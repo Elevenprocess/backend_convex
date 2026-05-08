@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
@@ -255,7 +255,6 @@ function LeadsSetter() {
 
 // ----- F6 Admin -----
 function LeadsAdmin() {
-  const navigate = useNavigate()
   const exportCsv = (rows: LeadResponse[]) => {
     const header = ['nom', 'telephone', 'email', 'ville', 'statut', 'source', 'createdAt']
     const csv = [header.join(','), ...rows.map((l) => [fullName(l), l.phone ?? '', l.email ?? '', l.city ?? '', l.status, l.source, l.createdAt].map((v) => `\"${String(v).replace(/\"/g, '\\\"')}\"`).join(','))].join('\n')
@@ -411,10 +410,7 @@ function LeadsAdmin() {
                     className={`border-b border-line-soft last:border-0 cursor-pointer transition-colors ${
                       selectedId === l.id ? 'bg-or/20 shadow-[inset_4px_0_0_var(--color-or-dark)] !text-text' : 'hover:bg-white/40'
                     }`}
-                    onClick={() => {
-                      selectLead(l.id)
-                      navigate(`/leads/${l.id}`)
-                    }}
+                    onClick={() => selectLead(l.id)}
                   >
                     {showColumn('nom') && <Td className="lead-sticky-cell"><span className="font-semibold truncate" title={fullName(l)}>{fullName(l)}</span></Td>}
                     {showColumn('statut') && <Td><span className={`status-badge ${STATUS_BADGE[l.status]}`}>{STATUS_LABEL[l.status]}</span></Td>}
