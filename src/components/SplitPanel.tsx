@@ -15,7 +15,7 @@ import { useCall, type CallState } from '../lib/call'
 import { useCallLogs, useRdvList, createCallLog, createRdv, updateLead, copyText } from '../lib/hooks'
 import { notifyClipboardCopied } from '../lib/clipboardToast'
 
-type Tab = { id: string; label: string }
+type Tab = { id: string; label: string; icon?: IconName }
 
 export type SplitPanelProps = {
   lead: LeadResponse
@@ -30,11 +30,11 @@ export type SplitPanelProps = {
 }
 
 const DEFAULT_TABS: Tab[] = [
-  { id: 'infos', label: 'Infos' },
-  { id: 'activite', label: 'Historique' },
-  { id: 'appels', label: 'Appels' },
-  { id: 'rdv', label: 'RDV' },
-  { id: 'notes', label: 'Notes' },
+  { id: 'infos', label: 'Infos', icon: 'eye' },
+  { id: 'activite', label: 'Historique', icon: 'clock' },
+  { id: 'appels', label: 'Appels', icon: 'phone' },
+  { id: 'rdv', label: 'RDV', icon: 'calendar' },
+  { id: 'notes', label: 'Notes', icon: 'edit' },
 ]
 
 const QUICK_RESULTS: CallResult[] = ['joint', 'non_joint', 'rdv_pris', 'refus', 'messagerie']
@@ -114,19 +114,21 @@ export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, chi
           primary
           disabled={!lead.phone}
         />
-        <ActionBtn icon="mail" onClick={() => { if (lead.email) window.location.href = `mailto:${lead.email}` }} disabled={!lead.email} />
         <ActionBtn icon="calendar" onClick={() => setActive('rdv')} />
         <ActionBtn icon="edit" onClick={() => setActive('notes')} />
       </div>
       {/* Tabs */}
-      <div className="flex gap-1 px-5 py-3 bg-or-tint border-b border-line-soft overflow-x-auto">
+      <div className="flex items-center justify-center gap-2 px-5 py-3 bg-or-tint border-b border-line-soft overflow-x-auto">
         {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setActive(t.id)}
-            className={`pill-tab text-xs whitespace-nowrap ${active === t.id ? 'active' : ''}`}
+            className={`w-10 h-10 rounded-full flex flex-shrink-0 items-center justify-center transition-colors ${active === t.id ? 'bg-or text-white shadow-sm' : 'bg-white/70 text-muted hover:bg-white hover:text-text'}`}
+            title={t.label}
+            aria-label={t.label}
           >
-            {t.label}
+            <Icon name={t.icon ?? iconForTab(t.id)} size={16} />
+            <span className="sr-only">{t.label}</span>
           </button>
         ))}
       </div>
@@ -148,6 +150,17 @@ export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, chi
       </div>
     </aside>
   )
+}
+
+function iconForTab(id: string): IconName {
+  switch (id) {
+    case 'infos': return 'eye'
+    case 'activite': return 'clock'
+    case 'appels': return 'phone'
+    case 'rdv': return 'calendar'
+    case 'notes': return 'edit'
+    default: return 'grid'
+  }
 }
 
 function ActionBtn({ icon, onClick, primary = false, disabled = false }: { icon: IconName; onClick?: () => void; primary?: boolean; disabled?: boolean }) {
