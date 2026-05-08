@@ -1,0 +1,689 @@
+import { useEffect, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
+import { Icon, type IconName } from './Icon'
+import {
+  STATUS_LABEL,
+  STATUS_BADGE,
+  CALL_RESULT_LABEL,
+  fullName,
+  initials as leadInitials,
+  type CallResult,
+  type LeadResponse,
+  type UserResponse,
+} from '../lib/types'
+import { useCall, type CallState } from '../lib/call'
+import { useCallLogs, useRdvList, createCallLog, createRdv, updateLead, copyText } from '../lib/hooks'
+import { notifyClipboardCopied } from '../lib/clipboardToast'
+
+type Tab = { id: string; label: string }
+
+export type SplitPanelProps = {
+  lead: LeadResponse
+  userMap?: Map<string, UserResponse>
+  tabs?: Tab[]
+  defaultTab?: string
+  children?: (activeTab: string) => ReactNode
+  /** Si fourni, affiche un bouton réduire en haut du panneau. */
+  onClose?: () => void
+  onSaved?: () => void
+  className?: string
+}
+
+const DEFAULT_TABS: Tab[] = [
+  { id: 'infos', label: 'Infos' },
+  { id: 'activite', label: 'Historique' },
+  { id: 'appels', label: 'Appels' },
+  { id: 'rdv', label: 'RDV' },
+  { id: 'notes', label: 'Notes' },
+]
+
+const QUICK_RESULTS: CallResult[] = ['joint', 'non_joint', 'rdv_pris', 'refus', 'messagerie']
+
+export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, children, onClose, onSaved, className }: SplitPanelProps) {
+  const [active, setActive] = useState(defaultTab ?? tabs[0].id)
+  const callState = useCall()
+  const isActiveCallForThisLead = callState.active && callState.leadId === lead.id
+
+  async function copyPhoneOnly() {
+    if (!lead.phone) return
+    await copyText(lead.phone)
+    notifyClipboardCopied()
+    setActive('notes')
+  }
+
+  return (
+    <aside className={`w-[420px] border-l border-line bg-white/65 backdrop-blur-md flex flex-col flex-shrink-0 overflow-hidden ${className ?? ''}`}>
+      {/* Header */}
+      <div className="p-5 border-b border-line-soft flex items-center gap-3">
+        <div className="w-12 h-12 rounded-full bg-cuivre-tint flex items-center justify-center text-sm font-bold">{leadInitials(lead)}</div>
+        <div className="flex-grow min-w-0">
+          <div className="font-bold text-sm">{fullName(lead)}</div>
+          <div className="text-xs text-faint truncate">{lead.phone ?? '—'}</div>
+          <div className="mt-1 flex items-center gap-2 flex-wrap">
+            <span className={`status-badge ${STATUS_BADGE[lead.status]}`}>{STATUS_LABEL[lead.status]}</span>
+          </div>
+        </div>
+        <Link to={`/leads/${lead.id}`} className="text-xs font-semibold text-or hover:underline whitespace-nowrap">
+          Fiche →
+        </Link>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="w-7 h-7 rounded-full hover:bg-cream flex items-center justify-center text-faint hover:text-text"
+            title="Réduire le panneau"
+          >
+            <Icon name="x" size={14} />
+          </button>
+        )}
+      </div>
+
+      {/* Action bar */}
+      <div className="p-4 border-b border-line-soft flex gap-2">
+        <ActionBtn
+          icon="phone"
+          onClick={() => { copyPhoneOnly().catch((err) => alert(err instanceof Error ? err.message : 'Impossible de copier le numéro')) }}
+          primary
+          disabled={!lead.phone}
+        />
+        <ActionBtn icon="mail" onClick={() => { if (lead.email) window.location.href = `mailto:${lead.email}` }} disabled={!lead.email} />
+        <ActionBtn icon="calendar" onClick={() => setActive('rdv')} />
+        <ActionBtn icon="edit" onClick={() => setActive('notes')} />
+      </div>
+      {/* Tabs */}
+      <div className="flex gap-1 px-5 py-3 bg-or-tint border-b border-line-soft overflow-x-auto">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setActive(t.id)}
+            className={`pill-tab text-xs whitespace-nowrap ${active === t.id ? 'active' : ''}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Content */}
+      <div className="flex-grow overflow-y-auto p-5 text-sm">
+        {children
+          ? children(active)
+          : (
+            <DefaultPanelContent
+              lead={lead}
+              userMap={userMap}
+              active={active}
+              isActiveCallForThisLead={isActiveCallForThisLead}
+              callState={callState}
+              onSaved={onSaved}
+            />
+          )}
+      </div>
+    </aside>
+  )
+}
+
+function ActionBtn({ icon, onClick, primary = false, disabled = false }: { icon: IconName; onClick?: () => void; primary?: boolean; disabled?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+        primary ? 'bg-or text-white hover:opacity-90' : 'bg-or-tint text-text hover:bg-cream'
+      }`}
+    >
+      <Icon name={icon} size={16} />
+    </button>
+  )
+}
+
+function DefaultPanelContent({
+  lead,
+  userMap,
+  active,
+  isActiveCallForThisLead,
+  callState,
+  onSaved,
+}: {
+  lead: LeadResponse
+  userMap?: Map<string, UserResponse>
+  active: string
+  isActiveCallForThisLead: boolean
+  callState: CallState
+  onSaved?: () => void
+}) {
+  if (active === 'infos') return <InfosTab lead={lead} userMap={userMap} />
+  if (active === 'activite') return <ActiviteTab leadId={lead.id} userMap={userMap} />
+  if (active === 'appels') return <AppelsTab leadId={lead.id} userMap={userMap} />
+  if (active === 'rdv') return <RdvTab leadId={lead.id} userMap={userMap} />
+  if (active === 'notes') {
+    return (
+      <NotesTab
+        lead={lead}
+        isActiveCall={isActiveCallForThisLead}
+        result={callState.result}
+        notes={callState.notes}
+        setResult={callState.setResult}
+        setNotes={callState.setNotes}
+        onSaved={onSaved}
+      />
+    )
+  }
+  return null
+}
+
+function InfosTab({ lead, userMap }: { lead: LeadResponse; userMap?: Map<string, UserResponse> }) {
+  const setter = lead.setterId ? userMap?.get(lead.setterId)?.name : null
+  const commercial = lead.assignedToId ? userMap?.get(lead.assignedToId)?.name : null
+  return (
+    <div className="space-y-3">
+      <Field label="EMAIL" value={lead.email ?? '—'} />
+      <Field label="VILLE" value={lead.city ?? '—'} />
+      <Field label="SOURCE" value={prettySource(lead)} />
+      {lead.utmSource && <Field label="UTM" value={lead.utmSource} />}
+      <Field label="STATUT" value={STATUS_LABEL[lead.status]} />
+      {setter && <Field label="SETTER" value={setter} />}
+      {commercial && <Field label="COMMERCIAL" value={commercial} />}
+    </div>
+  )
+}
+
+function ActiviteTab({ leadId, userMap }: { leadId: string; userMap?: Map<string, UserResponse> }) {
+  const { data: calls, loading: cLoading } = useCallLogs({ leadId, limit: 20 })
+  const { data: rdvs, loading: rLoading } = useRdvList({ leadId, limit: 20 })
+
+  if (cLoading || rLoading) return <p className="text-faint">Chargement…</p>
+
+  type Item = { ts: string; node: ReactNode }
+  const items: Item[] = []
+  for (const c of calls ?? []) {
+    items.push({
+      ts: c.calledAt,
+      node: (
+        <TimelineRow
+          key={`call-${c.id}`}
+          icon="phone"
+          title={`Appel — ${CALL_RESULT_LABEL[c.result]}`}
+          subtitle={c.notes ?? userMap?.get(c.setterId)?.name ?? null}
+          ts={c.calledAt}
+        />
+      ),
+    })
+  }
+  for (const r of rdvs ?? []) {
+    items.push({
+      ts: r.scheduledAt,
+      node: (
+        <TimelineRow
+          key={`rdv-${r.id}`}
+          icon="calendar"
+          title={`RDV ${r.locationType} — ${r.status}`}
+          subtitle={r.result ? `Résultat: ${r.result}` : null}
+          ts={r.scheduledAt}
+        />
+      ),
+    })
+  }
+  items.sort((a, b) => (a.ts < b.ts ? 1 : -1))
+
+  if (items.length === 0) return <p className="text-faint">Aucune activité.</p>
+  return <div className="space-y-3">{items.slice(0, 15).map((i) => i.node)}</div>
+}
+
+function AppelsTab({ leadId, userMap }: { leadId: string; userMap?: Map<string, UserResponse> }) {
+  const { data, loading } = useCallLogs({ leadId, limit: 50 })
+  if (loading) return <p className="text-faint">Chargement…</p>
+  if (!data || data.length === 0) return <p className="text-faint">Aucun appel pour ce lead.</p>
+  return (
+    <div className="space-y-3">
+      {data.map((c) => (
+        <div key={c.id} className="bg-white/60 border border-line rounded-xl p-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11px] font-bold uppercase tracking-widest text-or">{CALL_RESULT_LABEL[c.result]}</span>
+            <span className="text-[11px] text-faint">{formatDate(c.calledAt)}</span>
+          </div>
+          {userMap?.get(c.setterId)?.name && (
+            <div className="text-xs text-muted">{userMap.get(c.setterId)?.name}</div>
+          )}
+          {c.notes && <p className="text-sm mt-2 text-text">{c.notes}</p>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function RdvTab({ leadId, userMap }: { leadId: string; userMap?: Map<string, UserResponse> }) {
+  const { data, loading } = useRdvList({ leadId, limit: 50 })
+  if (loading) return <p className="text-faint">Chargement…</p>
+  if (!data || data.length === 0) return <p className="text-faint">Aucun RDV pour ce lead.</p>
+  return (
+    <div className="space-y-3">
+      {data.map((r) => (
+        <div key={r.id} className="bg-white/60 border border-line rounded-xl p-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11px] font-bold uppercase tracking-widest text-or">{r.status}</span>
+            <span className="text-[11px] text-faint">{formatDate(r.scheduledAt)}</span>
+          </div>
+          <div className="text-xs text-muted">
+            {r.locationType}
+            {r.commercialId && userMap?.get(r.commercialId)?.name ? ` · ${userMap.get(r.commercialId)?.name}` : ''}
+          </div>
+          {r.result && <div className="text-xs text-text mt-1">Résultat : <span className="font-semibold">{r.result}</span></div>}
+          {r.notes && <p className="text-sm mt-2 text-text">{r.notes}</p>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function NotesTab({
+  lead,
+  isActiveCall,
+  result,
+  notes,
+  setResult,
+  setNotes,
+  onSaved,
+}: {
+  lead: LeadResponse
+  isActiveCall: boolean
+  result: CallResult | ''
+  notes: string
+  setResult: (r: CallResult | '') => void
+  setNotes: (n: string) => void
+  onSaved?: () => void
+}) {
+  type SetterStatus = '' | 'non_qualifie' | 'a_rappeler' | 'pas_de_reponse' | 'qualifie'
+  type Step = 'qualification' | 'secteur' | 'rdv' | 'confirmation' | 'done'
+
+  const [setterStatus, setSetterStatus] = useState<SetterStatus>(() => statusToSetterStatus(lead.status))
+  const [step, setStep] = useState<Step>('qualification')
+  const [commentaire, setCommentaire] = useState('')
+  const [callbackAt, setCallbackAt] = useState('')
+  const [sector, setSector] = useState<'Nord' | 'Sud' | 'Est' | 'Ouest' | ''>('')
+  const [rdvAt, setRdvAt] = useState('')
+  const [form, setForm] = useState({
+    firstName: lead.firstName ?? '',
+    lastName: lead.lastName ?? '',
+    email: lead.email ?? '',
+    phone: lead.phone ?? '',
+    addressLine: lead.addressLine ?? '',
+    city: lead.city ?? '',
+    postalCode: lead.postalCode ?? '',
+    typeLogement: lead.typeLogement ?? '',
+    revenuFiscal: lead.revenuFiscal?.toString() ?? '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  void notes
+  void setNotes
+
+  useEffect(() => {
+    setSetterStatus(statusToSetterStatus(lead.status))
+    setStep('qualification')
+    setCommentaire('')
+    setCallbackAt('')
+    setSector('')
+    setRdvAt('')
+    setForm({
+      firstName: lead.firstName ?? '',
+      lastName: lead.lastName ?? '',
+      email: lead.email ?? '',
+      phone: lead.phone ?? '',
+      addressLine: lead.addressLine ?? '',
+      city: lead.city ?? '',
+      postalCode: lead.postalCode ?? '',
+      typeLogement: lead.typeLogement ?? '',
+      revenuFiscal: lead.revenuFiscal?.toString() ?? '',
+    })
+    setError(null)
+    setSuccess(null)
+  }, [lead.id])
+
+  const noteFinale = commentaire.trim() || null
+
+  async function saveCallAndLead(kind: Exclude<SetterStatus, ''>) {
+    setError(null)
+    setSaving(true)
+    try {
+      if (kind === 'non_qualifie') {
+        if (!commentaire.trim()) throw new Error('Ajoute un commentaire pour expliquer pourquoi le lead est non qualifié.')
+        await createCallLog({ leadId: lead.id, result: 'refus', notes: noteFinale })
+        await updateLead(lead.id, { status: 'pas_qualifie' })
+        setResult('')
+        setSuccess('Lead marqué non qualifié.')
+        setStep('done')
+      } else if (kind === 'pas_de_reponse') {
+        await createCallLog({ leadId: lead.id, result: 'non_joint', notes: noteFinale || null })
+        await updateLead(lead.id, { status: 'pas_de_reponse' })
+        setResult('')
+        setSuccess('Lead marqué en pas de réponse.')
+        setStep('done')
+      } else if (kind === 'a_rappeler') {
+        if (!callbackAt) throw new Error('Choisis la date et l’heure du rappel.')
+        if (!commentaire.trim()) throw new Error('Ajoute un commentaire pour le rappel.')
+        await createCallLog({ leadId: lead.id, result: 'rappel_planifie', nextCallbackAt: new Date(callbackAt).toISOString(), notes: noteFinale })
+        await updateLead(lead.id, { status: 'a_rappeler', datePassageRelance: new Date(callbackAt).toISOString() })
+        setResult('')
+        setSuccess('Rappel planifié et lead passé en À rappeler.')
+        setStep('done')
+      } else {
+        if (!commentaire.trim()) throw new Error('Ajoute un commentaire principal.')
+        setResult('')
+        setSuccess(null)
+        setStep('secteur')
+      }
+      onSaved?.()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Action impossible')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function validateRdv() {
+    setError(null)
+    setSaving(true)
+    try {
+      if (!sector) throw new Error('Sélectionne un secteur.')
+      if (!rdvAt) throw new Error('Choisis une date de rendez-vous.')
+      const revenu = form.revenuFiscal.trim() ? Number(form.revenuFiscal) : null
+      if (revenu !== null && Number.isNaN(revenu)) throw new Error('Le revenu fiscal doit être un nombre.')
+      await updateLead(lead.id, {
+        status: 'qualifie',
+        firstName: form.firstName || null,
+        lastName: form.lastName || null,
+        email: form.email || null,
+        phone: form.phone || null,
+        addressLine: form.addressLine || null,
+        city: form.city || null,
+        postalCode: form.postalCode || null,
+        typeLogement: form.typeLogement || null,
+        revenuFiscal: revenu,
+      })
+      await createRdv({
+        leadId: lead.id,
+        commercialId: null,
+        scheduledAt: new Date(rdvAt).toISOString(),
+        locationType: 'domicile',
+        notes: [sector && `Secteur : ${sector}`, noteFinale].filter(Boolean).join('\n\n') || null,
+      })
+      await createCallLog({ leadId: lead.id, result: 'joint', notes: noteFinale || null })
+      setSuccess('RDV créé et lead qualifié. GHL attribuera le commercial automatiquement.')
+      setStep('done')
+      onSaved?.()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Validation impossible')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <Stepper current={step} />
+      <div className="rounded-xl border border-line bg-white/70 px-3 py-2 text-sm flex items-center justify-between gap-3">
+        <span className="text-faint">Statut actuel</span>
+        <span className={`status-badge ${STATUS_BADGE[lead.status]}`}>{STATUS_LABEL[lead.status]}</span>
+      </div>
+      {error && <div className="rounded-xl border border-rouille/30 bg-rouille-tint px-3 py-2 text-sm text-rouille">{error}</div>}
+      {success && <div className="rounded-xl border border-success/30 bg-success-tint px-3 py-2 text-sm text-success">{success}</div>}
+
+      {step === 'qualification' && (
+        <div className="space-y-4">
+          <div>
+            <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-2">Statut setter</div>
+            <div className="grid grid-cols-1 gap-2">
+              <StatusChoice active={setterStatus === 'non_qualifie'} icon="x" title="Pas qualifié" text="Commentaire obligatoire" onClick={() => { setSetterStatus('non_qualifie'); setResult('refus') }} />
+              <StatusChoice active={setterStatus === 'a_rappeler'} icon="clock" title="À rappeler" text="Date + heure de rappel et commentaire" onClick={() => { setSetterStatus('a_rappeler'); setResult('rappel_planifie') }} />
+              <StatusChoice active={setterStatus === 'pas_de_reponse'} icon="phone-off" title="Pas de réponse" text="Aucun champ requis" onClick={() => { setSetterStatus('pas_de_reponse'); setResult('non_joint') }} />
+              <StatusChoice active={setterStatus === 'qualifie'} icon="check" title="Qualifié" text="Commentaire principal, secteur et RDV" onClick={() => { setSetterStatus('qualifie'); setResult('joint') }} />
+            </div>
+          </div>
+
+          {setterStatus && (
+            <div className="rounded-[18px] border border-line bg-white/70 p-4 space-y-3">
+              {setterStatus !== 'pas_de_reponse' && (
+                <textarea
+                  value={commentaire}
+                  onChange={(e) => setCommentaire(e.target.value)}
+                  placeholder={setterStatus === 'non_qualifie' ? 'Commentaire obligatoire : pourquoi pas qualifié ?' : setterStatus === 'qualifie' ? 'Commentaire obligatoire : besoins, contexte, objections…' : 'Commentaire rappel : disponibilité, contexte…'}
+                  className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full h-24 resize-none"
+                  autoFocus={isActiveCall}
+                />
+              )}
+              {setterStatus === 'a_rappeler' && (
+                <DateTimeSlotInput label="Date et heure du rappel" value={callbackAt} onChange={setCallbackAt} />
+              )}
+              {setterStatus === 'qualifie' && (
+                <p className="text-sm text-muted">Valide la qualification pour passer à la sélection du secteur puis au RDV.</p>
+              )}
+              {setterStatus === 'pas_de_reponse' && (
+                <p className="text-sm text-muted">Aucun champ obligatoire : tu peux enregistrer directement.</p>
+              )}
+              <button
+                onClick={() => saveCallAndLead(setterStatus)}
+                disabled={saving}
+                className="btn-primary w-full rounded-xl py-2 text-sm disabled:opacity-60"
+              >
+                {setterStatus === 'qualifie' ? 'Continuer vers secteur' : 'Enregistrer le statut'}
+              </button>
+            </div>
+          )}
+
+          <div className="border-t border-line-soft pt-3">
+            <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-2">Résultat rapide existant</div>
+            <div className="flex flex-wrap gap-2">
+              {QUICK_RESULTS.map((r) => (
+                <button key={r} onClick={() => setResult(result === r ? '' : r)} className={`pill-tab text-xs ${result === r ? 'active' : ''}`}>{CALL_RESULT_LABEL[r]}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {step === 'secteur' && (
+        <div className="space-y-4">
+          <div className="text-[10px] font-bold tracking-widest uppercase text-faint">Secteur de l’adresse client</div>
+          <div className="grid grid-cols-2 gap-2">
+            {(['Nord', 'Sud', 'Est', 'Ouest'] as const).map((s) => (
+              <button key={s} onClick={() => setSector(s)} className={`rounded-[18px] border p-4 text-left ${sector === s ? 'border-or bg-or-tint text-or-dark' : 'border-line bg-white/70 hover:bg-white'}`}>
+                <Icon name="map-pin" size={16} />
+                <div className="font-bold mt-2">{s}</div>
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setStep('qualification')} className="rounded-xl border border-line bg-white/70 py-2 text-sm font-semibold hover:bg-white">Retour</button>
+            <button onClick={() => setStep('rdv')} disabled={!sector} className="btn-primary rounded-xl py-2 text-sm disabled:opacity-50">Next · calendrier</button>
+          </div>
+        </div>
+      )}
+
+      {step === 'rdv' && (
+        <div className="space-y-4">
+          <DateTimeSlotInput label="Date et heure du RDV commercial" value={rdvAt} onChange={setRdvAt} timeSlots={COMMERCIAL_RDV_TIME_SLOTS} />
+          <p className="text-xs text-muted">Créneaux en heures pleines uniquement. Le commercial sera attribué automatiquement par GHL.</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setStep('secteur')} className="rounded-xl border border-line bg-white/70 py-2 text-sm font-semibold hover:bg-white">Retour</button>
+            <button onClick={() => setStep('confirmation')} disabled={!rdvAt} className="btn-primary rounded-xl py-2 text-sm disabled:opacity-50">Next · formulaire lead</button>
+          </div>
+        </div>
+      )}
+
+      {step === 'confirmation' && (
+        <div className="space-y-3">
+          <div className="text-[10px] font-bold tracking-widest uppercase text-faint">Vérifier / compléter la fiche lead</div>
+          <div className="grid grid-cols-2 gap-2">
+            <Input label="Prénom" value={form.firstName} onChange={(v) => setForm({ ...form, firstName: v })} />
+            <Input label="Nom" value={form.lastName} onChange={(v) => setForm({ ...form, lastName: v })} />
+          </div>
+          <Input label="Téléphone" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />
+          <Input label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
+          <Input label="Adresse" value={form.addressLine} onChange={(v) => setForm({ ...form, addressLine: v })} />
+          <div className="grid grid-cols-2 gap-2">
+            <Input label="Ville" value={form.city} onChange={(v) => setForm({ ...form, city: v })} />
+            <Input label="Code postal" value={form.postalCode} onChange={(v) => setForm({ ...form, postalCode: v })} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Input label="Type logement" value={form.typeLogement} onChange={(v) => setForm({ ...form, typeLogement: v })} />
+            <Input label="Revenu fiscal" value={form.revenuFiscal} onChange={(v) => setForm({ ...form, revenuFiscal: v })} />
+          </div>
+          <div className="rounded-[18px] border border-or/20 bg-or-tint p-4 space-y-2">
+            <div className="text-[10px] font-bold tracking-widest uppercase text-or-dark">Résumé final avant validation</div>
+            <Field label="LEAD" value={`${form.firstName} ${form.lastName}`.trim() || fullName(lead)} />
+            <Field label="STATUT" value="Qualifié" />
+            <Field label="NOTES" value={noteFinale || '—'} />
+            <Field label="SECTEUR" value={sector || '—'} />
+            <Field label="RDV" value={rdvAt ? formatDate(new Date(rdvAt).toISOString()) : '—'} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setStep('rdv')} className="rounded-xl border border-line bg-white/70 py-2 text-sm font-semibold hover:bg-white">Retour</button>
+            <button onClick={validateRdv} disabled={saving} className="btn-primary rounded-xl py-2 text-sm disabled:opacity-60">Valider définitivement</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Stepper({ current }: { current: string }) {
+  const steps = [
+    ['qualification', 'Qualification'],
+    ['secteur', 'Secteur'],
+    ['rdv', 'Calendrier'],
+    ['confirmation', 'Formulaire'],
+  ]
+  const idx = Math.max(0, steps.findIndex(([id]) => id === current))
+  return (
+    <div className="grid grid-cols-4 gap-1">
+      {steps.map(([id, label], i) => (
+        <div key={id} className={`rounded-full px-2 py-1 text-[10px] text-center font-bold ${i <= idx ? 'bg-or text-white' : 'bg-or-tint text-muted'}`}>{label}</div>
+      ))}
+    </div>
+  )
+}
+
+function StatusChoice({ active, icon, title, text, onClick }: { active: boolean; icon: IconName; title: string; text: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className={`rounded-[18px] border p-3 text-left flex gap-3 ${active ? 'border-or bg-or-tint' : 'border-line bg-white/70 hover:bg-white'}`}>
+      <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-or"><Icon name={icon} size={15} /></div>
+      <div>
+        <div className="font-bold text-sm">{title}</div>
+        <div className="text-xs text-muted">{text}</div>
+      </div>
+    </button>
+  )
+}
+
+const COMMERCIAL_RDV_TIME_SLOTS = Array.from({ length: 11 }, (_, i) => {
+  const hours = 9 + i
+  return `${String(hours).padStart(2, '0')}:00`
+})
+
+function DateTimeSlotInput({
+  label,
+  value,
+  onChange,
+  timeSlots,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  timeSlots?: string[]
+}) {
+  const [valueDate = '', valueTime = ''] = value.split('T')
+  const [date, setDate] = useState(valueDate)
+  const [time, setTime] = useState(valueTime)
+
+  useEffect(() => {
+    setDate(valueDate)
+    setTime(valueTime)
+  }, [valueDate, valueTime])
+
+  const setPart = (nextDate: string, nextTime: string) => {
+    setDate(nextDate)
+    setTime(nextTime)
+    onChange(nextDate && nextTime ? `${nextDate}T${nextTime}` : '')
+  }
+
+  return (
+    <label className="block">
+      <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-1">{label}</div>
+      <div className="grid grid-cols-2 gap-2">
+        <input type="date" value={date} onChange={(e) => setPart(e.target.value, time)} className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full" />
+        {timeSlots ? (
+          <select value={time} onChange={(e) => setPart(date, e.target.value)} className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full">
+            <option value="">Heure…</option>
+            {timeSlots.map((slot) => <option key={slot} value={slot}>{slot}</option>)}
+          </select>
+        ) : (
+          <input
+            type="time"
+            step={60}
+            value={time}
+            onChange={(e) => setPart(date, e.target.value)}
+            className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full"
+          />
+        )}
+      </div>
+    </label>
+  )
+}
+
+function Input({ label, value, onChange, type = 'text' }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
+  return (
+    <label className="block">
+      <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-1">{label}</div>
+      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full" />
+    </label>
+  )
+}
+
+function TimelineRow({ icon, title, subtitle, ts }: { icon: IconName; title: string; subtitle: string | null; ts: string }) {
+  return (
+    <div className="flex gap-3">
+      <div className="w-8 h-8 rounded-full bg-or-tint flex items-center justify-center flex-shrink-0">
+        <Icon name={icon} size={14} />
+      </div>
+      <div className="flex-grow min-w-0">
+        <div className="text-sm font-semibold truncate">{title}</div>
+        {subtitle && <div className="text-xs text-muted truncate">{subtitle}</div>}
+        <div className="text-[11px] text-faint">{formatDate(ts)}</div>
+      </div>
+    </div>
+  )
+}
+
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-[10px] font-bold text-faint uppercase tracking-widest mb-1">{label}</div>
+      <div className="text-sm font-medium">{value}</div>
+    </div>
+  )
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function statusToSetterStatus(status: LeadResponse['status']): '' | 'non_qualifie' | 'a_rappeler' | 'pas_de_reponse' | 'qualifie' {
+  if (status === 'pas_qualifie' || status === 'perdu') return 'non_qualifie'
+  if (status === 'a_rappeler' || status === 'relance') return 'a_rappeler'
+  if (status === 'pas_de_reponse') return 'pas_de_reponse'
+  if (status === 'qualifie' || status === 'rdv_pris' || status === 'rdv_honore' || status === 'signe') return 'qualifie'
+  return ''
+}
+
+function prettySource(l: Pick<LeadResponse, 'source' | 'canalAcquisition' | 'utmSource'>): string {
+  if (l.canalAcquisition) return l.canalAcquisition
+  if (l.utmSource) return l.utmSource[0].toUpperCase() + l.utmSource.slice(1)
+  switch (l.source) {
+    case 'ghl': return 'GHL'
+    case 'airtable_migration': return 'Migration'
+    case 'manual': return 'Manuel'
+    case 'referrer': return 'Parrain'
+  }
+}
