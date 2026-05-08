@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
+import { Navigate } from 'react-router-dom'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Icon } from '../components/Icon'
+import { useAuth } from '../lib/auth'
 import { inviteUser, useInvitations, useUsers } from '../lib/hooks'
 import type { InvitationResponse, Role, Team, UserResponse } from '../lib/types'
 
@@ -35,6 +37,14 @@ const TEAM_BY_ROLE: Record<Role, NonNullable<Team>> = {
 }
 
 export function Settings() {
+  const role = useAuth((s) => s.user?.role)
+
+  if (role !== 'admin') return <Navigate to="/overview" replace />
+
+  return <SettingsAdmin />
+}
+
+function SettingsAdmin() {
   const { data: users, loading, error, refetch: refetchUsers } = useUsers()
   const { data: invitations, refetch: refetchInvitations } = useInvitations()
   const [inviteOpen, setInviteOpen] = useState(false)

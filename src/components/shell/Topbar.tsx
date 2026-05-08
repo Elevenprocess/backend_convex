@@ -30,6 +30,7 @@ function currentMainTab(pathname: string, activeTab?: string): string {
 
 export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) {
   const user = useDisplayUser()
+  const isAdmin = user.role === 'admin'
   const signOut = useAuth((s) => s.signOut)
   const navigate = useNavigate()
   const { pathname } = useLocation()
@@ -152,7 +153,7 @@ export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) 
           </button>
           {openMenu === 'settings' && (
             <DropdownFrame className="w-64 p-2">
-              <MenuButton icon="settings" label="Paramètres" hint="Préférences du SaaS" onClick={() => { setOpenMenu(null); navigate('/settings') }} />
+              {isAdmin && <MenuButton icon="settings" label="Paramètres" hint="Préférences du SaaS" onClick={() => { setOpenMenu(null); navigate('/settings') }} />}
               <MenuButton icon="chart" label="Analytics" hint="Performance & pipeline" onClick={() => { setOpenMenu(null); navigate('/analytics') }} />
               <div className="h-px bg-line-soft my-2 mx-2" />
               <MenuButton icon="logout" label="Se déconnecter" danger onClick={handleSignOut} />
@@ -180,7 +181,7 @@ export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) 
               </div>
               <MenuButton icon="home" label="Dashboard" hint="Vue d’ensemble" onClick={() => { setOpenMenu(null); navigate('/overview') }} />
               <MenuButton icon="users" label="Tous les leads" hint="Liste complète" onClick={() => { setOpenMenu(null); navigate('/leads') }} />
-              <MenuButton icon="settings" label="Compte & paramètres" hint="Profil utilisateur" onClick={() => { setOpenMenu(null); navigate('/settings') }} />
+              {isAdmin && <MenuButton icon="settings" label="Compte & paramètres" hint="Profil utilisateur" onClick={() => { setOpenMenu(null); navigate('/settings') }} />}
             </DropdownFrame>
           )}
         </div>
