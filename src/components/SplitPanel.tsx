@@ -39,6 +39,35 @@ const DEFAULT_TABS: Tab[] = [
 
 const QUICK_RESULTS: CallResult[] = ['joint', 'non_joint', 'rdv_pris', 'refus', 'messagerie']
 
+type YesNo = '' | 'oui' | 'non'
+type ActivityStatus = '' | 'actif' | 'retraite'
+
+type EligibilityNotes = {
+  isOwner: YesNo
+  activity: ActivityStatus
+  age: string
+  projectTiming: string
+  monthlyBill: string
+  firstInfo: YesNo
+  wantsBattery: YesNo
+  batteryNote: string
+  hasBudget: YesNo
+  budgetNote: string
+}
+
+const EMPTY_ELIGIBILITY_NOTES: EligibilityNotes = {
+  isOwner: '',
+  activity: '',
+  age: '',
+  projectTiming: '',
+  monthlyBill: '',
+  firstInfo: '',
+  wantsBattery: '',
+  batteryNote: '',
+  hasBudget: '',
+  budgetNote: '',
+}
+
 export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, children, onClose, onSaved, className }: SplitPanelProps) {
   const [active, setActive] = useState(defaultTab ?? tabs[0].id)
   const callState = useCall()
@@ -195,15 +224,14 @@ function ActiviteTab({ leadId, userMap }: { leadId: string; userMap?: Map<string
   type Item = { ts: string; node: ReactNode }
   const items: Item[] = []
   for (const c of calls ?? []) {
-    const setterName = userMap?.get(c.setterId)?.name
     items.push({
       ts: c.calledAt,
       node: (
         <TimelineRow
           key={`call-${c.id}`}
           icon="phone"
-          title={`Appel — ${CALL_RESULT_LABEL[c.result]}${setterName ? ` · ${setterName}` : ''}`}
-          subtitle={c.notes ?? null}
+          title={`Appel — ${CALL_RESULT_LABEL[c.result]}`}
+          subtitle={c.notes ?? userMap?.get(c.setterId)?.name ?? null}
           ts={c.calledAt}
         />
       ),
@@ -235,21 +263,18 @@ function AppelsTab({ leadId, userMap }: { leadId: string; userMap?: Map<string, 
   if (!data || data.length === 0) return <p className="text-faint">Aucun appel pour ce lead.</p>
   return (
     <div className="space-y-3">
-      {data.map((c) => {
-        const setterName = userMap?.get(c.setterId)?.name
-        return (
-          <div key={c.id} className="bg-white/60 border border-line rounded-xl p-3">
-            <div className="flex items-start justify-between gap-3 mb-1">
-              <div className="min-w-0">
-                <span className="text-[11px] font-bold uppercase tracking-widest text-or">{CALL_RESULT_LABEL[c.result]}</span>
-                {setterName && <span className="ml-2 text-xs font-semibold text-text normal-case tracking-normal">{setterName}</span>}
-              </div>
-              <span className="text-[11px] text-faint whitespace-nowrap">{formatDate(c.calledAt)}</span>
-            </div>
-            {c.notes && <p className="text-sm mt-2 text-text">{c.notes}</p>}
+      {data.map((c) => (
+        <div key={c.id} className="bg-white/60 border border-line rounded-xl p-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11px] font-bold uppercase tracking-widest text-or">{CALL_RESULT_LABEL[c.result]}</span>
+            <span className="text-[11px] text-faint">{formatDate(c.calledAt)}</span>
           </div>
-        )
-      })}
+          {userMap?.get(c.setterId)?.name && (
+            <div className="text-xs text-muted">{userMap.get(c.setterId)?.name}</div>
+          )}
+          {c.notes && <p className="text-sm mt-2 text-text">{c.notes}</p>}
+        </div>
+      ))}
     </div>
   )
 }
@@ -296,10 +321,11 @@ function NotesTab({
   onSaved?: () => void
 }) {
   type SetterStatus = '' | 'non_qualifie' | 'a_rappeler' | 'pas_de_reponse' | 'qualifie'
-  type Step = 'qualification' | 'secteur' | 'rdv' | 'confirmation' | 'done'
+  type Step = 'eligibility' | 'qualification' | 'secteur' | 'rdv' | 'confirmation' | 'done'
 
   const [setterStatus, setSetterStatus] = useState<SetterStatus>(() => statusToSetterStatus(lead.status))
-  const [step, setStep] = useState<Step>('qualification')
+  const [step, setStep] = useState<Step>('eligibility')
+  const [eligibilityNotes, setEligibilityNotes] = useState<EligibilityNotes>(EMPTY_ELIGIBILITY_NOTES)
   const [commentaire, setCommentaire] = useState('')
   const [callbackAt, setCallbackAt] = useState('')
   const [sector, setSector] = useState<'Nord' | 'Sud' | 'Est' | 'Ouest' | ''>('')
@@ -323,7 +349,8 @@ function NotesTab({
 
   useEffect(() => {
     setSetterStatus(statusToSetterStatus(lead.status))
-    setStep('qualification')
+    setStep('eligibility')
+    setEligibilityNotes(EMPTY_ELIGIBILITY_NOTES)
     setCommentaire('')
     setCallbackAt('')
     setSector('')
@@ -343,7 +370,8 @@ function NotesTab({
     setSuccess(null)
   }, [lead.id])
 
-  const noteFinale = commentaire.trim() || null
+  const eligibilitySummary = formatEligibilityNotes(eligibilityNotes)
+  const noteFinale = [eligibilitySummary, commentaire.trim()].filter(Boolean).join('\n\n') || null
 
   async function saveCallAndLead(kind: Exclude<SetterStatus, ''>) {
     setError(null)
@@ -422,6 +450,23 @@ function NotesTab({
     }
   }
 
+  function updateEligibility<K extends keyof EligibilityNotes>(key: K, value: EligibilityNotes[K]) {
+    setEligibilityNotes((current) => ({ ...current, [key]: value }))
+  }
+
+  function continueToQualification() {
+    setError(null)
+    if (!eligibilityNotes.isOwner) return setError('Indique si la personne est propriétaire.')
+    if (!eligibilityNotes.activity) return setError('Indique si la personne est en activité ou retraitée.')
+    if (eligibilityNotes.activity === 'retraite' && !eligibilityNotes.age.trim()) return setError('Renseigne l’âge pour une personne retraitée.')
+    if (!eligibilityNotes.projectTiming.trim()) return setError('Indique si le projet est rapide ou informatif.')
+    if (!eligibilityNotes.monthlyBill.trim()) return setError('Renseigne le montant approximatif des factures mensuelles.')
+    if (!eligibilityNotes.firstInfo) return setError('Indique si c’est le premier renseignement sur le projet.')
+    if (!eligibilityNotes.wantsBattery) return setError('Indique si la personne souhaite une batterie / autonomie.')
+    if (!eligibilityNotes.hasBudget) return setError('Indique si la personne a déjà pensé à un budget.')
+    setStep('qualification')
+  }
+
   return (
     <div className="space-y-5">
       <Stepper current={step} />
@@ -431,6 +476,73 @@ function NotesTab({
       </div>
       {error && <div className="rounded-xl border border-rouille/30 bg-rouille-tint px-3 py-2 text-sm text-rouille">{error}</div>}
       {success && <div className="rounded-xl border border-success/30 bg-success-tint px-3 py-2 text-sm text-success">{success}</div>}
+
+      {step === 'eligibility' && (
+        <div className="space-y-4">
+          <div className="rounded-[18px] border border-line bg-white/70 p-4 space-y-4">
+            <div>
+              <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-1">Notes d’éligibilité</div>
+              <p className="text-sm text-muted">À remplir pendant l’appel avant de décider si le lead est qualifié, à rappeler ou non qualifié.</p>
+            </div>
+
+            <YesNoField
+              label="Est-ce que vous êtes bien propriétaire de la maison ?"
+              value={eligibilityNotes.isOwner}
+              onChange={(value) => updateEligibility('isOwner', value)}
+            />
+
+            <div>
+              <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-1">Êtes-vous en activité ou retraité ?</div>
+              <div className="grid grid-cols-2 gap-2">
+                <ChoicePill active={eligibilityNotes.activity === 'actif'} onClick={() => updateEligibility('activity', 'actif')}>En activité</ChoicePill>
+                <ChoicePill active={eligibilityNotes.activity === 'retraite'} onClick={() => updateEligibility('activity', 'retraite')}>Retraité</ChoicePill>
+              </div>
+              {eligibilityNotes.activity === 'retraite' && (
+                <div className="mt-2">
+                  <Input label="Si ce n’est pas trop indiscret, vous avez quel âge ?" type="number" value={eligibilityNotes.age} onChange={(value) => updateEligibility('age', value)} />
+                </div>
+              )}
+            </div>
+
+            <Input label="Projet rapidement ou juste à titre informatif ?" value={eligibilityNotes.projectTiming} onChange={(value) => updateEligibility('projectTiming', value)} />
+            <Input label="Factures d’électricité chaque mois (€ environ)" type="number" value={eligibilityNotes.monthlyBill} onChange={(value) => updateEligibility('monthlyBill', value)} />
+
+            <YesNoField
+              label="Est-ce qu’il s’agit de votre premier renseignement sur le projet ?"
+              value={eligibilityNotes.firstInfo}
+              onChange={(value) => updateEligibility('firstInfo', value)}
+            />
+
+            <YesNoField
+              label="Souhaitez-vous devenir autonome avec une batterie pour stocker l’énergie ?"
+              value={eligibilityNotes.wantsBattery}
+              onChange={(value) => updateEligibility('wantsBattery', value)}
+            />
+            <textarea
+              value={eligibilityNotes.batteryNote}
+              onChange={(e) => updateEligibility('batteryNote', e.target.value)}
+              placeholder="Petite note sur l’autonomie / batterie…"
+              className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full h-20 resize-none"
+            />
+
+            <YesNoField
+              label="Avez-vous déjà pensé à un budget à allouer au projet ?"
+              value={eligibilityNotes.hasBudget}
+              onChange={(value) => updateEligibility('hasBudget', value)}
+            />
+            <textarea
+              value={eligibilityNotes.budgetNote}
+              onChange={(e) => updateEligibility('budgetNote', e.target.value)}
+              placeholder="Petite note sur le budget envisagé…"
+              className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full h-20 resize-none"
+            />
+
+            <button type="button" onClick={continueToQualification} className="btn-primary w-full rounded-xl py-2 text-sm">
+              Continuer vers qualification
+            </button>
+          </div>
+        </div>
+      )}
 
       {step === 'qualification' && (
         <div className="space-y-4">
@@ -552,6 +664,7 @@ function NotesTab({
 
 function Stepper({ current }: { current: string }) {
   const steps = [
+    ['eligibility', 'Notes'],
     ['qualification', 'Qualification'],
     ['secteur', 'Secteur'],
     ['rdv', 'Calendrier'],
@@ -559,7 +672,7 @@ function Stepper({ current }: { current: string }) {
   ]
   const idx = Math.max(0, steps.findIndex(([id]) => id === current))
   return (
-    <div className="grid grid-cols-4 gap-1">
+    <div className="grid grid-cols-5 gap-1">
       {steps.map(([id, label], i) => (
         <div key={id} className={`rounded-full px-2 py-1 text-[10px] text-center font-bold ${i <= idx ? 'bg-or text-white' : 'bg-or-tint text-muted'}`}>{label}</div>
       ))}
@@ -577,6 +690,46 @@ function StatusChoice({ active, icon, title, text, onClick }: { active: boolean;
       </div>
     </button>
   )
+}
+
+function YesNoField({ label, value, onChange }: { label: string; value: YesNo; onChange: (value: YesNo) => void }) {
+  return (
+    <div>
+      <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-1">{label}</div>
+      <div className="grid grid-cols-2 gap-2">
+        <ChoicePill active={value === 'oui'} onClick={() => onChange('oui')}>Oui</ChoicePill>
+        <ChoicePill active={value === 'non'} onClick={() => onChange('non')}>Non</ChoicePill>
+      </div>
+    </div>
+  )
+}
+
+function ChoicePill({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} className={`rounded-[14px] border px-3 py-2 text-sm font-semibold ${active ? 'border-or bg-or-tint text-or-dark' : 'border-line bg-white/70 hover:bg-white text-muted'}`}>
+      {children}
+    </button>
+  )
+}
+
+function formatEligibilityNotes(notes: EligibilityNotes): string {
+  const lines = [
+    notes.isOwner && `Propriétaire maison : ${yesNoLabel(notes.isOwner)}`,
+    notes.activity && `Situation : ${notes.activity === 'retraite' ? `Retraité${notes.age.trim() ? ` · âge ${notes.age.trim()}` : ''}` : 'En activité'}`,
+    notes.projectTiming.trim() && `Intention projet : ${notes.projectTiming.trim()}`,
+    notes.monthlyBill.trim() && `Facture électricité mensuelle : ${notes.monthlyBill.trim()} € environ`,
+    notes.firstInfo && `Premier renseignement : ${yesNoLabel(notes.firstInfo)}`,
+    notes.wantsBattery && `Autonomie / batterie : ${yesNoLabel(notes.wantsBattery)}${notes.batteryNote.trim() ? ` · ${notes.batteryNote.trim()}` : ''}`,
+    notes.hasBudget && `Budget déjà envisagé : ${yesNoLabel(notes.hasBudget)}${notes.budgetNote.trim() ? ` · ${notes.budgetNote.trim()}` : ''}`,
+  ].filter(Boolean)
+
+  return lines.length > 0 ? `Notes d’éligibilité setter\n${lines.join('\n')}` : ''
+}
+
+function yesNoLabel(value: YesNo): string {
+  if (value === 'oui') return 'Oui'
+  if (value === 'non') return 'Non'
+  return '—'
 }
 
 const COMMERCIAL_RDV_TIME_SLOTS = Array.from({ length: 11 }, (_, i) => {
