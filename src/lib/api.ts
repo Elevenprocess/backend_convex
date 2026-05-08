@@ -31,10 +31,14 @@ type FetchOpts = {
   body?: unknown
   query?: Record<string, string | number | undefined | null>
   signal?: AbortSignal
+  timeoutMs?: number
 }
 
 export async function api<T>(path: string, opts: FetchOpts = {}): Promise<T> {
-  const { method = 'GET', body, query, signal } = opts
+  const { method = 'GET', body, query, signal, timeoutMs = 25_000 } = opts
+  const timeoutController = new AbortController()
+  const timeout = window.setTimeout(() => timeoutController.abort(), timeoutMs)
+  const combinedSignal = signal ? anySignal([signal, timeoutController.signal]) : timeoutController.signal
 
   const url = new URL(buildApiUrl(path))
   if (query) {
@@ -46,7 +50,7 @@ export async function api<T>(path: string, opts: FetchOpts = {}): Promise<T> {
   const init: RequestInit = {
     method,
     credentials: 'include',
-    signal,
+    signal: combinedSignal,
     headers: { Accept: 'application/json' },
   }
   if (body !== undefined) {
@@ -54,7 +58,18 @@ export async function api<T>(path: string, opts: FetchOpts = {}): Promise<T> {
     ;(init.headers as Record<string, string>)['Content-Type'] = 'application/json'
   }
 
-  const res = await fetch(url.toString(), init)
+  let res: Response
+  try {
+    res = await fetch(url.toString(), init)
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new ApiError(408, 'La requête a expiré. Réessaie dans quelques secondes.', 'TIMEOUT')
+    }
+    throw error
+  } finally {
+    window.clearTimeout(timeout)
+  }
+
   const text = await res.text()
   const data = text ? safeParse(text) : null
 
@@ -69,6 +84,21 @@ export async function api<T>(path: string, opts: FetchOpts = {}): Promise<T> {
 
 function safeParse(s: string): unknown {
   try { return JSON.parse(s) } catch { return s }
+}
+
+function anySignal(signals: AbortSignal[]): AbortSignal {
+  const controller = new AbortController()
+
+  const abort = () => controller.abort()
+  for (const signal of signals) {
+    if (signal.aborted) {
+      abort()
+      break
+    }
+    signal.addEventListener('abort', abort, { once: true })
+  }
+
+  return controller.signal
 }
 
 export { API_BASE }
