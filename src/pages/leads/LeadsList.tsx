@@ -118,7 +118,7 @@ function LeadsSetter() {
   const counts = useMemo(() => ({
     all: mine.length,
     nouveau: mine.filter((l) => l.status === 'nouveau').length,
-    rappel: mine.filter((l) => l.status === 'qualifie' || (l.joursSansContact ?? 0) >= 1).length,
+    rappel: mine.filter(isCallbackLead).length,
     qualifie: mine.filter((l) => l.status === 'qualifie').length,
     perdu: mine.filter((l) => l.status === 'perdu').length,
   }), [mine])
@@ -126,7 +126,7 @@ function LeadsSetter() {
   const filtered = useMemo(() => {
     let list = mine
     if (filter === 'nouveau') list = list.filter((l) => l.status === 'nouveau')
-    if (filter === 'rappel') list = list.filter((l) => l.status === 'qualifie' || (l.joursSansContact ?? 0) >= 1)
+    if (filter === 'rappel') list = list.filter(isCallbackLead)
     if (filter === 'qualifie') list = list.filter((l) => l.status === 'qualifie')
     if (filter === 'perdu') list = list.filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie')
     list = applyLeadFilters(list, leadFilters)
@@ -472,6 +472,10 @@ function LeadsAdmin() {
 }
 
 // ===== Helpers =====
+
+function isCallbackLead(lead: LeadResponse): boolean {
+  return lead.status === 'a_rappeler' || lead.status === 'relance' || Boolean(lead.nextCallbackAt)
+}
 
 function lastCallDateTime(iso: string | null): string {
   if (!iso) return 'Jamais'
