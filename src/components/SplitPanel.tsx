@@ -195,14 +195,15 @@ function ActiviteTab({ leadId, userMap }: { leadId: string; userMap?: Map<string
   type Item = { ts: string; node: ReactNode }
   const items: Item[] = []
   for (const c of calls ?? []) {
+    const setterName = userMap?.get(c.setterId)?.name
     items.push({
       ts: c.calledAt,
       node: (
         <TimelineRow
           key={`call-${c.id}`}
           icon="phone"
-          title={`Appel — ${CALL_RESULT_LABEL[c.result]}`}
-          subtitle={c.notes ?? userMap?.get(c.setterId)?.name ?? null}
+          title={`Appel — ${CALL_RESULT_LABEL[c.result]}${setterName ? ` · ${setterName}` : ''}`}
+          subtitle={c.notes ?? null}
           ts={c.calledAt}
         />
       ),
@@ -234,18 +235,21 @@ function AppelsTab({ leadId, userMap }: { leadId: string; userMap?: Map<string, 
   if (!data || data.length === 0) return <p className="text-faint">Aucun appel pour ce lead.</p>
   return (
     <div className="space-y-3">
-      {data.map((c) => (
-        <div key={c.id} className="bg-white/60 border border-line rounded-xl p-3">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] font-bold uppercase tracking-widest text-or">{CALL_RESULT_LABEL[c.result]}</span>
-            <span className="text-[11px] text-faint">{formatDate(c.calledAt)}</span>
+      {data.map((c) => {
+        const setterName = userMap?.get(c.setterId)?.name
+        return (
+          <div key={c.id} className="bg-white/60 border border-line rounded-xl p-3">
+            <div className="flex items-start justify-between gap-3 mb-1">
+              <div className="min-w-0">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-or">{CALL_RESULT_LABEL[c.result]}</span>
+                {setterName && <span className="ml-2 text-xs font-semibold text-text normal-case tracking-normal">{setterName}</span>}
+              </div>
+              <span className="text-[11px] text-faint whitespace-nowrap">{formatDate(c.calledAt)}</span>
+            </div>
+            {c.notes && <p className="text-sm mt-2 text-text">{c.notes}</p>}
           </div>
-          {userMap?.get(c.setterId)?.name && (
-            <div className="text-xs text-muted">{userMap.get(c.setterId)?.name}</div>
-          )}
-          {c.notes && <p className="text-sm mt-2 text-text">{c.notes}</p>}
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
