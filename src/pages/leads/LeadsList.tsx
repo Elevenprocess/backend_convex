@@ -93,7 +93,7 @@ export function LeadsList() {
 
 // ----- F5 Setter -----
 function LeadsSetter() {
-  const [filter, setFilter] = useState<'all' | 'nouveau' | 'rappel' | 'qualifie' | 'perdu'>('all')
+  const [filter, setFilter] = useState<'nouveau' | 'rappel' | 'qualifie' | 'perdu'>('nouveau')
   const [leadFilters, setLeadFilters] = useState<LeadListFilters>(DEFAULT_LEAD_FILTERS)
   const [searchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('search') ?? '')
@@ -104,8 +104,8 @@ function LeadsSetter() {
   const startCall = useStartCall()
   const showColumn = (key: ColumnKey) => visibleColumns.includes(key)
 
-  // Côté backend, le rôle setter voit tous les leads non supprimés.
-  // L'ordre vient de l'API : nouveaux leads en premier.
+  // Côté setter, l'écran s'ouvre directement sur les nouveaux leads.
+  // Le filtre global "Tous" n'est pas affiché aux setters.
   const { data, loading, error } = useLeads({ limit: 1500 })
   const { data: usersList } = useUsers()
   const mine = data ?? []
@@ -147,7 +147,7 @@ function LeadsSetter() {
     <AppShell>
       <Topbar
         eyebrow="LEADS / SETTER"
-        title="Tous les leads"
+        title="Nouveaux leads"
       />
       <div className="flex flex-grow overflow-hidden">
         <div className="flex-grow flex flex-col min-w-0">
@@ -166,7 +166,6 @@ function LeadsSetter() {
 
           <main className="p-8 pt-4 flex-grow flex flex-col min-h-0 overflow-hidden">
             <div className="flex items-center gap-2 mb-4 flex-wrap flex-shrink-0 bg-cream-darker/95 backdrop-blur z-20 pb-2">
-              <FilterPill active={filter === 'all'} onClick={() => setFilter('all')}>Tous ({counts.all})</FilterPill>
               <FilterPill active={filter === 'nouveau'} onClick={() => setFilter('nouveau')}>Nouveaux ({counts.nouveau})</FilterPill>
               <FilterPill active={filter === 'rappel'} onClick={() => setFilter('rappel')}>À rappeler ({counts.rappel})</FilterPill>
               <FilterPill active={filter === 'qualifie'} onClick={() => setFilter('qualifie')}>Qualifiés ({counts.qualifie})</FilterPill>
@@ -186,7 +185,7 @@ function LeadsSetter() {
                   icon="users"
                   title={mine.length === 0 ? 'Aucun lead pour le moment' : 'Aucun lead ne correspond'}
                   description={mine.length === 0 ? "Aucun lead disponible pour le moment." : 'Essayez un autre filtre ou créez un nouveau lead.'}
-                  secondaryAction={{ label: 'Voir tous les leads', onClick: () => { setFilter('all'); setQuery('') } }}
+                  secondaryAction={{ label: 'Voir les nouveaux leads', onClick: () => { setFilter('nouveau'); setQuery('') } }}
                 />
               </div>
             ) : (
