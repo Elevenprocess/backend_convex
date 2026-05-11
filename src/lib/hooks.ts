@@ -26,6 +26,8 @@ type FetchCacheEntry = {
 }
 
 const FETCH_CACHE_TTL_MS = 5 * 60 * 1000
+const PERSISTED_CACHE_PREFIX = 'ecoi.fetchCache.v1:'
+const PERSISTED_CACHE_PATHS = ['/leads', '/users']
 const fetchCache = new Map<string, FetchCacheEntry>()
 
 function buildFetchCacheKey(path: string | null, queryKey: string): string | null {
@@ -34,17 +36,73 @@ function buildFetchCacheKey(path: string | null, queryKey: string): string | nul
 
 function readCachedEntry(cacheKey: string | null): FetchCacheEntry | null {
   if (!cacheKey) return null
-  const entry = fetchCache.get(cacheKey)
+  const entry = fetchCache.get(cacheKey) ?? readPersistedCache(cacheKey)
   if (!entry) return null
   if (Date.now() - entry.timestamp > FETCH_CACHE_TTL_MS) {
-    fetchCache.delete(cacheKey)
+    deleteCache(cacheKey)
     return null
   }
+  fetchCache.set(cacheKey, entry)
   return entry
 }
 
 function readCachedData<T>(cacheKey: string | null): T | null {
   return (readCachedEntry(cacheKey)?.data as T | undefined) ?? null
+}
+
+function shouldPersistCache(cacheKey: string): boolean {
+  return PERSISTED_CACHE_PATHS.some((path) => cacheKey.startsWith(`${path}?`))
+}
+
+function readPersistedCache(cacheKey: string): FetchCacheEntry | null {
+  if (typeof window === 'undefined' || !shouldPersistCache(cacheKey)) return null
+  try {
+    const raw = window.sessionStorage.getItem(`${PERSISTED_CACHE_PREFIX}${cacheKey}`)
+    if (!raw) return null
+    return JSON.parse(raw) as FetchCacheEntry
+  } catch {
+    return null
+  }
+}
+
+function writeCache(cacheKey: string | null, entry: FetchCacheEntry) {
+  if (!cacheKey) return
+  fetchCache.set(cacheKey, entry)
+  if (typeof window === 'undefined' || !shouldPersistCache(cacheKey)) return
+  try {
+    window.sessionStorage.setItem(`${PERSISTED_CACHE_PREFIX}${cacheKey}`, JSON.stringify(entry))
+  } catch {
+    // Cache best-effort : si le navigateur refuse/limite sessionStorage, l'app continue.
+  }
+}
+
+function deleteCache(cacheKey: string) {
+  fetchCache.delete(cacheKey)
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.removeItem(`${PERSISTED_CACHE_PREFIX}${cacheKey}`)
+  } catch {
+    // best-effort
+  }
+}
+
+function deleteCachesForPrefixes(prefixes: string[]) {
+  for (const key of Array.from(fetchCache.keys())) {
+    if (prefixes.some((prefix) => key.startsWith(`${prefix}?`))) deleteCache(key)
+  }
+  if (typeof window === 'undefined') return
+  try {
+    for (let i = window.sessionStorage.length - 1; i >= 0; i--) {
+      const storageKey = window.sessionStorage.key(i)
+      if (!storageKey?.startsWith(PERSISTED_CACHE_PREFIX)) continue
+      const cacheKey = storageKey.slice(PERSISTED_CACHE_PREFIX.length)
+      if (prefixes.some((prefix) => cacheKey.startsWith(`${prefix}?`))) {
+        window.sessionStorage.removeItem(storageKey)
+      }
+    }
+  } catch {
+    // best-effort
+  }
 }
 
 // useFetch: passe `path = null` pour désactiver le fetch (utile quand l'id n'existe pas encore).
@@ -91,7 +149,7 @@ function useFetch<T>(
     api<T>(path, { query, signal: ctrl.signal })
       .then((d) => {
         if (ctrl.signal.aborted) return
-        if (cacheKey) fetchCache.set(cacheKey, { data: d, timestamp: Date.now() })
+        writeCache(cacheKey, { data: d, timestamp: Date.now() })
         setData(d)
       })
       .catch((e) => {
@@ -112,9 +170,7 @@ function useFetch<T>(
     const onRealtimeRefresh = (event: Event) => {
       const detail = (event as CustomEvent<RealtimeRefreshPayload>).detail
       if (!detail?.paths?.some((prefix) => path.startsWith(prefix))) return
-      for (const key of Array.from(fetchCache.keys())) {
-        if (detail.paths.some((prefix) => key.startsWith(`${prefix}?`))) fetchCache.delete(key)
-      }
+      deleteCachesForPrefixes(detail.paths)
       setTick((t) => t + 1)
     }
     window.addEventListener(REALTIME_REFRESH_EVENT, onRealtimeRefresh)
