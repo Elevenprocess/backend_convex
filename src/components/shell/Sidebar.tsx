@@ -28,7 +28,7 @@ export function Sidebar() {
     window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(expanded))
   }, [expanded])
 
-  const navIconSize = 20
+  const navIconSize = 18
   return (
     <aside className={`app-sidebar ${expanded ? 'expanded' : 'collapsed'}`}>
       <div className="sidebar-brand" title="Electro Concept OI">
@@ -43,7 +43,7 @@ export function Sidebar() {
         title={expanded ? 'Réduire le menu' : 'Agrandir le menu'}
         aria-label={expanded ? 'Réduire le menu' : 'Agrandir le menu'}
       >
-        <Icon name={expanded ? 'arrow-left' : 'chevron-right'} size={16} />
+        <Icon name={expanded ? 'arrow-left' : 'chevron-right'} size={18} />
         <span className="sidebar-toggle-label">Réduire</span>
       </button>
 
