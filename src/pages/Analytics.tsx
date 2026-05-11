@@ -9,6 +9,10 @@ const QUALIFIED_STATUSES = new Set(['qualifie', 'rdv_pris', 'rdv_honore', 'signe
 const CLASSIFIED_STATUSES = new Set(['qualifie', 'rdv_pris', 'rdv_honore', 'signe', 'perdu', 'relance', 'pas_qualifie', 'a_rappeler', 'pas_de_reponse'])
 const COLORS = ['#D4AF37', '#B87333', '#3DA86A', '#6B7C8C', '#B7410E', '#2F4858']
 
+type AnalyticsPeriodMode = 'today' | 'date' | 'week' | 'month' | 'year'
+type AnalyticsRange = { from: Date; to: Date; label: string; days: number }
+
+
 export function Analytics() {
   const me = useAuth((s) => s.user)
 
@@ -19,21 +23,21 @@ export function Analytics() {
 
 // ----- F11 Setter -----
 function AnalyticsSetter({ name, userId }: { name: string; userId?: string }) {
-  const [period, setPeriod] = useState<'7' | '30' | '90'>('30')
-  const days = Number(period)
+  const period = useAnalyticsPeriod('month')
+  const days = period.range.days
   const { data: leads = [] } = useLeads({ limit: 3000 })
   const { data: calls = [] } = useCallLogs(userId ? { setterId: userId, limit: 3000 } : { limit: 3000 })
   const { data: rdvs = [] } = useRdvList(userId ? { setterId: userId, limit: 1000 } : { limit: 1000 })
 
-  const stats = useMemo(() => buildSetterStats(leads ?? [], calls ?? [], rdvs ?? [], userId, days), [leads, calls, rdvs, userId, days])
+  const stats = useMemo(() => buildSetterStats(leads ?? [], calls ?? [], rdvs ?? [], userId, period.range), [leads, calls, rdvs, userId, period.range])
 
   return (
     <AppShell blobsKey="setter">
       <Topbar eyebrow="ANALYTICS / SETTER" title={`Mes performances — ${name}`} />
-      <div className="px-8 pt-4 flex items-center justify-between flex-shrink-0">
-        <div className="text-xs text-faint font-semibold">Moteur OLAP local : call_logs + statuts leads + RDV, sans données fictives.</div>
-        <PeriodSwitch value={period} onChange={setPeriod} options={[{ id: '7', label: '7j' }, { id: '30', label: '30j' }, { id: '90', label: '90j' }]} />
-      </div>
+      <AnalyticsPeriodBar
+        helper="Moteur OLAP local : call_logs + statuts leads + RDV, sans données fictives."
+        period={period}
+      />
       <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
         <div className="grid grid-cols-4 gap-6">
           <BigStatCard label="APPELS LOGIQUES" value={fmtInt(stats.calls)} delta={`${stats.callsPerDay}/j`} sub="1 classification = au moins 1 appel" />
@@ -73,17 +77,17 @@ function AnalyticsSetter({ name, userId }: { name: string; userId?: string }) {
 
 // ----- F12 Commercial -----
 function AnalyticsCommercial({ name, userId }: { name: string; userId: string }) {
-  const [period, setPeriod] = useState<'mois' | 'trim'>('mois')
+  const period = useAnalyticsPeriod('month')
   const { data: rdvs = [] } = useRdvList({ commercialId: userId, limit: 1000 })
-  const stats = useMemo(() => buildCommercialStats(rdvs ?? [], period === 'mois' ? 30 : 90), [rdvs, period])
+  const stats = useMemo(() => buildCommercialStats(rdvs ?? [], period.range), [rdvs, period.range])
 
   return (
     <AppShell blobsKey="commercial">
       <Topbar eyebrow="ANALYTICS / COMMERCIAL" title={`Mes performances — ${name}`} />
-      <div className="px-8 pt-4 flex items-center justify-between flex-shrink-0">
-        <div className="text-xs text-faint font-semibold">Analyse live des RDV honorés, ventes et modes de financement.</div>
-        <PeriodSwitch value={period} onChange={setPeriod} options={[{ id: 'mois', label: 'Ce mois' }, { id: 'trim', label: 'Trimestre' }]} />
-      </div>
+      <AnalyticsPeriodBar
+        helper="Analyse live des RDV honorés, ventes et modes de financement."
+        period={period}
+      />
       <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
         <div className="grid grid-cols-4 gap-6">
           <BigStatCard label="CA SIGNÉ" value={fmtKEur(stats.ca)} delta={`${stats.signed} ventes`} />
@@ -109,15 +113,20 @@ function AnalyticsCommercial({ name, userId }: { name: string; userId: string })
 
 // ----- F13 Admin -----
 function AnalyticsAdmin() {
+  const period = useAnalyticsPeriod('month')
   const { data: leads = [] } = useLeads({ limit: 5000 })
   const { data: calls = [] } = useCallLogs({ limit: 5000 })
   const { data: rdvs = [] } = useRdvList({ limit: 2000 })
   const { data: users = [] } = useUsers()
-  const stats = useMemo(() => buildAdminStats(leads ?? [], calls ?? [], rdvs ?? [], users ?? []), [leads, calls, rdvs, users])
+  const stats = useMemo(() => buildAdminStats(leads ?? [], calls ?? [], rdvs ?? [], users ?? [], period.range), [leads, calls, rdvs, users, period.range])
 
   return (
     <AppShell blobsKey="admin">
       <Topbar eyebrow="ANALYTICS / ADMIN" title="Performance globale équipe" />
+      <AnalyticsPeriodBar
+        helper="Filtre toutes les métriques équipe sur la période choisie."
+        period={period}
+      />
       <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
         <div className="grid grid-cols-4 gap-6">
           <BigStatCard label="APPELS LOGIQUES" value={fmtInt(stats.calls)} delta={`${stats.syntheticCalls} ETL`} sub="call_logs + classifications" />
@@ -204,16 +213,17 @@ type Segment = { label: string; value: number; color: string }
 type SetterPerf = { id: string; name: string; initials: string; calls: number; connected: number; classified: number; qualified: number; rdvPris: number; efficiency: number }
 type CommercialPerf = { id: string; name: string; initials: string; honored: number; signed: number; closing: number; panier: number; ca: number }
 
-function buildSetterStats(leads: LeadResponse[], calls: CallLogResponse[], rdvs: RdvResponse[], setterId: string | undefined, days: number) {
-  const scopedCalls = filterRecent(calls, days)
-  const scopedLeads = leads.filter((l) => belongsToSetter(l, setterId) && isRecent(l.updatedAt, days))
+function buildSetterStats(leads: LeadResponse[], calls: CallLogResponse[], rdvs: RdvResponse[], setterId: string | undefined, range: AnalyticsRange) {
+  const days = range.days
+  const scopedCalls = filterRange(calls, range)
+  const scopedLeads = leads.filter((l) => belongsToSetter(l, setterId) && isInRange(l.updatedAt, range))
   const classifiedLeads = scopedLeads.filter(isClassifiedLead)
   const syntheticCalls = Math.max(0, classifiedLeads.length - scopedCalls.length)
   const resultCounts = countResults(scopedCalls)
   addSyntheticResults(resultCounts, classifiedLeads, syntheticCalls)
   const callsTotal = scopedCalls.length + syntheticCalls
   const connected = (resultCounts.joint ?? 0) + (resultCounts.rdv_pris ?? 0)
-  const rdvPris = Math.max(resultCounts.rdv_pris ?? 0, rdvs.filter((r) => isRecent(r.createdAt, days)).length, classifiedLeads.filter((l) => l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe').length)
+  const rdvPris = Math.max(resultCounts.rdv_pris ?? 0, rdvs.filter((r) => isInRange(r.createdAt, range)).length, classifiedLeads.filter((l) => l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe').length)
   const qualified = classifiedLeads.filter(isQualifiedLead).length
   return {
     calls: callsTotal,
@@ -229,12 +239,12 @@ function buildSetterStats(leads: LeadResponse[], calls: CallLogResponse[], rdvs:
     qualificationRate: pct(qualified, callsTotal),
     rdvRate: pct(rdvPris, callsTotal),
     resultSegments: resultSegments(resultCounts),
-    dailyCalls: dailyLogicalCalls(scopedCalls, classifiedLeads, days),
+    dailyCalls: dailyLogicalCalls(scopedCalls, classifiedLeads, range),
   }
 }
 
-function buildCommercialStats(rdvs: RdvResponse[], days: number) {
-  const scoped = filterRecent(rdvs, days, (r) => r.scheduledAt)
+function buildCommercialStats(rdvs: RdvResponse[], range: AnalyticsRange) {
+  const scoped = filterRange(rdvs, range, (r) => r.scheduledAt)
   const honored = scoped.filter((r) => r.status === 'honore')
   const signed = honored.filter((r) => r.result === 'signe')
   const ca = signed.reduce((sum, r) => sum + money(r.montantTotal), 0)
@@ -260,22 +270,25 @@ function buildCommercialStats(rdvs: RdvResponse[], days: number) {
   }
 }
 
-function buildAdminStats(leads: LeadResponse[], calls: CallLogResponse[], rdvs: RdvResponse[], users: UserResponse[]) {
-  const classifiedLeads = leads.filter(isClassifiedLead)
-  const syntheticCalls = Math.max(0, classifiedLeads.length - calls.length)
-  const resultCounts = countResults(calls)
+function buildAdminStats(leads: LeadResponse[], calls: CallLogResponse[], rdvs: RdvResponse[], users: UserResponse[], range: AnalyticsRange) {
+  const scopedLeads = leads.filter((l) => isInRange(l.updatedAt, range))
+  const scopedCalls = filterRange(calls, range)
+  const scopedRdvs = filterRange(rdvs, range, (r) => r.scheduledAt)
+  const classifiedLeads = scopedLeads.filter(isClassifiedLead)
+  const syntheticCalls = Math.max(0, classifiedLeads.length - scopedCalls.length)
+  const resultCounts = countResults(scopedCalls)
   addSyntheticResults(resultCounts, classifiedLeads, syntheticCalls)
-  const callsTotal = calls.length + syntheticCalls
+  const callsTotal = scopedCalls.length + syntheticCalls
   const qualified = classifiedLeads.filter(isQualifiedLead).length
-  const rdvPris = Math.max(resultCounts.rdv_pris ?? 0, leads.filter((l) => l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe').length)
-  const honored = rdvs.filter((r) => r.status === 'honore')
+  const rdvPris = Math.max(resultCounts.rdv_pris ?? 0, scopedLeads.filter((l) => l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe').length)
+  const honored = scopedRdvs.filter((r) => r.status === 'honore')
   const signed = honored.filter((r) => r.result === 'signe')
   const ca = signed.reduce((sum, r) => sum + money(r.montantTotal), 0)
   return {
     calls: callsTotal,
     classified: classifiedLeads.length,
     qualified,
-    unclassified: leads.length - classifiedLeads.length,
+    unclassified: scopedLeads.length - classifiedLeads.length,
     syntheticCalls,
     rdvPris,
     rdvRate: pct(rdvPris, callsTotal),
@@ -283,8 +296,8 @@ function buildAdminStats(leads: LeadResponse[], calls: CallLogResponse[], rdvs: 
     ca,
     signed: signed.length,
     resultSegments: resultSegments(resultCounts),
-    setters: buildSetterRows(leads, calls, rdvs, users),
-    commercials: buildCommercialRows(rdvs, users),
+    setters: buildSetterRows(scopedLeads, scopedCalls, scopedRdvs, users),
+    commercials: buildCommercialRows(scopedRdvs, users),
   }
 }
 
@@ -363,8 +376,8 @@ function pieFromCounts(rows: [string, number][]): Segment[] {
   return rows.filter(([, value]) => value > 0).map(([label, value], i) => ({ label, value, color: COLORS[i % COLORS.length] }))
 }
 
-function dailyLogicalCalls(calls: CallLogResponse[], classified: LeadResponse[], days: number): number[] {
-  const keys = lastNDays(days)
+function dailyLogicalCalls(calls: CallLogResponse[], classified: LeadResponse[], range: AnalyticsRange): number[] {
+  const keys = dayKeys(range)
   return keys.map((day) => {
     const logged = calls.filter((c) => c.calledAt.slice(0, 10) === day).length
     const classifs = classified.filter((l) => l.updatedAt.slice(0, 10) === day).length
@@ -372,23 +385,23 @@ function dailyLogicalCalls(calls: CallLogResponse[], classified: LeadResponse[],
   })
 }
 
-function filterRecent<T>(rows: T[], days: number, getIso: (row: T) => string = (row) => (row as { calledAt?: string; updatedAt?: string }).calledAt ?? (row as { updatedAt: string }).updatedAt): T[] {
-  return rows.filter((row) => isRecent(getIso(row), days))
+function filterRange<T>(rows: T[], range: AnalyticsRange, getIso: (row: T) => string = (row) => (row as { calledAt?: string; updatedAt?: string }).calledAt ?? (row as { updatedAt: string }).updatedAt): T[] {
+  return rows.filter((row) => isInRange(getIso(row), range))
 }
 
-function isRecent(iso: string, days: number): boolean {
+function isInRange(iso: string, range: AnalyticsRange): boolean {
   const d = new Date(iso)
-  const from = new Date()
-  from.setDate(from.getDate() - days)
-  return d >= from
+  return d >= range.from && d <= range.to
 }
 
-function lastNDays(n: number): string[] {
-  return Array.from({ length: n }, (_, i) => {
-    const d = new Date()
-    d.setDate(d.getDate() - (n - 1 - i))
-    return d.toISOString().slice(0, 10)
-  })
+function dayKeys(range: AnalyticsRange): string[] {
+  const keys: string[] = []
+  const d = startOfDay(range.from)
+  while (d <= range.to) {
+    keys.push(toDateInputValue(d))
+    d.setDate(d.getDate() + 1)
+  }
+  return keys
 }
 
 function pct(num: number, denom: number): number {
@@ -413,6 +426,143 @@ function fmtKEur(val: number): string {
 function initialsFromName(name: string): string {
   const parts = name.split(' ').filter(Boolean)
   return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '??'
+}
+
+// ===== Period selector =====
+
+function useAnalyticsPeriod(defaultMode: AnalyticsPeriodMode) {
+  const [mode, setMode] = useState<AnalyticsPeriodMode>(defaultMode)
+  const [selectedDate, setSelectedDate] = useState(() => toDateInputValue(new Date()))
+  const range = useMemo(() => buildAnalyticsRange(mode, selectedDate), [mode, selectedDate])
+  return { mode, setMode, selectedDate, setSelectedDate, range }
+}
+
+function AnalyticsPeriodBar({ helper, period }: {
+  helper: string
+  period: ReturnType<typeof useAnalyticsPeriod>
+}) {
+  return (
+    <div className="px-8 pt-4 flex flex-wrap items-center justify-between flex-shrink-0 gap-4">
+      <div>
+        <div className="text-xs text-faint font-semibold">{helper}</div>
+        <div className="text-xs font-bold text-or-dark mt-1">Période : {period.range.label}</div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <PeriodSwitch
+          value={period.mode}
+          onChange={period.setMode}
+          options={[
+            { id: 'today', label: "Aujourd'hui" },
+            { id: 'date', label: 'Date' },
+            { id: 'week', label: 'Semaine' },
+            { id: 'month', label: 'Mois' },
+            { id: 'year', label: 'Année' },
+          ]}
+        />
+        <input
+          type="date"
+          value={period.selectedDate}
+          onChange={(e) => setPeriodDate(period, e.target.value)}
+          className="h-9 rounded-xl border border-line bg-white px-3 text-xs font-semibold text-text shadow-sm outline-none focus:border-or"
+          aria-label="Choisir une date pour les analytics"
+        />
+      </div>
+    </div>
+  )
+}
+
+function setPeriodDate(period: ReturnType<typeof useAnalyticsPeriod>, value: string) {
+  period.setSelectedDate(value || toDateInputValue(new Date()))
+  if (period.mode === 'today') period.setMode('date')
+}
+
+function buildAnalyticsRange(mode: AnalyticsPeriodMode, selectedDate: string): AnalyticsRange {
+  const anchor = parseDateInput(selectedDate)
+  if (mode === 'today' || mode === 'date') {
+    const from = startOfDay(mode === 'today' ? new Date() : anchor)
+    const to = endOfDay(from)
+    return {
+      from,
+      to,
+      label: mode === 'today' ? "Aujourd'hui" : from.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }),
+      days: 1,
+    }
+  }
+  if (mode === 'week') {
+    const from = startOfWeek(anchor)
+    const to = endOfDay(addDays(from, 6))
+    return {
+      from,
+      to,
+      label: `Semaine du ${shortDate(from)} au ${shortDate(to)}`,
+      days: 7,
+    }
+  }
+  if (mode === 'month') {
+    const from = startOfDay(new Date(anchor.getFullYear(), anchor.getMonth(), 1))
+    const to = endOfDay(new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0))
+    return {
+      from,
+      to,
+      label: anchor.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }),
+      days: daysBetween(from, to),
+    }
+  }
+  const from = startOfDay(new Date(anchor.getFullYear(), 0, 1))
+  const to = endOfDay(new Date(anchor.getFullYear(), 11, 31))
+  return {
+    from,
+    to,
+    label: `Année ${anchor.getFullYear()}`,
+    days: daysBetween(from, to),
+  }
+}
+
+function parseDateInput(value: string): Date {
+  if (!value) return startOfDay(new Date())
+  const [year, month, day] = value.split('-').map(Number)
+  if (!year || !month || !day) return startOfDay(new Date())
+  return startOfDay(new Date(year, month - 1, day))
+}
+
+function startOfDay(date: Date): Date {
+  const d = new Date(date)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+function endOfDay(date: Date): Date {
+  const d = new Date(date)
+  d.setHours(23, 59, 59, 999)
+  return d
+}
+
+function startOfWeek(date: Date): Date {
+  const d = startOfDay(date)
+  const dow = d.getDay() || 7
+  d.setDate(d.getDate() - dow + 1)
+  return d
+}
+
+function addDays(date: Date, days: number): Date {
+  const d = new Date(date)
+  d.setDate(d.getDate() + days)
+  return d
+}
+
+function daysBetween(from: Date, to: Date): number {
+  return Math.max(1, Math.round((startOfDay(to).getTime() - startOfDay(from).getTime()) / 86400000) + 1)
+}
+
+function toDateInputValue(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function shortDate(date: Date): string {
+  return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
 }
 
 // ===== Atoms =====
