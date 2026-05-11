@@ -192,7 +192,7 @@ function DefaultPanelContent({
   callState: CallState
   onSaved?: () => void
 }) {
-  if (active === 'infos') return <InfosTab lead={lead} userMap={userMap} />
+  if (active === 'infos') return <InfosTab lead={lead} userMap={userMap} onSaved={onSaved} />
   if (active === 'activite') return <ActiviteTab leadId={lead.id} userMap={userMap} />
   if (active === 'appels') return <AppelsTab leadId={lead.id} userMap={userMap} />
   if (active === 'rdv') return <RdvTab lead={lead} userMap={userMap} />
@@ -212,18 +212,165 @@ function DefaultPanelContent({
   return null
 }
 
-function InfosTab({ lead, userMap }: { lead: LeadResponse; userMap?: Map<string, UserResponse> }) {
-  const setter = lead.setterId ? userMap?.get(lead.setterId)?.name : null
+type InfosEditable = {
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+  addressLine: string
+  city: string
+  postalCode: string
+  status: LeadResponse['status']
+}
+
+function leadToInfosForm(lead: LeadResponse): InfosEditable {
+  return {
+    firstName: lead.firstName ?? '',
+    lastName: lead.lastName ?? '',
+    email: lead.email ?? '',
+    phone: lead.phone ?? '',
+    addressLine: lead.addressLine ?? '',
+    city: lead.city ?? '',
+    postalCode: lead.postalCode ?? '',
+    status: lead.status,
+  }
+}
+
+function InfosTab({ lead, userMap, onSaved }: { lead: LeadResponse; userMap?: Map<string, UserResponse>; onSaved?: () => void }) {
+  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState<InfosEditable>(() => leadToInfosForm(lead))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!editing) setForm(leadToInfosForm(lead))
+  }, [lead, editing])
+
+  // Setters multi : union de setterId (principal) + assignedSetterIds (collègues qui se sont auto-assignés).
+  const setterIdSet = new Set<string>()
+  if (lead.setterId) setterIdSet.add(lead.setterId)
+  for (const id of lead.assignedSetterIds ?? []) setterIdSet.add(id)
+  const setterNames = Array.from(setterIdSet)
+    .map((id) => userMap?.get(id)?.name)
+    .filter((n): n is string => Boolean(n))
   const commercial = lead.assignedToId ? userMap?.get(lead.assignedToId)?.name : null
+
+  async function save() {
+    setSaving(true)
+    setError(null)
+    try {
+      const patch: Record<string, unknown> = {}
+      const initial = leadToInfosForm(lead)
+      for (const key of Object.keys(form) as (keyof InfosEditable)[]) {
+        if (form[key] !== initial[key]) {
+          if (key !== 'status') {
+            // Champs texte : on envoie null si vide pour que le back nettoie la valeur.
+            const trimmed = (form[key] as string).trim()
+            patch[key] = trimmed === '' ? null : trimmed
+          } else {
+            patch[key] = form[key]
+          }
+        }
+      }
+      if (Object.keys(patch).length === 0) {
+        setEditing(false)
+        return
+      }
+      await updateLead(lead.id, patch as Parameters<typeof updateLead>[1])
+      onSaved?.()
+      setEditing(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur inconnue')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!editing) {
+    return (
+      <div className="space-y-3">
+        <div className="flex justify-end">
+          <button
+            onClick={() => setEditing(true)}
+            className="text-xs font-semibold text-or hover:underline inline-flex items-center gap-1"
+          >
+            <Icon name="edit" size={12} /> Modifier
+          </button>
+        </div>
+        <Field label="NOM" value={[lead.firstName, lead.lastName].filter(Boolean).join(' ') || '—'} />
+        <Field label="TÉLÉPHONE" value={lead.phone ?? '—'} />
+        <Field label="EMAIL" value={lead.email ?? '—'} />
+        <Field label="ADRESSE" value={[lead.addressLine, lead.postalCode, lead.city].filter(Boolean).join(', ') || '—'} />
+        <Field label="VILLE" value={lead.city ?? '—'} />
+        <Field label="SOURCE" value={prettySource(lead)} />
+        {lead.utmSource && <Field label="UTM" value={lead.utmSource} />}
+        <Field label="STATUT" value={STATUS_LABEL[lead.status]} />
+        {setterNames.length > 0 && (
+          <Field label={setterNames.length > 1 ? `SETTERS (${setterNames.length})` : 'SETTER'} value={setterNames.join(' · ')} />
+        )}
+        {commercial && <Field label="COMMERCIAL" value={commercial} />}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-3">
-      <Field label="EMAIL" value={lead.email ?? '—'} />
-      <Field label="VILLE" value={lead.city ?? '—'} />
-      <Field label="SOURCE" value={prettySource(lead)} />
-      {lead.utmSource && <Field label="UTM" value={lead.utmSource} />}
-      <Field label="STATUT" value={STATUS_LABEL[lead.status]} />
-      {setter && <Field label="SETTER" value={setter} />}
+      <div className="flex justify-end gap-2">
+        <button
+          onClick={() => { setEditing(false); setError(null) }}
+          disabled={saving}
+          className="text-xs font-semibold text-faint hover:underline disabled:opacity-50"
+        >
+          Annuler
+        </button>
+        <button
+          onClick={save}
+          disabled={saving}
+          className="text-xs font-semibold text-or hover:underline disabled:opacity-50"
+        >
+          {saving ? 'Enregistrement…' : 'Enregistrer'}
+        </button>
+      </div>
+      {error && <div className="text-xs text-rouille bg-rouille-tint/40 rounded p-2">{error}</div>}
+      <EditableField label="PRÉNOM" value={form.firstName} onChange={(v) => setForm((f) => ({ ...f, firstName: v }))} />
+      <EditableField label="NOM" value={form.lastName} onChange={(v) => setForm((f) => ({ ...f, lastName: v }))} />
+      <EditableField label="TÉLÉPHONE" value={form.phone} onChange={(v) => setForm((f) => ({ ...f, phone: v }))} placeholder="+262 692 ..." />
+      <EditableField label="EMAIL" value={form.email} onChange={(v) => setForm((f) => ({ ...f, email: v }))} type="email" />
+      <EditableField label="ADRESSE" value={form.addressLine} onChange={(v) => setForm((f) => ({ ...f, addressLine: v }))} />
+      <EditableField label="CODE POSTAL" value={form.postalCode} onChange={(v) => setForm((f) => ({ ...f, postalCode: v }))} placeholder="97400" />
+      <EditableField label="VILLE" value={form.city} onChange={(v) => setForm((f) => ({ ...f, city: v }))} />
+      <div>
+        <div className="text-[10px] font-bold text-faint uppercase tracking-widest mb-1">STATUT</div>
+        <select
+          value={form.status}
+          onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as LeadResponse['status'] }))}
+          className="w-full bg-white border border-line rounded px-2 py-1.5 text-sm"
+        >
+          {(Object.keys(STATUS_LABEL) as (keyof typeof STATUS_LABEL)[]).map((s) => (
+            <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+          ))}
+        </select>
+      </div>
+      <Field label="SOURCE" value={`${prettySource(lead)} · non modifiable`} />
+      {setterNames.length > 0 && (
+        <Field label={setterNames.length > 1 ? `SETTERS (${setterNames.length})` : 'SETTER'} value={setterNames.join(' · ')} />
+      )}
       {commercial && <Field label="COMMERCIAL" value={commercial} />}
+    </div>
+  )
+}
+
+function EditableField({ label, value, onChange, type = 'text', placeholder }: { label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string }) {
+  return (
+    <div>
+      <div className="text-[10px] font-bold text-faint uppercase tracking-widest mb-1">{label}</div>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full bg-white border border-line rounded px-2 py-1.5 text-sm"
+      />
     </div>
   )
 }
