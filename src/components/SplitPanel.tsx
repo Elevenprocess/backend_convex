@@ -405,8 +405,7 @@ function NotesTab({
         setStep('done')
       } else if (kind === 'a_rappeler') {
         if (!callbackAt) throw new Error('Choisis la date et l’heure du rappel.')
-        if (!commentaire.trim()) throw new Error('Ajoute un commentaire pour le rappel.')
-        await createCallLog({ leadId: lead.id, result: 'rappel_planifie', nextCallbackAt: new Date(callbackAt).toISOString(), notes: noteFinale })
+        await createCallLog({ leadId: lead.id, result: 'rappel_planifie', nextCallbackAt: new Date(callbackAt).toISOString(), notes: noteFinale || null })
         await updateLead(lead.id, { status: 'a_rappeler', datePassageRelance: new Date(callbackAt).toISOString() })
         setResult('')
         setSuccess('Rappel planifié et lead passé en À rappeler.')
@@ -477,6 +476,8 @@ function NotesTab({
     if (!eligibilityNotes.firstInfo) return setError('Indique si c’est le premier renseignement sur le projet.')
     if (!eligibilityNotes.wantsBattery) return setError('Indique si la personne souhaite une batterie / autonomie.')
     if (!eligibilityNotes.hasBudget) return setError('Indique si la personne a déjà pensé à un budget.')
+    setSetterStatus('')
+    setResult('')
     setStep('qualification')
   }
 
@@ -550,6 +551,41 @@ function NotesTab({
               className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full h-20 resize-none"
             />
 
+            <div className="rounded-[18px] border border-line bg-white/80 p-3 space-y-3">
+              <div>
+                <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-1">Si le lead ne peut pas répondre</div>
+                <p className="text-xs text-muted">Enregistre directement le statut depuis les notes.</p>
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                <StatusChoice active={setterStatus === 'a_rappeler'} icon="clock" title="À rappeler" text="Date et heure du rappel" onClick={() => { setSetterStatus('a_rappeler'); setResult('rappel_planifie') }} />
+                <StatusChoice active={setterStatus === 'pas_de_reponse'} icon="phone-off" title="Pas de réponse" text="Aucun champ requis" onClick={() => { setSetterStatus('pas_de_reponse'); setResult('non_joint') }} />
+              </div>
+              {setterStatus === 'a_rappeler' && (
+                <div className="space-y-3">
+                  <DateTimeSlotInput label="Date et heure du rappel" value={callbackAt} onChange={setCallbackAt} />
+                  <textarea
+                    value={commentaire}
+                    onChange={(e) => setCommentaire(e.target.value)}
+                    placeholder="Commentaire rappel : disponibilité, contexte…"
+                    className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full h-20 resize-none"
+                  />
+                </div>
+              )}
+              {setterStatus === 'pas_de_reponse' && (
+                <p className="text-sm text-muted">Aucun champ obligatoire : tu peux enregistrer directement.</p>
+              )}
+              {(setterStatus === 'a_rappeler' || setterStatus === 'pas_de_reponse') && (
+                <button
+                  type="button"
+                  onClick={() => saveCallAndLead(setterStatus)}
+                  disabled={saving}
+                  className="btn-primary w-full rounded-xl py-2 text-sm disabled:opacity-60"
+                >
+                  Enregistrer le statut
+                </button>
+              )}
+            </div>
+
             <button type="button" onClick={continueToQualification} className="btn-primary w-full rounded-xl py-2 text-sm">
               Continuer vers qualification
             </button>
@@ -559,35 +595,33 @@ function NotesTab({
 
       {step === 'qualification' && (
         <div className="space-y-4">
+          <button
+            type="button"
+            onClick={() => setStep('eligibility')}
+            className="rounded-xl border border-line bg-white/70 px-3 py-2 text-sm font-semibold hover:bg-white"
+          >
+            Retour vers notes
+          </button>
+
           <div>
             <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-2">Statut setter</div>
             <div className="grid grid-cols-1 gap-2">
               <StatusChoice active={setterStatus === 'non_qualifie'} icon="x" title="Pas qualifié" text="Commentaire obligatoire" onClick={() => { setSetterStatus('non_qualifie'); setResult('refus') }} />
-              <StatusChoice active={setterStatus === 'a_rappeler'} icon="clock" title="À rappeler" text="Date + heure de rappel et commentaire" onClick={() => { setSetterStatus('a_rappeler'); setResult('rappel_planifie') }} />
-              <StatusChoice active={setterStatus === 'pas_de_reponse'} icon="phone-off" title="Pas de réponse" text="Aucun champ requis" onClick={() => { setSetterStatus('pas_de_reponse'); setResult('non_joint') }} />
               <StatusChoice active={setterStatus === 'qualifie'} icon="check" title="Qualifié" text="Commentaire principal, secteur et RDV" onClick={() => { setSetterStatus('qualifie'); setResult('joint') }} />
             </div>
           </div>
 
-          {setterStatus && (
+          {(setterStatus === 'non_qualifie' || setterStatus === 'qualifie') && (
             <div className="rounded-[18px] border border-line bg-white/70 p-4 space-y-3">
-              {setterStatus !== 'pas_de_reponse' && (
-                <textarea
-                  value={commentaire}
-                  onChange={(e) => setCommentaire(e.target.value)}
-                  placeholder={setterStatus === 'non_qualifie' ? 'Commentaire obligatoire : pourquoi pas qualifié ?' : setterStatus === 'qualifie' ? 'Commentaire obligatoire : besoins, contexte, objections…' : 'Commentaire rappel : disponibilité, contexte…'}
-                  className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full h-24 resize-none"
-                  autoFocus={isActiveCall}
-                />
-              )}
-              {setterStatus === 'a_rappeler' && (
-                <DateTimeSlotInput label="Date et heure du rappel" value={callbackAt} onChange={setCallbackAt} />
-              )}
+              <textarea
+                value={commentaire}
+                onChange={(e) => setCommentaire(e.target.value)}
+                placeholder={setterStatus === 'non_qualifie' ? 'Commentaire obligatoire : pourquoi pas qualifié ?' : 'Commentaire obligatoire : besoins, contexte, objections…'}
+                className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full h-24 resize-none"
+                autoFocus={isActiveCall}
+              />
               {setterStatus === 'qualifie' && (
                 <p className="text-sm text-muted">Valide la qualification pour passer à la sélection du secteur puis au RDV.</p>
-              )}
-              {setterStatus === 'pas_de_reponse' && (
-                <p className="text-sm text-muted">Aucun champ obligatoire : tu peux enregistrer directement.</p>
               )}
               <button
                 onClick={() => saveCallAndLead(setterStatus)}
