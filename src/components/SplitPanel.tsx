@@ -195,7 +195,7 @@ function DefaultPanelContent({
   if (active === 'infos') return <InfosTab lead={lead} userMap={userMap} />
   if (active === 'activite') return <ActiviteTab leadId={lead.id} userMap={userMap} />
   if (active === 'appels') return <AppelsTab leadId={lead.id} userMap={userMap} />
-  if (active === 'rdv') return <RdvTab leadId={lead.id} userMap={userMap} />
+  if (active === 'rdv') return <RdvTab lead={lead} userMap={userMap} />
   if (active === 'notes') {
     return (
       <NotesTab
@@ -292,12 +292,17 @@ function AppelsTab({ leadId, userMap }: { leadId: string; userMap?: Map<string, 
   )
 }
 
-function RdvTab({ leadId, userMap }: { leadId: string; userMap?: Map<string, UserResponse> }) {
-  const { data, loading } = useRdvList({ leadId, limit: 50 })
+function RdvTab({ lead, userMap }: { lead: LeadResponse; userMap?: Map<string, UserResponse> }) {
+  const { data, loading } = useRdvList({ leadId: lead.id, limit: 50 })
   if (loading) return <p className="text-faint">Chargement…</p>
-  if (!data || data.length === 0) return <p className="text-faint">Aucun RDV pour ce lead.</p>
+  const callbackCard = lead.nextCallbackAt ? <CallbackCard nextCallbackAt={lead.nextCallbackAt} /> : null
+  if (!data || data.length === 0) {
+    if (callbackCard) return <div className="space-y-3">{callbackCard}</div>
+    return <p className="text-faint">Aucun RDV pour ce lead.</p>
+  }
   return (
     <div className="space-y-3">
+      {callbackCard}
       {data.map((r) => (
         <div key={r.id} className="bg-white/60 border border-line rounded-xl p-3">
           <div className="flex items-center justify-between mb-1">
@@ -312,6 +317,23 @@ function RdvTab({ leadId, userMap }: { leadId: string; userMap?: Map<string, Use
           {r.notes && <p className="text-sm mt-2 text-text">{r.notes}</p>}
         </div>
       ))}
+    </div>
+  )
+}
+
+function CallbackCard({ nextCallbackAt }: { nextCallbackAt: string }) {
+  const dueAt = new Date(nextCallbackAt).getTime()
+  const overdue = dueAt <= Date.now()
+  const label = overdue ? 'Rappel en retard' : 'Rappel programmé'
+  const tone = overdue ? 'text-rouille' : 'text-cuivre'
+  const bg = overdue ? 'bg-rouille-tint/40' : 'bg-cuivre-tint/40'
+  return (
+    <div className={`${bg} border border-line rounded-xl p-3`}>
+      <div className="flex items-center justify-between mb-1">
+        <span className={`text-[11px] font-bold uppercase tracking-widest ${tone}`}>{label}</span>
+        <span className="text-[11px] text-faint">{formatDate(nextCallbackAt)}</span>
+      </div>
+      <div className="text-xs text-muted">Téléphone</div>
     </div>
   )
 }
