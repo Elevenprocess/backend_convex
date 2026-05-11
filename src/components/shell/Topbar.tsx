@@ -191,18 +191,21 @@ export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) 
 }
 
 function countActiveNotifications(
-  leads: { status: string; createdAt: string; nextCallbackAt: string | null }[],
+  leads: { status: string; createdAt: string; updatedAt: string; nextCallbackAt: string | null }[],
   rdvs: { status: string; scheduledAt: string }[],
 ): number {
   const now = Date.now()
   const in10Min = now + 10 * 60 * 1000
-  const in24h = now - 24 * 60 * 60 * 1000
+  const in24hPast = now - 24 * 60 * 60 * 1000
+  const in24hFuture = now + 24 * 60 * 60 * 1000
   const leadCount = leads.filter((lead) => {
     const callbackAt = lead.nextCallbackAt ? new Date(lead.nextCallbackAt).getTime() : null
     const hasCallback = callbackAt != null && (lead.status === 'a_rappeler' || lead.status === 'relance' || Boolean(lead.nextCallbackAt))
-    const hasUrgentOrPlannedCallback = hasCallback && (callbackAt <= in10Min || lead.status === 'a_rappeler')
-    const isNewLead = lead.status === 'nouveau' && new Date(lead.createdAt).getTime() >= in24h
-    return hasUrgentOrPlannedCallback || isNewLead
+    // Callback en retard (passé) ou imminent (10 min) ou planifié à <=24h.
+    const callbackInWindow = hasCallback && (callbackAt <= in10Min || (lead.status === 'a_rappeler' && callbackAt <= in24hFuture))
+    const isNewLead = lead.status === 'nouveau' && new Date(lead.createdAt).getTime() >= in24hPast
+    const isQualifiedRecent = lead.status === 'qualifie' && new Date(lead.updatedAt).getTime() >= in24hPast
+    return callbackInWindow || isNewLead || isQualifiedRecent
   }).length
   const rdvCount = rdvs.filter((rdv) => {
     const scheduled = new Date(rdv.scheduledAt).getTime()

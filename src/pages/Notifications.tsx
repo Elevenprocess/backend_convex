@@ -127,7 +127,8 @@ function NotificationCard({ notif }: { notif: Notif }) {
 export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): Notif[] {
   const now = Date.now()
   const in10Min = now + 10 * 60 * 1000
-  const in24h = now - 24 * 60 * 60 * 1000
+  const in24hPast = now - 24 * 60 * 60 * 1000
+  const in24hFuture = now + 24 * 60 * 60 * 1000
   const notifications: Notif[] = []
 
   for (const lead of leads) {
@@ -165,7 +166,8 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         urgency: 'soon',
         to: leadLink,
       })
-    } else if (callbackAt && lead.status === 'a_rappeler') {
+    } else if (callbackAt && lead.status === 'a_rappeler' && callbackAt <= in24hFuture) {
+      // Fenêtre de 24h max : un rappel programmé dans 11 jours ne pollue plus la liste.
       notifications.push({
         id: `callback-planned-${lead.id}`,
         group: 'RAPPELS PROGRAMMÉS',
@@ -182,7 +184,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
       })
     }
 
-    if (lead.status === 'nouveau' && new Date(lead.createdAt).getTime() >= in24h) {
+    if (lead.status === 'nouveau' && new Date(lead.createdAt).getTime() >= in24hPast) {
       notifications.push({
         id: `new-lead-${lead.id}`,
         group: 'NOUVEAUX LEADS',
@@ -194,6 +196,23 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         body: <><strong>{name}</strong>{lead.city ? ` · ${lead.city}` : ''}{lead.phone ? ` · ${lead.phone}` : ''}</>,
         time: relativeTime(lead.createdAt),
         timestamp: new Date(lead.createdAt).getTime(),
+        urgency: 'info',
+        to: leadLink,
+      })
+    }
+
+    if (lead.status === 'qualifie' && new Date(lead.updatedAt).getTime() >= in24hPast) {
+      notifications.push({
+        id: `qualified-${lead.id}`,
+        group: 'LEADS QUALIFIÉS',
+        icon: 'eye',
+        iconBg: 'bg-or-tint',
+        iconColor: 'text-or-dark',
+        borderColor: 'border-l-or',
+        title: 'Lead qualifié',
+        body: <><strong>{name}</strong>{lead.city ? ` · ${lead.city}` : ''}{lead.phone ? ` · ${lead.phone}` : ''}</>,
+        time: relativeTime(lead.updatedAt),
+        timestamp: new Date(lead.updatedAt).getTime(),
         urgency: 'info',
         to: leadLink,
       })
