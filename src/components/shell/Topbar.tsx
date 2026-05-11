@@ -38,7 +38,7 @@ export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) 
   const topbarRef = useRef<HTMLElement | null>(null)
   const [openMenu, setOpenMenu] = useState<'search' | 'settings' | 'profile' | null>(null)
   const [search, setSearch] = useState('')
-  const { data: leadsData } = useLeads({ limit: 1500 })
+  const { data: leadsData } = useLeads({ limit: 500 })
   const { data: rdvsData } = useRdvList({ limit: 1000 })
   const notificationCount = useMemo(() => countActiveNotifications(leadsData ?? [], rdvsData ?? []), [leadsData, rdvsData])
 

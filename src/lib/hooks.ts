@@ -189,7 +189,7 @@ export function useLeads(filters?: {
   limit?: number
   offset?: number
 }): Async<LeadResponse[]> {
-  return useFetch<LeadResponse[]>('/leads', { ...filters, limit: filters?.limit ?? 1500 })
+  return useFetch<LeadResponse[]>('/leads', { ...filters, limit: filters?.limit ?? 500 })
 }
 
 export function useLead(id: string | undefined): Async<LeadResponse> {

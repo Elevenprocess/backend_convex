@@ -21,7 +21,7 @@ type Notif = {
 }
 
 export function Notifications() {
-  const { data: leadsData, loading: leadsLoading } = useLeads({ limit: 3000 })
+  const { data: leadsData, loading: leadsLoading } = useLeads({ limit: 500 })
   const { data: rdvsData, loading: rdvLoading } = useRdvList({ limit: 1000 })
   const leads = leadsData ?? []
   const rdvs = rdvsData ?? []

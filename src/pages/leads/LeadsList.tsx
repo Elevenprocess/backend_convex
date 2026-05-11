@@ -20,6 +20,10 @@ import {
 
 type ColumnKey = string
 
+const LEADS_PAGE_LIMIT = 500
+const INITIAL_VISIBLE_ROWS = 80
+const VISIBLE_ROWS_STEP = 120
+
 type ColumnChoice = {
   key: ColumnKey
   label: string
@@ -106,7 +110,7 @@ function LeadsSetter() {
 
   // Côté setter, l'écran s'ouvre directement sur les nouveaux leads.
   // Le filtre global "Tous" n'est pas affiché aux setters.
-  const { data, loading, error } = useLeads({ limit: 1500 })
+  const { data, loading, error } = useLeads({ limit: LEADS_PAGE_LIMIT })
   const { data: usersList } = useUsers()
   const mine = data ?? []
   const userMap = useMemo(() => {
@@ -141,6 +145,9 @@ function LeadsSetter() {
     () => (selectedId ? mine.find((l) => l.id === selectedId) ?? null : null),
     [mine, selectedId],
   )
+  const [visibleRows, setVisibleRows] = useState(INITIAL_VISIBLE_ROWS)
+  const visibleFiltered = useMemo(() => filtered.slice(0, visibleRows), [filtered, visibleRows])
+  useEffect(() => setVisibleRows(INITIAL_VISIBLE_ROWS), [filter, leadFilters, query])
   const tableScrollRef = useRememberedLeadTableScroll('ecoi.leads.setter.tableScroll.v1', filtered, selectedId)
 
   return (
@@ -208,7 +215,7 @@ function LeadsSetter() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((l) => (
+                    {visibleFiltered.map((l) => (
                       <tr
                         key={l.id}
                         data-lead-id={l.id}
@@ -241,6 +248,17 @@ function LeadsSetter() {
                     ))}
                   </tbody>
                 </table>
+                {visibleFiltered.length < filtered.length && (
+                  <div className="sticky left-0 flex justify-center border-t border-line-soft bg-white/80 p-3 backdrop-blur">
+                    <button
+                      type="button"
+                      onClick={() => setVisibleRows((count) => count + VISIBLE_ROWS_STEP)}
+                      className="btn-secondary rounded-xl px-4 py-2 text-sm"
+                    >
+                      Afficher plus de leads ({visibleFiltered.length}/{filtered.length})
+                    </button>
+                  </div>
+                )}
                 </div>
               </div>
             )}
@@ -276,7 +294,7 @@ function LeadsAdmin() {
   const selectLead = useLeadSidebar((s) => s.selectLead)
   const showColumn = (key: ColumnKey) => visibleColumns.includes(key)
 
-  const { data: leadsData, loading, error } = useLeads({ limit: 1500 })
+  const { data: leadsData, loading, error } = useLeads({ limit: LEADS_PAGE_LIMIT })
   const { data: users = [] } = useUsers()
   const leads = leadsData ?? []
 
@@ -304,6 +322,9 @@ function LeadsAdmin() {
     waiting: (leads ?? []).filter((l) => l.status === 'nouveau' || (l.joursSansContact ?? 0) >= 2).length,
     perdus: (leads ?? []).filter((l) => l.status === 'perdu').length,
   }), [leads])
+  const [visibleRows, setVisibleRows] = useState(INITIAL_VISIBLE_ROWS)
+  const visibleFiltered = useMemo(() => filtered.slice(0, visibleRows), [filtered, visibleRows])
+  useEffect(() => setVisibleRows(INITIAL_VISIBLE_ROWS), [setterFilter, commercialFilter, leadFilters])
   const tableScrollRef = useRememberedLeadTableScroll('ecoi.leads.admin.tableScroll.v1', filtered, selectedId)
 
   return (
@@ -404,7 +425,7 @@ function LeadsAdmin() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((l) => (
+                {visibleFiltered.map((l) => (
                   <tr
                     key={l.id}
                     data-lead-id={l.id}
@@ -459,6 +480,17 @@ function LeadsAdmin() {
                 ))}
               </tbody>
             </table>
+            {visibleFiltered.length < filtered.length && (
+              <div className="sticky left-0 flex justify-center border-t border-line-soft bg-white/80 p-3 backdrop-blur">
+                <button
+                  type="button"
+                  onClick={() => setVisibleRows((count) => count + VISIBLE_ROWS_STEP)}
+                  className="btn-secondary rounded-xl px-4 py-2 text-sm"
+                >
+                  Afficher plus de leads ({visibleFiltered.length}/{filtered.length})
+                </button>
+              </div>
+            )}
             </div>
           </div>
         )}
