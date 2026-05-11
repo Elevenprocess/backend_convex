@@ -27,7 +27,6 @@ export const useLeadSidebar = create<LeadSidebarState>((set) => ({
 
 export function isLeadSidebarExcludedPath(pathname: string): boolean {
   return (
-    pathname === '/leads' ||
     pathname === '/overview' ||
     pathname === '/analytics' ||
     pathname === '/notifications' ||
