@@ -5,7 +5,7 @@ import { useAuth } from '../lib/auth'
 import { useAnalyticsSummary } from '../lib/hooks'
 import type { AnalyticsResponse } from '../lib/types'
 
-type AnalyticsPeriodMode = 'today' | 'date' | 'week' | 'month' | 'year'
+type AnalyticsPeriodMode = 'today' | 'week' | 'month' | 'year'
 type AnalyticsRange = { from: Date; to: Date; label: string; days: number }
 
 
@@ -268,43 +268,98 @@ function AnalyticsPeriodBar({ helper, period }: {
       <div className="flex flex-wrap items-center gap-2">
         <PeriodSwitch
           value={period.mode}
-          onChange={period.setMode}
+          onChange={(mode) => setPeriodMode(period, mode)}
           options={[
             { id: 'today', label: "Aujourd'hui" },
-            { id: 'date', label: 'Date' },
             { id: 'week', label: 'Semaine' },
             { id: 'month', label: 'Mois' },
             { id: 'year', label: 'Année' },
           ]}
         />
-        <input
-          type="date"
-          value={period.selectedDate}
-          max={toDateInputValue(new Date())}
-          onChange={(e) => setPeriodDate(period, e.target.value)}
-          className="h-9 rounded-xl border border-line bg-white px-3 text-xs font-semibold text-text shadow-sm outline-none focus:border-or"
-          aria-label="Choisir une date pour les analytics"
-        />
+        <PeriodCalendar period={period} />
       </div>
     </div>
   )
 }
 
+function PeriodCalendar({ period }: { period: ReturnType<typeof useAnalyticsPeriod> }) {
+  const inputClass = 'h-9 rounded-xl border border-line bg-white px-3 text-xs font-semibold text-text shadow-sm outline-none focus:border-or'
+  if (period.mode === 'today') {
+    return <div className={`${inputClass} flex items-center`}>{formatDateInputFr(toDateInputValue(new Date()))}</div>
+  }
+  if (period.mode === 'month') {
+    const currentMonth = toMonthInputValue(new Date())
+    return (
+      <input
+        type="month"
+        value={toMonthInputValue(parseDateInput(period.selectedDate))}
+        max={currentMonth}
+        onChange={(e) => setPeriodMonth(period, e.target.value)}
+        className={inputClass}
+        aria-label="Choisir le mois pour les analytics"
+      />
+    )
+  }
+  if (period.mode === 'year') {
+    const currentYear = new Date().getFullYear()
+    return (
+      <input
+        type="number"
+        min="2000"
+        max={currentYear}
+        value={parseDateInput(period.selectedDate).getFullYear()}
+        onChange={(e) => setPeriodYear(period, e.target.value)}
+        className={`${inputClass} w-24`}
+        aria-label="Choisir l'année pour les analytics"
+      />
+    )
+  }
+  return (
+    <input
+      type="date"
+      value={period.selectedDate}
+      max={toDateInputValue(new Date())}
+      onChange={(e) => setPeriodDate(period, e.target.value)}
+      className={inputClass}
+      aria-label="Choisir une date dans la semaine pour les analytics"
+    />
+  )
+}
+
+function setPeriodMode(period: ReturnType<typeof useAnalyticsPeriod>, mode: AnalyticsPeriodMode) {
+  period.setMode(mode)
+  if (mode === 'today') period.setSelectedDate(toDateInputValue(new Date()))
+}
+
 function setPeriodDate(period: ReturnType<typeof useAnalyticsPeriod>, value: string) {
   period.setSelectedDate(clampDateInputToToday(value || toDateInputValue(new Date())))
-  if (period.mode === 'today') period.setMode('date')
+}
+
+function setPeriodMonth(period: ReturnType<typeof useAnalyticsPeriod>, value: string) {
+  const safeValue = value || toMonthInputValue(new Date())
+  const [year, month] = safeValue.split('-').map(Number)
+  if (!year || !month) return
+  period.setSelectedDate(clampDateInputToToday(`${year}-${String(month).padStart(2, '0')}-01`))
+}
+
+function setPeriodYear(period: ReturnType<typeof useAnalyticsPeriod>, value: string) {
+  const year = Number(value)
+  const currentYear = new Date().getFullYear()
+  if (!year) return
+  const safeYear = Math.min(Math.max(year, 2000), currentYear)
+  period.setSelectedDate(clampDateInputToToday(`${safeYear}-01-01`))
 }
 
 function buildAnalyticsRange(mode: AnalyticsPeriodMode, selectedDate: string): AnalyticsRange {
   const anchor = parseDateInput(clampDateInputToToday(selectedDate))
   const todayEnd = endOfDay(new Date())
-  if (mode === 'today' || mode === 'date') {
-    const from = startOfDay(mode === 'today' ? new Date() : anchor)
+  if (mode === 'today') {
+    const from = startOfDay(new Date())
     const to = minDate(endOfDay(from), todayEnd)
     return {
       from,
       to,
-      label: mode === 'today' ? "Aujourd'hui" : from.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }),
+      label: formatDateInputFr(toDateInputValue(from)),
       days: 1,
     }
   }
@@ -389,6 +444,17 @@ function toDateInputValue(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, '0')
   const d = String(date.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
+}
+
+function toMonthInputValue(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  return `${y}-${m}`
+}
+
+function formatDateInputFr(value: string): string {
+  const [year, month, day] = value.split('-')
+  return `${day}/${month}/${year}`
 }
 
 function shortDate(date: Date): string {
