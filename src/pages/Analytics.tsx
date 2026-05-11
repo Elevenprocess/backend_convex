@@ -479,9 +479,10 @@ function setPeriodDate(period: ReturnType<typeof useAnalyticsPeriod>, value: str
 
 function buildAnalyticsRange(mode: AnalyticsPeriodMode, selectedDate: string): AnalyticsRange {
   const anchor = parseDateInput(clampDateInputToToday(selectedDate))
+  const todayEnd = endOfDay(new Date())
   if (mode === 'today' || mode === 'date') {
     const from = startOfDay(mode === 'today' ? new Date() : anchor)
-    const to = endOfDay(from)
+    const to = minDate(endOfDay(from), todayEnd)
     return {
       from,
       to,
@@ -491,30 +492,30 @@ function buildAnalyticsRange(mode: AnalyticsPeriodMode, selectedDate: string): A
   }
   if (mode === 'week') {
     const from = startOfWeek(anchor)
-    const to = endOfDay(addDays(from, 6))
+    const to = minDate(endOfDay(addDays(from, 6)), todayEnd)
     return {
       from,
       to,
       label: `Semaine du ${shortDate(from)} au ${shortDate(to)}`,
-      days: 7,
+      days: daysBetween(from, to),
     }
   }
   if (mode === 'month') {
     const from = startOfDay(new Date(anchor.getFullYear(), anchor.getMonth(), 1))
-    const to = endOfDay(new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0))
+    const to = minDate(endOfDay(new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0)), todayEnd)
     return {
       from,
       to,
-      label: anchor.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }),
+      label: `${anchor.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })} · 1-${to.getDate()}`,
       days: daysBetween(from, to),
     }
   }
   const from = startOfDay(new Date(anchor.getFullYear(), 0, 1))
-  const to = endOfDay(new Date(anchor.getFullYear(), 11, 31))
+  const to = minDate(endOfDay(new Date(anchor.getFullYear(), 11, 31)), todayEnd)
   return {
     from,
     to,
-    label: `Année ${anchor.getFullYear()}`,
+    label: `Année ${anchor.getFullYear()} · jusqu'au ${shortDate(to)}`,
     days: daysBetween(from, to),
   }
 }
@@ -555,6 +556,10 @@ function addDays(date: Date, days: number): Date {
   const d = new Date(date)
   d.setDate(d.getDate() + days)
   return d
+}
+
+function minDate(a: Date, b: Date): Date {
+  return a <= b ? a : b
 }
 
 function daysBetween(from: Date, to: Date): number {
