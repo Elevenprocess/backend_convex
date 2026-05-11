@@ -4,6 +4,7 @@ import { Topbar } from '../../components/shell/Topbar'
 import { SplitPanel } from '../../components/SplitPanel'
 import { LeadFiltersBar } from '../../components/LeadFiltersBar'
 import { useLeadsProgressive, useUsers } from '../../lib/hooks'
+import { LoadingBlock } from '../../components/Spinner'
 import { DEFAULT_LEAD_FILTERS, applyLeadFilters, type LeadListFilters } from '../../lib/leadFilters'
 import {
   STATUS_BADGE,
@@ -55,7 +56,7 @@ export function LeadsSplit() {
         {/* Main: leads table */}
         <main className="flex-grow p-6 overflow-y-auto min-w-0">
           {loading ? (
-            <div className="py-16 text-center text-faint text-sm">Chargement des leads…</div>
+            <LoadingBlock label="Chargement des leads…" />
           ) : error ? (
             <div className="py-16 text-center text-rouille text-sm">Erreur : {error}</div>
           ) : (

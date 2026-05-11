@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
+import { Spinner, LoadingBlock } from '../../components/Spinner'
 import { EmptyState } from '../../components/EmptyState'
 import { LeadFiltersBar } from '../../components/LeadFiltersBar'
 import { useAuth } from '../../lib/auth'
@@ -183,11 +184,11 @@ function LeadsSetter() {
               <FilterPill active={filter === 'perdu'} onClick={() => setFilter('perdu')}>Perdus ({counts.perdu})</FilterPill>
               <LeadFiltersBar filters={leadFilters} onChange={setLeadFilters} total={mine.length} filtered={filtered.length} />
               <ColumnVisibilityMenu columns={SETTER_COLUMNS} visible={visibleColumns} onChange={setVisibleColumns} />
-              {loading && mine.length > 0 && <span className="text-xs text-faint ml-auto">Actualisation…</span>}
+              {loading && mine.length > 0 && <span className="text-xs text-faint ml-auto inline-flex items-center gap-1"><Spinner size={12} stroke={2} />Actualisation…</span>}
             </div>
 
             {loading && mine.length === 0 ? (
-              <div className="py-16 text-center text-faint text-sm">Chargement des leads…</div>
+              <LoadingBlock label="Chargement des leads…" />
             ) : error ? (
               <div className="py-16 text-center text-rouille text-sm">Erreur : {error}</div>
             ) : filtered.length === 0 ? (
@@ -373,7 +374,7 @@ function LeadsAdmin() {
         </div>
 
         {loading && leads.length === 0 ? (
-          <div className="py-16 text-center text-faint text-sm">Chargement…</div>
+          <LoadingBlock />
         ) : error ? (
           <div className="py-16 text-center text-rouille text-sm">Erreur : {error}</div>
         ) : filtered.length === 0 ? (

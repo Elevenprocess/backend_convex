@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { acceptInvitation } from '../lib/hooks'
+import { Spinner } from '../components/Spinner'
 
 export function AcceptInvitation() {
   const [searchParams] = useSearchParams()
@@ -59,8 +60,8 @@ export function AcceptInvitation() {
           <input type="password" minLength={8} required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="mt-1 w-full rounded-xl border border-line bg-white/70 px-3 py-2 outline-none focus:border-or" />
         </label>
 
-        <button disabled={loading || !token} className="btn-primary w-full rounded-xl py-2.5 disabled:opacity-60">
-          {loading ? 'Création…' : 'Créer mon compte'}
+        <button disabled={loading || !token} className="btn-primary w-full rounded-xl py-2.5 disabled:opacity-60 inline-flex items-center justify-center gap-2">
+          {loading ? <Spinner size={16} stroke={2} label="Création…" /> : 'Créer mon compte'}
         </button>
 
         <div className="text-center text-sm text-muted">

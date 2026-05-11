@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon, type IconName } from './Icon'
+import { Spinner, LoadingBlock } from './Spinner'
 import {
   STATUS_LABEL,
   STATUS_BADGE,
@@ -332,7 +333,7 @@ function InfosTab({ lead, userMap, onSaved }: { lead: LeadResponse; userMap?: Ma
           disabled={saving}
           className="text-xs font-semibold text-or hover:underline disabled:opacity-50"
         >
-          {saving ? 'Enregistrement…' : 'Enregistrer'}
+          {saving ? <Spinner size={14} stroke={2} label="Enregistrement…" /> : 'Enregistrer'}
         </button>
       </div>
       {error && <div className="text-xs text-rouille bg-rouille-tint/40 rounded p-2">{error}</div>}
@@ -383,7 +384,7 @@ function ActiviteTab({ leadId, userMap }: { leadId: string; userMap?: Map<string
   const { data: calls, loading: cLoading } = useCallLogs({ leadId, limit: 20 })
   const { data: rdvs, loading: rLoading } = useRdvList({ leadId, limit: 20 })
 
-  if (cLoading || rLoading) return <p className="text-faint">Chargement…</p>
+  if (cLoading || rLoading) return <LoadingBlock />
 
   type Item = { ts: string; node: ReactNode }
   const items: Item[] = []
@@ -423,7 +424,8 @@ function ActiviteTab({ leadId, userMap }: { leadId: string; userMap?: Map<string
 
 function AppelsTab({ leadId, userMap }: { leadId: string; userMap?: Map<string, UserResponse> }) {
   const { data, loading } = useCallLogs({ leadId, limit: 50 })
-  if (loading) return <p className="text-faint">Chargement…</p>
+  if (loading) return <LoadingBlock />
+
   if (!data || data.length === 0) return <p className="text-faint">Aucun appel pour ce lead.</p>
   return (
     <div className="space-y-3">
@@ -445,7 +447,8 @@ function AppelsTab({ leadId, userMap }: { leadId: string; userMap?: Map<string, 
 
 function RdvTab({ lead, userMap }: { lead: LeadResponse; userMap?: Map<string, UserResponse> }) {
   const { data, loading } = useRdvList({ leadId: lead.id, limit: 50 })
-  if (loading) return <p className="text-faint">Chargement…</p>
+  if (loading) return <LoadingBlock />
+
   const callbackCard = lead.nextCallbackAt ? <CallbackCard nextCallbackAt={lead.nextCallbackAt} /> : null
   if (!data || data.length === 0) {
     if (callbackCard) return <div className="space-y-3">{callbackCard}</div>
@@ -807,8 +810,9 @@ function NotesTab({
                   type="button"
                   onClick={() => saveCallAndLead(setterStatus)}
                   disabled={saving}
-                  className="btn-primary w-full rounded-xl py-2 text-sm disabled:opacity-60"
+                  className="btn-primary w-full rounded-xl py-2 text-sm disabled:opacity-60 flex items-center justify-center gap-2"
                 >
+                  {saving ? <Spinner size={16} stroke={2} /> : null}
                   Enregistrer le statut
                 </button>
               )}
@@ -854,8 +858,9 @@ function NotesTab({
               <button
                 onClick={() => saveCallAndLead(setterStatus)}
                 disabled={saving}
-                className="btn-primary w-full rounded-xl py-2 text-sm disabled:opacity-60"
+                className="btn-primary w-full rounded-xl py-2 text-sm disabled:opacity-60 flex items-center justify-center gap-2"
               >
+                {saving ? <Spinner size={16} stroke={2} /> : null}
                 {setterStatus === 'qualifie' ? 'Continuer vers secteur' : 'Enregistrer le statut'}
               </button>
             </div>
@@ -929,7 +934,7 @@ function NotesTab({
           </div>
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setStep('rdv')} className="rounded-xl border border-line bg-white/70 py-2 text-sm font-semibold hover:bg-white">Retour</button>
-            <button onClick={validateRdv} disabled={saving} className="btn-primary rounded-xl py-2 text-sm disabled:opacity-60">Valider définitivement</button>
+            <button onClick={validateRdv} disabled={saving} className="btn-primary rounded-xl py-2 text-sm disabled:opacity-60 flex items-center justify-center gap-2">{saving ? <Spinner size={16} stroke={2} /> : null}Valider définitivement</button>
           </div>
         </div>
       )}

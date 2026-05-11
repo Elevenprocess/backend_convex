@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
+import { LoadingBlock } from '../../components/Spinner'
 import { useRdvList, useLeads } from '../../lib/hooks'
 import { fullName, type LeadResponse, type RdvResponse, type RdvStatus } from '../../lib/types'
 
@@ -108,7 +109,7 @@ export function RdvCalendar() {
       <main className="p-8 pt-4 overflow-hidden flex-grow">
         <div className="glass-card !p-0 overflow-hidden h-full flex flex-col">
           {loading ? (
-            <div className="flex-grow flex items-center justify-center text-faint text-sm">Chargement…</div>
+            <div className="flex-grow flex items-center justify-center"><LoadingBlock /></div>
           ) : error ? (
             <div className="flex-grow flex items-center justify-center text-rouille text-sm">Erreur : {error}</div>
           ) : view === 'month' ? (

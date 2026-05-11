@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
+import { LoadingBlock } from './Spinner'
 
 export function RequireAuth() {
   const status = useAuth((s) => s.status)
@@ -13,8 +14,8 @@ export function RequireAuth() {
 
   if (status === 'loading') {
     return (
-      <div className="w-full h-screen flex items-center justify-center text-faint text-sm">
-        Chargement…
+      <div className="w-full h-screen flex items-center justify-center">
+        <LoadingBlock />
       </div>
     )
   }

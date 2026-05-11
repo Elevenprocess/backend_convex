@@ -4,6 +4,7 @@ import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Icon, type IconName } from '../components/Icon'
 import { useLeadsProgressive, useRdvListProgressive } from '../lib/hooks'
+import { Spinner, LoadingBlock } from '../components/Spinner'
 import { fullName, type LeadResponse, type RdvResponse } from '../lib/types'
 
 type Notif = {
@@ -70,9 +71,15 @@ export function Notifications() {
       <Topbar eyebrow="NOTIFICATIONS" title="Notifications et rappels" />
       <div className="px-8 pt-4 flex items-center justify-between flex-shrink-0 gap-4">
         <div className="text-sm text-muted">
-          {initialLoading
-            ? 'Chargement des notifications…'
-            : `${notifs.length} notification${notifs.length > 1 ? 's' : ''} active${notifs.length > 1 ? 's' : ''}${hasMore ? ` · ${visibleCount} affichées` : ''}${backgroundLoading ? ' · synchronisation…' : ''}`}
+          {initialLoading ? (
+            <Spinner size={14} stroke={2} label="Chargement des notifications…" />
+          ) : (
+            <span>
+              {notifs.length} notification{notifs.length > 1 ? 's' : ''} active{notifs.length > 1 ? 's' : ''}
+              {hasMore ? ` · ${visibleCount} affichées` : ''}
+              {backgroundLoading && <> · <Spinner size={12} stroke={2} label="synchronisation…" /></>}
+            </span>
+          )}
         </div>
         <button
           onClick={async () => setPermission(await requestNotificationPermission())}
@@ -85,7 +92,7 @@ export function Notifications() {
 
       <main className="p-8 pt-4 max-w-3xl mx-auto w-full overflow-y-auto space-y-3 flex-grow">
         {initialLoading && notifs.length === 0 ? (
-          <div className="glass-card p-6 text-sm text-muted">Chargement des notifications…</div>
+          <LoadingBlock label="Chargement des notifications…" />
         ) : notifs.length === 0 ? (
           <div className="glass-card p-6 text-sm text-muted">Aucune notification urgente : pas de nouveau lead récent, pas de rappel à traiter, pas de RDV imminent.</div>
         ) : (
@@ -93,11 +100,13 @@ export function Notifications() {
             {visibleNotifs.map((n) => <NotificationCard key={n.id} notif={n} />)}
             {hasMore && (
               <div ref={sentinelRef} className="glass-card p-4 text-center text-xs text-faint">
-                {loadingMore ? 'Chargement des notifications suivantes…' : 'Continue à descendre pour voir la suite'}
+                {loadingMore ? <Spinner size={16} stroke={2} label="Chargement des notifications suivantes…" /> : 'Continue à descendre pour voir la suite'}
               </div>
             )}
             {!hasMore && backgroundLoading && (
-              <div className="glass-card p-4 text-center text-xs text-faint">Mise à jour en arrière-plan…</div>
+              <div className="glass-card p-4 text-center text-xs text-faint">
+                <Spinner size={14} stroke={2} label="Mise à jour en arrière-plan…" />
+              </div>
             )}
           </>
         )}
