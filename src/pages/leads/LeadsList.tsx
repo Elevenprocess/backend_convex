@@ -215,7 +215,8 @@ function LeadsSetter() {
                         className={`border-b border-line-soft last:border-0 cursor-pointer transition-colors ${
                           selected?.id === l.id ? 'bg-or/20 shadow-[inset_4px_0_0_var(--color-or-dark)] !text-text' : 'hover:bg-white/40'
                         }`}
-                        onClick={() => selectLead(l.id)}
+                        onDoubleClick={() => selectLead(l.id)}
+                        title="Double-cliquez pour ouvrir la fiche lead"
                       >
                         {showColumn('nom') && (
                           <Td className="lead-sticky-cell">
