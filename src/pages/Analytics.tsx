@@ -216,7 +216,7 @@ type CommercialPerf = { id: string; name: string; initials: string; honored: num
 function buildSetterStats(leads: LeadResponse[], calls: CallLogResponse[], rdvs: RdvResponse[], setterId: string | undefined, range: AnalyticsRange) {
   const days = range.days
   const scopedCalls = filterRange(calls, range)
-  const scopedLeads = leads.filter((l) => belongsToSetter(l, setterId) && isInRange(l.updatedAt, range))
+  const scopedLeads = leads.filter((l) => belongsToSetter(l, setterId) && isLeadActivityInRange(l, range))
   const classifiedLeads = scopedLeads.filter(isClassifiedLead)
   const syntheticCalls = Math.max(0, classifiedLeads.length - scopedCalls.length)
   const resultCounts = countResults(scopedCalls)
@@ -231,7 +231,7 @@ function buildSetterStats(leads: LeadResponse[], calls: CallLogResponse[], rdvs:
     syntheticCalls,
     callsPerDay: days ? Math.round(callsTotal / days) : 0,
     classified: classifiedLeads.length,
-    unclassified: scopedLeads.length - classifiedLeads.length,
+    unclassified: scopedLeads.filter((l) => isInRange(l.createdAt, range)).length,
     connected,
     qualified,
     rdvPris,
@@ -271,7 +271,7 @@ function buildCommercialStats(rdvs: RdvResponse[], range: AnalyticsRange) {
 }
 
 function buildAdminStats(leads: LeadResponse[], calls: CallLogResponse[], rdvs: RdvResponse[], users: UserResponse[], range: AnalyticsRange) {
-  const scopedLeads = leads.filter((l) => isInRange(l.updatedAt, range))
+  const scopedLeads = leads.filter((l) => isLeadActivityInRange(l, range))
   const scopedCalls = filterRange(calls, range)
   const scopedRdvs = filterRange(rdvs, range, (r) => r.scheduledAt)
   const classifiedLeads = scopedLeads.filter(isClassifiedLead)
@@ -288,7 +288,7 @@ function buildAdminStats(leads: LeadResponse[], calls: CallLogResponse[], rdvs: 
     calls: callsTotal,
     classified: classifiedLeads.length,
     qualified,
-    unclassified: scopedLeads.length - classifiedLeads.length,
+    unclassified: scopedLeads.filter((l) => isInRange(l.createdAt, range)).length,
     syntheticCalls,
     rdvPris,
     rdvRate: pct(rdvPris, callsTotal),
@@ -296,12 +296,12 @@ function buildAdminStats(leads: LeadResponse[], calls: CallLogResponse[], rdvs: 
     ca,
     signed: signed.length,
     resultSegments: resultSegments(resultCounts),
-    setters: buildSetterRows(scopedLeads, scopedCalls, scopedRdvs, users),
+    setters: buildSetterRows(scopedLeads, scopedCalls, scopedRdvs, users, range),
     commercials: buildCommercialRows(scopedRdvs, users),
   }
 }
 
-function buildSetterRows(leads: LeadResponse[], calls: CallLogResponse[], _rdvs: RdvResponse[], users: UserResponse[]): SetterPerf[] {
+function buildSetterRows(leads: LeadResponse[], calls: CallLogResponse[], _rdvs: RdvResponse[], users: UserResponse[], range: AnalyticsRange): SetterPerf[] {
   return users
     .filter((u) => u.role === 'setter')
     .map((u) => {
@@ -346,6 +346,16 @@ function isQualifiedLead(lead: LeadResponse) {
   return QUALIFIED_STATUSES.has(lead.status)
 }
 
+
+function leadCallActivityIso(lead: LeadResponse): string | null {
+  return lead.latestCallAt ?? lead.lastContactAt ?? lead.firstCallAt
+}
+
+function isLeadCallActivityInRange(lead: LeadResponse, range: AnalyticsRange): boolean {
+  const iso = leadCallActivityIso(lead)
+  return iso ? isInRange(iso, range) : false
+}
+
 function countResults(calls: CallLogResponse[]): Record<CallResult, number> {
   const counts = { joint: 0, non_joint: 0, rappel_planifie: 0, rdv_pris: 0, refus: 0, injoignable: 0, messagerie: 0 }
   for (const call of calls) counts[call.result] += 1
@@ -380,7 +390,7 @@ function dailyLogicalCalls(calls: CallLogResponse[], classified: LeadResponse[],
   const keys = dayKeys(range)
   return keys.map((day) => {
     const logged = calls.filter((c) => c.calledAt.slice(0, 10) === day).length
-    const classifs = classified.filter((l) => l.updatedAt.slice(0, 10) === day).length
+    const classifs = classified.filter((l) => leadActivityDate(l)?.slice(0, 10) === day).length
     return Math.max(logged, classifs)
   })
 }
@@ -392,6 +402,18 @@ function filterRange<T>(rows: T[], range: AnalyticsRange, getIso: (row: T) => st
 function isInRange(iso: string, range: AnalyticsRange): boolean {
   const d = new Date(iso)
   return d >= range.from && d <= range.to
+}
+
+function isLeadActivityInRange(lead: LeadResponse, range: AnalyticsRange): boolean {
+  const iso = leadActivityDate(lead)
+  return iso ? isInRange(iso, range) : false
+}
+
+function leadActivityDate(lead: LeadResponse): string | null {
+  // Les imports Airtable peuvent avoir updatedAt = date d'import/déploiement.
+  // Pour ne pas transformer toute la migration en faux appels sur ce jour-là,
+  // on date les appels logiques via la vraie dernière trace d'appel/contact.
+  return lead.latestCallAt ?? lead.lastContactAt ?? (lead.source === 'airtable_migration' ? null : lead.updatedAt)
 }
 
 function dayKeys(range: AnalyticsRange): string[] {
