@@ -329,13 +329,21 @@ function CallbackCard({ nextCallbackAt }: { nextCallbackAt: string }) {
   const bg = overdue ? 'bg-rouille-tint/40' : 'bg-cuivre-tint/40'
   return (
     <div className={`${bg} border border-line rounded-xl p-3`}>
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex items-center justify-between mb-2">
         <span className={`text-[11px] font-bold uppercase tracking-widest ${tone}`}>{label}</span>
-        <span className="text-[11px] text-faint">{formatDate(nextCallbackAt)}</span>
+        <span className="text-[11px] text-faint">Téléphone</span>
       </div>
-      <div className="text-xs text-muted">Téléphone</div>
+      <div className="text-sm font-semibold text-text">{formatCallbackDate(nextCallbackAt)}</div>
     </div>
   )
+}
+
+function formatCallbackDate(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const datePart = d.toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
+  const timePart = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  return `${datePart[0].toUpperCase()}${datePart.slice(1)} à ${timePart}`
 }
 
 function NotesTab({

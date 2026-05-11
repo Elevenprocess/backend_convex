@@ -129,15 +129,19 @@ function LeadsSetter() {
 
   const filtered = useMemo(() => {
     let list = mine
-    if (filter === 'nouveau') list = list.filter((l) => l.status === 'nouveau')
-    if (filter === 'rappel') list = list.filter(isCallbackLead)
-    if (filter === 'qualifie') list = list.filter((l) => l.status === 'qualifie')
-    if (filter === 'perdu') list = list.filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie')
-    list = applyLeadFilters(list, leadFilters)
-    if (query) {
-      const q = query.toLowerCase()
+    const q = query.trim().toLowerCase()
+    // Recherche globale : si l'utilisateur cherche un lead (depuis l'input ou un
+    // click sur une notif qui pousse ?search=…), on bypass le filtre catégorie
+    // pour qu'un lead "à rappeler" reste trouvable depuis l'onglet "Nouveaux".
+    if (q) {
       list = list.filter((l) => [fullName(l), l.phone, l.email, l.city].filter(Boolean).join(' ').toLowerCase().includes(q))
+    } else {
+      if (filter === 'nouveau') list = list.filter((l) => l.status === 'nouveau')
+      if (filter === 'rappel') list = list.filter(isCallbackLead)
+      if (filter === 'qualifie') list = list.filter((l) => l.status === 'qualifie')
+      if (filter === 'perdu') list = list.filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie')
     }
+    list = applyLeadFilters(list, leadFilters)
     return list
   }, [mine, filter, leadFilters, query])
 
