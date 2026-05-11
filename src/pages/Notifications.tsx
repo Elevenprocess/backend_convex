@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
@@ -23,6 +23,10 @@ type Notif = {
   to?: string
 }
 
+const INITIAL_PAGE_SIZE = 30
+const PAGE_INCREMENT = 30
+const LOAD_DELAY_MS = 250
+
 export function Notifications() {
   const { data: leadsData, loading: leadsLoading } = useLeads({ limit: 500 })
   const { data: rdvsData, loading: rdvLoading } = useRdvList({ limit: 1000 })
@@ -31,15 +35,38 @@ export function Notifications() {
   const notifs = useMemo(() => buildNotifications(leads, rdvs), [leads, rdvs])
   const loading = leadsLoading || rdvLoading
   const [permission, setPermission] = useState(notificationPermission())
+  const [visibleCount, setVisibleCount] = useState(INITIAL_PAGE_SIZE)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  const visibleNotifs = useMemo(() => notifs.slice(0, visibleCount), [notifs, visibleCount])
+  const hasMore = visibleCount < notifs.length
 
   useBrowserNotifications(notifs)
+
+  useEffect(() => {
+    if (!hasMore) return
+    const target = sentinelRef.current
+    if (!target) return
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries[0]?.isIntersecting || loadingMore) return
+      setLoadingMore(true)
+      window.setTimeout(() => {
+        setVisibleCount((c) => c + PAGE_INCREMENT)
+        setLoadingMore(false)
+      }, LOAD_DELAY_MS)
+    }, { rootMargin: '200px' })
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [hasMore, loadingMore])
 
   return (
     <AppShell>
       <Topbar eyebrow="NOTIFICATIONS" title="Notifications et rappels" />
       <div className="px-8 pt-4 flex items-center justify-between flex-shrink-0 gap-4">
         <div className="text-sm text-muted">
-          {loading && notifs.length === 0 ? 'Chargement des notifications…' : `${notifs.length} notification${notifs.length > 1 ? 's' : ''} active${notifs.length > 1 ? 's' : ''}`}
+          {loading && notifs.length === 0
+            ? 'Chargement des notifications…'
+            : `${notifs.length} notification${notifs.length > 1 ? 's' : ''} active${notifs.length > 1 ? 's' : ''}${hasMore ? ` · ${visibleCount} affichées` : ''}`}
         </div>
         <button
           onClick={async () => setPermission(await requestNotificationPermission())}
@@ -54,7 +81,14 @@ export function Notifications() {
         {notifs.length === 0 ? (
           <div className="glass-card p-6 text-sm text-muted">Aucune notification urgente : pas de nouveau lead récent, pas de rappel à traiter, pas de RDV imminent.</div>
         ) : (
-          notifs.map((n) => <NotificationCard key={n.id} notif={n} />)
+          <>
+            {visibleNotifs.map((n) => <NotificationCard key={n.id} notif={n} />)}
+            {hasMore && (
+              <div ref={sentinelRef} className="glass-card p-4 text-center text-xs text-faint">
+                {loadingMore ? 'Chargement des notifications suivantes…' : 'Continue à descendre pour voir la suite'}
+              </div>
+            )}
+          </>
         )}
       </main>
     </AppShell>
