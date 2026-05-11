@@ -432,7 +432,7 @@ function AppelsTab({ leadId, userMap }: { leadId: string; userMap?: Map<string, 
           {userMap?.get(c.setterId)?.name && (
             <div className="text-xs text-muted">{userMap.get(c.setterId)?.name}</div>
           )}
-          {c.notes && <p className="text-sm mt-2 text-text">{c.notes}</p>}
+          {c.notes && <p className="text-sm mt-2 text-text whitespace-pre-line">{c.notes}</p>}
         </div>
       ))}
     </div>
@@ -461,7 +461,7 @@ function RdvTab({ lead, userMap }: { lead: LeadResponse; userMap?: Map<string, U
             {r.commercialId && userMap?.get(r.commercialId)?.name ? ` · ${userMap.get(r.commercialId)?.name}` : ''}
           </div>
           {r.result && <div className="text-xs text-text mt-1">Résultat : <span className="font-semibold">{r.result}</span></div>}
-          {r.notes && <p className="text-sm mt-2 text-text">{r.notes}</p>}
+          {r.notes && <p className="text-sm mt-2 text-text whitespace-pre-line">{r.notes}</p>}
         </div>
       ))}
     </div>
