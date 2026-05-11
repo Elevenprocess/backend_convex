@@ -6,7 +6,7 @@ import { Icon } from '../../components/Icon'
 import { EmptyState } from '../../components/EmptyState'
 import { LeadFiltersBar } from '../../components/LeadFiltersBar'
 import { useAuth } from '../../lib/auth'
-import { useLeads, useUsers, useStartCall } from '../../lib/hooks'
+import { useLeadsProgressive, useUsers, useStartCall } from '../../lib/hooks'
 import { useLeadSidebar } from '../../lib/leadSidebar'
 import { DEFAULT_LEAD_FILTERS, applyLeadFilters, type LeadListFilters } from '../../lib/leadFilters'
 import {
@@ -110,7 +110,7 @@ function LeadsSetter() {
 
   // Côté setter, l'écran s'ouvre directement sur les nouveaux leads.
   // Le filtre global "Tous" n'est pas affiché aux setters.
-  const { data, loading, error } = useLeads({ limit: LEADS_PAGE_LIMIT })
+  const { data, loading, error } = useLeadsProgressive({ quickLimit: 50, fullLimit: LEADS_PAGE_LIMIT })
   const { data: usersList } = useUsers()
   const mine = data ?? []
   const userMap = useMemo(() => {
@@ -294,7 +294,7 @@ function LeadsAdmin() {
   const selectLead = useLeadSidebar((s) => s.selectLead)
   const showColumn = (key: ColumnKey) => visibleColumns.includes(key)
 
-  const { data: leadsData, loading, error } = useLeads({ limit: LEADS_PAGE_LIMIT })
+  const { data: leadsData, loading, error } = useLeadsProgressive({ quickLimit: 50, fullLimit: LEADS_PAGE_LIMIT })
   const { data: users = [] } = useUsers()
   const leads = leadsData ?? []
 

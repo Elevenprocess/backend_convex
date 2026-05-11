@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Icon, type IconName } from '../components/Icon'
-import { useLeads, useRdvList } from '../lib/hooks'
+import { useLeadsProgressive, useRdvListProgressive } from '../lib/hooks'
 import { fullName, type LeadResponse, type RdvResponse } from '../lib/types'
 
 type Notif = {
@@ -23,17 +23,20 @@ type Notif = {
   to?: string
 }
 
-const INITIAL_PAGE_SIZE = 30
-const PAGE_INCREMENT = 30
-const LOAD_DELAY_MS = 250
+const INITIAL_PAGE_SIZE = 20
+const PAGE_INCREMENT = 20
+const LOAD_DELAY_MS = 200
 
 export function Notifications() {
-  const { data: leadsData, loading: leadsLoading } = useLeads({ limit: 500 })
-  const { data: rdvsData, loading: rdvLoading } = useRdvList({ limit: 1000 })
-  const leads = leadsData ?? []
-  const rdvs = rdvsData ?? []
+  // Two-phase fetch : 50 leads + 100 RDV peignent l'écran tout de suite,
+  // puis 500 leads + 1000 RDV hydratent le reste en arrière-plan.
+  const leadsState = useLeadsProgressive({ quickLimit: 50, fullLimit: 500 })
+  const rdvsState = useRdvListProgressive({ quickLimit: 100, fullLimit: 1000 })
+  const leads = leadsState.data ?? []
+  const rdvs = rdvsState.data ?? []
   const notifs = useMemo(() => buildNotifications(leads, rdvs), [leads, rdvs])
-  const loading = leadsLoading || rdvLoading
+  const initialLoading = leadsState.loading || rdvsState.loading
+  const backgroundLoading = leadsState.backgroundLoading || rdvsState.backgroundLoading
   const [permission, setPermission] = useState(notificationPermission())
   const [visibleCount, setVisibleCount] = useState(INITIAL_PAGE_SIZE)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -54,7 +57,7 @@ export function Notifications() {
         setVisibleCount((c) => c + PAGE_INCREMENT)
         setLoadingMore(false)
       }, LOAD_DELAY_MS)
-    }, { rootMargin: '200px' })
+    }, { rootMargin: '300px' })
     observer.observe(target)
     return () => observer.disconnect()
   }, [hasMore, loadingMore])
@@ -64,9 +67,9 @@ export function Notifications() {
       <Topbar eyebrow="NOTIFICATIONS" title="Notifications et rappels" />
       <div className="px-8 pt-4 flex items-center justify-between flex-shrink-0 gap-4">
         <div className="text-sm text-muted">
-          {loading && notifs.length === 0
+          {initialLoading
             ? 'Chargement des notifications…'
-            : `${notifs.length} notification${notifs.length > 1 ? 's' : ''} active${notifs.length > 1 ? 's' : ''}${hasMore ? ` · ${visibleCount} affichées` : ''}`}
+            : `${notifs.length} notification${notifs.length > 1 ? 's' : ''} active${notifs.length > 1 ? 's' : ''}${hasMore ? ` · ${visibleCount} affichées` : ''}${backgroundLoading ? ' · synchronisation…' : ''}`}
         </div>
         <button
           onClick={async () => setPermission(await requestNotificationPermission())}
@@ -78,7 +81,9 @@ export function Notifications() {
       </div>
 
       <main className="p-8 pt-4 max-w-3xl mx-auto w-full overflow-y-auto space-y-3 flex-grow">
-        {notifs.length === 0 ? (
+        {initialLoading && notifs.length === 0 ? (
+          <div className="glass-card p-6 text-sm text-muted">Chargement des notifications…</div>
+        ) : notifs.length === 0 ? (
           <div className="glass-card p-6 text-sm text-muted">Aucune notification urgente : pas de nouveau lead récent, pas de rappel à traiter, pas de RDV imminent.</div>
         ) : (
           <>
@@ -87,6 +92,9 @@ export function Notifications() {
               <div ref={sentinelRef} className="glass-card p-4 text-center text-xs text-faint">
                 {loadingMore ? 'Chargement des notifications suivantes…' : 'Continue à descendre pour voir la suite'}
               </div>
+            )}
+            {!hasMore && backgroundLoading && (
+              <div className="glass-card p-4 text-center text-xs text-faint">Mise à jour en arrière-plan…</div>
             )}
           </>
         )}

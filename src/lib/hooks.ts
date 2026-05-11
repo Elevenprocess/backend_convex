@@ -20,6 +20,11 @@ type Async<T> = {
   refetch: () => void
 }
 
+// `backgroundLoading` = phase 2 (full hydration) still running, phase 1 data is already on screen.
+type AsyncProgressive<T> = Async<T> & {
+  backgroundLoading: boolean
+}
+
 type FetchCacheEntry = {
   data: unknown
   timestamp: number
@@ -192,6 +197,32 @@ export function useLeads(filters?: {
   return useFetch<LeadResponse[]>('/leads', { ...filters, limit: filters?.limit ?? 500 })
 }
 
+// Two-phase fetch (Facebook News-Feed style):
+//   phase 1 → quickFetch (defaults to 50 leads) renvoie vite, on peint l'écran
+//   phase 2 → fullFetch (defaults to 500) tourne en parallèle, remplace phase 1 dès qu'il arrive
+// Pendant la phase 2, `backgroundLoading` = true → le composant peut afficher un badge subtil.
+export function useLeadsProgressive(filters?: {
+  status?: LeadStatus
+  setterId?: string
+  assignedToId?: string
+  city?: string
+  quickLimit?: number
+  fullLimit?: number
+}): AsyncProgressive<LeadResponse[]> {
+  const quickLimit = filters?.quickLimit ?? 50
+  const fullLimit = filters?.fullLimit ?? 500
+  const baseFilters = { ...filters, quickLimit: undefined, fullLimit: undefined }
+  const quick = useFetch<LeadResponse[]>('/leads', { ...baseFilters, limit: quickLimit })
+  const full = useFetch<LeadResponse[]>('/leads', { ...baseFilters, limit: fullLimit })
+  return {
+    data: full.data ?? quick.data,
+    loading: !quick.data && !full.data && (quick.loading || full.loading),
+    backgroundLoading: !!quick.data && !full.data && full.loading,
+    error: full.error ?? quick.error,
+    refetch: () => { quick.refetch(); full.refetch() },
+  }
+}
+
 export function useLead(id: string | undefined): Async<LeadResponse> {
   return useFetch<LeadResponse>(id ? `/leads/${id}` : null)
 }
@@ -206,6 +237,30 @@ export function useRdvList(filters?: {
   limit?: number
 }): Async<RdvResponse[]> {
   return useFetch<RdvResponse[]>('/rdv', { ...filters, limit: filters?.limit ?? 200 })
+}
+
+// Cf. useLeadsProgressive — même pattern pour les RDV.
+export function useRdvListProgressive(filters?: {
+  leadId?: string
+  commercialId?: string
+  setterId?: string
+  fromDate?: string
+  toDate?: string
+  quickLimit?: number
+  fullLimit?: number
+}): AsyncProgressive<RdvResponse[]> {
+  const quickLimit = filters?.quickLimit ?? 100
+  const fullLimit = filters?.fullLimit ?? 1000
+  const baseFilters = { ...filters, quickLimit: undefined, fullLimit: undefined }
+  const quick = useFetch<RdvResponse[]>('/rdv', { ...baseFilters, limit: quickLimit })
+  const full = useFetch<RdvResponse[]>('/rdv', { ...baseFilters, limit: fullLimit })
+  return {
+    data: full.data ?? quick.data,
+    loading: !quick.data && !full.data && (quick.loading || full.loading),
+    backgroundLoading: !!quick.data && !full.data && full.loading,
+    error: full.error ?? quick.error,
+    refetch: () => { quick.refetch(); full.refetch() },
+  }
 }
 
 export function useRdv(id: string | undefined): Async<RdvResponse> {

@@ -3,7 +3,7 @@ import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { SplitPanel } from '../../components/SplitPanel'
 import { LeadFiltersBar } from '../../components/LeadFiltersBar'
-import { useLeads, useUsers } from '../../lib/hooks'
+import { useLeadsProgressive, useUsers } from '../../lib/hooks'
 import { DEFAULT_LEAD_FILTERS, applyLeadFilters, type LeadListFilters } from '../../lib/leadFilters'
 import {
   STATUS_BADGE,
@@ -14,7 +14,7 @@ import {
 } from '../../lib/types'
 
 export function LeadsSplit() {
-  const { data: leads, loading, error, refetch } = useLeads({ limit: 200 })
+  const { data: leads, loading, error, refetch, backgroundLoading } = useLeadsProgressive({ quickLimit: 50, fullLimit: 200 })
   const { data: users } = useUsers()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -62,7 +62,7 @@ export function LeadsSplit() {
             <div className="glass-card !p-0 overflow-hidden">
               <div className="px-5 py-4 border-b border-line-soft flex items-center justify-between">
                 <div>
-                  <div className="font-semibold">{counts.total} leads</div>
+                  <div className="font-semibold">{counts.total} leads{backgroundLoading ? ' · synchronisation…' : ''}</div>
                   <div className="text-xs text-muted">{counts.nouveau} nouveaux · {counts.qualifie} qualifiés · {counts.relance} en relance</div>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap justify-end">
