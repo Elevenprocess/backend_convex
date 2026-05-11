@@ -2,7 +2,7 @@ import { useLocation } from 'react-router-dom'
 import { SplitPanel } from '../SplitPanel'
 import { useLead, useUsers } from '../../lib/hooks'
 import { useAuth } from '../../lib/auth'
-import { useLeadSidebar } from '../../lib/leadSidebar'
+import { isLeadSidebarExcludedPath, useLeadSidebar } from '../../lib/leadSidebar'
 import type { UserResponse } from '../../lib/types'
 
 export function PersistentLeadSidebar() {
@@ -15,9 +15,7 @@ export function PersistentLeadSidebar() {
 
   if (!role) return null
   if (!selectedLeadId) return null
-  if (location.pathname === '/overview') return null
-  if (role === 'setter' && location.pathname === '/analytics') return null
-  if (location.pathname.startsWith('/team/setters')) return null
+  if (isLeadSidebarExcludedPath(location.pathname)) return null
   if (!lead) return null
 
   const userMap = new Map<string, UserResponse>()
