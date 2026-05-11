@@ -16,6 +16,9 @@ type Notif = {
   title: string
   body: React.ReactNode
   time: string
+  // Sort key: event timestamp (lead.createdAt, nextCallbackAt, scheduledAt).
+  // Most recent first → top of the feed.
+  timestamp: number
   urgency: 'now' | 'soon' | 'info'
   to?: string
 }
@@ -26,7 +29,6 @@ export function Notifications() {
   const leads = leadsData ?? []
   const rdvs = rdvsData ?? []
   const notifs = useMemo(() => buildNotifications(leads, rdvs), [leads, rdvs])
-  const groups = Array.from(new Set(notifs.map((n) => n.group)))
   const loading = leadsLoading || rdvLoading
   const [permission, setPermission] = useState(notificationPermission())
 
@@ -51,12 +53,9 @@ export function Notifications() {
       <main className="p-8 pt-4 max-w-3xl mx-auto w-full overflow-y-auto space-y-3 flex-grow">
         {notifs.length === 0 ? (
           <div className="glass-card p-6 text-sm text-muted">Aucune notification urgente : pas de nouveau lead récent, pas de rappel à traiter, pas de RDV imminent.</div>
-        ) : groups.map((g) => (
-          <div key={g} className="space-y-3">
-            <div className="text-xs eyebrow text-muted mt-4 first:mt-0">{g}</div>
-            {notifs.filter((n) => n.group === g).map((n) => <NotificationCard key={n.id} notif={n} />)}
-          </div>
-        ))}
+        ) : (
+          notifs.map((n) => <NotificationCard key={n.id} notif={n} />)
+        )}
       </main>
     </AppShell>
   )
@@ -105,6 +104,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         title: 'Appel à rappeler maintenant',
         body: <><strong>{name}</strong>{lead.phone ? ` · ${lead.phone}` : ''}</>,
         time: formatDateTime(lead.nextCallbackAt!),
+        timestamp: callbackAt,
         urgency: 'now',
         to: leadLink,
       })
@@ -119,6 +119,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         title: 'Rappel téléphonique imminent',
         body: <><strong>{name}</strong>{lead.phone ? ` · ${lead.phone}` : ''}</>,
         time: formatDateTime(lead.nextCallbackAt!),
+        timestamp: callbackAt,
         urgency: 'soon',
         to: leadLink,
       })
@@ -133,6 +134,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         title: 'Client à rappeler',
         body: <><strong>{name}</strong>{lead.phone ? ` · ${lead.phone}` : ''}</>,
         time: formatDateTime(lead.nextCallbackAt!),
+        timestamp: callbackAt,
         urgency: 'info',
         to: leadLink,
       })
@@ -149,6 +151,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         title: 'Nouveau lead arrivé',
         body: <><strong>{name}</strong>{lead.city ? ` · ${lead.city}` : ''}{lead.phone ? ` · ${lead.phone}` : ''}</>,
         time: relativeTime(lead.createdAt),
+        timestamp: new Date(lead.createdAt).getTime(),
         urgency: 'info',
         to: leadLink,
       })
@@ -169,13 +172,17 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         title: 'RDV dans moins de 10 minutes',
         body: <>Prépare le RDV {rdv.locationType} prévu à {formatDateTime(rdv.scheduledAt)}.</>,
         time: formatDateTime(rdv.scheduledAt),
+        timestamp: scheduled,
         urgency: 'soon',
         to: '/rdv',
       })
     }
   }
 
-  return notifications.sort((a, b) => urgencyRank(a) - urgencyRank(b))
+  // Tri "feed" : la notif la plus récente en haut.
+  // Pour les events futurs (RDV imminent, callback programmé), on plafonne à `now`
+  // pour éviter qu'un RDV dans 2 semaines passe devant un nouveau lead arrivé à l'instant.
+  return notifications.sort((a, b) => Math.min(b.timestamp, now) - Math.min(a.timestamp, now))
 }
 
 function useBrowserNotifications(notifs: Notif[]) {
@@ -203,11 +210,6 @@ function readNotifiedIds(): Set<string> {
 
 function writeNotifiedIds(ids: Set<string>) {
   localStorage.setItem('ecoi.notifiedIds', JSON.stringify(Array.from(ids).slice(-100)))
-}
-
-function urgencyRank(notif: Notif): number {
-  const groupRank = notif.group === 'RAPPELS EN RETARD' ? 0 : notif.group === 'DANS 10 MIN' ? 1 : notif.group === 'NOUVEAUX LEADS' ? 2 : 3
-  return groupRank * 10 + (notif.urgency === 'now' ? 0 : notif.urgency === 'soon' ? 1 : 2)
 }
 
 function supportsBrowserNotifications(): boolean {
