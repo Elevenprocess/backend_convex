@@ -20,6 +20,9 @@ type Notif = {
   // Most recent first → top of the feed.
   timestamp: number
   urgency: 'now' | 'soon' | 'info'
+  // `handled = true` quand l'utilisateur a déjà fait quelque chose côté lead
+  // (call log enregistré APRÈS l'événement déclencheur). Affiche un check.
+  handled: boolean
   to?: string
 }
 
@@ -106,20 +109,29 @@ export function Notifications() {
 function NotificationCard({ notif }: { notif: Notif }) {
   const content = (
     <>
-      <div className={`w-10 h-10 rounded-full ${notif.iconBg} flex items-center justify-center shrink-0`}>
+      <div className={`relative w-10 h-10 rounded-full ${notif.iconBg} flex items-center justify-center shrink-0`}>
         <Icon name={notif.icon} size={18} className={notif.iconColor} />
+        {notif.handled && (
+          <span
+            title="Lead déjà contacté"
+            className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-success text-white border-2 border-white flex items-center justify-center"
+          >
+            <Icon name="check" size={10} className="stroke-[3]" />
+          </span>
+        )}
       </div>
       <div className="flex-grow min-w-0">
         <div className="flex justify-between items-start gap-2">
-          <span className="font-semibold text-sm">{notif.title}</span>
+          <span className={`font-semibold text-sm ${notif.handled ? 'text-faint line-through decoration-1' : ''}`}>{notif.title}</span>
           <span className="text-xs text-faint shrink-0">{notif.time}</span>
         </div>
-        <p className="text-sm text-muted mt-1">{notif.body}</p>
+        <p className={`text-sm mt-1 ${notif.handled ? 'text-faint' : 'text-muted'}`}>{notif.body}</p>
       </div>
     </>
   )
 
-  const className = `glass-card p-4 flex items-start gap-4 ${notif.borderColor ? `border-l-4 ${notif.borderColor}` : ''}`
+  const opacity = notif.handled ? 'opacity-70' : ''
+  const className = `glass-card p-4 flex items-start gap-4 ${notif.borderColor ? `border-l-4 ${notif.borderColor}` : ''} ${opacity}`
   if (!notif.to) return <div className={className}>{content}</div>
   return <Link to={notif.to} className={`${className} hover:border-or transition-colors`}>{content}</Link>
 }
@@ -135,6 +147,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
     const name = fullName(lead)
     const leadLink = `/leads?search=${encodeURIComponent(name)}`
     const callbackAt = lead.nextCallbackAt ? new Date(lead.nextCallbackAt).getTime() : null
+    const lastContactAt = lead.lastContactAt ? new Date(lead.lastContactAt).getTime() : null
 
     if (callbackAt && callbackAt <= now && (lead.status === 'a_rappeler' || lead.status === 'relance' || lead.nextCallbackAt)) {
       notifications.push({
@@ -149,6 +162,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         time: formatDateTime(lead.nextCallbackAt!),
         timestamp: callbackAt,
         urgency: 'now',
+        handled: lastContactAt != null && lastContactAt >= callbackAt,
         to: leadLink,
       })
     } else if (callbackAt && callbackAt <= in10Min && callbackAt > now) {
@@ -164,10 +178,12 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         time: formatDateTime(lead.nextCallbackAt!),
         timestamp: callbackAt,
         urgency: 'soon',
+        handled: lastContactAt != null && lastContactAt >= callbackAt - 10 * 60 * 1000,
         to: leadLink,
       })
     } else if (callbackAt && lead.status === 'a_rappeler' && callbackAt <= in24hFuture) {
       // Fenêtre de 24h max : un rappel programmé dans 11 jours ne pollue plus la liste.
+      // `handled` = contact dans la dernière heure (le commercial vient probablement d'appeler).
       notifications.push({
         id: `callback-planned-${lead.id}`,
         group: 'RAPPELS PROGRAMMÉS',
@@ -180,11 +196,13 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         time: formatDateTime(lead.nextCallbackAt!),
         timestamp: callbackAt,
         urgency: 'info',
+        handled: lastContactAt != null && lastContactAt >= now - 60 * 60 * 1000,
         to: leadLink,
       })
     }
 
     if (lead.status === 'nouveau' && new Date(lead.createdAt).getTime() >= in24hPast) {
+      const createdAt = new Date(lead.createdAt).getTime()
       notifications.push({
         id: `new-lead-${lead.id}`,
         group: 'NOUVEAUX LEADS',
@@ -195,13 +213,15 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         title: 'Nouveau lead arrivé',
         body: <><strong>{name}</strong>{lead.city ? ` · ${lead.city}` : ''}{lead.phone ? ` · ${lead.phone}` : ''}</>,
         time: relativeTime(lead.createdAt),
-        timestamp: new Date(lead.createdAt).getTime(),
+        timestamp: createdAt,
         urgency: 'info',
+        handled: lastContactAt != null && lastContactAt >= createdAt,
         to: leadLink,
       })
     }
 
     if (lead.status === 'qualifie' && new Date(lead.updatedAt).getTime() >= in24hPast) {
+      const updatedAt = new Date(lead.updatedAt).getTime()
       notifications.push({
         id: `qualified-${lead.id}`,
         group: 'LEADS QUALIFIÉS',
@@ -212,8 +232,9 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         title: 'Lead qualifié',
         body: <><strong>{name}</strong>{lead.city ? ` · ${lead.city}` : ''}{lead.phone ? ` · ${lead.phone}` : ''}</>,
         time: relativeTime(lead.updatedAt),
-        timestamp: new Date(lead.updatedAt).getTime(),
+        timestamp: updatedAt,
         urgency: 'info',
+        handled: lastContactAt != null && lastContactAt >= updatedAt,
         to: leadLink,
       })
     }
@@ -235,6 +256,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         time: formatDateTime(rdv.scheduledAt),
         timestamp: scheduled,
         urgency: 'soon',
+        handled: false,
         to: '/rdv',
       })
     }
