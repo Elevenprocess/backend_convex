@@ -2,12 +2,8 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
-import { useCallLogs, useLeads, useRdvList, useUsers } from '../lib/hooks'
-import { CALL_RESULT_LABEL, type CallLogResponse, type CallResult, type LeadResponse, type RdvResponse, type UserResponse } from '../lib/types'
-
-const QUALIFIED_STATUSES = new Set(['qualifie', 'rdv_pris', 'rdv_honore', 'signe'])
-const CLASSIFIED_STATUSES = new Set(['qualifie', 'rdv_pris', 'rdv_honore', 'signe', 'perdu', 'relance', 'pas_qualifie', 'a_rappeler', 'pas_de_reponse'])
-const COLORS = ['#D4AF37', '#B87333', '#3DA86A', '#6B7C8C', '#B7410E', '#2F4858']
+import { useAnalyticsSummary } from '../lib/hooks'
+import type { AnalyticsResponse } from '../lib/types'
 
 type AnalyticsPeriodMode = 'today' | 'date' | 'week' | 'month' | 'year'
 type AnalyticsRange = { from: Date; to: Date; label: string; days: number }
@@ -22,14 +18,11 @@ export function Analytics() {
 }
 
 // ----- F11 Setter -----
-function AnalyticsSetter({ name, userId }: { name: string; userId?: string }) {
+function AnalyticsSetter({ name }: { name: string; userId?: string }) {
   const period = useAnalyticsPeriod('month')
   const days = period.range.days
-  const { data: leads = [] } = useLeads({ limit: 3000 })
-  const { data: calls = [] } = useCallLogs(userId ? { setterId: userId, limit: 3000 } : { limit: 3000 })
-  const { data: rdvs = [] } = useRdvList(userId ? { setterId: userId, limit: 1000 } : { limit: 1000 })
-
-  const stats = useMemo(() => buildSetterStats(leads ?? [], calls ?? [], rdvs ?? [], userId, period.range), [leads, calls, rdvs, userId, period.range])
+  const { data } = useAnalyticsSummary(rangeQuery(period.range))
+  const stats = data ?? EMPTY_ANALYTICS_STATS
 
   return (
     <AppShell blobsKey="setter">
@@ -76,10 +69,10 @@ function AnalyticsSetter({ name, userId }: { name: string; userId?: string }) {
 }
 
 // ----- F12 Commercial -----
-function AnalyticsCommercial({ name, userId }: { name: string; userId: string }) {
+function AnalyticsCommercial({ name }: { name: string; userId: string }) {
   const period = useAnalyticsPeriod('month')
-  const { data: rdvs = [] } = useRdvList({ commercialId: userId, limit: 1000 })
-  const stats = useMemo(() => buildCommercialStats(rdvs ?? [], period.range), [rdvs, period.range])
+  const { data } = useAnalyticsSummary(rangeQuery(period.range))
+  const stats = data ?? EMPTY_ANALYTICS_STATS
 
   return (
     <AppShell blobsKey="commercial">
@@ -114,11 +107,8 @@ function AnalyticsCommercial({ name, userId }: { name: string; userId: string })
 // ----- F13 Admin -----
 function AnalyticsAdmin() {
   const period = useAnalyticsPeriod('month')
-  const { data: leads = [] } = useLeads({ limit: 5000 })
-  const { data: calls = [] } = useCallLogs({ limit: 5000 })
-  const { data: rdvs = [] } = useRdvList({ limit: 2000 })
-  const { data: users = [] } = useUsers()
-  const stats = useMemo(() => buildAdminStats(leads ?? [], calls ?? [], rdvs ?? [], users ?? [], period.range), [leads, calls, rdvs, users, period.range])
+  const { data } = useAnalyticsSummary(rangeQuery(period.range))
+  const stats = data ?? EMPTY_ANALYTICS_STATS
 
   return (
     <AppShell blobsKey="admin">
@@ -207,222 +197,43 @@ function AnalyticsAdmin() {
   )
 }
 
-// ===== Analytics ETL/OLAP helpers =====
+// ===== Analytics backend helpers =====
 
-type Segment = { label: string; value: number; color: string }
-type SetterPerf = { id: string; name: string; initials: string; calls: number; connected: number; classified: number; qualified: number; rdvPris: number; efficiency: number }
-type CommercialPerf = { id: string; name: string; initials: string; honored: number; signed: number; closing: number; panier: number; ca: number }
+type Segment = AnalyticsResponse['resultSegments'][number]
 
-function buildSetterStats(leads: LeadResponse[], calls: CallLogResponse[], rdvs: RdvResponse[], setterId: string | undefined, range: AnalyticsRange) {
-  const days = range.days
-  const scopedCalls = filterRange(calls, range)
-  const scopedLeads = leads.filter((l) => belongsToSetter(l, setterId) && isLeadActivityInRange(l, range))
-  const classifiedLeads = scopedLeads.filter(isClassifiedLead)
-  const syntheticCalls = Math.max(0, classifiedLeads.length - scopedCalls.length)
-  const resultCounts = countResults(scopedCalls)
-  addSyntheticResults(resultCounts, classifiedLeads, syntheticCalls)
-  const callsTotal = scopedCalls.length + syntheticCalls
-  const connected = (resultCounts.joint ?? 0) + (resultCounts.rdv_pris ?? 0)
-  const rdvPris = Math.max(resultCounts.rdv_pris ?? 0, rdvs.filter((r) => isInRange(r.createdAt, range)).length, classifiedLeads.filter((l) => l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe').length)
-  const qualified = classifiedLeads.filter(isQualifiedLead).length
-  return {
-    calls: callsTotal,
-    loggedCalls: scopedCalls.length,
-    syntheticCalls,
-    callsPerDay: days ? Math.round(callsTotal / days) : 0,
-    classified: classifiedLeads.length,
-    unclassified: scopedLeads.filter((l) => isInRange(l.createdAt, range)).length,
-    connected,
-    qualified,
-    rdvPris,
-    connectionRate: pct(connected, callsTotal),
-    qualificationRate: pct(qualified, callsTotal),
-    rdvRate: pct(rdvPris, callsTotal),
-    resultSegments: resultSegments(resultCounts),
-    dailyCalls: dailyLogicalCalls(scopedCalls, classifiedLeads, range),
-  }
+const EMPTY_ANALYTICS_STATS: AnalyticsResponse = {
+  calls: 0,
+  loggedCalls: 0,
+  syntheticCalls: 0,
+  callsPerDay: 0,
+  classified: 0,
+  unclassified: 0,
+  connected: 0,
+  qualified: 0,
+  rdvPris: 0,
+  rdvRate: 0,
+  connectionRate: 0,
+  qualificationRate: 0,
+  ca: 0,
+  signed: 0,
+  total: 0,
+  honored: 0,
+  closing: 0,
+  panier: 0,
+  resultSegments: [],
+  financingSegments: [],
+  dailyCalls: [],
+  setters: [],
+  commercials: [],
 }
 
-function buildCommercialStats(rdvs: RdvResponse[], range: AnalyticsRange) {
-  const scoped = filterRange(rdvs, range, (r) => r.scheduledAt)
-  const honored = scoped.filter((r) => r.status === 'honore')
-  const signed = honored.filter((r) => r.result === 'signe')
-  const ca = signed.reduce((sum, r) => sum + money(r.montantTotal), 0)
-  return {
-    total: scoped.length,
-    honored: honored.length,
-    signed: signed.length,
-    ca,
-    panier: signed.length ? ca / signed.length : 0,
-    closing: pct(signed.length, honored.length),
-    resultSegments: pieFromCounts([
-      ['Signé', signed.length],
-      ['Réflexion', honored.filter((r) => r.result === 'reflexion').length],
-      ['Perdu', honored.filter((r) => r.result === 'perdu').length],
-      ['No-show', scoped.filter((r) => r.status === 'no_show').length],
-      ['Reporté', scoped.filter((r) => r.status === 'reporte').length],
-    ]),
-    financingSegments: pieFromCounts([
-      ['Comptant', signed.filter((r) => r.financingType === 'comptant').length],
-      ['Financement', signed.filter((r) => r.financingType === 'financement').length],
-      ['À définir', signed.filter((r) => !r.financingType).length],
-    ]),
-  }
-}
-
-function buildAdminStats(leads: LeadResponse[], calls: CallLogResponse[], rdvs: RdvResponse[], users: UserResponse[], range: AnalyticsRange) {
-  const scopedLeads = leads.filter((l) => isLeadActivityInRange(l, range))
-  const scopedCalls = filterRange(calls, range)
-  const scopedRdvs = filterRange(rdvs, range, (r) => r.scheduledAt)
-  const classifiedLeads = scopedLeads.filter(isClassifiedLead)
-  const syntheticCalls = Math.max(0, classifiedLeads.length - scopedCalls.length)
-  const resultCounts = countResults(scopedCalls)
-  addSyntheticResults(resultCounts, classifiedLeads, syntheticCalls)
-  const callsTotal = scopedCalls.length + syntheticCalls
-  const qualified = classifiedLeads.filter(isQualifiedLead).length
-  const rdvPris = Math.max(resultCounts.rdv_pris ?? 0, scopedLeads.filter((l) => l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe').length)
-  const honored = scopedRdvs.filter((r) => r.status === 'honore')
-  const signed = honored.filter((r) => r.result === 'signe')
-  const ca = signed.reduce((sum, r) => sum + money(r.montantTotal), 0)
-  return {
-    calls: callsTotal,
-    classified: classifiedLeads.length,
-    qualified,
-    unclassified: scopedLeads.filter((l) => isInRange(l.createdAt, range)).length,
-    syntheticCalls,
-    rdvPris,
-    rdvRate: pct(rdvPris, callsTotal),
-    qualificationRate: pct(qualified, callsTotal),
-    ca,
-    signed: signed.length,
-    resultSegments: resultSegments(resultCounts),
-    setters: buildSetterRows(scopedLeads, scopedCalls, scopedRdvs, users),
-    commercials: buildCommercialRows(scopedRdvs, users),
-  }
-}
-
-function buildSetterRows(leads: LeadResponse[], calls: CallLogResponse[], _rdvs: RdvResponse[], users: UserResponse[]): SetterPerf[] {
-  return users
-    .filter((u) => u.role === 'setter')
-    .map((u) => {
-      const ownLeads = leads.filter((l) => belongsToSetter(l, u.id))
-      const classified = ownLeads.filter(isClassifiedLead)
-      const ownCalls = calls.filter((c) => c.setterId === u.id)
-      const synthetic = Math.max(0, classified.length - ownCalls.length)
-      const counts = countResults(ownCalls)
-      addSyntheticResults(counts, classified, synthetic)
-      const callsTotal = ownCalls.length + synthetic
-      const connected = (counts.joint ?? 0) + (counts.rdv_pris ?? 0)
-      const qualified = classified.filter(isQualifiedLead).length
-      const rdvPris = Math.max(counts.rdv_pris ?? 0, classified.filter((l) => l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe').length)
-      return { id: u.id, name: u.name, initials: initialsFromName(u.name), calls: callsTotal, connected, classified: classified.length, qualified, rdvPris, efficiency: pct(qualified + rdvPris, callsTotal) }
-    })
-    .sort((a, b) => b.calls - a.calls)
-}
-
-function buildCommercialRows(rdvs: RdvResponse[], users: UserResponse[]): CommercialPerf[] {
-  return users
-    .filter((u) => u.role === 'commercial')
-    .map((u) => {
-      const honored = rdvs.filter((r) => r.commercialId === u.id && r.status === 'honore')
-      const signed = honored.filter((r) => r.result === 'signe')
-      const ca = signed.reduce((sum, r) => sum + money(r.montantTotal), 0)
-      return { id: u.id, name: u.name, initials: initialsFromName(u.name), honored: honored.length, signed: signed.length, closing: pct(signed.length, honored.length), panier: signed.length ? ca / signed.length : 0, ca }
-    })
-    .filter((p) => p.honored > 0 || p.signed > 0)
-    .sort((a, b) => b.ca - a.ca)
-}
-
-function belongsToSetter(lead: LeadResponse, setterId: string | undefined): boolean {
-  if (!setterId) return true
-  return lead.setterId === setterId || lead.assignedSetterIds.includes(setterId)
-}
-
-function isClassifiedLead(lead: LeadResponse) {
-  return CLASSIFIED_STATUSES.has(lead.status)
-}
-
-function isQualifiedLead(lead: LeadResponse) {
-  return QUALIFIED_STATUSES.has(lead.status)
-}
-
-function countResults(calls: CallLogResponse[]): Record<CallResult, number> {
-  const counts = { joint: 0, non_joint: 0, rappel_planifie: 0, rdv_pris: 0, refus: 0, injoignable: 0, messagerie: 0 }
-  for (const call of calls) counts[call.result] += 1
-  return counts
-}
-
-function addSyntheticResults(counts: Record<CallResult, number>, leads: LeadResponse[], maxToAdd: number) {
-  if (maxToAdd <= 0) return
-  for (const lead of leads.slice(0, maxToAdd)) {
-    counts[statusToResult(lead.status)] += 1
-  }
-}
-
-function statusToResult(status: LeadResponse['status']): CallResult {
-  if (status === 'rdv_pris' || status === 'rdv_honore' || status === 'signe') return 'rdv_pris'
-  if (status === 'qualifie') return 'joint'
-  if (status === 'a_rappeler' || status === 'relance') return 'rappel_planifie'
-  if (status === 'pas_de_reponse') return 'non_joint'
-  if (status === 'pas_qualifie' || status === 'perdu') return 'refus'
-  return 'non_joint'
-}
-
-function resultSegments(counts: Record<CallResult, number>): Segment[] {
-  return pieFromCounts((Object.keys(counts) as CallResult[]).map((key) => [CALL_RESULT_LABEL[key], counts[key]]))
-}
-
-function pieFromCounts(rows: [string, number][]): Segment[] {
-  return rows.filter(([, value]) => value > 0).map(([label, value], i) => ({ label, value, color: COLORS[i % COLORS.length] }))
-}
-
-function dailyLogicalCalls(calls: CallLogResponse[], classified: LeadResponse[], range: AnalyticsRange): number[] {
-  const keys = dayKeys(range)
-  return keys.map((day) => {
-    const logged = calls.filter((c) => c.calledAt.slice(0, 10) === day).length
-    const classifs = classified.filter((l) => leadActivityDate(l)?.slice(0, 10) === day).length
-    return Math.max(logged, classifs)
-  })
-}
-
-function filterRange<T>(rows: T[], range: AnalyticsRange, getIso: (row: T) => string = (row) => (row as { calledAt?: string; updatedAt?: string }).calledAt ?? (row as { updatedAt: string }).updatedAt): T[] {
-  return rows.filter((row) => isInRange(getIso(row), range))
-}
-
-function isInRange(iso: string, range: AnalyticsRange): boolean {
-  const d = new Date(iso)
-  return d >= range.from && d <= range.to
-}
-
-function isLeadActivityInRange(lead: LeadResponse, range: AnalyticsRange): boolean {
-  const iso = leadActivityDate(lead)
-  return iso ? isInRange(iso, range) : false
-}
-
-function leadActivityDate(lead: LeadResponse): string | null {
-  // Les imports Airtable peuvent avoir updatedAt = date d'import/déploiement.
-  // Pour ne pas transformer toute la migration en faux appels sur ce jour-là,
-  // on date les appels logiques via la vraie dernière trace d'appel/contact.
-  return lead.latestCallAt ?? lead.lastContactAt ?? (lead.source === 'airtable_migration' ? null : lead.updatedAt)
-}
-
-function dayKeys(range: AnalyticsRange): string[] {
-  const keys: string[] = []
-  const d = startOfDay(range.from)
-  while (d <= range.to) {
-    keys.push(toDateInputValue(d))
-    d.setDate(d.getDate() + 1)
-  }
-  return keys
+function rangeQuery(range: AnalyticsRange) {
+  return { from: range.from.toISOString(), to: range.to.toISOString() }
 }
 
 function pct(num: number, denom: number): number {
   if (denom <= 0) return 0
   return Math.min(100, Math.round((num / denom) * 100))
-}
-
-function money(value: string | null): number {
-  return parseFloat(value ?? '0') || 0
 }
 
 function fmtInt(n: number): string {
@@ -433,11 +244,6 @@ function fmtKEur(val: number): string {
   if (val === 0) return '0€'
   if (val >= 1000) return `${(val / 1000).toFixed(val >= 10000 ? 0 : 1)}k€`
   return `${Math.round(val)}€`
-}
-
-function initialsFromName(name: string): string {
-  const parts = name.split(' ').filter(Boolean)
-  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '??'
 }
 
 // ===== Period selector =====

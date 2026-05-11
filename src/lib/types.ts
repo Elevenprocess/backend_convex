@@ -123,6 +123,57 @@ export const CALL_RESULT_LABEL: Record<CallResult, string> = {
   messagerie: 'Messagerie',
 }
 
+export type AnalyticsSegment = { label: string; value: number; color: string }
+
+export type SetterPerformance = {
+  id: string
+  name: string
+  initials: string
+  calls: number
+  connected: number
+  classified: number
+  qualified: number
+  rdvPris: number
+  efficiency: number
+}
+
+export type CommercialPerformance = {
+  id: string
+  name: string
+  initials: string
+  honored: number
+  signed: number
+  closing: number
+  panier: number
+  ca: number
+}
+
+export type AnalyticsResponse = {
+  calls: number
+  loggedCalls: number
+  syntheticCalls: number
+  callsPerDay: number
+  classified: number
+  unclassified: number
+  connected: number
+  qualified: number
+  rdvPris: number
+  rdvRate: number
+  connectionRate: number
+  qualificationRate: number
+  ca: number
+  signed: number
+  total: number
+  honored: number
+  closing: number
+  panier: number
+  resultSegments: AnalyticsSegment[]
+  financingSegments: AnalyticsSegment[]
+  dailyCalls: number[]
+  setters: SetterPerformance[]
+  commercials: CommercialPerformance[]
+}
+
 export type RdvStatus = 'planifie' | 'honore' | 'no_show' | 'reporte' | 'annule'
 export type RdvResult = 'signe' | 'reflexion' | 'perdu' | 'no_show' | 'reporte'
 export type RdvLocation = 'domicile' | 'agence' | 'visio'

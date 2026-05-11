@@ -10,6 +10,7 @@ import type {
   RdvLocation,
   RdvResponse,
   UserResponse,
+  AnalyticsResponse,
 } from './types'
 
 type Async<T> = {
@@ -182,6 +183,14 @@ export async function acceptInvitation(input: { token: string; password: string 
 
 export function useUser(id: string | undefined): Async<UserResponse> {
   return useFetch<UserResponse>(id ? `/users/${id}` : null)
+}
+
+// ─── Analytics ─────────────────────────────────────────────
+export function useAnalyticsSummary(filters: {
+  from: string
+  to: string
+}): Async<AnalyticsResponse> {
+  return useFetch<AnalyticsResponse>('/analytics/summary', filters)
 }
 
 // ─── Call logs ─────────────────────────────────────────────
