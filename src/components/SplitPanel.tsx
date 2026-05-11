@@ -68,6 +68,10 @@ const EMPTY_ELIGIBILITY_NOTES: EligibilityNotes = {
   budgetNote: '',
 }
 
+function notesTabStorageKey(leadId: string): string {
+  return `ecoi.notes-tab.v1.${leadId}`
+}
+
 export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, children, onClose, onSaved, className }: SplitPanelProps) {
   const [active, setActive] = useState(defaultTab ?? tabs[0].id)
   const callState = useCall()
@@ -537,15 +541,11 @@ function NotesTab({
   void notes
   void setNotes
 
+  // Restaure le workflow en cours depuis localStorage (par lead.id) — survit aux
+  // remounts (PersistentLeadSidebar peut se démonter brièvement quand useLead
+  // refetch, F5, déconnexion WS, etc.) sans faire perdre la saisie en cours.
   useEffect(() => {
-    setSetterStatus(statusToSetterStatus(lead.status))
-    setStep('eligibility')
-    setEligibilityNotes(EMPTY_ELIGIBILITY_NOTES)
-    setCommentaire('')
-    setCallbackAt('')
-    setSector('')
-    setRdvAt('')
-    setForm({
+    const defaultForm = {
       firstName: lead.firstName ?? '',
       lastName: lead.lastName ?? '',
       email: lead.email ?? '',
@@ -555,10 +555,61 @@ function NotesTab({
       postalCode: lead.postalCode ?? '',
       typeLogement: lead.typeLogement ?? '',
       revenuFiscal: lead.revenuFiscal?.toString() ?? '',
-    })
+    }
+    try {
+      const stored = localStorage.getItem(notesTabStorageKey(lead.id))
+      if (stored) {
+        const parsed = JSON.parse(stored) as Partial<{
+          setterStatus: SetterStatus
+          step: Step
+          eligibilityNotes: EligibilityNotes
+          commentaire: string
+          callbackAt: string
+          sector: '' | 'Nord' | 'Sud' | 'Est' | 'Ouest'
+          rdvAt: string
+          form: typeof defaultForm
+        }>
+        setSetterStatus(parsed.setterStatus ?? statusToSetterStatus(lead.status))
+        setStep(parsed.step ?? 'eligibility')
+        setEligibilityNotes(parsed.eligibilityNotes ?? EMPTY_ELIGIBILITY_NOTES)
+        setCommentaire(parsed.commentaire ?? '')
+        setCallbackAt(parsed.callbackAt ?? '')
+        setSector(parsed.sector ?? '')
+        setRdvAt(parsed.rdvAt ?? '')
+        setForm({ ...defaultForm, ...(parsed.form ?? {}) })
+        setError(null)
+        setSuccess(null)
+        return
+      }
+    } catch {}
+    setSetterStatus(statusToSetterStatus(lead.status))
+    setStep('eligibility')
+    setEligibilityNotes(EMPTY_ELIGIBILITY_NOTES)
+    setCommentaire('')
+    setCallbackAt('')
+    setSector('')
+    setRdvAt('')
+    setForm(defaultForm)
     setError(null)
     setSuccess(null)
   }, [lead.id])
+
+  // Sauvegarde à chaque modification (debounced via React batching) — clé par lead.
+  useEffect(() => {
+    if (step === 'done') return // workflow terminé, on ne persiste plus
+    try {
+      localStorage.setItem(notesTabStorageKey(lead.id), JSON.stringify({
+        setterStatus, step, eligibilityNotes, commentaire, callbackAt, sector, rdvAt, form,
+      }))
+    } catch {}
+  }, [lead.id, setterStatus, step, eligibilityNotes, commentaire, callbackAt, sector, rdvAt, form])
+
+  // Workflow validé : on nettoie le brouillon pour que la prochaine visite reparte propre.
+  useEffect(() => {
+    if (step === 'done') {
+      try { localStorage.removeItem(notesTabStorageKey(lead.id)) } catch {}
+    }
+  }, [step, lead.id])
 
   const eligibilitySummary = formatEligibilityNotes(eligibilityNotes)
   const noteFinale = [eligibilitySummary, commentaire.trim()].filter(Boolean).join('\n\n') || null
