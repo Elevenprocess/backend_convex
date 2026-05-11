@@ -234,7 +234,7 @@ function LeadsSetter() {
                         {showColumn('dernierAppel') && <Td className="text-faint">{lastCallDateTime(l.latestCallAt ?? l.lastContactAt)}</Td>}
                         {showColumn('statut') && <Td><span className={`status-badge ${STATUS_BADGE[l.status]}`}>{STATUS_LABEL[l.status]}</span></Td>}
                         {showColumn('appelDate') && <Td className="text-faint">{lastCallDateTime(l.latestCallAt ?? l.lastContactAt)}</Td>}
-                        {showColumn('jauge') && <Td><ElevenDayGauge jours={l.joursRelance ?? l.joursSansContact} airtableGauge={l.jauge11Jours} /></Td>}
+                        {showColumn('jauge') && <Td><ElevenDayGauge jours={l.joursRelance ?? null} /></Td>}
                         {showColumn('logAppel') && <Td><LeadCommentButton comment={l.latestCallComment} leadName={fullName(l)} onOpen={setOpenComment} /></Td>}
                         {showColumn('appelsCommercial') && <Td className="text-muted truncate" title={commercialLabel(l, userMap)}>{commercialLabel(l, userMap)}</Td>}
                       </tr>
@@ -445,7 +445,7 @@ function LeadsAdmin() {
                     {showColumn('jaugeAppels') && <Td><DailyCallGauge count={l.callsToday ?? 0} /></Td>}
                     {showColumn('prochainRappel') && <Td className="text-faint">{lastCallDateTime(l.nextCallbackAt ?? null)}</Td>}
                     {showColumn('relanceMax') && <Td className="text-faint">{formatDays(l.joursRelance)}</Td>}
-                    {showColumn('jauge') && <Td><ElevenDayGauge jours={l.joursRelance ?? l.joursSansContact} airtableGauge={l.jauge11Jours} /></Td>}
+                    {showColumn('jauge') && <Td><ElevenDayGauge jours={l.joursRelance ?? null} /></Td>}
                     {showColumn('projets') && <Td className="text-muted truncate" title={l.typeLogement ?? undefined}>{l.typeLogement ?? '—'}</Td>}
                     {showColumn('localisationMap') && <Td className="text-muted truncate" title={l.localisationMap ?? undefined}>{l.localisationMap ?? '—'}</Td>}
                     {showColumn('contactId') && <Td className="text-muted truncate" title={l.externalId ?? undefined}>{l.externalId ?? '—'}</Td>}
@@ -740,17 +740,14 @@ function StatCard({ label, value }: { label: string; value: string }) {
   )
 }
 
-function ElevenDayGauge({ jours, airtableGauge }: { jours: number | null; airtableGauge?: string | null }) {
-  const rawGauge = airtableGauge?.trim()
-  const rawValue = rawGauge?.match(/(\d+)\s*\/\s*11/)?.[1]
-  const displayDays = rawValue ? Number(rawValue) : jours
-  const safeDays = Math.max(0, displayDays ?? 0)
+function ElevenDayGauge({ jours }: { jours: number | null }) {
+  const safeDays = Math.max(0, jours ?? 0)
   const progress = Math.min(100, Math.round((safeDays / 11) * 100))
   const barColor = safeDays >= 11 ? 'bg-rouille' : safeDays >= 8 ? 'bg-or' : 'bg-success'
-  const label = displayDays === null ? '0/11j' : `${Math.min(safeDays, 11)}/11j`
+  const label = `${Math.min(safeDays, 11)}/11j`
 
   return (
-    <div className="min-w-[86px]" title={rawGauge || label}>
+    <div className="min-w-[86px]" title={label}>
       <div className="flex items-center justify-between gap-2 text-[11px] font-semibold text-muted">
         <span>{label}</span>
         {safeDays >= 11 && <span className="text-rouille">Urgent</span>}
