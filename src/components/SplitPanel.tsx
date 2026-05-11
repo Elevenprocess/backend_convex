@@ -1039,7 +1039,7 @@ function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <div className="text-[10px] font-bold text-faint uppercase tracking-widest mb-1">{label}</div>
-      <div className="text-sm font-medium">{value}</div>
+      <div className="text-sm font-medium whitespace-pre-line">{value}</div>
     </div>
   )
 }
