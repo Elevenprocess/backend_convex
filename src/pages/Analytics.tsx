@@ -462,6 +462,7 @@ function AnalyticsPeriodBar({ helper, period }: {
         <input
           type="date"
           value={period.selectedDate}
+          max={toDateInputValue(new Date())}
           onChange={(e) => setPeriodDate(period, e.target.value)}
           className="h-9 rounded-xl border border-line bg-white px-3 text-xs font-semibold text-text shadow-sm outline-none focus:border-or"
           aria-label="Choisir une date pour les analytics"
@@ -472,12 +473,12 @@ function AnalyticsPeriodBar({ helper, period }: {
 }
 
 function setPeriodDate(period: ReturnType<typeof useAnalyticsPeriod>, value: string) {
-  period.setSelectedDate(value || toDateInputValue(new Date()))
+  period.setSelectedDate(clampDateInputToToday(value || toDateInputValue(new Date())))
   if (period.mode === 'today') period.setMode('date')
 }
 
 function buildAnalyticsRange(mode: AnalyticsPeriodMode, selectedDate: string): AnalyticsRange {
-  const anchor = parseDateInput(selectedDate)
+  const anchor = parseDateInput(clampDateInputToToday(selectedDate))
   if (mode === 'today' || mode === 'date') {
     const from = startOfDay(mode === 'today' ? new Date() : anchor)
     const to = endOfDay(from)
@@ -516,6 +517,12 @@ function buildAnalyticsRange(mode: AnalyticsPeriodMode, selectedDate: string): A
     label: `Année ${anchor.getFullYear()}`,
     days: daysBetween(from, to),
   }
+}
+
+function clampDateInputToToday(value: string): string {
+  const today = toDateInputValue(new Date())
+  if (!value || value > today) return today
+  return value
 }
 
 function parseDateInput(value: string): Date {
