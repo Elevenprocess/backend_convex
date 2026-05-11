@@ -885,6 +885,7 @@ function PersonChip({ name, tint }: { name: string; tint: string }) {
 }
 
 function SetterChips({ lead, userMap }: { lead: LeadResponse; userMap: Map<string, UserResponse> | Map<string, string> }) {
+  const [open, setOpen] = useState(false)
   const ids = lead.assignedSetterIds?.length ? lead.assignedSetterIds : (lead.setterId ? [lead.setterId] : [])
   const names = ids
     .map((id) => {
@@ -892,16 +893,40 @@ function SetterChips({ lead, userMap }: { lead: LeadResponse; userMap: Map<strin
       return typeof user === 'string' ? user : user?.name
     })
     .filter((name): name is string => Boolean(name))
+  const extraNames = names.slice(1)
 
   if (names.length === 0) return <span className="text-faint">—</span>
 
   return (
-    <div className="flex items-center gap-1.5 min-w-0" title={names.join(', ')}>
+    <div className="relative flex items-center gap-1.5 min-w-0" title={names.join(', ')}>
       <PersonChip name={names[0]} tint="bg-cuivre-tint" />
-      {names.length > 1 && (
-        <span className="rounded-full bg-line-soft px-2 py-1 text-[11px] font-bold text-muted flex-shrink-0">
-          +{names.length - 1}
-        </span>
+      {extraNames.length > 0 && (
+        <>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              setOpen((current) => !current)
+            }}
+            className="rounded-full bg-line-soft px-2 py-1 text-[11px] font-bold text-muted flex-shrink-0 hover:bg-or-tint hover:text-or-dark"
+            aria-label="Voir les autres setters assignés"
+          >
+            +{extraNames.length}
+          </button>
+          {open && (
+            <div
+              className="absolute left-0 top-full z-50 mt-2 w-64 rounded-[18px] border border-line bg-white p-3 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-faint">Autres setters assignés</div>
+              <div className="space-y-2">
+                {extraNames.map((name) => (
+                  <PersonChip key={name} name={name} tint="bg-or-tint" />
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
