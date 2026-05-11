@@ -296,12 +296,12 @@ function buildAdminStats(leads: LeadResponse[], calls: CallLogResponse[], rdvs: 
     ca,
     signed: signed.length,
     resultSegments: resultSegments(resultCounts),
-    setters: buildSetterRows(scopedLeads, scopedCalls, scopedRdvs, users, range),
+    setters: buildSetterRows(scopedLeads, scopedCalls, scopedRdvs, users),
     commercials: buildCommercialRows(scopedRdvs, users),
   }
 }
 
-function buildSetterRows(leads: LeadResponse[], calls: CallLogResponse[], _rdvs: RdvResponse[], users: UserResponse[], range: AnalyticsRange): SetterPerf[] {
+function buildSetterRows(leads: LeadResponse[], calls: CallLogResponse[], _rdvs: RdvResponse[], users: UserResponse[]): SetterPerf[] {
   return users
     .filter((u) => u.role === 'setter')
     .map((u) => {
@@ -344,16 +344,6 @@ function isClassifiedLead(lead: LeadResponse) {
 
 function isQualifiedLead(lead: LeadResponse) {
   return QUALIFIED_STATUSES.has(lead.status)
-}
-
-
-function leadCallActivityIso(lead: LeadResponse): string | null {
-  return lead.latestCallAt ?? lead.lastContactAt ?? lead.firstCallAt
-}
-
-function isLeadCallActivityInRange(lead: LeadResponse, range: AnalyticsRange): boolean {
-  const iso = leadCallActivityIso(lead)
-  return iso ? isInRange(iso, range) : false
 }
 
 function countResults(calls: CallLogResponse[]): Record<CallResult, number> {
