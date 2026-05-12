@@ -2,12 +2,17 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
-import { useAnalyticsSummary } from '../lib/hooks'
-import type { AnalyticsResponse } from '../lib/types'
+import { useCallLogs, useLeads, useRdvList, useUsers } from '../lib/hooks'
+import { CALL_RESULT_LABEL, type CallLogResponse, type CallResult, type LeadResponse, type RdvResponse, type UserResponse } from '../lib/types'
 
-type AnalyticsPeriodMode = 'today' | 'week' | 'month' | 'year'
-type AnalyticsRange = { from: Date; to: Date; label: string; days: number }
-
+const QUALIFIED_STATUSES = new Set(['qualifie', 'rdv_pris', 'rdv_honore', 'signe'])
+const RDV_STATUSES = new Set(['rdv_pris', 'rdv_honore', 'signe'])
+const NOT_QUALIFIED_STATUSES = new Set(['pas_qualifie', 'perdu'])
+const RELANCE_STATUSES = new Set(['relance', 'a_rappeler', 'pas_de_reponse'])
+const ANSWERED_RESULTS: ReadonlySet<CallResult> = new Set(['joint', 'rdv_pris', 'refus'])
+const RELANCE_RESULTS: ReadonlySet<CallResult> = new Set(['non_joint', 'rappel_planifie', 'injoignable', 'messagerie'])
+const CLASSIFIED_STATUSES = new Set(['qualifie', 'rdv_pris', 'rdv_honore', 'signe', 'perdu', 'relance', 'pas_qualifie', 'a_rappeler', 'pas_de_reponse'])
+const COLORS = ['#D4AF37', '#B87333', '#3DA86A', '#6B7C8C', '#B7410E', '#2F4858']
 
 export function Analytics() {
   const me = useAuth((s) => s.user)
@@ -18,53 +23,63 @@ export function Analytics() {
 }
 
 // ----- F11 Setter -----
-function AnalyticsSetter({ name }: { name: string; userId?: string }) {
-  const period = useAnalyticsPeriod('month')
-  const { data } = useAnalyticsSummary(rangeQuery(period.range))
-  const stats = data ?? EMPTY_ANALYTICS_STATS
-  const pipeline = buildSetterPipeline(stats)
+function AnalyticsSetter({ name, userId }: { name: string; userId?: string }) {
+  const [period, setPeriod] = useState<'1' | '7' | '30' | '90'>('1')
+  const days = Number(period)
+  const { data: leads = [] } = useLeads({ limit: 3000 })
+  const { data: calls = [] } = useCallLogs(userId ? { setterId: userId, limit: 3000 } : { limit: 3000 })
+  const { data: rdvs = [] } = useRdvList(userId ? { setterId: userId, limit: 1000 } : { limit: 1000 })
+
+  const stats = useMemo(() => buildSetterStats(leads ?? [], calls ?? [], rdvs ?? [], userId, days), [leads, calls, rdvs, userId, days])
 
   return (
     <AppShell blobsKey="setter">
       <Topbar eyebrow="ANALYTICS / SETTER" title={`Mes performances — ${name}`} />
-      <AnalyticsPeriodBar
-        helper="Moteur OLAP local : call_logs + statuts leads + RDV, sans données fictives."
-        period={period}
-      />
+      <div className="px-8 pt-4 flex items-center justify-between flex-shrink-0">
+        <div className="text-xs text-faint font-semibold">Moteur OLAP local : call_logs + statuts leads + RDV, sans données fictives.</div>
+        <PeriodSwitch value={period} onChange={setPeriod} options={[{ id: '1', label: "Aujourd'hui" }, { id: '7', label: '7j' }, { id: '30', label: '30j' }, { id: '90', label: '90j' }]} />
+      </div>
       <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
         <div className="grid grid-cols-4 gap-6">
-          <BigStatCard label="APPELS LOGIQUES" value={fmtInt(stats.calls)} delta={`${stats.callsPerDay}/j`} sub="1 classification = au moins 1 appel" />
-          <BigStatCard label="TAUX DE CONNEXION" value={`${stats.connectionRate}%`} delta={`${stats.connected} joints`} />
-          <BigStatCard label="RDV / APPELS" value={`${stats.rdvRate}%`} sub={`${stats.rdvPris} RDV pris`} />
-          <BigStatCard label="CLASSIFICATIONS" value={fmtInt(stats.classified)} sub={`${stats.syntheticCalls} appels déduits des statuts`} />
+          <BigStatCard label="NOUVEAUX LEADS" value={fmtInt(stats.newLeads)} sub="Entrées du système sur la période" />
+          <BigStatCard label="APPELS EFFECTUÉS" value={fmtInt(stats.calls)} delta={`${stats.callsPerDay}/j`} sub={`${stats.syntheticCalls} déduits des statuts`} />
+          <BigStatCard label="LEADS AYANT RÉPONDU" value={fmtInt(stats.answered)} delta={`${stats.responseRate}%`} sub="Taux réponse = répondu / nouveaux leads" />
+          <BigStatCard label="RDV PRIS" value={fmtInt(stats.rdvPris)} delta={`${stats.globalRdvRate}%`} sub="Taux global RDV = RDV / nouveaux leads" />
         </div>
-
-        <SetterPipelineConcept pipeline={pipeline} />
 
         <div className="grid grid-cols-12 gap-6">
           <div className="glass-card p-6 col-span-7">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold">Camembert des issues d'appel</h3>
-              <span className="eyebrow">ETL classifications → appels</span>
+              <h3 className="font-bold">Pipeline setter — nouveau lead → RDV</h3>
+              <span className="eyebrow">données live</span>
             </div>
-            <PieChart segments={stats.resultSegments} center={`${stats.calls}\nappels`} />
+            <PipelineFlow stats={stats} />
           </div>
           <div className="glass-card p-6 col-span-5">
-            <h3 className="font-bold mb-4">Pipeline setter</h3>
+            <h3 className="font-bold mb-4">Taux de conversion</h3>
             <div className="space-y-4">
-              <Goal label="Nouveaux leads → répondus" value={`${pipeline.connected} / ${pipeline.newLeads}`} pct={pipeline.responseRate} color="#D4AF37" />
-              <Goal label="Répondus → RDV" value={`${pipeline.rdvPris} / ${pipeline.connected}`} pct={pipeline.rdvAfterAnswerRate} color="#3DA86A" />
-              <Goal label="Nouveaux leads → RDV" value={`${pipeline.rdvPris} / ${pipeline.newLeads}`} pct={pipeline.globalRdvRate} color="#B87333" />
-              <Row label="En relance / non joints" value={String(pipeline.relance)} />
-              <Row label="Pas qualifiés" value={String(pipeline.notQualified)} />
-              <Row label="Ratio qualification" value={`${stats.qualificationRate}%`} highlight />
+              <Goal label="Taux de réponse" value={`${stats.answered} / ${Math.max(1, stats.newLeads)} · ${stats.responseRate}%`} pct={stats.responseRate} color="#D4AF37" />
+              <Goal label="RDV après réponse" value={`${stats.rdvPris} / ${Math.max(1, stats.answered)} · ${stats.rdvAfterAnswerRate}%`} pct={stats.rdvAfterAnswerRate} color="#3DA86A" />
+              <Goal label="Taux global RDV" value={`${stats.rdvPris} / ${Math.max(1, stats.newLeads)} · ${stats.globalRdvRate}%`} pct={stats.globalRdvRate} color="#B87333" />
+              <Row label="Leads en relance" value={String(stats.relance)} />
+              <Row label="Pas qualifiés" value={String(stats.notQualified)} />
+              <Row label="Qualifiés" value={String(stats.qualified)} highlight />
             </div>
           </div>
         </div>
 
-        <div className="glass-card p-6">
-          <h3 className="font-bold mb-4">Série OLAP — appels passés par jour</h3>
-          <Heatline values={stats.dailyCalls} color="#D4AF37" />
+        <div className="grid grid-cols-12 gap-6">
+          <div className="glass-card p-6 col-span-7">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold">Issues d'appel</h3>
+              <span className="eyebrow">répondu / relance / refus</span>
+            </div>
+            <PieChart segments={stats.resultSegments} center={`${stats.calls}\nappels`} />
+          </div>
+          <div className="glass-card p-6 col-span-5">
+            <h3 className="font-bold mb-4">Série — appels par jour</h3>
+            <Heatline values={stats.dailyCalls} color="#D4AF37" />
+          </div>
         </div>
       </main>
     </AppShell>
@@ -72,18 +87,18 @@ function AnalyticsSetter({ name }: { name: string; userId?: string }) {
 }
 
 // ----- F12 Commercial -----
-function AnalyticsCommercial({ name }: { name: string; userId: string }) {
-  const period = useAnalyticsPeriod('month')
-  const { data } = useAnalyticsSummary(rangeQuery(period.range))
-  const stats = data ?? EMPTY_ANALYTICS_STATS
+function AnalyticsCommercial({ name, userId }: { name: string; userId: string }) {
+  const [period, setPeriod] = useState<'mois' | 'trim'>('mois')
+  const { data: rdvs = [] } = useRdvList({ commercialId: userId, limit: 1000 })
+  const stats = useMemo(() => buildCommercialStats(rdvs ?? [], period === 'mois' ? 30 : 90), [rdvs, period])
 
   return (
     <AppShell blobsKey="commercial">
       <Topbar eyebrow="ANALYTICS / COMMERCIAL" title={`Mes performances — ${name}`} />
-      <AnalyticsPeriodBar
-        helper="Analyse live des RDV honorés, ventes et modes de financement."
-        period={period}
-      />
+      <div className="px-8 pt-4 flex items-center justify-between flex-shrink-0">
+        <div className="text-xs text-faint font-semibold">Analyse live des RDV honorés, ventes et modes de financement.</div>
+        <PeriodSwitch value={period} onChange={setPeriod} options={[{ id: 'mois', label: 'Ce mois' }, { id: 'trim', label: 'Trimestre' }]} />
+      </div>
       <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
         <div className="grid grid-cols-4 gap-6">
           <BigStatCard label="CA SIGNÉ" value={fmtKEur(stats.ca)} delta={`${stats.signed} ventes`} />
@@ -109,17 +124,15 @@ function AnalyticsCommercial({ name }: { name: string; userId: string }) {
 
 // ----- F13 Admin -----
 function AnalyticsAdmin() {
-  const period = useAnalyticsPeriod('month')
-  const { data } = useAnalyticsSummary(rangeQuery(period.range))
-  const stats = data ?? EMPTY_ANALYTICS_STATS
+  const { data: leads = [] } = useLeads({ limit: 5000 })
+  const { data: calls = [] } = useCallLogs({ limit: 5000 })
+  const { data: rdvs = [] } = useRdvList({ limit: 2000 })
+  const { data: users = [] } = useUsers()
+  const stats = useMemo(() => buildAdminStats(leads ?? [], calls ?? [], rdvs ?? [], users ?? []), [leads, calls, rdvs, users])
 
   return (
     <AppShell blobsKey="admin">
       <Topbar eyebrow="ANALYTICS / ADMIN" title="Performance globale équipe" />
-      <AnalyticsPeriodBar
-        helper="Filtre toutes les métriques équipe sur la période choisie."
-        period={period}
-      />
       <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
         <div className="grid grid-cols-4 gap-6">
           <BigStatCard label="APPELS LOGIQUES" value={fmtInt(stats.calls)} delta={`${stats.syntheticCalls} ETL`} sub="call_logs + classifications" />
@@ -200,86 +213,262 @@ function AnalyticsAdmin() {
   )
 }
 
-// ===== Analytics backend helpers =====
+// ===== Analytics ETL/OLAP helpers =====
 
-type Segment = AnalyticsResponse['resultSegments'][number]
-type SetterPipeline = {
-  newLeads: number
-  calls: number
-  connected: number
-  relance: number
-  qualified: number
-  notQualified: number
-  rdvPris: number
-  responseRate: number
-  qualificationRate: number
-  rdvAfterAnswerRate: number
-  globalRdvRate: number
-}
+type Segment = { label: string; value: number; color: string }
+type SetterPerf = { id: string; name: string; initials: string; calls: number; connected: number; classified: number; qualified: number; rdvPris: number; efficiency: number }
+type CommercialPerf = { id: string; name: string; initials: string; honored: number; signed: number; closing: number; panier: number; ca: number }
 
-const EMPTY_ANALYTICS_STATS: AnalyticsResponse = {
-  calls: 0,
-  loggedCalls: 0,
-  syntheticCalls: 0,
-  callsPerDay: 0,
-  classified: 0,
-  unclassified: 0,
-  connected: 0,
-  qualified: 0,
-  rdvPris: 0,
-  rdvRate: 0,
-  connectionRate: 0,
-  qualificationRate: 0,
-  ca: 0,
-  signed: 0,
-  total: 0,
-  honored: 0,
-  closing: 0,
-  panier: 0,
-  resultSegments: [],
-  financingSegments: [],
-  dailyCalls: [],
-  setters: [],
-  commercials: [],
-}
+function buildSetterStats(leads: LeadResponse[], calls: CallLogResponse[], rdvs: RdvResponse[], setterId: string | undefined, days: number) {
+  const ownLeads = leads.filter((l) => belongsToSetter(l, setterId))
+  const scopedCalls = filterRecent(calls, days)
+  const scopedLeads = ownLeads.filter((l) => isRecent(l.updatedAt, days) || isRecent(l.latestCallAt ?? l.lastContactAt ?? l.updatedAt, days))
+  const newLeadRows = ownLeads.filter((l) => isRecent(l.createdAt, days))
+  const classifiedLeads = scopedLeads.filter(isClassifiedLead)
+  const classifiedWithoutLoggedCall = classifiedLeads.filter((l) => !scopedCalls.some((c) => c.leadId === l.id))
+  const syntheticCalls = classifiedWithoutLoggedCall.length
+  const resultCounts = countResults(scopedCalls)
+  addSyntheticResults(resultCounts, classifiedWithoutLoggedCall, syntheticCalls)
+  const callsTotal = scopedCalls.length + syntheticCalls
 
-function rangeQuery(range: AnalyticsRange) {
-  return { from: range.from.toISOString(), to: range.to.toISOString() }
-}
+  const answeredIds = new Set<string>()
+  const relanceIds = new Set<string>()
+  const notQualifiedIds = new Set<string>()
+  const qualifiedIds = new Set<string>()
+  const rdvIds = new Set<string>()
 
-function buildSetterPipeline(stats: AnalyticsResponse): SetterPipeline {
-  const newLeads = Math.max(stats.classified + stats.unclassified, stats.classified, stats.calls, stats.connected, stats.rdvPris)
-  const relance = Math.max(0, segmentTotal(stats.resultSegments, ['non joint', 'non_joint', 'injoignable', 'messagerie', 'rappel', 'relance']))
-  const notQualified = Math.max(0, segmentTotal(stats.resultSegments, ['refus', 'pas qualifie', 'pas qualifié', 'non qualifie', 'non qualifié']))
+  for (const call of scopedCalls) {
+    if (ANSWERED_RESULTS.has(call.result)) answeredIds.add(call.leadId)
+    if (RELANCE_RESULTS.has(call.result)) relanceIds.add(call.leadId)
+    if (call.result === 'refus') notQualifiedIds.add(call.leadId)
+    if (call.result === 'rdv_pris') rdvIds.add(call.leadId)
+  }
+
+  for (const lead of classifiedLeads) {
+    if (RELANCE_STATUSES.has(lead.status)) relanceIds.add(lead.id)
+    if (NOT_QUALIFIED_STATUSES.has(lead.status)) {
+      notQualifiedIds.add(lead.id)
+      answeredIds.add(lead.id)
+    }
+    if (QUALIFIED_STATUSES.has(lead.status)) {
+      qualifiedIds.add(lead.id)
+      answeredIds.add(lead.id)
+    }
+    if (RDV_STATUSES.has(lead.status)) rdvIds.add(lead.id)
+  }
+
+  for (const r of rdvs.filter((r) => isRecent(r.createdAt, days))) {
+    rdvIds.add(r.leadId)
+    answeredIds.add(r.leadId)
+    qualifiedIds.add(r.leadId)
+  }
+
+  const answered = answeredIds.size
+  const rdvPris = rdvIds.size
+
   return {
-    newLeads,
-    calls: stats.calls,
-    connected: stats.connected,
-    relance,
-    qualified: stats.qualified,
-    notQualified,
-    rdvPris: stats.rdvPris,
-    responseRate: pct(stats.connected, newLeads),
-    qualificationRate: pct(stats.qualified, stats.connected),
-    rdvAfterAnswerRate: pct(stats.rdvPris, stats.connected),
-    globalRdvRate: pct(stats.rdvPris, newLeads),
+    newLeads: newLeadRows.length,
+    calls: callsTotal,
+    loggedCalls: scopedCalls.length,
+    syntheticCalls,
+    callsPerDay: days ? Math.round(callsTotal / days) : 0,
+    classified: classifiedLeads.length,
+    unclassified: scopedLeads.length - classifiedLeads.length,
+    answered,
+    connected: answered,
+    relance: relanceIds.size,
+    notQualified: notQualifiedIds.size,
+    qualified: qualifiedIds.size,
+    rdvPris,
+    responseRate: pct(answered, newLeadRows.length),
+    rdvAfterAnswerRate: pct(rdvPris, answered),
+    globalRdvRate: pct(rdvPris, newLeadRows.length),
+    connectionRate: pct(answered, callsTotal),
+    qualificationRate: pct(qualifiedIds.size, answered),
+    rdvRate: pct(rdvPris, callsTotal),
+    resultSegments: resultSegments(resultCounts),
+    dailyCalls: dailyLogicalCalls(scopedCalls, classifiedLeads, days),
   }
 }
 
-function segmentTotal(segments: Segment[], needles: string[]): number {
-  return segments.reduce((sum, segment) => {
-    const label = normalizeLabel(segment.label)
-    return needles.some((needle) => label.includes(normalizeLabel(needle))) ? sum + segment.value : sum
-  }, 0)
+function buildCommercialStats(rdvs: RdvResponse[], days: number) {
+  const scoped = filterRecent(rdvs, days, (r) => r.scheduledAt)
+  const honored = scoped.filter((r) => r.status === 'honore')
+  const signed = honored.filter((r) => r.result === 'signe')
+  const ca = signed.reduce((sum, r) => sum + money(r.montantTotal), 0)
+  return {
+    total: scoped.length,
+    honored: honored.length,
+    signed: signed.length,
+    ca,
+    panier: signed.length ? ca / signed.length : 0,
+    closing: pct(signed.length, honored.length),
+    resultSegments: pieFromCounts([
+      ['Signé', signed.length],
+      ['Réflexion', honored.filter((r) => r.result === 'reflexion').length],
+      ['Perdu', honored.filter((r) => r.result === 'perdu').length],
+      ['No-show', scoped.filter((r) => r.status === 'no_show').length],
+      ['Reporté', scoped.filter((r) => r.status === 'reporte').length],
+    ]),
+    financingSegments: pieFromCounts([
+      ['Comptant', signed.filter((r) => r.financingType === 'comptant').length],
+      ['Financement', signed.filter((r) => r.financingType === 'financement').length],
+      ['À définir', signed.filter((r) => !r.financingType).length],
+    ]),
+  }
 }
 
-function normalizeLabel(value: string): string {
-  return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+function buildAdminStats(leads: LeadResponse[], calls: CallLogResponse[], rdvs: RdvResponse[], users: UserResponse[]) {
+  const classifiedLeads = leads.filter(isClassifiedLead)
+  const syntheticCalls = Math.max(0, classifiedLeads.length - calls.length)
+  const resultCounts = countResults(calls)
+  addSyntheticResults(resultCounts, classifiedLeads, syntheticCalls)
+  const callsTotal = calls.length + syntheticCalls
+  const qualified = classifiedLeads.filter(isQualifiedLead).length
+  const rdvPris = Math.max(resultCounts.rdv_pris ?? 0, leads.filter((l) => l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe').length)
+  const honored = rdvs.filter((r) => r.status === 'honore')
+  const signed = honored.filter((r) => r.result === 'signe')
+  const ca = signed.reduce((sum, r) => sum + money(r.montantTotal), 0)
+  return {
+    calls: callsTotal,
+    classified: classifiedLeads.length,
+    qualified,
+    unclassified: leads.length - classifiedLeads.length,
+    syntheticCalls,
+    rdvPris,
+    rdvRate: pct(rdvPris, callsTotal),
+    qualificationRate: pct(qualified, callsTotal),
+    ca,
+    signed: signed.length,
+    resultSegments: resultSegments(resultCounts),
+    setters: buildSetterRows(leads, calls, rdvs, users),
+    commercials: buildCommercialRows(rdvs, users),
+  }
+}
+
+function buildSetterRows(leads: LeadResponse[], calls: CallLogResponse[], _rdvs: RdvResponse[], users: UserResponse[]): SetterPerf[] {
+  return users
+    .filter((u) => u.role === 'setter')
+    .map((u) => {
+      const ownLeads = leads.filter((l) => belongsToSetter(l, u.id))
+      const classified = ownLeads.filter(isClassifiedLead)
+      const ownCalls = calls.filter((c) => c.setterId === u.id)
+      const synthetic = Math.max(0, classified.length - ownCalls.length)
+      const counts = countResults(ownCalls)
+      addSyntheticResults(counts, classified, synthetic)
+      const callsTotal = ownCalls.length + synthetic
+      const connected = (counts.joint ?? 0) + (counts.rdv_pris ?? 0)
+      const qualified = classified.filter(isQualifiedLead).length
+      const rdvPris = Math.max(counts.rdv_pris ?? 0, classified.filter((l) => l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe').length)
+      return { id: u.id, name: u.name, initials: initialsFromName(u.name), calls: callsTotal, connected, classified: classified.length, qualified, rdvPris, efficiency: pct(qualified + rdvPris, callsTotal) }
+    })
+    .sort((a, b) => b.calls - a.calls)
+}
+
+function buildCommercialRows(rdvs: RdvResponse[], users: UserResponse[]): CommercialPerf[] {
+  return users
+    .filter((u) => u.role === 'commercial')
+    .map((u) => {
+      const honored = rdvs.filter((r) => r.commercialId === u.id && r.status === 'honore')
+      const signed = honored.filter((r) => r.result === 'signe')
+      const ca = signed.reduce((sum, r) => sum + money(r.montantTotal), 0)
+      return { id: u.id, name: u.name, initials: initialsFromName(u.name), honored: honored.length, signed: signed.length, closing: pct(signed.length, honored.length), panier: signed.length ? ca / signed.length : 0, ca }
+    })
+    .filter((p) => p.honored > 0 || p.signed > 0)
+    .sort((a, b) => b.ca - a.ca)
+}
+
+function belongsToSetter(lead: LeadResponse, setterId: string | undefined): boolean {
+  if (!setterId) return true
+  return lead.setterId === setterId || lead.assignedSetterIds.includes(setterId)
+}
+
+function isClassifiedLead(lead: LeadResponse) {
+  return CLASSIFIED_STATUSES.has(lead.status)
+}
+
+function isQualifiedLead(lead: LeadResponse) {
+  return QUALIFIED_STATUSES.has(lead.status)
+}
+
+function countResults(calls: CallLogResponse[]): Record<CallResult, number> {
+  const counts = { joint: 0, non_joint: 0, rappel_planifie: 0, rdv_pris: 0, refus: 0, injoignable: 0, messagerie: 0 }
+  for (const call of calls) counts[call.result] += 1
+  return counts
+}
+
+function addSyntheticResults(counts: Record<CallResult, number>, leads: LeadResponse[], maxToAdd: number) {
+  if (maxToAdd <= 0) return
+  for (const lead of leads.slice(0, maxToAdd)) {
+    counts[statusToResult(lead.status)] += 1
+  }
+}
+
+function statusToResult(status: LeadResponse['status']): CallResult {
+  if (status === 'rdv_pris' || status === 'rdv_honore' || status === 'signe') return 'rdv_pris'
+  if (status === 'qualifie') return 'joint'
+  if (status === 'a_rappeler' || status === 'relance') return 'rappel_planifie'
+  if (status === 'pas_de_reponse') return 'non_joint'
+  if (status === 'pas_qualifie' || status === 'perdu') return 'refus'
+  return 'non_joint'
+}
+
+function resultSegments(counts: Record<CallResult, number>): Segment[] {
+  return pieFromCounts((Object.keys(counts) as CallResult[]).map((key) => [CALL_RESULT_LABEL[key], counts[key]]))
+}
+
+function pieFromCounts(rows: [string, number][]): Segment[] {
+  return rows.filter(([, value]) => value > 0).map(([label, value], i) => ({ label, value, color: COLORS[i % COLORS.length] }))
+}
+
+function dailyLogicalCalls(calls: CallLogResponse[], classified: LeadResponse[], days: number): number[] {
+  const keys = lastNDays(days)
+  return keys.map((day) => {
+    const logged = calls.filter((c) => reunionDayKey(c.calledAt) === day).length
+    const classifs = classified.filter((l) => reunionDayKey(l.updatedAt) === day).length
+    return Math.max(logged, classifs)
+  })
+}
+
+function filterRecent<T>(rows: T[], days: number, getIso: (row: T) => string = (row) => (row as { calledAt?: string; updatedAt?: string }).calledAt ?? (row as { updatedAt: string }).updatedAt): T[] {
+  return rows.filter((row) => isRecent(getIso(row), days))
+}
+
+function isRecent(iso: string, days: number): boolean {
+  if (days === 1) return reunionDayKey(iso) === reunionDayKey(new Date())
+  const d = new Date(iso)
+  const from = new Date()
+  from.setDate(from.getDate() - days)
+  return d >= from
+}
+
+function reunionDayKey(value: string | Date): string {
+  const date = value instanceof Date ? value : new Date(value)
+  const parts = new Intl.DateTimeFormat('fr-CA', {
+    timeZone: 'Indian/Reunion',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
+  return `${get('year')}-${get('month')}-${get('day')}`
+}
+
+function lastNDays(n: number): string[] {
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date()
+    d.setDate(d.getDate() - (n - 1 - i))
+    return reunionDayKey(d)
+  })
 }
 
 function pct(num: number, denom: number): number {
   if (denom <= 0) return 0
   return Math.min(100, Math.round((num / denom) * 100))
+}
+
+function money(value: string | null): number {
+  return parseFloat(value ?? '0') || 0
 }
 
 function fmtInt(n: number): string {
@@ -292,290 +481,12 @@ function fmtKEur(val: number): string {
   return `${Math.round(val)}€`
 }
 
-// ===== Period selector =====
-
-function useAnalyticsPeriod(defaultMode: AnalyticsPeriodMode) {
-  const [mode, setMode] = useState<AnalyticsPeriodMode>(defaultMode)
-  const [selectedDate, setSelectedDate] = useState(() => toDateInputValue(new Date()))
-  const range = useMemo(() => buildAnalyticsRange(mode, selectedDate), [mode, selectedDate])
-  return { mode, setMode, selectedDate, setSelectedDate, range }
-}
-
-function AnalyticsPeriodBar({ helper, period }: {
-  helper: string
-  period: ReturnType<typeof useAnalyticsPeriod>
-}) {
-  return (
-    <div className="px-8 pt-4 flex flex-wrap items-center justify-between flex-shrink-0 gap-4">
-      <div>
-        <div className="text-xs text-faint font-semibold">{helper}</div>
-        <div className="text-xs font-bold text-or-dark mt-1">Période : {period.range.label}</div>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <PeriodSwitch
-          value={period.mode}
-          onChange={(mode) => setPeriodMode(period, mode)}
-          options={[
-            { id: 'today', label: "Aujourd'hui" },
-            { id: 'week', label: 'Semaine' },
-            { id: 'month', label: 'Mois' },
-            { id: 'year', label: 'Année' },
-          ]}
-        />
-        <PeriodCalendar period={period} />
-      </div>
-    </div>
-  )
-}
-
-function PeriodCalendar({ period }: { period: ReturnType<typeof useAnalyticsPeriod> }) {
-  const inputClass = 'h-9 rounded-xl border border-line bg-white px-3 text-xs font-semibold text-text shadow-sm outline-none focus:border-or'
-  if (period.mode === 'today') {
-    return <div className={`${inputClass} flex items-center`}>{formatDateInputFr(toDateInputValue(new Date()))}</div>
-  }
-  if (period.mode === 'month') {
-    const currentMonth = toMonthInputValue(new Date())
-    return (
-      <input
-        type="month"
-        value={toMonthInputValue(parseDateInput(period.selectedDate))}
-        max={currentMonth}
-        onChange={(e) => setPeriodMonth(period, e.target.value)}
-        className={inputClass}
-        aria-label="Choisir le mois pour les analytics"
-      />
-    )
-  }
-  if (period.mode === 'year') {
-    const currentYear = new Date().getFullYear()
-    return (
-      <input
-        type="number"
-        min="2000"
-        max={currentYear}
-        value={parseDateInput(period.selectedDate).getFullYear()}
-        onChange={(e) => setPeriodYear(period, e.target.value)}
-        className={`${inputClass} w-24`}
-        aria-label="Choisir l'année pour les analytics"
-      />
-    )
-  }
-  return (
-    <input
-      type="date"
-      value={period.selectedDate}
-      max={toDateInputValue(new Date())}
-      onChange={(e) => setPeriodDate(period, e.target.value)}
-      className={inputClass}
-      aria-label="Choisir une date dans la semaine pour les analytics"
-    />
-  )
-}
-
-function setPeriodMode(period: ReturnType<typeof useAnalyticsPeriod>, mode: AnalyticsPeriodMode) {
-  period.setMode(mode)
-  if (mode === 'today') period.setSelectedDate(toDateInputValue(new Date()))
-}
-
-function setPeriodDate(period: ReturnType<typeof useAnalyticsPeriod>, value: string) {
-  period.setSelectedDate(clampDateInputToToday(value || toDateInputValue(new Date())))
-}
-
-function setPeriodMonth(period: ReturnType<typeof useAnalyticsPeriod>, value: string) {
-  const safeValue = value || toMonthInputValue(new Date())
-  const [year, month] = safeValue.split('-').map(Number)
-  if (!year || !month) return
-  period.setSelectedDate(clampDateInputToToday(`${year}-${String(month).padStart(2, '0')}-01`))
-}
-
-function setPeriodYear(period: ReturnType<typeof useAnalyticsPeriod>, value: string) {
-  const year = Number(value)
-  const currentYear = new Date().getFullYear()
-  if (!year) return
-  const safeYear = Math.min(Math.max(year, 2000), currentYear)
-  period.setSelectedDate(clampDateInputToToday(`${safeYear}-01-01`))
-}
-
-function buildAnalyticsRange(mode: AnalyticsPeriodMode, selectedDate: string): AnalyticsRange {
-  const anchor = parseDateInput(clampDateInputToToday(selectedDate))
-  const todayEnd = endOfDay(new Date())
-  if (mode === 'today') {
-    const from = startOfDay(new Date())
-    const to = minDate(endOfDay(from), todayEnd)
-    return {
-      from,
-      to,
-      label: formatDateInputFr(toDateInputValue(from)),
-      days: 1,
-    }
-  }
-  if (mode === 'week') {
-    const from = startOfWeek(anchor)
-    const to = minDate(endOfDay(addDays(from, 6)), todayEnd)
-    return {
-      from,
-      to,
-      label: `Semaine du ${shortDate(from)} au ${shortDate(to)}`,
-      days: daysBetween(from, to),
-    }
-  }
-  if (mode === 'month') {
-    const from = startOfDay(new Date(anchor.getFullYear(), anchor.getMonth(), 1))
-    const to = minDate(endOfDay(new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0)), todayEnd)
-    return {
-      from,
-      to,
-      label: `${anchor.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })} · 1-${to.getDate()}`,
-      days: daysBetween(from, to),
-    }
-  }
-  const from = startOfDay(new Date(anchor.getFullYear(), 0, 1))
-  const to = minDate(endOfDay(new Date(anchor.getFullYear(), 11, 31)), todayEnd)
-  return {
-    from,
-    to,
-    label: `Année ${anchor.getFullYear()} · jusqu'au ${shortDate(to)}`,
-    days: daysBetween(from, to),
-  }
-}
-
-function clampDateInputToToday(value: string): string {
-  const today = toDateInputValue(new Date())
-  if (!value || value > today) return today
-  return value
-}
-
-function parseDateInput(value: string): Date {
-  if (!value) return startOfDay(new Date())
-  const [year, month, day] = value.split('-').map(Number)
-  if (!year || !month || !day) return startOfDay(new Date())
-  return startOfDay(new Date(year, month - 1, day))
-}
-
-function startOfDay(date: Date): Date {
-  const d = new Date(date)
-  d.setHours(0, 0, 0, 0)
-  return d
-}
-
-function endOfDay(date: Date): Date {
-  const d = new Date(date)
-  d.setHours(23, 59, 59, 999)
-  return d
-}
-
-function startOfWeek(date: Date): Date {
-  const d = startOfDay(date)
-  const dow = d.getDay() || 7
-  d.setDate(d.getDate() - dow + 1)
-  return d
-}
-
-function addDays(date: Date, days: number): Date {
-  const d = new Date(date)
-  d.setDate(d.getDate() + days)
-  return d
-}
-
-function minDate(a: Date, b: Date): Date {
-  return a <= b ? a : b
-}
-
-function daysBetween(from: Date, to: Date): number {
-  return Math.max(1, Math.round((startOfDay(to).getTime() - startOfDay(from).getTime()) / 86400000) + 1)
-}
-
-function toDateInputValue(date: Date): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-
-function toMonthInputValue(date: Date): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  return `${y}-${m}`
-}
-
-function formatDateInputFr(value: string): string {
-  const [year, month, day] = value.split('-')
-  return `${day}/${month}/${year}`
-}
-
-function shortDate(date: Date): string {
-  return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
+function initialsFromName(name: string): string {
+  const parts = name.split(' ').filter(Boolean)
+  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '??'
 }
 
 // ===== Atoms =====
-
-function SetterPipelineConcept({ pipeline }: { pipeline: SetterPipeline }) {
-  return (
-    <div className="glass-card p-6 space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <span className="eyebrow">PIPELINE DE TRAITEMENT DES LEADS</span>
-          <h3 className="text-xl font-extrabold mt-1">Du nouveau lead au RDV qualifié</h3>
-          <p className="text-sm text-muted mt-1 max-w-3xl">
-            Ce bloc suit le parcours setter : entrée du lead, appel, réponse ou relance, qualification, puis réservation du RDV.
-          </p>
-        </div>
-        <div className="rounded-2xl bg-or-tint px-4 py-3 text-sm font-bold text-or-dark">
-          Objectif : transformer vite les nouveaux leads en RDV qualifiés.
-        </div>
-      </div>
-
-      <div className="grid grid-cols-5 gap-3">
-        <FlowStep title="Nouveau lead" value={pipeline.newLeads} text="Facebook, formulaire, site, GHL, webhook" tone="gold" />
-        <FlowStep title="Appel setter" value={pipeline.calls} text="Contact, notes, statut, qualification" tone="bronze" />
-        <FlowStep title="A répondu" value={pipeline.connected} text="Le prospect a décroché" tone="green" />
-        <FlowStep title="Qualifié" value={pipeline.qualified} text="Besoin, budget, zone, motivation OK" tone="green" />
-        <FlowStep title="RDV pris" value={pipeline.rdvPris} text="Créneau commercial réservé" tone="bronze" />
-      </div>
-
-      <div className="grid grid-cols-3 gap-4">
-        <ConversionCard label="% de réponse" value={`${pipeline.responseRate}%`} formula="Leads répondus / nouveaux leads" detail={`${pipeline.connected} / ${pipeline.newLeads}`} />
-        <ConversionCard label="% RDV après réponse" value={`${pipeline.rdvAfterAnswerRate}%`} formula="RDV pris / leads répondus" detail={`${pipeline.rdvPris} / ${pipeline.connected}`} />
-        <ConversionCard label="% RDV global" value={`${pipeline.globalRdvRate}%`} formula="RDV pris / nouveaux leads" detail={`${pipeline.rdvPris} / ${pipeline.newLeads}`} highlight />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 text-sm">
-        <div className="rounded-2xl border border-line-soft bg-white/50 p-4">
-          <div className="font-bold mb-1">Branche non-réponse → relance</div>
-          <p className="text-muted">Quand le lead ne répond pas, il passe en relance : rappel programmé, SMS/email ou suivi automatique.</p>
-          <div className="mt-3 font-extrabold text-xl">{pipeline.relance}</div>
-        </div>
-        <div className="rounded-2xl border border-line-soft bg-white/50 p-4">
-          <div className="font-bold mb-1">Branche réponse → qualification</div>
-          <p className="text-muted">Le setter vérifie besoin réel, budget, disponibilité, zone et motivation avant de proposer un RDV.</p>
-          <div className="mt-3 font-extrabold text-xl">{pipeline.notQualified} pas qualifiés</div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function FlowStep({ title, value, text, tone }: { title: string; value: number; text: string; tone: 'gold' | 'bronze' | 'green' }) {
-  const toneClass = tone === 'green' ? 'bg-success-tint text-success' : tone === 'bronze' ? 'bg-cuivre-tint text-cuivre' : 'bg-or-tint text-or-dark'
-  return (
-    <div className="relative rounded-2xl border border-line-soft bg-white/60 p-4 min-h-[132px]">
-      <div className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-widest ${toneClass}`}>{title}</div>
-      <div className="text-3xl font-extrabold mt-3">{fmtInt(value)}</div>
-      <p className="text-xs text-muted mt-2 leading-relaxed">{text}</p>
-    </div>
-  )
-}
-
-function ConversionCard({ label, value, formula, detail, highlight = false }: { label: string; value: string; formula: string; detail: string; highlight?: boolean }) {
-  return (
-    <div className={`rounded-2xl border p-4 ${highlight ? 'border-or bg-or-tint' : 'border-line-soft bg-white/50'}`}>
-      <div className="eyebrow">{label}</div>
-      <div className="text-3xl font-extrabold mt-1">{value}</div>
-      <div className="text-xs text-muted mt-2">{formula}</div>
-      <div className="text-xs font-bold mt-1">{detail}</div>
-    </div>
-  )
-}
 
 function BigStatCard({ label, value, delta, sub }: { label: string; value: string; delta?: string; sub?: string }) {
   return (
@@ -586,6 +497,50 @@ function BigStatCard({ label, value, delta, sub }: { label: string; value: strin
         {delta && <span className="delta-badge delta-success">{delta}</span>}
       </div>
       {sub && <div className="text-xs text-faint mt-2">{sub}</div>}
+    </div>
+  )
+}
+
+function PipelineFlow({ stats }: { stats: ReturnType<typeof buildSetterStats> }) {
+  const nodes = [
+    { label: 'Nouveau lead', value: stats.newLeads, color: '#6B7C8C', sub: 'entrées' },
+    { label: 'Appel setter', value: stats.calls, color: '#D4AF37', sub: 'actions' },
+    { label: 'A répondu', value: stats.answered, color: '#3DA86A', sub: `${stats.responseRate}% réponse` },
+    { label: 'Qualifié', value: stats.qualified, color: '#B87333', sub: `${stats.notQualified} pas qualifiés` },
+    { label: 'Prise de RDV', value: stats.rdvPris, color: '#B7410E', sub: `${stats.globalRdvRate}% global` },
+  ]
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-5 gap-3 items-stretch">
+        {nodes.map((n, i) => (
+          <div key={n.label} className="relative rounded-2xl bg-white/60 border border-line-soft p-4 min-h-[112px] overflow-hidden">
+            <div className="absolute -right-8 -top-8 w-20 h-20 rounded-full opacity-20" style={{ background: n.color }} />
+            <div className="relative z-10">
+              <div className="text-[10px] font-extrabold uppercase tracking-widest text-faint mb-2">Étape {i + 1}</div>
+              <div className="font-bold leading-tight">{n.label}</div>
+              <div className="text-[34px] font-extrabold leading-none mt-3" style={{ color: n.color }}>{fmtInt(n.value)}</div>
+              <div className="text-[11px] text-muted mt-1">{n.sub}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-3 gap-3 text-sm">
+        <div className="rounded-2xl bg-cuivre-tint/60 border border-line-soft p-4">
+          <div className="eyebrow mb-1">Non répondu → relance</div>
+          <div className="text-2xl font-extrabold text-cuivre">{stats.relance}</div>
+          <div className="text-xs text-muted">À rappeler / pas de réponse / relance</div>
+        </div>
+        <div className="rounded-2xl bg-rouille-tint/60 border border-line-soft p-4">
+          <div className="eyebrow mb-1">Répondu → pas qualifié</div>
+          <div className="text-2xl font-extrabold text-rouille">{stats.notQualified}</div>
+          <div className="text-xs text-muted">Refus / hors cible / pas budget</div>
+        </div>
+        <div className="rounded-2xl bg-success-tint/60 border border-line-soft p-4">
+          <div className="eyebrow mb-1">Répondu → RDV</div>
+          <div className="text-2xl font-extrabold text-success">{stats.rdvPris}</div>
+          <div className="text-xs text-muted">{stats.rdvAfterAnswerRate}% des leads répondus</div>
+        </div>
+      </div>
     </div>
   )
 }

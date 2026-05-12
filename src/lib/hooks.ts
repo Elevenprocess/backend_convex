@@ -185,6 +185,14 @@ function useFetch<T>(
   return { data, loading, error, refetch: () => setTick((t) => t + 1) }
 }
 
+const LEADS_LIMIT_MAX = 2000
+const CALL_LOGS_LIMIT_MAX = 200
+const RDV_LIMIT_MAX = 200
+
+function clampLimit(limit: number | undefined, fallback: number, max: number): number {
+  return Math.min(limit ?? fallback, max)
+}
+
 // ─── Leads ─────────────────────────────────────────────────
 export function useLeads(filters?: {
   status?: LeadStatus
@@ -194,7 +202,7 @@ export function useLeads(filters?: {
   limit?: number
   offset?: number
 }): Async<LeadResponse[]> {
-  return useFetch<LeadResponse[]>('/leads', { ...filters, limit: filters?.limit ?? 500 })
+  return useFetch<LeadResponse[]>('/leads', { ...filters, limit: clampLimit(filters?.limit, 500, LEADS_LIMIT_MAX) })
 }
 
 // Two-phase fetch (Facebook News-Feed style):
@@ -209,8 +217,8 @@ export function useLeadsProgressive(filters?: {
   quickLimit?: number
   fullLimit?: number
 }): AsyncProgressive<LeadResponse[]> {
-  const quickLimit = filters?.quickLimit ?? 50
-  const fullLimit = filters?.fullLimit ?? 500
+  const quickLimit = clampLimit(filters?.quickLimit, 50, LEADS_LIMIT_MAX)
+  const fullLimit = clampLimit(filters?.fullLimit, 500, LEADS_LIMIT_MAX)
   const baseFilters = { ...filters, quickLimit: undefined, fullLimit: undefined }
   const quick = useFetch<LeadResponse[]>('/leads', { ...baseFilters, limit: quickLimit })
   const full = useFetch<LeadResponse[]>('/leads', { ...baseFilters, limit: fullLimit })
@@ -236,7 +244,7 @@ export function useRdvList(filters?: {
   toDate?: string
   limit?: number
 }): Async<RdvResponse[]> {
-  return useFetch<RdvResponse[]>('/rdv', { ...filters, limit: filters?.limit ?? 200 })
+  return useFetch<RdvResponse[]>('/rdv', { ...filters, limit: clampLimit(filters?.limit, 200, RDV_LIMIT_MAX) })
 }
 
 // Cf. useLeadsProgressive — même pattern pour les RDV.
@@ -249,8 +257,8 @@ export function useRdvListProgressive(filters?: {
   quickLimit?: number
   fullLimit?: number
 }): AsyncProgressive<RdvResponse[]> {
-  const quickLimit = filters?.quickLimit ?? 100
-  const fullLimit = filters?.fullLimit ?? 1000
+  const quickLimit = clampLimit(filters?.quickLimit, 100, RDV_LIMIT_MAX)
+  const fullLimit = clampLimit(filters?.fullLimit, 200, RDV_LIMIT_MAX)
   const baseFilters = { ...filters, quickLimit: undefined, fullLimit: undefined }
   const quick = useFetch<RdvResponse[]>('/rdv', { ...baseFilters, limit: quickLimit })
   const full = useFetch<RdvResponse[]>('/rdv', { ...baseFilters, limit: fullLimit })
@@ -311,7 +319,7 @@ export function useCallLogs(filters?: {
   limit?: number
   offset?: number
 }): Async<CallLogResponse[]> {
-  return useFetch<CallLogResponse[]>('/call-logs', { ...filters, limit: filters?.limit ?? 50 })
+  return useFetch<CallLogResponse[]>('/call-logs', { ...filters, limit: clampLimit(filters?.limit, 50, CALL_LOGS_LIMIT_MAX) })
 }
 
 export type CreateCallLogInput = {
