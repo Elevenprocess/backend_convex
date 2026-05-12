@@ -352,6 +352,56 @@ export type CreateRdvInput = {
   notes?: string | null
 }
 
+export type GhlSectorConfig = {
+  sector: string
+  calendarId: string
+  label: string
+}
+
+export type GhlCalendarConfig = {
+  configured: boolean
+  locationIdPresent: boolean
+  sectorCalendarCount: number
+  sectors: GhlSectorConfig[]
+}
+
+export type GhlFreeSlot = {
+  startTime: string
+  endTime?: string | null
+  calendarId: string
+  sector?: string | null
+}
+
+export function useGhlCalendarConfig(): Async<GhlCalendarConfig> {
+  return useFetch<GhlCalendarConfig>('/ghl-calendar/config')
+}
+
+export function useGhlFreeSlots(filters?: {
+  sector?: string
+  calendarId?: string
+  from?: string
+  to?: string
+  timezone?: string
+}): Async<{ configured: boolean; slots: GhlFreeSlot[] }> {
+  return useFetch<{ configured: boolean; slots: GhlFreeSlot[] }>(filters?.from && filters?.to ? '/ghl-calendar/free-slots' : null, filters)
+}
+
+export type CreateGhlAppointmentInput = CreateRdvInput & {
+  sector: string
+  calendarId?: string
+  firstName?: string | null
+  lastName?: string | null
+  email?: string | null
+  phone?: string | null
+  addressLine?: string | null
+  city?: string | null
+  postalCode?: string | null
+}
+
+export async function createGhlAppointment(input: CreateGhlAppointmentInput): Promise<{ rdv: RdvResponse; ghl: unknown }> {
+  return api<{ rdv: RdvResponse; ghl: unknown }>('/ghl-calendar/appointments', { method: 'POST', body: input })
+}
+
 export async function createRdv(input: CreateRdvInput): Promise<RdvResponse> {
   return api<RdvResponse>('/rdv', { method: 'POST', body: input })
 }

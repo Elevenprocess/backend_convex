@@ -14,7 +14,7 @@ import {
   type UserResponse,
 } from '../lib/types'
 import { useCall, type CallState } from '../lib/call'
-import { useCallLogs, useRdvList, createCallLog, createRdv, updateLead, copyText } from '../lib/hooks'
+import { useCallLogs, useRdvList, createCallLog, createRdv, updateLead, copyText, useGhlCalendarConfig, useGhlFreeSlots, createGhlAppointment } from '../lib/hooks'
 import { notifyClipboardCopied } from '../lib/clipboardToast'
 
 type Tab = { id: string; label: string; icon?: IconName }
@@ -527,6 +527,7 @@ function NotesTab({
   const [commentaire, setCommentaire] = useState('')
   const [callbackAt, setCallbackAt] = useState('')
   const [sector, setSector] = useState<'Nord' | 'Sud' | 'Est' | 'Ouest' | ''>('')
+  const [rdvDate, setRdvDate] = useState(todayInputValue())
   const [rdvAt, setRdvAt] = useState('')
   const [form, setForm] = useState({
     firstName: lead.firstName ?? '',
@@ -542,13 +543,25 @@ function NotesTab({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const agendaDate = rdvAt ? rdvAt.split('T')[0] : todayInputValue()
+  const agendaDate = rdvDate || todayInputValue()
   const agendaPeriod = useMemo(() => dayPeriodFromInput(agendaDate), [agendaDate])
   const { data: agendaRdvs, loading: agendaLoading, refetch: refetchAgenda } = useRdvList({
     fromDate: agendaPeriod.from.toISOString(),
     toDate: agendaPeriod.to.toISOString(),
     limit: 80,
   })
+  const { data: ghlConfig } = useGhlCalendarConfig()
+  const selectedSectorConfig = ghlConfig?.sectors.find((item) => normalizeSectorKey(item.sector) === normalizeSectorKey(sector))
+  const slotRange = buildDayRange(rdvDate)
+  const { data: ghlSlotsData, loading: ghlSlotsLoading } = useGhlFreeSlots({
+    sector: sector || undefined,
+    calendarId: selectedSectorConfig?.calendarId || undefined,
+    from: slotRange?.from,
+    to: slotRange?.to,
+    timezone: 'Indian/Reunion',
+  })
+  const ghlTimeSlots = (ghlSlotsData?.slots ?? []).map((slot) => slotToReunionTime(slot.startTime)).filter(Boolean)
+  const commercialTimeSlots = ghlConfig?.configured && rdvDate ? uniqueStrings(ghlTimeSlots) : COMMERCIAL_RDV_TIME_SLOTS
   void notes
   void setNotes
 
@@ -577,6 +590,7 @@ function NotesTab({
           commentaire: string
           callbackAt: string
           sector: '' | 'Nord' | 'Sud' | 'Est' | 'Ouest'
+          rdvDate: string
           rdvAt: string
           form: typeof defaultForm
         }>
@@ -586,6 +600,7 @@ function NotesTab({
         setCommentaire(parsed.commentaire ?? '')
         setCallbackAt(parsed.callbackAt ?? '')
         setSector(parsed.sector ?? '')
+        setRdvDate(parsed.rdvDate ?? todayInputValue())
         setRdvAt(parsed.rdvAt ?? '')
         setForm({ ...defaultForm, ...(parsed.form ?? {}) })
         setError(null)
@@ -599,6 +614,7 @@ function NotesTab({
     setCommentaire('')
     setCallbackAt('')
     setSector('')
+    setRdvDate(todayInputValue())
     setRdvAt('')
     setForm(defaultForm)
     setError(null)
@@ -610,10 +626,10 @@ function NotesTab({
     if (step === 'done') return // workflow terminé, on ne persiste plus
     try {
       localStorage.setItem(notesTabStorageKey(lead.id), JSON.stringify({
-        setterStatus, step, eligibilityNotes, commentaire, callbackAt, sector, rdvAt, form,
+        setterStatus, step, eligibilityNotes, commentaire, callbackAt, sector, rdvDate, rdvAt, form,
       }))
     } catch {}
-  }, [lead.id, setterStatus, step, eligibilityNotes, commentaire, callbackAt, sector, rdvAt, form])
+  }, [lead.id, setterStatus, step, eligibilityNotes, commentaire, callbackAt, sector, rdvDate, rdvAt, form])
 
   // Workflow validé : on nettoie le brouillon pour que la prochaine visite reparte propre.
   useEffect(() => {
@@ -689,13 +705,31 @@ function NotesTab({
         typeLogement: form.typeLogement || null,
         revenuFiscal: revenu,
       })
-      await createRdv({
-        leadId: lead.id,
-        commercialId: null,
-        scheduledAt: new Date(rdvAt).toISOString(),
-        locationType: 'domicile',
-        notes: rdvTransferNote,
-      })
+      if (ghlConfig?.configured) {
+        await createGhlAppointment({
+          leadId: lead.id,
+          sector,
+          calendarId: selectedSectorConfig?.calendarId || undefined,
+          scheduledAt: rdvAtToReunionIso(rdvAt),
+          locationType: 'domicile',
+          notes: rdvTransferNote,
+          firstName: form.firstName || null,
+          lastName: form.lastName || null,
+          email: form.email || null,
+          phone: form.phone || null,
+          addressLine: form.addressLine || null,
+          city: form.city || null,
+          postalCode: form.postalCode || null,
+        })
+      } else {
+        await createRdv({
+          leadId: lead.id,
+          commercialId: null,
+          scheduledAt: rdvAtToReunionIso(rdvAt),
+          locationType: 'domicile',
+          notes: rdvTransferNote,
+        })
+      }
       await createCallLog({ leadId: lead.id, result: 'joint', notes: noteFinale || null })
       refetchAgenda()
       setSuccess('RDV créé, agenda mis à jour et lead qualifié. Les infos envoyées incluent email, nom complet, numéro et note d’appel.')
@@ -919,14 +953,24 @@ function NotesTab({
               <button type="button" onClick={() => setStep('secteur')} className="text-xs font-semibold text-or hover:underline">Changer</button>
             </div>
           </div>
-          <DateTimeSlotInput label="Date et heure du RDV commercial" value={rdvAt} onChange={setRdvAt} timeSlots={COMMERCIAL_RDV_TIME_SLOTS} />
+          <DateOnlyInput label="Date du RDV commercial" value={rdvDate} onChange={(date) => { setRdvDate(date); setRdvAt('') }} />
           <InlineRdvAgenda
             selectedAt={rdvAt}
             rdvs={agendaRdvs ?? []}
-            loading={agendaLoading}
+            loading={Boolean(agendaLoading || (ghlConfig?.configured && rdvDate && ghlSlotsLoading))}
             leadId={lead.id}
+            timeSlots={commercialTimeSlots}
+            onSelect={(time) => setRdvAt(`${rdvDate}T${time}`)}
           />
-          <p className="text-xs text-muted">Créneaux en heures pleines uniquement. L’agenda se met à jour directement ici, sans quitter le tableau des leads. Le commercial sera attribué automatiquement par GHL.</p>
+          <p className="text-xs text-muted">
+            {ghlConfig?.configured
+              ? ghlSlotsLoading
+                ? 'Chargement des créneaux libres GHL…'
+                : rdvDate && commercialTimeSlots.length === 0
+                  ? 'Aucun créneau libre GHL sur cette date. Choisis une autre date.'
+                  : 'Mini agenda synchronisé avec GHL en temps réel.'
+              : 'Mode local : ajoute la clé GHL pour charger les vrais créneaux libres.'}
+          </p>
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setStep('secteur')} className="rounded-xl border border-line bg-white/70 py-2 text-sm font-semibold hover:bg-white">Retour</button>
             <button onClick={() => setStep('confirmation')} disabled={!rdvAt} className="btn-primary rounded-xl py-2 text-sm disabled:opacity-50">Next · formulaire lead</button>
@@ -960,7 +1004,7 @@ function NotesTab({
             <Field label="TÉLÉPHONE" value={(form.phone || lead.phone) ?? '—'} />
             <Field label="NOTES D’APPEL ENVOYÉES" value={noteFinale || '—'} />
             <Field label="SECTEUR" value={sector || '—'} />
-            <Field label="RDV" value={rdvAt ? formatDate(new Date(rdvAt).toISOString()) : '—'} />
+            <Field label="RDV" value={rdvAt ? formatDate(rdvAtToReunionIso(rdvAt)) : '—'} />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setStep('rdv')} className="rounded-xl border border-line bg-white/70 py-2 text-sm font-semibold hover:bg-white">Retour</button>
@@ -977,11 +1021,15 @@ function InlineRdvAgenda({
   rdvs,
   loading,
   leadId,
+  timeSlots,
+  onSelect,
 }: {
   selectedAt: string
   rdvs: RdvResponse[]
   loading: boolean
   leadId: string
+  timeSlots: string[]
+  onSelect: (time: string) => void
 }) {
   const selectedTime = selectedAt ? selectedAt.split('T')[1] : ''
   const planned = rdvs.filter((r) => r.status === 'planifie')
@@ -998,18 +1046,23 @@ function InlineRdvAgenda({
       <div className="px-3 py-2 border-b border-line-soft flex items-center justify-between gap-2">
         <div>
           <div className="text-[10px] font-bold tracking-widest uppercase text-faint">Agenda du jour</div>
-          <div className="text-xs text-muted">{planned.length} RDV planifié{planned.length > 1 ? 's' : ''}</div>
+          <div className="text-xs text-muted">{timeSlots.length} créneau{timeSlots.length > 1 ? 'x' : ''} libre{timeSlots.length > 1 ? 's' : ''}</div>
         </div>
         {loading && <Spinner size={14} stroke={2} label="Agenda…" />}
       </div>
       <div className="divide-y divide-line-soft max-h-64 overflow-y-auto">
-        {COMMERCIAL_RDV_TIME_SLOTS.map((slot) => {
+        {timeSlots.map((slot) => {
           const slotLabel = slot
           const matches = byTime.get(slotLabel) ?? []
           const selected = selectedTime === slot
           const busy = matches.length > 0
           return (
-            <div key={slot} className={`px-3 py-2 flex items-start gap-3 ${selected ? 'bg-or-tint' : busy ? 'bg-white/80' : 'bg-white/40'}`}>
+            <button
+              key={slot}
+              type="button"
+              onClick={() => onSelect(slot)}
+              className={`w-full px-3 py-2 flex items-start gap-3 text-left ${selected ? 'bg-or-tint' : busy ? 'bg-white/80' : 'bg-white/40 hover:bg-or-tint/60'}`}
+            >
               <div className={`w-14 text-xs font-bold ${selected ? 'text-or-dark' : 'text-muted'}`}>{slotLabel}</div>
               <div className="flex-grow min-w-0">
                 {busy ? matches.map((r) => (
@@ -1021,7 +1074,7 @@ function InlineRdvAgenda({
                 )}
               </div>
               {selected && <span className="status-badge bg-or text-white">Choisi</span>}
-            </div>
+            </button>
           )
         })}
       </div>
@@ -1128,9 +1181,11 @@ function yesNoLabel(value: YesNo): string {
   return '—'
 }
 
-const COMMERCIAL_RDV_TIME_SLOTS = Array.from({ length: 11 }, (_, i) => {
-  const hours = 9 + i
-  return `${String(hours).padStart(2, '0')}:00`
+const COMMERCIAL_RDV_TIME_SLOTS = Array.from({ length: 16 }, (_, i) => {
+  const totalMinutes = 8 * 60 + i * 30
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
 })
 
 function todayInputValue(): string {
@@ -1147,6 +1202,15 @@ function dayPeriodFromInput(value: string): { from: Date; to: Date } {
   const to = new Date(base)
   to.setHours(23, 59, 59, 999)
   return { from, to }
+}
+
+function DateOnlyInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="block">
+      <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-1">{label}</div>
+      <input type="date" value={value} onChange={(e) => onChange(e.target.value)} className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full" />
+    </label>
+  )
 }
 
 function DateTimeSlotInput({
@@ -1236,6 +1300,35 @@ function formatDate(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function buildDayRange(date: string): { from: string; to: string } | null {
+  if (!date) return null
+  const from = new Date(`${date}T00:00:00+04:00`)
+  const to = new Date(`${date}T23:59:59+04:00`)
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return null
+  return { from: from.toISOString(), to: to.toISOString() }
+}
+
+function slotToReunionTime(value: string): string {
+  if (/^\d{2}:\d{2}$/.test(value)) return value
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Indian/Reunion' })
+}
+
+function rdvAtToReunionIso(value: string): string {
+  const [date, time] = value.split('T')
+  if (!date || !time) return new Date(value).toISOString()
+  return new Date(`${date}T${time}:00+04:00`).toISOString()
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)].sort()
+}
+
+function normalizeSectorKey(value: string): string {
+  return value.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
 
 function statusToSetterStatus(status: LeadResponse['status']): '' | 'non_qualifie' | 'a_rappeler' | 'pas_de_reponse' | 'qualifie' {
