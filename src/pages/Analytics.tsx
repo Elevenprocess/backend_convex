@@ -20,9 +20,9 @@ export function Analytics() {
 // ----- F11 Setter -----
 function AnalyticsSetter({ name }: { name: string; userId?: string }) {
   const period = useAnalyticsPeriod('month')
-  const days = period.range.days
   const { data } = useAnalyticsSummary(rangeQuery(period.range))
   const stats = data ?? EMPTY_ANALYTICS_STATS
+  const pipeline = buildSetterPipeline(stats)
 
   return (
     <AppShell blobsKey="setter">
@@ -39,6 +39,8 @@ function AnalyticsSetter({ name }: { name: string; userId?: string }) {
           <BigStatCard label="CLASSIFICATIONS" value={fmtInt(stats.classified)} sub={`${stats.syntheticCalls} appels déduits des statuts`} />
         </div>
 
+        <SetterPipelineConcept pipeline={pipeline} />
+
         <div className="grid grid-cols-12 gap-6">
           <div className="glass-card p-6 col-span-7">
             <div className="flex items-center justify-between mb-4">
@@ -50,10 +52,11 @@ function AnalyticsSetter({ name }: { name: string; userId?: string }) {
           <div className="glass-card p-6 col-span-5">
             <h3 className="font-bold mb-4">Pipeline setter</h3>
             <div className="space-y-4">
-              <Goal label="Appels logiques" value={`${stats.calls} / ${Math.max(1, days * 35)}`} pct={pct(stats.calls, days * 35)} color="#D4AF37" />
-              <Goal label="Leads qualifiés" value={`${stats.qualified} / ${Math.max(1, Math.round(days * 2.5))}`} pct={pct(stats.qualified, Math.round(days * 2.5))} color="#3DA86A" />
-              <Goal label="RDV pris" value={`${stats.rdvPris} / ${Math.max(1, Math.round(days * 1.2))}`} pct={pct(stats.rdvPris, Math.round(days * 1.2))} color="#B87333" />
-              <Row label="Leads sans appel/statut" value={String(stats.unclassified)} />
+              <Goal label="Nouveaux leads → répondus" value={`${pipeline.connected} / ${pipeline.newLeads}`} pct={pipeline.responseRate} color="#D4AF37" />
+              <Goal label="Répondus → RDV" value={`${pipeline.rdvPris} / ${pipeline.connected}`} pct={pipeline.rdvAfterAnswerRate} color="#3DA86A" />
+              <Goal label="Nouveaux leads → RDV" value={`${pipeline.rdvPris} / ${pipeline.newLeads}`} pct={pipeline.globalRdvRate} color="#B87333" />
+              <Row label="En relance / non joints" value={String(pipeline.relance)} />
+              <Row label="Pas qualifiés" value={String(pipeline.notQualified)} />
               <Row label="Ratio qualification" value={`${stats.qualificationRate}%`} highlight />
             </div>
           </div>
@@ -200,6 +203,19 @@ function AnalyticsAdmin() {
 // ===== Analytics backend helpers =====
 
 type Segment = AnalyticsResponse['resultSegments'][number]
+type SetterPipeline = {
+  newLeads: number
+  calls: number
+  connected: number
+  relance: number
+  qualified: number
+  notQualified: number
+  rdvPris: number
+  responseRate: number
+  qualificationRate: number
+  rdvAfterAnswerRate: number
+  globalRdvRate: number
+}
 
 const EMPTY_ANALYTICS_STATS: AnalyticsResponse = {
   calls: 0,
@@ -229,6 +245,36 @@ const EMPTY_ANALYTICS_STATS: AnalyticsResponse = {
 
 function rangeQuery(range: AnalyticsRange) {
   return { from: range.from.toISOString(), to: range.to.toISOString() }
+}
+
+function buildSetterPipeline(stats: AnalyticsResponse): SetterPipeline {
+  const newLeads = Math.max(stats.classified + stats.unclassified, stats.classified, stats.calls, stats.connected, stats.rdvPris)
+  const relance = Math.max(0, segmentTotal(stats.resultSegments, ['non joint', 'non_joint', 'injoignable', 'messagerie', 'rappel', 'relance']))
+  const notQualified = Math.max(0, segmentTotal(stats.resultSegments, ['refus', 'pas qualifie', 'pas qualifié', 'non qualifie', 'non qualifié']))
+  return {
+    newLeads,
+    calls: stats.calls,
+    connected: stats.connected,
+    relance,
+    qualified: stats.qualified,
+    notQualified,
+    rdvPris: stats.rdvPris,
+    responseRate: pct(stats.connected, newLeads),
+    qualificationRate: pct(stats.qualified, stats.connected),
+    rdvAfterAnswerRate: pct(stats.rdvPris, stats.connected),
+    globalRdvRate: pct(stats.rdvPris, newLeads),
+  }
+}
+
+function segmentTotal(segments: Segment[], needles: string[]): number {
+  return segments.reduce((sum, segment) => {
+    const label = normalizeLabel(segment.label)
+    return needles.some((needle) => label.includes(normalizeLabel(needle))) ? sum + segment.value : sum
+  }, 0)
+}
+
+function normalizeLabel(value: string): string {
+  return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
 
 function pct(num: number, denom: number): number {
@@ -462,6 +508,74 @@ function shortDate(date: Date): string {
 }
 
 // ===== Atoms =====
+
+function SetterPipelineConcept({ pipeline }: { pipeline: SetterPipeline }) {
+  return (
+    <div className="glass-card p-6 space-y-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <span className="eyebrow">PIPELINE DE TRAITEMENT DES LEADS</span>
+          <h3 className="text-xl font-extrabold mt-1">Du nouveau lead au RDV qualifié</h3>
+          <p className="text-sm text-muted mt-1 max-w-3xl">
+            Ce bloc suit le parcours setter : entrée du lead, appel, réponse ou relance, qualification, puis réservation du RDV.
+          </p>
+        </div>
+        <div className="rounded-2xl bg-or-tint px-4 py-3 text-sm font-bold text-or-dark">
+          Objectif : transformer vite les nouveaux leads en RDV qualifiés.
+        </div>
+      </div>
+
+      <div className="grid grid-cols-5 gap-3">
+        <FlowStep title="Nouveau lead" value={pipeline.newLeads} text="Facebook, formulaire, site, GHL, webhook" tone="gold" />
+        <FlowStep title="Appel setter" value={pipeline.calls} text="Contact, notes, statut, qualification" tone="bronze" />
+        <FlowStep title="A répondu" value={pipeline.connected} text="Le prospect a décroché" tone="green" />
+        <FlowStep title="Qualifié" value={pipeline.qualified} text="Besoin, budget, zone, motivation OK" tone="green" />
+        <FlowStep title="RDV pris" value={pipeline.rdvPris} text="Créneau commercial réservé" tone="bronze" />
+      </div>
+
+      <div className="grid grid-cols-3 gap-4">
+        <ConversionCard label="% de réponse" value={`${pipeline.responseRate}%`} formula="Leads répondus / nouveaux leads" detail={`${pipeline.connected} / ${pipeline.newLeads}`} />
+        <ConversionCard label="% RDV après réponse" value={`${pipeline.rdvAfterAnswerRate}%`} formula="RDV pris / leads répondus" detail={`${pipeline.rdvPris} / ${pipeline.connected}`} />
+        <ConversionCard label="% RDV global" value={`${pipeline.globalRdvRate}%`} formula="RDV pris / nouveaux leads" detail={`${pipeline.rdvPris} / ${pipeline.newLeads}`} highlight />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 text-sm">
+        <div className="rounded-2xl border border-line-soft bg-white/50 p-4">
+          <div className="font-bold mb-1">Branche non-réponse → relance</div>
+          <p className="text-muted">Quand le lead ne répond pas, il passe en relance : rappel programmé, SMS/email ou suivi automatique.</p>
+          <div className="mt-3 font-extrabold text-xl">{pipeline.relance}</div>
+        </div>
+        <div className="rounded-2xl border border-line-soft bg-white/50 p-4">
+          <div className="font-bold mb-1">Branche réponse → qualification</div>
+          <p className="text-muted">Le setter vérifie besoin réel, budget, disponibilité, zone et motivation avant de proposer un RDV.</p>
+          <div className="mt-3 font-extrabold text-xl">{pipeline.notQualified} pas qualifiés</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FlowStep({ title, value, text, tone }: { title: string; value: number; text: string; tone: 'gold' | 'bronze' | 'green' }) {
+  const toneClass = tone === 'green' ? 'bg-success-tint text-success' : tone === 'bronze' ? 'bg-cuivre-tint text-cuivre' : 'bg-or-tint text-or-dark'
+  return (
+    <div className="relative rounded-2xl border border-line-soft bg-white/60 p-4 min-h-[132px]">
+      <div className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-widest ${toneClass}`}>{title}</div>
+      <div className="text-3xl font-extrabold mt-3">{fmtInt(value)}</div>
+      <p className="text-xs text-muted mt-2 leading-relaxed">{text}</p>
+    </div>
+  )
+}
+
+function ConversionCard({ label, value, formula, detail, highlight = false }: { label: string; value: string; formula: string; detail: string; highlight?: boolean }) {
+  return (
+    <div className={`rounded-2xl border p-4 ${highlight ? 'border-or bg-or-tint' : 'border-line-soft bg-white/50'}`}>
+      <div className="eyebrow">{label}</div>
+      <div className="text-3xl font-extrabold mt-1">{value}</div>
+      <div className="text-xs text-muted mt-2">{formula}</div>
+      <div className="text-xs font-bold mt-1">{detail}</div>
+    </div>
+  )
+}
 
 function BigStatCard({ label, value, delta, sub }: { label: string; value: string; delta?: string; sub?: string }) {
   return (
