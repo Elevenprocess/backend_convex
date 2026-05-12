@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon, type IconName } from './Icon'
 import { Spinner, LoadingBlock } from './Spinner'
@@ -10,6 +10,7 @@ import {
   initials as leadInitials,
   type CallResult,
   type LeadResponse,
+  type RdvResponse,
   type UserResponse,
 } from '../lib/types'
 import { useCall, type CallState } from '../lib/call'
@@ -541,6 +542,13 @@ function NotesTab({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const agendaDate = rdvAt ? rdvAt.split('T')[0] : todayInputValue()
+  const agendaPeriod = useMemo(() => dayPeriodFromInput(agendaDate), [agendaDate])
+  const { data: agendaRdvs, loading: agendaLoading, refetch: refetchAgenda } = useRdvList({
+    fromDate: agendaPeriod.from.toISOString(),
+    toDate: agendaPeriod.to.toISOString(),
+    limit: 80,
+  })
   void notes
   void setNotes
 
@@ -616,6 +624,12 @@ function NotesTab({
 
   const eligibilitySummary = formatEligibilityNotes(eligibilityNotes)
   const noteFinale = [eligibilitySummary, commentaire.trim()].filter(Boolean).join('\n\n') || null
+  const rdvTransferNote = formatRdvTransferNote({
+    lead,
+    form,
+    sector,
+    callNote: noteFinale,
+  })
 
   async function saveCallAndLead(kind: Exclude<SetterStatus, ''>) {
     setError(null)
@@ -680,10 +694,11 @@ function NotesTab({
         commercialId: null,
         scheduledAt: new Date(rdvAt).toISOString(),
         locationType: 'domicile',
-        notes: [sector && `Secteur : ${sector}`, noteFinale].filter(Boolean).join('\n\n') || null,
+        notes: rdvTransferNote,
       })
       await createCallLog({ leadId: lead.id, result: 'joint', notes: noteFinale || null })
-      setSuccess('RDV créé et lead qualifié. GHL attribuera le commercial automatiquement.')
+      refetchAgenda()
+      setSuccess('RDV créé, agenda mis à jour et lead qualifié. Les infos envoyées incluent email, nom complet, numéro et note d’appel.')
       setStep('done')
       onSaved?.()
     } catch (e) {
@@ -882,7 +897,7 @@ function NotesTab({
           <div className="text-[10px] font-bold tracking-widest uppercase text-faint">Secteur de l’adresse client</div>
           <div className="grid grid-cols-2 gap-2">
             {(['Nord', 'Sud', 'Est', 'Ouest'] as const).map((s) => (
-              <button key={s} onClick={() => setSector(s)} className={`rounded-[18px] border p-4 text-left ${sector === s ? 'border-or bg-or-tint text-or-dark' : 'border-line bg-white/70 hover:bg-white'}`}>
+              <button key={s} onClick={() => { setSector(s); setStep('rdv') }} className={`rounded-[18px] border p-4 text-left ${sector === s ? 'border-or bg-or-tint text-or-dark' : 'border-line bg-white/70 hover:bg-white'}`}>
                 <Icon name="map-pin" size={16} />
                 <div className="font-bold mt-2">{s}</div>
               </button>
@@ -897,8 +912,21 @@ function NotesTab({
 
       {step === 'rdv' && (
         <div className="space-y-4">
+          <div className="rounded-[18px] border border-or/20 bg-or-tint p-3">
+            <div className="text-[10px] font-bold tracking-widest uppercase text-or-dark mb-1">Secteur sélectionné</div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-bold text-or-dark">{sector}</span>
+              <button type="button" onClick={() => setStep('secteur')} className="text-xs font-semibold text-or hover:underline">Changer</button>
+            </div>
+          </div>
           <DateTimeSlotInput label="Date et heure du RDV commercial" value={rdvAt} onChange={setRdvAt} timeSlots={COMMERCIAL_RDV_TIME_SLOTS} />
-          <p className="text-xs text-muted">Créneaux en heures pleines uniquement. Le commercial sera attribué automatiquement par GHL.</p>
+          <InlineRdvAgenda
+            selectedAt={rdvAt}
+            rdvs={agendaRdvs ?? []}
+            loading={agendaLoading}
+            leadId={lead.id}
+          />
+          <p className="text-xs text-muted">Créneaux en heures pleines uniquement. L’agenda se met à jour directement ici, sans quitter le tableau des leads. Le commercial sera attribué automatiquement par GHL.</p>
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setStep('secteur')} className="rounded-xl border border-line bg-white/70 py-2 text-sm font-semibold hover:bg-white">Retour</button>
             <button onClick={() => setStep('confirmation')} disabled={!rdvAt} className="btn-primary rounded-xl py-2 text-sm disabled:opacity-50">Next · formulaire lead</button>
@@ -928,7 +956,9 @@ function NotesTab({
             <div className="text-[10px] font-bold tracking-widest uppercase text-or-dark">Résumé final avant validation</div>
             <Field label="LEAD" value={`${form.firstName} ${form.lastName}`.trim() || fullName(lead)} />
             <Field label="STATUT" value="Qualifié" />
-            <Field label="NOTES" value={noteFinale || '—'} />
+            <Field label="EMAIL" value={(form.email || lead.email) ?? '—'} />
+            <Field label="TÉLÉPHONE" value={(form.phone || lead.phone) ?? '—'} />
+            <Field label="NOTES D’APPEL ENVOYÉES" value={noteFinale || '—'} />
             <Field label="SECTEUR" value={sector || '—'} />
             <Field label="RDV" value={rdvAt ? formatDate(new Date(rdvAt).toISOString()) : '—'} />
           </div>
@@ -938,6 +968,63 @@ function NotesTab({
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function InlineRdvAgenda({
+  selectedAt,
+  rdvs,
+  loading,
+  leadId,
+}: {
+  selectedAt: string
+  rdvs: RdvResponse[]
+  loading: boolean
+  leadId: string
+}) {
+  const selectedTime = selectedAt ? selectedAt.split('T')[1] : ''
+  const planned = rdvs.filter((r) => r.status === 'planifie')
+  const byTime = new Map<string, RdvResponse[]>()
+  for (const r of planned) {
+    const slot = new Date(r.scheduledAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+    const list = byTime.get(slot) ?? []
+    list.push(r)
+    byTime.set(slot, list)
+  }
+
+  return (
+    <div className="rounded-[18px] border border-line bg-white/70 overflow-hidden">
+      <div className="px-3 py-2 border-b border-line-soft flex items-center justify-between gap-2">
+        <div>
+          <div className="text-[10px] font-bold tracking-widest uppercase text-faint">Agenda du jour</div>
+          <div className="text-xs text-muted">{planned.length} RDV planifié{planned.length > 1 ? 's' : ''}</div>
+        </div>
+        {loading && <Spinner size={14} stroke={2} label="Agenda…" />}
+      </div>
+      <div className="divide-y divide-line-soft max-h-64 overflow-y-auto">
+        {COMMERCIAL_RDV_TIME_SLOTS.map((slot) => {
+          const slotLabel = slot
+          const matches = byTime.get(slotLabel) ?? []
+          const selected = selectedTime === slot
+          const busy = matches.length > 0
+          return (
+            <div key={slot} className={`px-3 py-2 flex items-start gap-3 ${selected ? 'bg-or-tint' : busy ? 'bg-white/80' : 'bg-white/40'}`}>
+              <div className={`w-14 text-xs font-bold ${selected ? 'text-or-dark' : 'text-muted'}`}>{slotLabel}</div>
+              <div className="flex-grow min-w-0">
+                {busy ? matches.map((r) => (
+                  <div key={r.id} className={`text-xs ${r.leadId === leadId ? 'font-bold text-or-dark' : 'text-text'}`}>
+                    {r.leadId === leadId ? 'Ce lead' : 'RDV déjà pris'} · {r.locationType}
+                  </div>
+                )) : (
+                  <div className="text-xs text-faint">Disponible</div>
+                )}
+              </div>
+              {selected && <span className="status-badge bg-or text-white">Choisi</span>}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -992,6 +1079,35 @@ function ChoicePill({ active, onClick, children }: { active: boolean; onClick: (
   )
 }
 
+function formatRdvTransferNote({
+  lead,
+  form,
+  sector,
+  callNote,
+}: {
+  lead: LeadResponse
+  form: {
+    firstName: string
+    lastName: string
+    email: string
+    phone: string
+  }
+  sector: string
+  callNote: string | null
+}): string {
+  const name = `${form.firstName} ${form.lastName}`.trim() || fullName(lead)
+  const email = form.email.trim() || lead.email || '—'
+  const phone = form.phone.trim() || lead.phone || '—'
+  return [
+    'Transmission RDV commercial',
+    `Nom complet du lead : ${name}`,
+    `Email : ${email}`,
+    `Numéro : ${phone}`,
+    sector ? `Secteur : ${sector}` : null,
+    callNote ? `Note de l’appel :\n${callNote}` : 'Note de l’appel : —',
+  ].filter(Boolean).join('\n')
+}
+
 function formatEligibilityNotes(notes: EligibilityNotes): string {
   const lines = [
     notes.isOwner && `Propriétaire maison : ${yesNoLabel(notes.isOwner)}`,
@@ -1016,6 +1132,22 @@ const COMMERCIAL_RDV_TIME_SLOTS = Array.from({ length: 11 }, (_, i) => {
   const hours = 9 + i
   return `${String(hours).padStart(2, '0')}:00`
 })
+
+function todayInputValue(): string {
+  const d = new Date()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${month}-${day}`
+}
+
+function dayPeriodFromInput(value: string): { from: Date; to: Date } {
+  const base = value ? new Date(`${value}T00:00:00`) : new Date()
+  const from = new Date(base)
+  from.setHours(0, 0, 0, 0)
+  const to = new Date(base)
+  to.setHours(23, 59, 59, 999)
+  return { from, to }
+}
 
 function DateTimeSlotInput({
   label,
