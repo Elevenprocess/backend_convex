@@ -3,13 +3,15 @@ import { useNavigate } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
-import { LoadingBlock } from '../../components/Spinner'
-import { useRdvList, useLeads } from '../../lib/hooks'
+import { useGhlCalendarEvents, useRdvList, useLeads, type GhlCalendarEvent } from '../../lib/hooks'
 import { fullName, type LeadResponse, type RdvResponse, type RdvStatus } from '../../lib/types'
 
 const DEFAULT_HOURS = Array.from({ length: 12 }, (_, i) => 8 + i)
 const DAY_LABELS = ['LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM', 'DIM']
 type CalendarView = 'day' | 'week' | 'month'
+type CalendarItem =
+  | { source: 'local'; id: string; scheduledAt: string; status: RdvStatus; rdv: RdvResponse }
+  | { source: 'ghl'; id: string; scheduledAt: string; status: 'ghl'; event: GhlCalendarEvent }
 
 const STATUS_TONE: Record<RdvStatus, string> = {
   planifie: 'bg-cuivre-tint text-cuivre',
@@ -29,7 +31,11 @@ export function RdvCalendar() {
   const { data: rdvs, loading, error } = useRdvList({
     fromDate: period.from.toISOString(),
     toDate: period.to.toISOString(),
-    limit: 500,
+    limit: 200,
+  })
+  const { data: ghlEventsData, loading: ghlLoading, error: ghlError } = useGhlCalendarEvents({
+    from: period.from.toISOString(),
+    to: period.to.toISOString(),
   })
   const { data: leads } = useLeads({ limit: 1500 })
 
@@ -39,41 +45,58 @@ export function RdvCalendar() {
     return m
   }, [leads])
 
-  const plannedRdvs = useMemo(
-    () => (rdvs ?? []).filter((r) => r.status === 'planifie'),
-    [rdvs],
-  )
+  const calendarItems = useMemo(() => {
+    const localRdvs = rdvs ?? []
+    const localExternalIds = new Set(localRdvs.map((r) => r.externalId).filter(Boolean))
+    const localItems: CalendarItem[] = localRdvs.map((rdv) => ({
+      source: 'local',
+      id: rdv.id,
+      scheduledAt: rdv.scheduledAt,
+      status: rdv.status,
+      rdv,
+    }))
+    const ghlItems: CalendarItem[] = (ghlEventsData?.events ?? [])
+      .filter((event) => !localExternalIds.has(event.id))
+      .map((event) => ({
+        source: 'ghl',
+        id: event.id,
+        scheduledAt: event.startTime,
+        status: 'ghl',
+        event,
+      }))
+    return [...localItems, ...ghlItems].sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
+  }, [ghlEventsData?.events, rdvs])
 
   const visibleHours = useMemo(() => {
     const hours = new Set(DEFAULT_HOURS)
-    for (const r of plannedRdvs) hours.add(new Date(r.scheduledAt).getHours())
+    for (const item of calendarItems) hours.add(new Date(item.scheduledAt).getHours())
     return [...hours].sort((a, b) => a - b)
-  }, [plannedRdvs])
+  }, [calendarItems])
 
   const rdvByHourCell = useMemo(() => {
-    const m = new Map<string, RdvResponse[]>()
-    for (const r of plannedRdvs) {
-      const d = new Date(r.scheduledAt)
+    const m = new Map<string, CalendarItem[]>()
+    for (const item of calendarItems) {
+      const d = new Date(item.scheduledAt)
       const key = `${isoDay(d)}:${d.getHours()}`
       const list = m.get(key) ?? []
-      list.push(r)
-      list.sort(byScheduledAt)
+      list.push(item)
+      list.sort(byCalendarItemAt)
       m.set(key, list)
     }
     return m
-  }, [plannedRdvs])
+  }, [calendarItems])
 
   const rdvByDay = useMemo(() => {
-    const m = new Map<string, RdvResponse[]>()
-    for (const r of plannedRdvs) {
-      const key = isoDay(new Date(r.scheduledAt))
+    const m = new Map<string, CalendarItem[]>()
+    for (const item of calendarItems) {
+      const key = isoDay(new Date(item.scheduledAt))
       const list = m.get(key) ?? []
-      list.push(r)
-      list.sort(byScheduledAt)
+      list.push(item)
+      list.sort(byCalendarItemAt)
       m.set(key, list)
     }
     return m
-  }, [plannedRdvs])
+  }, [calendarItems])
 
   return (
     <AppShell>
@@ -100,7 +123,8 @@ export function RdvCalendar() {
             </button>
           ))}
         </div>
-        <button onClick={() => navigate('/rdv/split')} className="btn-primary px-4 py-2 rounded-xl text-sm flex items-center gap-2 ml-auto">
+        {ghlLoading && <span className="text-xs text-muted ml-auto">Sync GHL…</span>}
+        <button onClick={() => navigate('/rdv/split')} className="btn-primary px-4 py-2 rounded-xl text-sm flex items-center gap-2">
           <Icon name="plus" size={14} />
           Nouveau RDV
         </button>
@@ -108,10 +132,10 @@ export function RdvCalendar() {
 
       <main className="p-8 pt-4 overflow-hidden flex-grow">
         <div className="glass-card !p-0 overflow-hidden h-full flex flex-col">
-          {loading ? (
-            <div className="flex-grow flex items-center justify-center"><LoadingBlock /></div>
-          ) : error ? (
-            <div className="flex-grow flex items-center justify-center text-rouille text-sm">Erreur : {error}</div>
+          {loading && !rdvs ? (
+            <div className="flex-grow flex items-center justify-center text-faint text-sm">Chargement…</div>
+          ) : error || ghlError ? (
+            <div className="flex-grow flex items-center justify-center text-rouille text-sm">Erreur : {error ?? ghlError}</div>
           ) : view === 'month' ? (
             <MonthView
               days={period.days}
@@ -149,7 +173,7 @@ function TimeGridView({
 }: {
   days: DayCell[]
   visibleHours: number[]
-  rdvByCell: Map<string, RdvResponse[]>
+  rdvByCell: Map<string, CalendarItem[]>
   leadMap: Map<string, LeadResponse>
   onOpen: (rdvId: string) => void
   onOpenDay: (date: Date) => void
@@ -200,7 +224,7 @@ function RowHour({
 }: {
   hour: number
   days: DayCell[]
-  rdvByCell: Map<string, RdvResponse[]>
+  rdvByCell: Map<string, CalendarItem[]>
   leadMap: Map<string, LeadResponse>
   onOpen: (rdvId: string) => void
 }) {
@@ -211,8 +235,8 @@ function RowHour({
         const list = rdvByCell.get(`${d.key}:${hour}`) ?? []
         return (
           <div key={d.key} className={`border-l border-t border-line-soft p-1 relative ${d.today ? 'bg-cuivre-tint/20' : ''}`}>
-            {list.map((rdv) => (
-              <RdvButton key={rdv.id} rdv={rdv} lead={leadMap.get(rdv.leadId)} onClick={() => onOpen(rdv.id)} />
+            {list.map((item) => (
+              <RdvButton key={`${item.source}-${item.id}`} item={item} lead={item.source === 'local' ? leadMap.get(item.rdv.leadId) : undefined} onClick={() => item.source === 'local' && onOpen(item.id)} />
             ))}
           </div>
         )
@@ -231,7 +255,7 @@ function MonthView({
 }: {
   days: DayCell[]
   cursorDate: Date
-  rdvByDay: Map<string, RdvResponse[]>
+  rdvByDay: Map<string, CalendarItem[]>
   leadMap: Map<string, LeadResponse>
   onOpen: (rdvId: string) => void
   onOpenDay: (date: Date) => void
@@ -253,8 +277,8 @@ function MonthView({
                 {d.date.getDate()}
               </button>
               <div className="mt-1 space-y-1 overflow-hidden">
-                {list.slice(0, 4).map((rdv) => (
-                  <RdvButton key={rdv.id} rdv={rdv} lead={leadMap.get(rdv.leadId)} compact onClick={() => onOpen(rdv.id)} />
+                {list.slice(0, 4).map((item) => (
+                  <RdvButton key={`${item.source}-${item.id}`} item={item} lead={item.source === 'local' ? leadMap.get(item.rdv.leadId) : undefined} compact onClick={() => item.source === 'local' && onOpen(item.id)} />
                 ))}
                 {list.length > 4 && (
                   <button onClick={() => onOpenDay(d.date)} className="text-[11px] font-semibold text-muted hover:text-or">+{list.length - 4} autres</button>
@@ -268,14 +292,19 @@ function MonthView({
   )
 }
 
-function RdvButton({ rdv, lead, compact = false, onClick }: { rdv: RdvResponse; lead?: LeadResponse; compact?: boolean; onClick: () => void }) {
+function RdvButton({ item, lead, compact = false, onClick }: { item: CalendarItem; lead?: LeadResponse; compact?: boolean; onClick: () => void }) {
+  const isGhl = item.source === 'ghl'
+  const label = isGhl ? item.event.title || `RDV GHL ${item.event.sector ?? ''}`.trim() : (lead ? fullName(lead) : 'Lead inconnu')
+  const tone = isGhl ? 'bg-info-tint text-info' : STATUS_TONE[item.rdv.status]
+  const title = `${formatTime(item.scheduledAt)} — ${label}${isGhl ? ' — GHL temps réel' : ''}`
   return (
     <button
       onClick={onClick}
-      className={`rdv-block ${STATUS_TONE[rdv.status]} w-full text-left font-semibold rounded-xl hover:scale-[1.01] transition-transform ${compact ? 'text-[11px] px-2 py-1 truncate' : 'min-h-12 text-[11px] px-2 py-2 mb-1'}`}
-      title={`${formatTime(rdv.scheduledAt)} — ${lead ? fullName(lead) : 'Lead inconnu'}`}
+      className={`rdv-block ${tone} w-full text-left font-semibold rounded-xl transition-transform ${isGhl ? 'cursor-default' : 'hover:scale-[1.01]'} ${compact ? 'text-[11px] px-2 py-1 truncate' : 'min-h-12 text-[11px] px-2 py-2 mb-1'}`}
+      title={title}
     >
-      {formatTime(rdv.scheduledAt)} — {lead ? fullName(lead) : '…'}
+      <span className="block truncate">{formatTime(item.scheduledAt)} — {label}</span>
+      {!compact && isGhl && <span className="text-[10px] opacity-75">GHL live{item.event.sector ? ` · ${item.event.sector}` : ''}</span>}
     </button>
   )
 }
@@ -387,7 +416,7 @@ function isSameDay(a: Date, b: Date): boolean {
   )
 }
 
-function byScheduledAt(a: RdvResponse, b: RdvResponse): number {
+function byCalendarItemAt(a: CalendarItem, b: CalendarItem): number {
   return new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
 }
 

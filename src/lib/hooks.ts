@@ -392,6 +392,20 @@ export type GhlFreeSlot = {
   sector?: string | null
 }
 
+export type GhlCalendarEvent = {
+  id: string
+  calendarId: string
+  sector?: string | null
+  title: string | null
+  startTime: string
+  endTime?: string | null
+  status?: string | null
+  contactId?: string | null
+  assignedUserId?: string | null
+  address?: string | null
+  notes?: string | null
+}
+
 export function useGhlCalendarConfig(): Async<GhlCalendarConfig> {
   return useFetch<GhlCalendarConfig>('/ghl-calendar/config')
 }
@@ -404,6 +418,15 @@ export function useGhlFreeSlots(filters?: {
   timezone?: string
 }): Async<{ configured: boolean; slots: GhlFreeSlot[] }> {
   return useFetch<{ configured: boolean; slots: GhlFreeSlot[] }>(filters?.from && filters?.to ? '/ghl-calendar/free-slots' : null, filters)
+}
+
+export function useGhlCalendarEvents(filters?: {
+  sector?: string
+  calendarId?: string
+  from?: string
+  to?: string
+}): Async<{ configured: boolean; events: GhlCalendarEvent[] }> {
+  return useFetch<{ configured: boolean; events: GhlCalendarEvent[] }>(filters?.from && filters?.to ? '/ghl-calendar/events' : null, filters)
 }
 
 export type CreateGhlAppointmentInput = CreateRdvInput & {

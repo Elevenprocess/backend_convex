@@ -39,7 +39,7 @@ export function useRealtimeSocket() {
     })
     socket.on('lead:updated', () => notifyRealtimeRefresh({ event: 'lead:updated', paths: ['/leads'] }))
     socket.on('call-log:new', () => notifyRealtimeRefresh({ event: 'call-log:new', paths: ['/call-logs', '/leads'] }))
-    socket.on('rdv:new', () => notifyRealtimeRefresh({ event: 'rdv:new', paths: ['/rdv', '/leads', '/ghl-calendar/free-slots'] }))
+    socket.on('rdv:new', () => notifyRealtimeRefresh({ event: 'rdv:new', paths: ['/rdv', '/leads', '/ghl-calendar/free-slots', '/ghl-calendar/events'] }))
     socket.on('notification:new', (notification: { title?: string; body?: string; id?: string }) => {
       console.log('[ws] notification:new', notification)
       notifyRealtimeRefresh({ event: 'notification:new', paths: ['/leads', '/rdv', '/call-logs'] })
