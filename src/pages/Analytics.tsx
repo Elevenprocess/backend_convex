@@ -579,11 +579,12 @@ function Row({ label, value, highlight = false }: { label: string; value: string
 
 type EvolutionSeries = { key: keyof Pick<AnalyticsDailyPoint, 'calls' | 'rdv' | 'signed' | 'ca'>; label: string; color: string }
 
-function EvolutionChart({ title, data, series }: { title: string; data: AnalyticsDailyPoint[]; series: EvolutionSeries[] }) {
+function EvolutionChart({ title, data, series }: { title: string; data?: AnalyticsDailyPoint[]; series: EvolutionSeries[] }) {
   const width = 520
   const height = 210
   const pad = 28
-  const sample = data.length > 32 ? data.filter((_, i) => i % Math.ceil(data.length / 32) === 0 || i === data.length - 1) : data
+  const points = data ?? []
+  const sample = points.length > 32 ? points.filter((_, i) => i % Math.ceil(points.length / 32) === 0 || i === points.length - 1) : points
   const max = Math.max(1, ...sample.flatMap((point) => series.map((serie) => point[serie.key] || 0)))
   const pointsFor = (serie: EvolutionSeries) => sample.map((point, i) => {
     const x = sample.length <= 1 ? width / 2 : pad + (i / (sample.length - 1)) * (width - pad * 2)
