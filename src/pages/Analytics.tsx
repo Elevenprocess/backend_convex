@@ -100,7 +100,7 @@ function AnalyticsSetter({ name }: { name: string }) {
       <Topbar eyebrow="ANALYTICS / SETTER" title={`Mes performances — ${name}`} />
       <div className="px-8 pt-4 flex items-center justify-between gap-4 flex-shrink-0">
         <div className="text-xs text-faint font-semibold">
-          Moteur OLAP/ETL backend : {range.label}.{loading ? ' Chargement…' : ''}{error ? ` Erreur: ${error}` : ''}
+          Moteur OLAP/ETL backend : {range.label}.{loading && <AnalyticsInlineLoading />}{error ? ` Erreur: ${error}` : ''}
         </div>
         <PeriodSelector value={period} onChange={setPeriod} />
       </div>
@@ -172,7 +172,7 @@ function AnalyticsCommercial({ name }: { name: string }) {
     <AppShell blobsKey="commercial">
       <Topbar eyebrow="ANALYTICS / COMMERCIAL" title={`Mes performances — ${name}`} />
       <div className="px-8 pt-4 flex items-center justify-between gap-4 flex-shrink-0">
-        <div className="text-xs text-faint font-semibold">OLAP/ETL backend sur {range.label}.{loading ? ' Chargement…' : ''}{error ? ` Erreur: ${error}` : ''}</div>
+        <div className="text-xs text-faint font-semibold">OLAP/ETL backend sur {range.label}.{loading && <AnalyticsInlineLoading />}{error ? ` Erreur: ${error}` : ''}</div>
         <PeriodSelector value={period} onChange={setPeriod} />
       </div>
       <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
@@ -220,7 +220,7 @@ function AnalyticsAdmin() {
     <AppShell blobsKey="admin">
       <Topbar eyebrow="ANALYTICS / ADMIN" title="Performance globale équipe" />
       <div className="px-8 pt-4 flex items-center justify-between gap-4 flex-shrink-0">
-        <div className="text-xs text-faint font-semibold">Requête unique backend /analytics/summary : {range.label}.{loading ? ' Chargement…' : ''}{error ? ` Erreur: ${error}` : ''}</div>
+        <div className="text-xs text-faint font-semibold">Requête unique backend /analytics/summary : {range.label}.{loading && <AnalyticsInlineLoading />}{error ? ` Erreur: ${error}` : ''}</div>
         <PeriodSelector value={period} onChange={setPeriod} />
       </div>
       <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
@@ -443,6 +443,18 @@ function adminTableRows(stats: AnalyticsAdminSummary) {
 }
 
 // ===== Atoms =====
+
+function AnalyticsInlineLoading() {
+  return (
+    <span className="ml-2 inline-flex items-center gap-1.5 rounded-full bg-or-tint/70 border border-or/20 px-2 py-0.5 text-or-dark shadow-sm">
+      <span className="relative inline-flex h-3 w-3 items-center justify-center">
+        <span className="absolute inline-flex h-full w-full rounded-full bg-or/40 animate-ping" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-or" />
+      </span>
+      <span className="font-extrabold">Chargement…</span>
+    </span>
+  )
+}
 
 function BigStatCard({ label, value, delta, sub }: { label: string; value: string; delta?: string; sub?: string }) {
   return (
