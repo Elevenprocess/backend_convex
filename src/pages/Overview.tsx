@@ -484,6 +484,8 @@ function AdminLeadFunnel({
         <div className="py-10 text-center text-faint text-sm">Aucune donnée funnel disponible.</div>
       ) : (
         <div className="grid grid-cols-12 gap-4">
+          <FunnelFlowMap totals={totals} />
+
           <div className="col-span-12 grid grid-cols-12 gap-4">
             <FunnelTopCard label="1. Nouveaux leads" value={totals.newLeads} sub="Leads créés sur la période" color="#6B7C8C" />
             <FunnelTopCard label="2. Appels setters" value={totals.calls} sub={`${callsPerLead(totals.calls, totals.newLeads)} appels / lead`} color="#D4AF37" />
@@ -509,6 +511,58 @@ function AdminLeadFunnel({
       )}
     </section>
   )
+}
+
+function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }) {
+  return (
+    <div className="col-span-12 rounded-3xl border border-line-soft bg-gradient-to-r from-white/75 via-or-tint/35 to-emerald-50/70 p-4">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div>
+          <div className="eyebrow">Lecture rapide du parcours</div>
+          <div className="font-extrabold">Le chemin exact d’un nouveau lead jusqu’au rendez-vous</div>
+        </div>
+        <div className="rounded-full bg-white/70 border border-line px-3 py-1 text-xs font-bold text-emerald-700">
+          {totals.globalConversionRate}% conversion globale
+        </div>
+      </div>
+      <div className="grid grid-cols-7 gap-2 items-stretch text-center">
+        <FlowStep title="Nouveaux leads" value={totals.newLeads} sub="entrée CRM" color="#6B7C8C" />
+        <FlowArrow />
+        <FlowStep title="Appels setters" value={totals.calls} sub="activité setter" color="#D4AF37" />
+        <FlowArrow />
+        <FlowDecision
+          yes={`${totals.answered} oui · ${totals.responseRate}%`}
+          no={`${totals.noAnswer} non · ${totals.relances} relances`}
+        />
+        <FlowArrow />
+        <FlowStep title="RDV pris" value={totals.rdv} sub={`${totals.qualified} qualifiés · ${totals.notQualified} pas qualifiés`} color="#3DA86A" />
+      </div>
+    </div>
+  )
+}
+
+function FlowStep({ title, value, sub, color }: { title: string; value: number; sub: string; color: string }) {
+  return (
+    <div className="rounded-2xl bg-white/75 border border-line-soft p-3 flex flex-col justify-center min-h-[112px]">
+      <div className="text-[10px] font-bold uppercase text-faint">{title}</div>
+      <div className="text-3xl font-extrabold mt-1" style={{ color }}>{fmtCompact(value)}</div>
+      <div className="text-[11px] text-muted mt-1">{sub}</div>
+    </div>
+  )
+}
+
+function FlowDecision({ yes, no }: { yes: string; no: string }) {
+  return (
+    <div className="rounded-2xl bg-white/75 border border-line-soft p-3 min-h-[112px]">
+      <div className="text-[10px] font-bold uppercase text-faint">A répondu ?</div>
+      <div className="mt-2 rounded-xl bg-emerald-50 text-emerald-700 px-2 py-1 text-xs font-extrabold">OUI : {yes}</div>
+      <div className="mt-2 rounded-xl bg-amber-50 text-amber-700 px-2 py-1 text-xs font-extrabold">NON : {no}</div>
+    </div>
+  )
+}
+
+function FlowArrow() {
+  return <div className="hidden md:flex items-center justify-center text-3xl font-black text-or">→</div>
 }
 
 function FunnelTopCard({ label, value, sub, color }: { label: string; value: number; sub: string; color: string }) {
