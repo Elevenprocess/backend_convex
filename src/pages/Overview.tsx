@@ -322,8 +322,6 @@ function OverviewAdmin() {
     }
   }, [leads, rdvs, calls, usersList])
 
-  const teamPerf = useMemo(() => buildTeamPerf(rdvs ?? [], usersList ?? []), [rdvs, usersList])
-
   return (
     <AppShell blobsKey="admin">
       <Topbar
@@ -388,50 +386,6 @@ function OverviewAdmin() {
           sparkColor="#B7410E"
           className="col-span-4"
         />
-
-        <div className="glass-card col-span-7 p-5">
-          <h3 className="font-bold mb-3">Performance équipe — top 4</h3>
-          {teamPerf.length === 0 ? (
-            <div className="text-xs text-faint py-4">Pas de RDV honorés pour calculer la perf équipe.</div>
-          ) : (
-            <table className="w-full text-xs">
-              <thead className="text-left eyebrow border-b border-line">
-                <tr>
-                  <th className="pb-2">MEMBRE</th>
-                  <th className="pb-2">RÔLE</th>
-                  <th className="pb-2">RDV/VENTES</th>
-                  <th className="pb-2">CLOSING</th>
-                  <th className="pb-2 text-right">CA</th>
-                </tr>
-              </thead>
-              <tbody>
-                {teamPerf.slice(0, 4).map((p) => (
-                  <TeamRow
-                    key={p.id}
-                    initials={p.initials}
-                    name={p.name}
-                    role="commercial"
-                    stat={`${p.honored} / ${p.signed}`}
-                    closing={`${p.closing}%`}
-                    closingClass={p.closing >= 35 ? 'text-success' : ''}
-                    ca={fmtKEur(p.ca)}
-                  />
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        <div className="promo-card col-span-5 flex flex-col justify-between">
-          <div className="promo-halo" style={{ background: '#B87333' }} />
-          <div className="relative z-10">
-            <span className="eyebrow block mb-2">RAPPEL</span>
-            <h3 className="text-base font-bold leading-tight">Données live — backend connecté</h3>
-            <p className="text-xs text-muted mt-2 leading-relaxed">
-              {stats.leads} leads en base, {stats.classified} classifiés, {stats.appels} appels logiques. Un lead classifié compte comme un appel passé.
-            </p>
-          </div>
-        </div>
         </section>
 
         {funnel?.totals && <FunnelFlowMap totals={funnel.totals} />}
@@ -772,44 +726,6 @@ function shortDateTime(iso: string): string {
   return `${dd}/${mm} ${hh}:${mn}`
 }
 
-type TeamPerf = {
-  id: string
-  name: string
-  initials: string
-  honored: number
-  signed: number
-  closing: number
-  ca: number
-}
-
-function buildTeamPerf(rdvs: RdvResponse[], users: { id: string; name: string; role: string }[]): TeamPerf[] {
-  const userMap = new Map<string, { name: string }>()
-  for (const u of users) userMap.set(u.id, u)
-  const grouped = new Map<string, TeamPerf>()
-  for (const r of rdvs) {
-    if (r.status !== 'honore') continue
-    if (!r.commercialId) continue
-    const u = userMap.get(r.commercialId)
-    if (!u) continue
-    let p = grouped.get(r.commercialId)
-    if (!p) {
-      const parts = u.name.split(' ').filter(Boolean)
-      const inits = ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase()
-      p = { id: r.commercialId, name: u.name, initials: inits, honored: 0, signed: 0, closing: 0, ca: 0 }
-      grouped.set(r.commercialId, p)
-    }
-    p.honored += 1
-    if (r.result === 'signe') {
-      p.signed += 1
-      p.ca += parseFloat(r.montantTotal ?? '0') || 0
-    }
-  }
-  for (const p of grouped.values()) {
-    p.closing = p.honored ? Math.round((p.signed / p.honored) * 100) : 0
-  }
-  return [...grouped.values()].sort((a, b) => b.ca - a.ca)
-}
-
 // ===== Futuristic data helpers =====
 
 function monthlyLeadSeries(leads: LeadResponse[]): number[] {
@@ -1030,34 +946,6 @@ function RdvRow({ color, time, sub }: { color: string; time: string; sub: string
         <div className="text-[10px] text-faint">{sub}</div>
       </div>
     </div>
-  )
-}
-
-function TeamRow({ initials, name, role, stat, closing, closingClass = '', ca }: {
-  initials: string
-  name: string
-  role: 'setter' | 'commercial'
-  stat: string
-  closing: string
-  closingClass?: string
-  ca: string
-}) {
-  const isComm = role === 'commercial'
-  return (
-    <tr className="border-b border-line-soft last:border-0">
-      <td className="py-2">
-        <div className="flex items-center gap-2">
-          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold ${isComm ? 'bg-or-tint' : 'bg-cuivre-tint'}`}>{initials}</div>
-          <span className="font-semibold">{name}</span>
-        </div>
-      </td>
-      <td>
-        <span className={`status-badge ${isComm ? 'bg-info-tint text-info' : 'bg-cuivre-tint text-cuivre'}`}>{isComm ? 'Comm.' : 'Setter'}</span>
-      </td>
-      <td>{stat}</td>
-      <td className={`font-bold ${closingClass}`}>{closing}</td>
-      <td className={`text-right font-bold ${ca === '0€' ? 'text-faint' : 'text-or'}`}>{ca}</td>
-    </tr>
   )
 }
 
