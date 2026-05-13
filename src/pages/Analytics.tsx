@@ -580,74 +580,141 @@ function Row({ label, value, highlight = false }: { label: string; value: string
 type EvolutionSeries = { key: keyof Pick<AnalyticsDailyPoint, 'calls' | 'rdv' | 'signed' | 'ca'>; label: string; color: string }
 
 function EvolutionChart({ title, data, series }: { title: string; data?: AnalyticsDailyPoint[]; series: EvolutionSeries[] }) {
-  const width = 520
-  const height = 210
-  const pad = 28
+  const [activeKey, setActiveKey] = useState<EvolutionSeries['key']>(series[0]?.key ?? 'calls')
+  const width = 620
+  const height = 260
+  const padX = 44
+  const padTop = 24
+  const padBottom = 42
   const points = data ?? []
-  const sample = points.length > 32 ? points.filter((_, i) => i % Math.ceil(points.length / 32) === 0 || i === points.length - 1) : points
-  const max = Math.max(1, ...sample.flatMap((point) => series.map((serie) => point[serie.key] || 0)))
-  const pointsFor = (serie: EvolutionSeries) => sample.map((point, i) => {
-    const x = sample.length <= 1 ? width / 2 : pad + (i / (sample.length - 1)) * (width - pad * 2)
-    const y = height - pad - ((point[serie.key] || 0) / max) * (height - pad * 2)
+  const sample = points.length > 36 ? points.filter((_, i) => i % Math.ceil(points.length / 36) === 0 || i === points.length - 1) : points
+  const active = series.find((serie) => serie.key === activeKey) ?? series[0]
+  const max = Math.max(1, ...sample.map((point) => active ? point[active.key] || 0 : 0))
+  const total = sample.reduce((sum, point) => sum + (active ? point[active.key] || 0 : 0), 0)
+  const peak = sample.reduce((best, point) => ((active ? point[active.key] || 0 : 0) > (active ? best[active.key] || 0 : 0) ? point : best), sample[0] ?? null)
+  const last = sample[sample.length - 1]
+  const chartHeight = height - padTop - padBottom
+  const xFor = (idx: number) => sample.length <= 1 ? width / 2 : padX + (idx / (sample.length - 1)) * (width - padX * 2)
+  const yFor = (value: number) => padTop + chartHeight - (value / max) * chartHeight
+  const linePoints = active ? sample.map((point, i) => `${xFor(i)},${yFor(point[active.key] || 0)}`).join(' ') : ''
+  const areaPoints = active && sample.length
+    ? `${padX},${height - padBottom} ${linePoints} ${width - padX},${height - padBottom}`
+    : ''
+  const ghostMax = Math.max(1, ...sample.flatMap((point) => series.map((serie) => point[serie.key] || 0)))
+  const ghostPointsFor = (serie: EvolutionSeries) => sample.map((point, i) => {
+    const x = xFor(i)
+    const y = padTop + chartHeight - ((point[serie.key] || 0) / ghostMax) * chartHeight
     return `${x},${y}`
   }).join(' ')
-  const last = sample[sample.length - 1]
+  const formatMetric = (key: EvolutionSeries['key'], value: number) => key === 'ca' ? fmtKEur(value) : fmtInt(value)
+  const delta = active && sample.length >= 2 ? (last?.[active.key] || 0) - (sample[0]?.[active.key] || 0) : 0
 
   return (
     <div className="glass-card p-6 col-span-12 xl:col-span-5 overflow-hidden">
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
           <h3 className="font-bold">{title}</h3>
-          <div className="text-xs text-faint mt-1">Évolution jour par jour selon la période</div>
+          <div className="text-xs text-faint mt-1">Courbe claire par indicateur — clique sur une statistique</div>
         </div>
-        <span className="eyebrow">courbes</span>
+        <span className="eyebrow">évolution</span>
       </div>
-      {sample.length === 0 ? (
-        <div className="h-[210px] rounded-2xl bg-white/40 border border-line-soft flex items-center justify-center text-sm text-faint">Aucune donnée sur la période.</div>
+      {sample.length === 0 || !active ? (
+        <div className="h-[260px] rounded-[28px] bg-white/45 border border-line-soft flex items-center justify-center text-sm text-faint">Aucune donnée sur la période.</div>
       ) : (
         <>
-          <div className="relative rounded-2xl bg-white/45 border border-line-soft p-3 shadow-inner">
-            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-[210px]" role="img" aria-label={title}>
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            {series.map((serie) => {
+              const isActive = serie.key === active.key
+              const serieTotal = sample.reduce((sum, point) => sum + (point[serie.key] || 0), 0)
+              return (
+                <button
+                  key={serie.key}
+                  type="button"
+                  onClick={() => setActiveKey(serie.key)}
+                  className={`text-left rounded-2xl border px-3 py-2 transition-all ${isActive ? 'bg-white shadow-lg border-or/40 scale-[1.02]' : 'bg-white/45 border-line-soft hover:bg-white/75'}`}
+                >
+                  <span className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-widest text-faint">
+                    <i className="w-2.5 h-2.5 rounded-full" style={{ background: serie.color }} />{serie.label}
+                  </span>
+                  <span className="block text-xl font-extrabold mt-1" style={{ color: isActive ? serie.color : undefined }}>{formatMetric(serie.key, serieTotal)}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="relative rounded-[28px] bg-gradient-to-br from-white/80 via-white/55 to-or-tint/30 border border-line-soft p-3 shadow-inner overflow-hidden">
+            <div className="absolute right-4 top-4 rounded-2xl bg-white/80 border border-line-soft px-3 py-2 shadow-sm">
+              <div className="text-[10px] font-extrabold uppercase tracking-widest text-faint">Dernier jour</div>
+              <div className="text-2xl font-extrabold" style={{ color: active.color }}>{formatMetric(active.key, last?.[active.key] || 0)}</div>
+              <div className={`text-[11px] font-bold ${delta >= 0 ? 'text-success' : 'text-rouille'}`}>{delta >= 0 ? '+' : ''}{formatMetric(active.key, delta)} vs début</div>
+            </div>
+            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-[260px]" role="img" aria-label={title}>
               <defs>
-                <linearGradient id="evolutionGlow" x1="0" x2="1" y1="0" y2="1">
-                  <stop offset="0%" stopColor="#D4AF37" stopOpacity="0.18" />
-                  <stop offset="100%" stopColor="#3DA86A" stopOpacity="0.08" />
+                <linearGradient id={`area-${active.key}`} x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stopColor={active.color} stopOpacity="0.35" />
+                  <stop offset="70%" stopColor={active.color} stopOpacity="0.08" />
+                  <stop offset="100%" stopColor={active.color} stopOpacity="0" />
                 </linearGradient>
+                <filter id="softGlow">
+                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                </filter>
               </defs>
-              <rect x="0" y="0" width={width} height={height} rx="18" fill="url(#evolutionGlow)" />
-              {[0, 1, 2, 3].map((line) => (
-                <line key={line} x1={pad} x2={width - pad} y1={pad + line * ((height - pad * 2) / 3)} y2={pad + line * ((height - pad * 2) / 3)} stroke="#E5E1DA" strokeWidth="1" />
+              {[0, 0.5, 1].map((ratio) => {
+                const y = padTop + ratio * chartHeight
+                const label = Math.round(max * (1 - ratio))
+                return (
+                  <g key={ratio}>
+                    <line x1={padX} x2={width - padX} y1={y} y2={y} stroke="#DDD6C9" strokeDasharray="6 8" strokeWidth="1" />
+                    <text x="8" y={y + 4} fill="#6B7C8C" fontSize="11" fontWeight="700">{formatMetric(active.key, label)}</text>
+                  </g>
+                )
+              })}
+              {series.filter((serie) => serie.key !== active.key).map((serie) => (
+                <polyline key={serie.key} points={ghostPointsFor(serie)} fill="none" stroke={serie.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.2" strokeDasharray="5 8" />
               ))}
-              {series.map((serie, i) => (
-                <g key={serie.key}>
-                  <polyline
-                    points={pointsFor(serie)}
-                    fill="none"
-                    stroke={serie.color}
-                    strokeWidth="4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    style={{ strokeDasharray: 900, strokeDashoffset: 0, animation: `dashDraw 1.15s ease ${i * 0.16}s both` }}
-                  />
-                  {sample.map((point, idx) => {
-                    const x = sample.length <= 1 ? width / 2 : pad + (idx / (sample.length - 1)) * (width - pad * 2)
-                    const y = height - pad - ((point[serie.key] || 0) / max) * (height - pad * 2)
-                    return <circle key={`${serie.key}-${point.date}`} cx={x} cy={y} r="3.5" fill="white" stroke={serie.color} strokeWidth="2" />
-                  })}
-                </g>
-              ))}
-              <text x={pad} y={height - 8} fill="#6B7C8C" fontSize="11" fontWeight="700">{sample[0]?.label}</text>
-              <text x={width - pad} y={height - 8} fill="#6B7C8C" fontSize="11" fontWeight="700" textAnchor="end">{last?.label}</text>
-              <text x={pad} y="18" fill="#6B7C8C" fontSize="11" fontWeight="700">max {fmtInt(max)}</text>
+              <polygon points={areaPoints} fill={`url(#area-${active.key})`} opacity="0.95" />
+              <polyline
+                points={linePoints}
+                fill="none"
+                stroke={active.color}
+                strokeWidth="5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                filter="url(#softGlow)"
+                style={{ strokeDasharray: 1100, strokeDashoffset: 0, animation: 'dashDraw 1.05s ease both' }}
+              />
+              {sample.map((point, idx) => {
+                const x = xFor(idx)
+                const y = yFor(point[active.key] || 0)
+                const isPeak = peak?.date === point.date
+                const showLabel = sample.length <= 10 || idx === 0 || idx === sample.length - 1 || isPeak
+                return (
+                  <g key={point.date}>
+                    <circle cx={x} cy={y} r={isPeak ? 6 : 4} fill="white" stroke={active.color} strokeWidth={isPeak ? 4 : 3} />
+                    {isPeak && <text x={x} y={y - 12} fill={active.color} fontSize="11" fontWeight="800" textAnchor="middle">pic {formatMetric(active.key, point[active.key] || 0)}</text>}
+                    {showLabel && <text x={x} y={height - 13} fill="#6B7C8C" fontSize="11" fontWeight="700" textAnchor={idx === 0 ? 'start' : idx === sample.length - 1 ? 'end' : 'middle'}>{point.label}</text>}
+                  </g>
+                )
+              })}
             </svg>
           </div>
-          <div className="flex flex-wrap gap-3 mt-4 text-xs font-bold">
-            {series.map((serie) => (
-              <span key={serie.key} className="inline-flex items-center gap-2 rounded-full bg-white/65 border border-line-soft px-3 py-1.5">
-                <i className="w-2.5 h-2.5 rounded-full" style={{ background: serie.color }} />
-                {serie.label}: {fmtInt(last?.[serie.key] || 0)}
-              </span>
-            ))}
+
+          <div className="grid grid-cols-3 gap-3 mt-4 text-sm">
+            <div className="rounded-2xl bg-white/60 border border-line-soft p-3">
+              <div className="eyebrow mb-1">Total période</div>
+              <div className="text-xl font-extrabold">{formatMetric(active.key, total)}</div>
+            </div>
+            <div className="rounded-2xl bg-white/60 border border-line-soft p-3">
+              <div className="eyebrow mb-1">Pic</div>
+              <div className="text-xl font-extrabold">{peak ? formatMetric(active.key, peak[active.key] || 0) : '0'}</div>
+              <div className="text-[11px] text-faint">{peak?.label}</div>
+            </div>
+            <div className="rounded-2xl bg-white/60 border border-line-soft p-3">
+              <div className="eyebrow mb-1">Tendance</div>
+              <div className={`text-xl font-extrabold ${delta >= 0 ? 'text-success' : 'text-rouille'}`}>{delta >= 0 ? 'Hausse' : 'Baisse'}</div>
+              <div className="text-[11px] text-faint">début → fin</div>
+            </div>
           </div>
         </>
       )}
