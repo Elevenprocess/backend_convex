@@ -4,8 +4,8 @@ import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
 import { useDisplayUser } from '../lib/role'
-import { useCallLogs, useLeads, useRdvList, useUsers, useStartCall } from '../lib/hooks'
-import { fullName, initials, type CallLogResponse, type LeadResponse, type RdvResponse } from '../lib/types'
+import { useCallLogs, useLeads, useRdvList, useUsers, useStartCall, useAnalyticsFunnel } from '../lib/hooks'
+import { fullName, initials, type AnalyticsFunnelResponse, type CallLogResponse, type LeadResponse, type RdvResponse } from '../lib/types'
 
 export function Overview() {
   const role = useAuth((s) => s.user?.role)
@@ -283,6 +283,14 @@ function OverviewCommercial() {
 function OverviewAdmin() {
   const navigate = useNavigate()
   const [tab, setTab] = useState('overview')
+  const [funnelDays, setFunnelDays] = useState(30)
+  const [funnelSetterId, setFunnelSetterId] = useState('')
+  const [funnelSector, setFunnelSector] = useState('')
+  const { data: funnel, loading: funnelLoading } = useAnalyticsFunnel({
+    days: funnelDays,
+    setterId: funnelSetterId || undefined,
+    sector: funnelSector || undefined,
+  })
   const { data: leads = [] } = useLeads({ limit: 1500 })
   const { data: rdvs = [] } = useRdvList({ limit: 200 })
   const { data: calls = [] } = useCallLogs({ limit: 5000 })
@@ -341,6 +349,18 @@ function OverviewAdmin() {
         <SmallKpi title="LEADS" value={fmtCompact(stats.leads)} haloColor="#6B7C8C" lineColor="#6B7C8C" linePoints="0,16 15,14 30,10 45,8 60,12 75,6 100,4" />
         <SmallKpi title="PANIER MOY." value={fmtKEur(stats.panier)} haloColor="#B7410E" lineColor="#B7410E" linePoints="0,8 15,10 30,12 45,10 60,14 75,12 100,16" />
         <SmallKpi title="APPELS" value={fmtCompact(stats.appels)} haloColor="#D4AF37" lineColor="#D4AF37" linePoints="0,12 15,8 30,10 45,6 60,8 75,4 100,6" />
+
+        <AdminLeadFunnel
+          funnel={funnel}
+          loading={funnelLoading}
+          users={usersList ?? []}
+          days={funnelDays}
+          setterId={funnelSetterId}
+          sector={funnelSector}
+          onDaysChange={setFunnelDays}
+          onSetterChange={setFunnelSetterId}
+          onSectorChange={setFunnelSector}
+        />
 
         <div className="glass-card col-span-8 p-5">
           <div className="flex items-center justify-between mb-4">
@@ -411,6 +431,167 @@ function OverviewAdmin() {
         </div>
       </main>
     </AppShell>
+  )
+}
+
+// ===== Helpers =====
+
+function AdminLeadFunnel({
+  funnel, loading, users, days, setterId, sector, onDaysChange, onSetterChange, onSectorChange,
+}: {
+  funnel: AnalyticsFunnelResponse | null
+  loading: boolean
+  users: { id: string; name: string; role: string }[]
+  days: number
+  setterId: string
+  sector: string
+  onDaysChange: (days: number) => void
+  onSetterChange: (id: string) => void
+  onSectorChange: (sector: string) => void
+}) {
+  const totals = funnel?.totals
+  const setters = users.filter((u) => u.role === 'setter')
+  return (
+    <section className="glass-card col-span-12 p-5 overflow-hidden">
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
+        <div>
+          <span className="eyebrow">FUNNEL LEADS CRM</span>
+          <h3 className="text-xl font-extrabold mt-1">Parcours des leads jusqu’au rendez-vous</h3>
+          <p className="text-xs text-faint mt-1">Mesure les pertes, la qualité lead, les réponses setter et la conversion globale.</p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs">
+          <select className="rounded-xl border border-line bg-white/70 px-3 py-2 font-semibold" value={days} onChange={(e) => onDaysChange(Number(e.target.value))}>
+            <option value={1}>Aujourd’hui</option>
+            <option value={7}>7 jours</option>
+            <option value={30}>30 jours</option>
+            <option value={90}>90 jours</option>
+            <option value={365}>Cette année</option>
+          </select>
+          <select className="rounded-xl border border-line bg-white/70 px-3 py-2 font-semibold" value={setterId} onChange={(e) => onSetterChange(e.target.value)}>
+            <option value="">Tous les setters</option>
+            {setters.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+          <select className="rounded-xl border border-line bg-white/70 px-3 py-2 font-semibold" value={sector} onChange={(e) => onSectorChange(e.target.value)}>
+            <option value="">Tous secteurs</option>
+            {(funnel?.sectors ?? []).map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {loading && !funnel ? (
+        <div className="py-10 text-center text-faint text-sm">Chargement du funnel CRM…</div>
+      ) : !funnel || !totals ? (
+        <div className="py-10 text-center text-faint text-sm">Aucune donnée funnel disponible.</div>
+      ) : (
+        <div className="grid grid-cols-12 gap-4">
+          <div className="col-span-7 space-y-3">
+            {funnel.stages.map((stage, index) => (
+              <FunnelStageCard key={stage.id} stage={stage} previous={index === 0 ? null : funnel.stages[index - 1]} />
+            ))}
+            <div className="grid grid-cols-3 gap-3 pt-1">
+              <FunnelMini label="Sans réponse" value={totals.noAnswer} sub={`${totals.relances} relances`} color="#B87333" />
+              <FunnelMini label="Non qualifiés" value={totals.notQualified} sub={`${totals.notQualifiedRate}% des réponses`} color="#B7410E" />
+              <FunnelMini label="Conversion finale" value={totals.rdv} sub={`${totals.globalConversionRate}% leads → RDV`} color="#3DA86A" />
+            </div>
+          </div>
+          <div className="col-span-5 space-y-4">
+            <FunnelBranchChart totals={totals} />
+            <FunnelDailyChart data={funnel.daily} />
+          </div>
+          <div className="col-span-6 glass-card !p-4 bg-white/35">
+            <h4 className="font-bold mb-3">Comparaison setters</h4>
+            <FunnelComparisonTable rows={funnel.setterComparison.slice(0, 5)} empty="Aucune activité setter sur la période." />
+          </div>
+          <div className="col-span-6 glass-card !p-4 bg-white/35">
+            <h4 className="font-bold mb-3">Comparaison commerciaux</h4>
+            <FunnelComparisonTable rows={funnel.commercialComparison.slice(0, 5)} empty="Aucun RDV commercial sur la période." />
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function FunnelStageCard({ stage, previous }: { stage: AnalyticsFunnelResponse['stages'][number]; previous: AnalyticsFunnelResponse['stages'][number] | null }) {
+  const loss = previous ? Math.max(0, previous.value - stage.value) : 0
+  return (
+    <div className="relative rounded-2xl border border-line-soft bg-white/55 p-4 overflow-hidden">
+      <div className="absolute inset-y-0 left-0 bg-or/15" style={{ width: `${Math.max(6, stage.percent)}%` }} />
+      <div className="relative z-10 flex items-center justify-between gap-4">
+        <div>
+          <div className="eyebrow">{stage.detail}</div>
+          <div className="text-base font-extrabold">{stage.label}</div>
+          {previous && <div className="text-[11px] text-faint mt-1">Perte étape précédente : {loss} leads</div>}
+        </div>
+        <div className="text-right">
+          <div className="text-3xl font-extrabold">{fmtCompact(stage.value)}</div>
+          <div className="text-xs font-bold text-or-dark">{stage.percent}%</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FunnelMini({ label, value, sub, color }: { label: string; value: number; sub: string; color: string }) {
+  return (
+    <div className="rounded-2xl border border-line-soft bg-white/50 p-3">
+      <div className="text-[10px] font-bold uppercase text-faint">{label}</div>
+      <div className="text-2xl font-extrabold" style={{ color }}>{fmtCompact(value)}</div>
+      <div className="text-[11px] text-muted">{sub}</div>
+    </div>
+  )
+}
+
+function FunnelBranchChart({ totals }: { totals: AnalyticsFunnelResponse['totals'] }) {
+  return (
+    <div className="rounded-2xl border border-line-soft bg-white/45 p-4">
+      <h4 className="font-bold mb-3">Répartition après appel</h4>
+      <div className="space-y-3 text-xs font-semibold">
+        <Goal label="A répondu" value={`${totals.answered} · ${totals.responseRate}%`} pct={totals.responseRate} color="#3DA86A" />
+        <Goal label="Qualifiés" value={`${totals.qualified} · ${totals.qualificationRate}%`} pct={totals.qualificationRate} color="#D4AF37" />
+        <Goal label="Pas qualifiés" value={`${totals.notQualified} · ${totals.notQualifiedRate}%`} pct={totals.notQualifiedRate} color="#B7410E" />
+        <Goal label="Sans réponse / relances" value={`${totals.noAnswer} · ${totals.relances} relances`} pct={pct(totals.noAnswer, totals.calls)} color="#B87333" />
+      </div>
+    </div>
+  )
+}
+
+function FunnelDailyChart({ data }: { data: AnalyticsFunnelResponse['daily'] }) {
+  const values = data.map((d) => d.rdv)
+  const max = Math.max(1, ...values)
+  return (
+    <div className="rounded-2xl border border-line-soft bg-white/45 p-4 h-[190px]">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="font-bold">Vue chronologique</h4>
+        <span className="eyebrow">RDV / jour</span>
+      </div>
+      <div className="h-[120px] flex items-end gap-1.5">
+        {data.slice(-14).map((d) => (
+          <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
+            <div className="w-full rounded-t-lg bg-or/75" style={{ height: `${Math.max(6, (d.rdv / max) * 100)}px` }} title={`${d.label}: ${d.rdv} RDV`} />
+            <span className="text-[9px] text-faint">{d.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function FunnelComparisonTable({ rows, empty }: { rows: AnalyticsFunnelResponse['setterComparison']; empty: string }) {
+  if (rows.length === 0) return <div className="text-xs text-faint py-3">{empty}</div>
+  return (
+    <table className="w-full text-xs">
+      <thead className="eyebrow text-left border-b border-line"><tr><th className="pb-2">Nom</th><th className="pb-2">Appels/RDV</th><th className="pb-2 text-right">Conv.</th></tr></thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={row.id} className="border-b border-line-soft last:border-0">
+            <td className="py-2 font-semibold">{row.name}</td>
+            <td>{row.calls ? `${row.calls} appels · ${row.rdv} RDV` : `${row.rdv} RDV`}</td>
+            <td className="text-right font-extrabold text-or">{row.conversionRate}%</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )
 }
 

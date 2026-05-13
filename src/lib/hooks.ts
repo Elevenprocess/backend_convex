@@ -11,6 +11,7 @@ import type {
   RdvResponse,
   UserResponse,
   AnalyticsSummaryResponse,
+  AnalyticsFunnelResponse,
 } from './types'
 
 type Async<T> = {
@@ -311,6 +312,16 @@ export function useAnalyticsSummary(filters?: {
   to?: string
 }): Async<AnalyticsSummaryResponse> {
   return useFetch<AnalyticsSummaryResponse>('/analytics/summary', filters)
+}
+
+export function useAnalyticsFunnel(filters?: {
+  days?: number
+  from?: string
+  to?: string
+  setterId?: string
+  sector?: string
+}): Async<AnalyticsFunnelResponse> {
+  return useFetch<AnalyticsFunnelResponse>('/analytics/funnel', filters)
 }
 
 // ─── Call logs ─────────────────────────────────────────────

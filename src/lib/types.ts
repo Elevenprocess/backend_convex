@@ -217,6 +217,66 @@ export type AnalyticsAdminSummary = {
   commercials: AnalyticsCommercialPerf[]
 }
 
+
+
+export type AnalyticsFunnelStage = {
+  id: string
+  label: string
+  value: number
+  percent: number
+  detail: string
+}
+
+export type AnalyticsFunnelComparison = {
+  id: string
+  name: string
+  role: 'setter' | 'commercial'
+  calls: number
+  answered: number
+  qualified: number
+  rdv: number
+  conversionRate: number
+}
+
+export type AnalyticsFunnelDailyPoint = {
+  date: string
+  label: string
+  newLeads: number
+  calls: number
+  answered: number
+  qualified: number
+  rdv: number
+}
+
+export type AnalyticsFunnelResponse = {
+  generatedAt: string
+  engine: 'backend-funnel'
+  range: AnalyticsRange
+  filters: { setterId: string | null; sector: string | null }
+  totals: {
+    newLeads: number
+    calls: number
+    answered: number
+    responseRate: number
+    qualified: number
+    qualificationRate: number
+    notQualified: number
+    notQualifiedRate: number
+    noAnswer: number
+    relances: number
+    rdv: number
+    globalConversionRate: number
+    lossesBeforeCall: number
+    lossesAfterNoAnswer: number
+    lossesAfterNotQualified: number
+  }
+  stages: AnalyticsFunnelStage[]
+  setterComparison: AnalyticsFunnelComparison[]
+  commercialComparison: AnalyticsFunnelComparison[]
+  daily: AnalyticsFunnelDailyPoint[]
+  sectors: string[]
+}
+
 export type AnalyticsSummaryResponse = {
   generatedAt: string
   engine: 'backend-olap-etl'
