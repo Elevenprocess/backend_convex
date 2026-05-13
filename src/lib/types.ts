@@ -131,6 +131,15 @@ export type AnalyticsRange = {
   days: number
 }
 
+export type AnalyticsDailyPoint = {
+  date: string
+  label: string
+  calls: number
+  rdv: number
+  signed: number
+  ca: number
+}
+
 export type AnalyticsSetterSummary = {
   newLeads: number
   calls: number
@@ -153,6 +162,7 @@ export type AnalyticsSetterSummary = {
   rdvRate: number
   resultSegments: AnalyticsSegment[]
   dailyCalls: number[]
+  dailyEvolution: AnalyticsDailyPoint[]
 }
 
 export type AnalyticsCommercialSummary = {
@@ -164,6 +174,7 @@ export type AnalyticsCommercialSummary = {
   closing: number
   resultSegments: AnalyticsSegment[]
   financingSegments: AnalyticsSegment[]
+  dailyEvolution: AnalyticsDailyPoint[]
 }
 
 export type AnalyticsSetterPerf = {
@@ -201,6 +212,7 @@ export type AnalyticsAdminSummary = {
   ca: number
   signed: number
   resultSegments: AnalyticsSegment[]
+  dailyEvolution: AnalyticsDailyPoint[]
   setters: AnalyticsSetterPerf[]
   commercials: AnalyticsCommercialPerf[]
 }

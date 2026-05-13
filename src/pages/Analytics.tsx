@@ -3,7 +3,7 @@ import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
 import { useAnalyticsSummary } from '../lib/hooks'
-import type { AnalyticsAdminSummary, AnalyticsCommercialSummary, AnalyticsSegment, AnalyticsSetterSummary } from '../lib/types'
+import type { AnalyticsAdminSummary, AnalyticsCommercialSummary, AnalyticsDailyPoint, AnalyticsSegment, AnalyticsSetterSummary } from '../lib/types'
 
 type Segment = AnalyticsSegment
 
@@ -48,6 +48,7 @@ const EMPTY_SETTER_STATS: AnalyticsSetterSummary = {
   rdvRate: 0,
   resultSegments: [],
   dailyCalls: [],
+  dailyEvolution: [],
 }
 
 const EMPTY_COMMERCIAL_STATS: AnalyticsCommercialSummary = {
@@ -59,6 +60,7 @@ const EMPTY_COMMERCIAL_STATS: AnalyticsCommercialSummary = {
   closing: 0,
   resultSegments: [],
   financingSegments: [],
+  dailyEvolution: [],
 }
 
 const EMPTY_ADMIN_STATS: AnalyticsAdminSummary = {
@@ -73,6 +75,7 @@ const EMPTY_ADMIN_STATS: AnalyticsAdminSummary = {
   ca: 0,
   signed: 0,
   resultSegments: [],
+  dailyEvolution: [],
   setters: [],
   commercials: [],
 }
@@ -109,7 +112,15 @@ function AnalyticsSetter({ name }: { name: string }) {
           <BigStatCard label="RDV PRIS" value={fmtInt(stats.rdvPris)} delta={`${stats.globalRdvRate}%`} sub="Taux global RDV = RDV / nouveaux leads" />
         </div>
 
-        <AnalyticsStatsTable title="Tableau statistiques setter" rows={setterTableRows(stats)} />
+        <div className="grid grid-cols-12 gap-6 items-stretch">
+          <div className="col-span-12 xl:col-span-7">
+            <AnalyticsStatsTable title="Tableau statistiques setter" rows={setterTableRows(stats)} />
+          </div>
+          <EvolutionChart title="Courbes d'évolution setter" data={stats.dailyEvolution} series={[
+            { key: 'calls', label: 'Appels', color: '#D4AF37' },
+            { key: 'rdv', label: 'RDV', color: '#B87333' },
+          ]} />
+        </div>
 
         <div className="grid grid-cols-12 gap-6">
           <div className="glass-card p-6 col-span-7">
@@ -172,7 +183,16 @@ function AnalyticsCommercial({ name }: { name: string }) {
           <BigStatCard label="RDV HONORÉS" value={`${stats.honored}/${stats.total}`} />
         </div>
 
-        <AnalyticsStatsTable title="Tableau statistiques commercial" rows={commercialTableRows(stats)} />
+        <div className="grid grid-cols-12 gap-6 items-stretch">
+          <div className="col-span-12 xl:col-span-7">
+            <AnalyticsStatsTable title="Tableau statistiques commercial" rows={commercialTableRows(stats)} />
+          </div>
+          <EvolutionChart title="Courbes d'évolution commercial" data={stats.dailyEvolution} series={[
+            { key: 'rdv', label: 'RDV', color: '#D4AF37' },
+            { key: 'signed', label: 'Ventes', color: '#3DA86A' },
+            { key: 'ca', label: 'CA', color: '#B87333' },
+          ]} />
+        </div>
 
         <div className="grid grid-cols-2 gap-6">
           <div className="glass-card p-6">
@@ -211,7 +231,16 @@ function AnalyticsAdmin() {
           <BigStatCard label="CA SIGNÉ" value={fmtKEur(stats.ca)} delta={`${stats.signed} ventes`} />
         </div>
 
-        <AnalyticsStatsTable title="Tableau statistiques global" rows={adminTableRows(stats)} />
+        <div className="grid grid-cols-12 gap-6 items-stretch">
+          <div className="col-span-12 xl:col-span-7">
+            <AnalyticsStatsTable title="Tableau statistiques global" rows={adminTableRows(stats)} />
+          </div>
+          <EvolutionChart title="Courbes d'évolution globales" data={stats.dailyEvolution} series={[
+            { key: 'calls', label: 'Appels', color: '#D4AF37' },
+            { key: 'rdv', label: 'RDV', color: '#B87333' },
+            { key: 'signed', label: 'Ventes', color: '#3DA86A' },
+          ]} />
+        </div>
 
         <div className="grid grid-cols-12 gap-6">
           <div className="glass-card p-6 col-span-7">
@@ -543,6 +572,84 @@ function Row({ label, value, highlight = false }: { label: string; value: string
     <div className={`flex justify-between ${highlight ? 'text-success font-bold pt-2 border-t border-line-soft' : ''}`}>
       <span>{label}</span>
       <span className="font-bold">{value}</span>
+    </div>
+  )
+}
+
+
+type EvolutionSeries = { key: keyof Pick<AnalyticsDailyPoint, 'calls' | 'rdv' | 'signed' | 'ca'>; label: string; color: string }
+
+function EvolutionChart({ title, data, series }: { title: string; data: AnalyticsDailyPoint[]; series: EvolutionSeries[] }) {
+  const width = 520
+  const height = 210
+  const pad = 28
+  const sample = data.length > 32 ? data.filter((_, i) => i % Math.ceil(data.length / 32) === 0 || i === data.length - 1) : data
+  const max = Math.max(1, ...sample.flatMap((point) => series.map((serie) => point[serie.key] || 0)))
+  const pointsFor = (serie: EvolutionSeries) => sample.map((point, i) => {
+    const x = sample.length <= 1 ? width / 2 : pad + (i / (sample.length - 1)) * (width - pad * 2)
+    const y = height - pad - ((point[serie.key] || 0) / max) * (height - pad * 2)
+    return `${x},${y}`
+  }).join(' ')
+  const last = sample[sample.length - 1]
+
+  return (
+    <div className="glass-card p-6 col-span-12 xl:col-span-5 overflow-hidden">
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div>
+          <h3 className="font-bold">{title}</h3>
+          <div className="text-xs text-faint mt-1">Évolution jour par jour selon la période</div>
+        </div>
+        <span className="eyebrow">courbes</span>
+      </div>
+      {sample.length === 0 ? (
+        <div className="h-[210px] rounded-2xl bg-white/40 border border-line-soft flex items-center justify-center text-sm text-faint">Aucune donnée sur la période.</div>
+      ) : (
+        <>
+          <div className="relative rounded-2xl bg-white/45 border border-line-soft p-3 shadow-inner">
+            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-[210px]" role="img" aria-label={title}>
+              <defs>
+                <linearGradient id="evolutionGlow" x1="0" x2="1" y1="0" y2="1">
+                  <stop offset="0%" stopColor="#D4AF37" stopOpacity="0.18" />
+                  <stop offset="100%" stopColor="#3DA86A" stopOpacity="0.08" />
+                </linearGradient>
+              </defs>
+              <rect x="0" y="0" width={width} height={height} rx="18" fill="url(#evolutionGlow)" />
+              {[0, 1, 2, 3].map((line) => (
+                <line key={line} x1={pad} x2={width - pad} y1={pad + line * ((height - pad * 2) / 3)} y2={pad + line * ((height - pad * 2) / 3)} stroke="#E5E1DA" strokeWidth="1" />
+              ))}
+              {series.map((serie, i) => (
+                <g key={serie.key}>
+                  <polyline
+                    points={pointsFor(serie)}
+                    fill="none"
+                    stroke={serie.color}
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{ strokeDasharray: 900, strokeDashoffset: 0, animation: `dashDraw 1.15s ease ${i * 0.16}s both` }}
+                  />
+                  {sample.map((point, idx) => {
+                    const x = sample.length <= 1 ? width / 2 : pad + (idx / (sample.length - 1)) * (width - pad * 2)
+                    const y = height - pad - ((point[serie.key] || 0) / max) * (height - pad * 2)
+                    return <circle key={`${serie.key}-${point.date}`} cx={x} cy={y} r="3.5" fill="white" stroke={serie.color} strokeWidth="2" />
+                  })}
+                </g>
+              ))}
+              <text x={pad} y={height - 8} fill="#6B7C8C" fontSize="11" fontWeight="700">{sample[0]?.label}</text>
+              <text x={width - pad} y={height - 8} fill="#6B7C8C" fontSize="11" fontWeight="700" textAnchor="end">{last?.label}</text>
+              <text x={pad} y="18" fill="#6B7C8C" fontSize="11" fontWeight="700">max {fmtInt(max)}</text>
+            </svg>
+          </div>
+          <div className="flex flex-wrap gap-3 mt-4 text-xs font-bold">
+            {series.map((serie) => (
+              <span key={serie.key} className="inline-flex items-center gap-2 rounded-full bg-white/65 border border-line-soft px-3 py-1.5">
+                <i className="w-2.5 h-2.5 rounded-full" style={{ background: serie.color }} />
+                {serie.label}: {fmtInt(last?.[serie.key] || 0)}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }

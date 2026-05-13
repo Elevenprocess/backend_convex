@@ -520,3 +520,8 @@ body {
   from { transform: scaleX(1); }
   to { transform: scaleX(0); }
 }
+
+@keyframes dashDraw {
+  from { stroke-dashoffset: 900; opacity: 0.35; }
+  to { stroke-dashoffset: 0; opacity: 1; }
+}
