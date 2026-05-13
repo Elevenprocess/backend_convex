@@ -484,15 +484,14 @@ function AdminLeadFunnel({
         <div className="py-10 text-center text-faint text-sm">Aucune donnée funnel disponible.</div>
       ) : (
         <div className="grid grid-cols-12 gap-4">
-          <div className="col-span-7 space-y-3">
-            {funnel.stages.map((stage, index) => (
-              <FunnelStageCard key={stage.id} stage={stage} previous={index === 0 ? null : funnel.stages[index - 1]} />
-            ))}
-            <div className="grid grid-cols-3 gap-3 pt-1">
-              <FunnelMini label="Sans réponse" value={totals.noAnswer} sub={`${totals.relances} relances`} color="#B87333" />
-              <FunnelMini label="Non qualifiés" value={totals.notQualified} sub={`${totals.notQualifiedRate}% des réponses`} color="#B7410E" />
-              <FunnelMini label="Conversion finale" value={totals.rdv} sub={`${totals.globalConversionRate}% leads → RDV`} color="#3DA86A" />
-            </div>
+          <div className="col-span-12 grid grid-cols-12 gap-4">
+            <FunnelTopCard label="1. Nouveaux leads" value={totals.newLeads} sub="Leads créés sur la période" color="#6B7C8C" />
+            <FunnelTopCard label="2. Appels setters" value={totals.calls} sub={`${callsPerLead(totals.calls, totals.newLeads)} appels / lead`} color="#D4AF37" />
+            <FunnelTopCard label="3. Conversion finale" value={totals.rdv} sub={`${totals.globalConversionRate}% des nouveaux leads`} color="#3DA86A" />
+          </div>
+
+          <div className="col-span-7">
+            <FunnelLogicTree totals={totals} />
           </div>
           <div className="col-span-5 space-y-4">
             <FunnelBranchChart totals={totals} />
@@ -512,32 +511,68 @@ function AdminLeadFunnel({
   )
 }
 
-function FunnelStageCard({ stage, previous }: { stage: AnalyticsFunnelResponse['stages'][number]; previous: AnalyticsFunnelResponse['stages'][number] | null }) {
-  const loss = previous ? Math.max(0, previous.value - stage.value) : 0
+function FunnelTopCard({ label, value, sub, color }: { label: string; value: number; sub: string; color: string }) {
   return (
-    <div className="relative rounded-2xl border border-line-soft bg-white/55 p-4 overflow-hidden">
-      <div className="absolute inset-y-0 left-0 bg-or/15" style={{ width: `${Math.max(6, stage.percent)}%` }} />
-      <div className="relative z-10 flex items-center justify-between gap-4">
-        <div>
-          <div className="eyebrow">{stage.detail}</div>
-          <div className="text-base font-extrabold">{stage.label}</div>
-          {previous && <div className="text-[11px] text-faint mt-1">Perte étape précédente : {loss} leads</div>}
-        </div>
-        <div className="text-right">
-          <div className="text-3xl font-extrabold">{fmtCompact(stage.value)}</div>
-          <div className="text-xs font-bold text-or-dark">{stage.percent}%</div>
-        </div>
-      </div>
+    <div className="col-span-4 rounded-2xl border border-line-soft bg-white/55 p-4">
+      <div className="text-[10px] font-bold uppercase text-faint">{label}</div>
+      <div className="mt-1 text-3xl font-extrabold" style={{ color }}>{fmtCompact(value)}</div>
+      <div className="text-xs text-muted mt-1">{sub}</div>
     </div>
   )
 }
 
-function FunnelMini({ label, value, sub, color }: { label: string; value: number; sub: string; color: string }) {
+function FunnelLogicTree({ totals }: { totals: AnalyticsFunnelResponse['totals'] }) {
   return (
-    <div className="rounded-2xl border border-line-soft bg-white/50 p-3">
-      <div className="text-[10px] font-bold uppercase text-faint">{label}</div>
-      <div className="text-2xl font-extrabold" style={{ color }}>{fmtCompact(value)}</div>
-      <div className="text-[11px] text-muted">{sub}</div>
+    <div className="rounded-3xl border border-line-soft bg-white/45 p-5">
+      <div className="text-center">
+        <div className="eyebrow">Question centrale</div>
+        <h4 className="text-lg font-extrabold">Après les appels setters, le lead a répondu ?</h4>
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-4">
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
+          <div className="text-xs font-bold uppercase text-emerald-700">Oui, a répondu</div>
+          <div className="mt-1 text-4xl font-extrabold text-emerald-700">{fmtCompact(totals.answered)}</div>
+          <div className="text-sm font-bold text-emerald-800">{totals.responseRate}% des appels</div>
+
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-white/70 p-3">
+              <div className="text-[10px] font-bold uppercase text-faint">Qualifiés</div>
+              <div className="text-2xl font-extrabold text-or-dark">{fmtCompact(totals.qualified)}</div>
+              <div className="text-[11px] text-muted">{totals.qualificationRate}% des réponses</div>
+              <div className="mt-2 text-[11px] font-bold text-emerald-700">→ {fmtCompact(totals.rdv)} RDV pris</div>
+            </div>
+            <div className="rounded-xl bg-white/70 p-3">
+              <div className="text-[10px] font-bold uppercase text-faint">Pas qualifiés</div>
+              <div className="text-2xl font-extrabold text-rouille">{fmtCompact(totals.notQualified)}</div>
+              <div className="text-[11px] text-muted">{totals.notQualifiedRate}% des réponses</div>
+              <div className="mt-2 text-[11px] font-bold text-rouille">Perte commerciale</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
+          <div className="text-xs font-bold uppercase text-amber-700">Non, pas de réponse</div>
+          <div className="mt-1 text-4xl font-extrabold text-amber-700">{fmtCompact(totals.noAnswer)}</div>
+          <div className="text-sm font-bold text-amber-800">leads appelés sans réponse</div>
+          <div className="mt-4 rounded-xl bg-white/70 p-3">
+            <div className="text-[10px] font-bold uppercase text-faint">Relances effectuées</div>
+            <div className="text-2xl font-extrabold text-amber-700">{fmtCompact(totals.relances)}</div>
+            <div className="text-[11px] text-muted">appels non joints, injoignables, messagerie ou rappel planifié</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-emerald-200 bg-white/65 p-4 flex items-center justify-between">
+        <div>
+          <div className="eyebrow">Résultat final</div>
+          <div className="font-extrabold">Nouveaux leads qui ont obtenu un rendez-vous</div>
+        </div>
+        <div className="text-right">
+          <div className="text-3xl font-extrabold text-emerald-700">{fmtCompact(totals.rdv)}</div>
+          <div className="text-xs font-bold text-emerald-700">{totals.globalConversionRate}% de conversion globale</div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -605,6 +640,11 @@ function ratePct(denom: number, num: number): number {
 function pct(num: number, denom: number): number {
   if (denom === 0) return 0
   return Math.min(100, Math.round((num / denom) * 100))
+}
+
+function callsPerLead(calls: number, leads: number): string {
+  if (!leads) return '0'
+  return (calls / leads).toFixed(calls >= leads * 10 ? 0 : 1)
 }
 
 function isClassifiedLead(lead: LeadResponse): boolean {
