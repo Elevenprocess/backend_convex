@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
@@ -32,19 +32,122 @@ type ColumnChoice = {
   label: string
 }
 
-const SETTER_COLUMNS: ColumnChoice[] = [
-  { key: 'nom', label: 'Nom' },
-  { key: 'telephone', label: 'Téléphone du Prospect' },
-  { key: 'adresseComplete', label: 'Adresse complète' },
-  { key: 'setter', label: 'Setter assigné' },
-  { key: 'jaugeAppels', label: 'Jauge appels (4/jour)' },
-  { key: 'dernierAppel', label: 'Dernier appel (date/heure)' },
-  { key: 'statut', label: 'Statut opportunité' },
-  { key: 'appelDate', label: "Date/heure de l'appel (from Appels)" },
-  { key: 'jauge', label: 'Jauge 11 jours' },
-  { key: 'logAppel', label: 'Log appel' },
-  { key: 'appelsCommercial', label: 'Appels Commercial (from Rendez-vous)' },
+// Contexte injecté à chaque renderCell — évite les closures imbriquées par cellule.
+type SetterCellCtx = {
+  userMap: Map<string, UserResponse>
+  startCall: ReturnType<typeof useStartCall>
+  setOpenComment: (data: { leadName: string; comment: string } | null) => void
+}
+
+// Définition d'une colonne setter : largeur fixe + libellé d'en-tête + fonction
+// de rendu. L'ordre d'affichage et la visibilité sont stockés en localStorage
+// par utilisateur ; la définition reste statique ici.
+type SetterColumnDef = ColumnChoice & {
+  width: string
+  headLabel: string
+  sticky?: boolean
+  renderCell: (lead: LeadResponse, ctx: SetterCellCtx) => ReactNode
+  tdClassName?: string | ((lead: LeadResponse, ctx: SetterCellCtx) => string)
+  tdTitle?: (lead: LeadResponse, ctx: SetterCellCtx) => string | undefined
+}
+
+const SETTER_COLUMNS: SetterColumnDef[] = [
+  {
+    key: 'nom',
+    label: 'Nom',
+    headLabel: 'NOM',
+    width: 'w-[240px]',
+    sticky: true,
+    tdClassName: 'lead-sticky-cell',
+    renderCell: (l, ctx) => (
+      <div className="flex items-center gap-3 min-w-0">
+        <LeadCommentButton comment={l.latestCallComment} leadName={fullName(l)} onOpen={ctx.setOpenComment} />
+        <div className="w-8 h-8 rounded-full bg-cuivre-tint flex flex-shrink-0 items-center justify-center text-xs font-bold">{initials(l)}</div>
+        <span className="font-semibold truncate" title={fullName(l)}>{fullName(l)}</span>
+      </div>
+    ),
+  },
+  {
+    key: 'telephone',
+    label: 'Téléphone du Prospect',
+    headLabel: 'TÉLÉPHONE DU PROSPECT',
+    width: 'w-[190px]',
+    renderCell: (l, ctx) => <PhoneCell lead={l} onStartCall={ctx.startCall} />,
+  },
+  {
+    key: 'adresseComplete',
+    label: 'Adresse complète',
+    headLabel: 'ADRESSE COMPLÈTE',
+    width: 'w-[260px]',
+    tdClassName: 'text-muted truncate',
+    tdTitle: (l) => addressFull(l),
+    renderCell: (l) => addressFull(l),
+  },
+  {
+    key: 'setter',
+    label: 'Setter assigné',
+    headLabel: 'SETTER ASSIGNÉ',
+    width: 'w-[210px]',
+    renderCell: (l, ctx) => <SetterChips lead={l} userMap={ctx.userMap} />,
+  },
+  {
+    key: 'jaugeAppels',
+    label: 'Jauge appels (4/jour)',
+    headLabel: 'JAUGE APPELS (4/JOUR)',
+    width: 'w-[160px]',
+    renderCell: (l) => <DailyCallGauge count={l.callsToday ?? 0} />,
+  },
+  {
+    key: 'dernierAppel',
+    label: 'Dernier appel (date/heure)',
+    headLabel: 'DERNIER APPEL',
+    width: 'w-[170px]',
+    tdClassName: 'text-faint',
+    renderCell: (l) => lastCallDateTime(l.latestCallAt ?? l.lastContactAt),
+  },
+  {
+    key: 'statut',
+    label: 'Statut opportunité',
+    headLabel: 'STATUT OPPORTUNITÉ',
+    width: 'w-[160px]',
+    renderCell: (l) => <span className={`status-badge ${STATUS_BADGE[l.status]}`}>{STATUS_LABEL[l.status]}</span>,
+  },
+  {
+    key: 'appelDate',
+    label: "Date/heure de l'appel (from Appels)",
+    headLabel: "DATE/HEURE DE L'APPEL",
+    width: 'w-[190px]',
+    tdClassName: 'text-faint',
+    renderCell: (l) => lastCallDateTime(l.latestCallAt ?? l.lastContactAt),
+  },
+  {
+    key: 'jauge',
+    label: 'Jauge 11 jours',
+    headLabel: 'JAUGE 11 JOURS',
+    width: 'w-[160px]',
+    renderCell: (l) => <ElevenDayGauge jours={l.joursRelance ?? null} />,
+  },
+  {
+    key: 'logAppel',
+    label: 'Log appel',
+    headLabel: 'LOG APPEL',
+    width: 'w-[120px]',
+    renderCell: (l, ctx) => <LeadCommentButton comment={l.latestCallComment} leadName={fullName(l)} onOpen={ctx.setOpenComment} />,
+  },
+  {
+    key: 'appelsCommercial',
+    label: 'Appels Commercial (from Rendez-vous)',
+    headLabel: 'APPELS COMMERCIAL',
+    width: 'w-[220px]',
+    tdClassName: 'text-muted truncate',
+    tdTitle: (l, ctx) => commercialLabel(l, ctx.userMap),
+    renderCell: (l, ctx) => commercialLabel(l, ctx.userMap),
+  },
 ]
+
+const SETTER_COLUMNS_BY_KEY: Record<string, SetterColumnDef> = Object.fromEntries(
+  SETTER_COLUMNS.map((c) => [c.key, c]),
+)
 
 const ADMIN_COLUMNS: ColumnChoice[] = [
   { key: 'nom', label: 'Nom' },
@@ -115,7 +218,12 @@ function LeadsSetter() {
   const [openComment, setOpenComment] = useState<{ leadName: string; comment: string } | null>(null)
   const [visibleColumns, setVisibleColumns] = useColumnVisibility('ecoi.leads.setter.columns.v2', SETTER_COLUMNS)
   const startCall = useStartCall()
-  const showColumn = (key: ColumnKey) => visibleColumns.includes(key)
+  // Colonnes effectivement rendues : on suit l'ordre choisi par l'utilisateur
+  // (stocké en localStorage par useColumnVisibility), pas l'ordre statique du tableau.
+  const orderedColumns = useMemo(
+    () => visibleColumns.map((k) => SETTER_COLUMNS_BY_KEY[k]).filter(Boolean),
+    [visibleColumns],
+  )
 
   // Côté setter, l'écran s'ouvre directement sur les nouveaux leads.
   // Le filtre global "Tous" n'est pas affiché aux setters.
@@ -222,51 +330,38 @@ function LeadsSetter() {
                 <table className="min-w-[1640px] w-full text-sm table-fixed lead-table">
                   <thead className="text-left eyebrow bg-or-tint sticky top-0 z-10 shadow-sm">
                     <tr>
-                      {showColumn('nom') && <Th className="w-[240px] lead-sticky-head">NOM</Th>}
-                      {showColumn('telephone') && <Th className="w-[190px]">TÉLÉPHONE DU PROSPECT</Th>}
-                      {showColumn('adresseComplete') && <Th className="w-[260px]">ADRESSE COMPLÈTE</Th>}
-                      {showColumn('setter') && <Th className="w-[210px]">SETTER ASSIGNÉ</Th>}
-                      {showColumn('jaugeAppels') && <Th className="w-[160px]">JAUGE APPELS (4/JOUR)</Th>}
-                      {showColumn('dernierAppel') && <Th className="w-[170px]">DERNIER APPEL</Th>}
-                      {showColumn('statut') && <Th className="w-[160px]">STATUT OPPORTUNITÉ</Th>}
-                      {showColumn('appelDate') && <Th className="w-[190px]">DATE/HEURE DE L'APPEL</Th>}
-                      {showColumn('jauge') && <Th className="w-[160px]">JAUGE 11 JOURS</Th>}
-                      {showColumn('logAppel') && <Th className="w-[120px]">LOG APPEL</Th>}
-                      {showColumn('appelsCommercial') && <Th className="w-[220px]">APPELS COMMERCIAL</Th>}
+                      {orderedColumns.map((col) => (
+                        <Th key={col.key} className={`${col.width}${col.sticky ? ' lead-sticky-head' : ''}`}>
+                          {col.headLabel}
+                        </Th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleFiltered.map((l) => (
-                      <tr
-                        key={l.id}
-                        data-lead-id={l.id}
-                        className={`border-b border-line-soft last:border-0 cursor-pointer transition-colors ${
-                          selected?.id === l.id ? 'bg-or/20 shadow-[inset_4px_0_0_var(--color-or-dark)] !text-text' : 'hover:bg-white/40'
-                        }`}
-                        onDoubleClick={() => selectLead(l.id)}
-                        title="Double-cliquez pour ouvrir la fiche lead"
-                      >
-                        {showColumn('nom') && (
-                          <Td className="lead-sticky-cell">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <LeadCommentButton comment={l.latestCallComment} leadName={fullName(l)} onOpen={setOpenComment} />
-                              <div className="w-8 h-8 rounded-full bg-cuivre-tint flex flex-shrink-0 items-center justify-center text-xs font-bold">{initials(l)}</div>
-                              <span className="font-semibold truncate" title={fullName(l)}>{fullName(l)}</span>
-                            </div>
-                          </Td>
-                        )}
-                        {showColumn('telephone') && <Td><PhoneCell lead={l} onStartCall={startCall} /></Td>}
-                        {showColumn('adresseComplete') && <Td className="text-muted truncate" title={addressFull(l)}>{addressFull(l)}</Td>}
-                        {showColumn('setter') && <Td><SetterChips lead={l} userMap={userMap} /></Td>}
-                        {showColumn('jaugeAppels') && <Td><DailyCallGauge count={l.callsToday ?? 0} /></Td>}
-                        {showColumn('dernierAppel') && <Td className="text-faint">{lastCallDateTime(l.latestCallAt ?? l.lastContactAt)}</Td>}
-                        {showColumn('statut') && <Td><span className={`status-badge ${STATUS_BADGE[l.status]}`}>{STATUS_LABEL[l.status]}</span></Td>}
-                        {showColumn('appelDate') && <Td className="text-faint">{lastCallDateTime(l.latestCallAt ?? l.lastContactAt)}</Td>}
-                        {showColumn('jauge') && <Td><ElevenDayGauge jours={l.joursRelance ?? null} /></Td>}
-                        {showColumn('logAppel') && <Td><LeadCommentButton comment={l.latestCallComment} leadName={fullName(l)} onOpen={setOpenComment} /></Td>}
-                        {showColumn('appelsCommercial') && <Td className="text-muted truncate" title={commercialLabel(l, userMap)}>{commercialLabel(l, userMap)}</Td>}
-                      </tr>
-                    ))}
+                    {visibleFiltered.map((l) => {
+                      const ctx: SetterCellCtx = { userMap, startCall, setOpenComment }
+                      return (
+                        <tr
+                          key={l.id}
+                          data-lead-id={l.id}
+                          className={`border-b border-line-soft last:border-0 cursor-pointer transition-colors ${
+                            selected?.id === l.id ? 'bg-or/20 shadow-[inset_4px_0_0_var(--color-or-dark)] !text-text' : 'hover:bg-white/40'
+                          }`}
+                          onDoubleClick={() => selectLead(l.id)}
+                          title="Double-cliquez pour ouvrir la fiche lead"
+                        >
+                          {orderedColumns.map((col) => {
+                            const cls = typeof col.tdClassName === 'function' ? col.tdClassName(l, ctx) : (col.tdClassName ?? '')
+                            const title = col.tdTitle?.(l, ctx)
+                            return (
+                              <Td key={col.key} className={cls} title={title}>
+                                {col.renderCell(l, ctx)}
+                              </Td>
+                            )
+                          })}
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
                 {visibleFiltered.length < filtered.length && (
@@ -736,8 +831,21 @@ function ColumnVisibilityMenu({
   onChange: (next: ColumnKey[]) => void
 }) {
   const [query, setQuery] = useState('')
-  const filteredColumns = columns.filter((column) => column.label.toLowerCase().includes(query.trim().toLowerCase()))
+  // Index drag/drop : on retient l'index source au début du drag puis on swap
+  // au drop. Si null → pas de drag en cours.
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const hiddenCount = columns.length - visible.length
+  const columnByKey = useMemo(() => Object.fromEntries(columns.map((c) => [c.key, c])), [columns])
+
+  // Liste affichée : visibles dans l'ordre choisi, puis masquées dans l'ordre source.
+  const visibleEntries = visible
+    .map((k) => columnByKey[k])
+    .filter((c): c is ColumnChoice => Boolean(c))
+  const hiddenEntries = columns.filter((c) => !visible.includes(c.key))
+  const q = query.trim().toLowerCase()
+  const matchQuery = (c: ColumnChoice) => !q || c.label.toLowerCase().includes(q)
+
   const toggle = (key: ColumnKey) => {
     if (key === 'nom') return
     if (visible.includes(key)) {
@@ -748,8 +856,18 @@ function ColumnVisibilityMenu({
     onChange([...visible, key])
   }
 
+  const moveVisible = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0) return
+    if (from >= visible.length || to >= visible.length) return
+    const next = [...visible]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    onChange(next)
+  }
+
   const showAll = () => onChange(columns.map((c) => c.key))
-  const showEssentials = () => onChange(columns.filter((c) => ['nom', 'telephone', 'statut', 'setter', 'dernierAppel', 'jauge'].includes(c.key)).map((c) => c.key))
+  const showEssentials = () =>
+    onChange(columns.filter((c) => ['nom', 'telephone', 'statut', 'setter', 'dernierAppel', 'jauge'].includes(c.key)).map((c) => c.key))
 
   return (
     <details className="relative group">
@@ -758,13 +876,13 @@ function ColumnVisibilityMenu({
         Colonnes
         <span className="rounded-full bg-or-tint px-2 py-0.5 text-[11px] text-or-dark">{visible.length}/{columns.length}</span>
       </summary>
-      <div className="absolute right-0 mt-3 w-[340px] max-h-[520px] overflow-hidden rounded-[22px] border border-line bg-white shadow-2xl z-40">
+      <div className="absolute right-0 mt-3 w-[360px] max-h-[560px] overflow-hidden rounded-[22px] border border-line bg-white shadow-2xl z-40">
         <div className="border-b border-line-soft p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="eyebrow">Vue du tableau</p>
-              <h4 className="font-bold">Masquer / afficher les colonnes</h4>
-              <p className="text-xs text-faint mt-1">Le nom reste fixé à gauche comme sur Airtable.</p>
+              <h4 className="font-bold">Réorganiser & masquer les colonnes</h4>
+              <p className="text-xs text-faint mt-1">Glissez les lignes visibles pour changer l'ordre. Le nom reste fixé à gauche.</p>
             </div>
             <span className="rounded-full bg-line-soft px-2.5 py-1 text-xs font-bold text-muted">{hiddenCount} masquée{hiddenCount > 1 ? 's' : ''}</span>
           </div>
@@ -782,22 +900,87 @@ function ColumnVisibilityMenu({
             <button type="button" className="rounded-full border border-line px-3 py-1.5 text-xs font-bold text-muted hover:text-text" onClick={showEssentials}>Essentiel</button>
           </div>
         </div>
-        <div className="max-h-[330px] overflow-auto p-2">
-          {filteredColumns.map((column) => {
-            const checked = visible.includes(column.key)
+
+        <div className="max-h-[400px] overflow-auto p-2">
+          {/* Section visibles : drag-and-drop pour réordonner */}
+          {visibleEntries.filter(matchQuery).length > 0 && (
+            <p className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-faint">
+              Affichées · glisser pour réordonner
+            </p>
+          )}
+          {visibleEntries.map((column, idx) => {
+            if (!matchQuery(column)) return null
             const locked = column.key === 'nom'
+            const isDragOver = dragOverIndex === idx && dragIndex !== null && dragIndex !== idx
             return (
-              <label key={column.key} className="flex items-center gap-3 rounded-[14px] px-3 py-2.5 text-sm hover:bg-line-soft cursor-pointer">
+              <div
+                key={column.key}
+                draggable={!locked}
+                onDragStart={(e) => {
+                  if (locked) return
+                  setDragIndex(idx)
+                  e.dataTransfer.effectAllowed = 'move'
+                }}
+                onDragOver={(e) => {
+                  if (dragIndex === null || locked) return
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                  if (dragOverIndex !== idx) setDragOverIndex(idx)
+                }}
+                onDragLeave={() => {
+                  if (dragOverIndex === idx) setDragOverIndex(null)
+                }}
+                onDrop={(e) => {
+                  if (dragIndex === null || locked) return
+                  e.preventDefault()
+                  moveVisible(dragIndex, idx)
+                  setDragIndex(null)
+                  setDragOverIndex(null)
+                }}
+                onDragEnd={() => {
+                  setDragIndex(null)
+                  setDragOverIndex(null)
+                }}
+                className={`flex items-center gap-2 rounded-[14px] px-2 py-2 text-sm transition-colors ${
+                  isDragOver ? 'bg-or-tint' : 'hover:bg-line-soft'
+                } ${locked ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'}`}
+                title={locked ? 'Colonne fixe' : 'Glisser pour réorganiser'}
+              >
+                <span className={`text-faint ${locked ? 'opacity-30' : ''}`} aria-hidden>
+                  <Icon name="grid" size={14} />
+                </span>
                 <input
                   type="checkbox"
-                  checked={checked}
-                  disabled={locked}
+                  checked={true}
+                  disabled={locked || visible.length === 1}
                   onChange={() => toggle(column.key)}
                   className="accent-[var(--color-or)]"
                 />
                 <span className="flex-grow truncate" title={column.label}>{column.label}</span>
                 {locked && <span className="rounded-full bg-cuivre-tint px-2 py-0.5 text-[10px] font-bold text-cuivre">fixe</span>}
-                {!checked && !locked && <span className="text-[11px] font-semibold text-faint">masquée</span>}
+              </div>
+            )
+          })}
+
+          {/* Section masquées : cases à cocher seulement */}
+          {hiddenEntries.filter(matchQuery).length > 0 && (
+            <p className="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-faint">Masquées</p>
+          )}
+          {hiddenEntries.map((column) => {
+            if (!matchQuery(column)) return null
+            return (
+              <label
+                key={column.key}
+                className="flex items-center gap-3 rounded-[14px] px-3 py-2 text-sm hover:bg-line-soft cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={false}
+                  onChange={() => toggle(column.key)}
+                  className="accent-[var(--color-or)]"
+                />
+                <span className="flex-grow truncate" title={column.label}>{column.label}</span>
+                <span className="text-[11px] font-semibold text-faint">masquée</span>
               </label>
             )
           })}
