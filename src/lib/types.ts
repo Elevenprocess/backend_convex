@@ -279,7 +279,7 @@ export type AnalyticsFunnelResponse = {
 
 export type AnalyticsSummaryResponse = {
   generatedAt: string
-  engine: 'backend-olap-etl'
+  engine: 'backend-olap-etl' | 'backend-olap-etl-fast'
   role: Role
   days: number | null
   range: AnalyticsRange
