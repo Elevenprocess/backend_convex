@@ -342,7 +342,7 @@ function OverviewAdmin() {
           if (id === 'commerciaux' || id === 'ventes') navigate('/analytics')
         }}
       />
-      <main className="p-6 grid grid-cols-12 grid-rows-[auto_1fr_1fr] gap-4 flex-grow overflow-auto">
+      <main className="p-6 grid grid-cols-12 auto-rows-auto gap-4 flex-grow overflow-auto">
         <SmallKpi title="CA TOTAL" value={fmtKEur(stats.caMois)} haloColor="#D4AF37" lineColor="#D4AF37" linePoints="0,16 15,12 30,14 45,8 60,10 75,4 100,6" />
         <SmallKpi title="VENTES" value={String(stats.ventes)} haloColor="#B87333" lineColor="#B87333" linePoints="0,14 15,16 30,10 45,12 60,6 75,8 100,4" />
         <SmallKpi title="CLOSING" value={`${stats.closing}%`} haloColor="#3DA86A" lineColor="#3DA86A" linePoints="0,12 15,14 30,10 45,12 60,8 75,10 100,6" />
@@ -429,6 +429,8 @@ function OverviewAdmin() {
             </p>
           </div>
         </div>
+
+        {funnel?.totals && <FunnelFlowMap totals={funnel.totals} />}
       </main>
     </AppShell>
   )
@@ -505,8 +507,6 @@ function AdminLeadFunnel({
             <h4 className="font-bold mb-3">Comparaison commerciaux</h4>
             <FunnelComparisonTable rows={funnel.commercialComparison.slice(0, 5)} empty="Aucun RDV commercial sur la période." />
           </div>
-
-          <FunnelFlowMap totals={totals} />
         </div>
       )}
     </section>
@@ -515,7 +515,7 @@ function AdminLeadFunnel({
 
 function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }) {
   return (
-    <div className="col-span-12 mt-3 rounded-3xl border border-line-soft bg-gradient-to-br from-white/85 via-or-tint/35 to-emerald-50/80 p-6">
+    <div className="col-span-12 mt-6 rounded-3xl border border-line-soft bg-gradient-to-br from-white/85 via-or-tint/35 to-emerald-50/80 p-8 min-h-[760px]">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <div className="eyebrow">Lecture détaillée du parcours</div>
@@ -527,7 +527,7 @@ function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto space-y-4">
+      <div className="max-w-6xl mx-auto space-y-6">
         <FlowStep title="1. Nouveaux leads" value={totals.newLeads} sub="Leads entrés dans le CRM sur la période" color="#6B7C8C" />
         <FlowArrow />
         <FlowStep title="2. Appels setters" value={totals.calls} sub={`${callsPerLead(totals.calls, totals.newLeads)} appels par lead en moyenne`} color="#D4AF37" />
@@ -550,7 +550,7 @@ function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }
 
 function FlowStep({ title, value, sub, color }: { title: string; value: number; sub: string; color: string }) {
   return (
-    <div className="rounded-3xl bg-white/80 border border-line-soft p-5 flex items-center justify-between gap-4 shadow-sm">
+    <div className="rounded-3xl bg-white/80 border border-line-soft p-6 flex items-center justify-between gap-4 shadow-sm min-h-[110px]">
       <div>
         <div className="text-xs font-black uppercase text-faint tracking-wide">{title}</div>
         <div className="text-sm text-muted mt-1">{sub}</div>
@@ -562,7 +562,7 @@ function FlowStep({ title, value, sub, color }: { title: string; value: number; 
 
 function FlowDecision({ yes, no }: { yes: string; no: string }) {
   return (
-    <div className="rounded-3xl bg-white/80 border border-line-soft p-5 shadow-sm">
+    <div className="rounded-3xl bg-white/80 border border-line-soft p-6 shadow-sm min-h-[150px]">
       <div className="text-center text-sm font-black uppercase text-faint tracking-wide">3. Le lead a répondu ?</div>
       <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-4 text-emerald-800">
