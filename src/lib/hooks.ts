@@ -10,7 +10,7 @@ import type {
   RdvLocation,
   RdvResponse,
   UserResponse,
-  AnalyticsResponse,
+  AnalyticsSummaryResponse,
 } from './types'
 
 type Async<T> = {
@@ -305,11 +305,12 @@ export function useUser(id: string | undefined): Async<UserResponse> {
 }
 
 // ─── Analytics ─────────────────────────────────────────────
-export function useAnalyticsSummary(filters: {
-  from: string
-  to: string
-}): Async<AnalyticsResponse> {
-  return useFetch<AnalyticsResponse>('/analytics/summary', filters)
+export function useAnalyticsSummary(filters?: {
+  days?: number
+  from?: string
+  to?: string
+}): Async<AnalyticsSummaryResponse> {
+  return useFetch<AnalyticsSummaryResponse>('/analytics/summary', filters)
 }
 
 // ─── Call logs ─────────────────────────────────────────────

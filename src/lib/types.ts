@@ -125,7 +125,48 @@ export const CALL_RESULT_LABEL: Record<CallResult, string> = {
 
 export type AnalyticsSegment = { label: string; value: number; color: string }
 
-export type SetterPerformance = {
+export type AnalyticsRange = {
+  from: string
+  to: string
+  days: number
+}
+
+export type AnalyticsSetterSummary = {
+  newLeads: number
+  calls: number
+  loggedCalls: number
+  syntheticCalls: number
+  callsPerDay: number
+  classified: number
+  unclassified: number
+  answered: number
+  connected: number
+  relance: number
+  notQualified: number
+  qualified: number
+  rdvPris: number
+  responseRate: number
+  rdvAfterAnswerRate: number
+  globalRdvRate: number
+  connectionRate: number
+  qualificationRate: number
+  rdvRate: number
+  resultSegments: AnalyticsSegment[]
+  dailyCalls: number[]
+}
+
+export type AnalyticsCommercialSummary = {
+  total: number
+  honored: number
+  signed: number
+  ca: number
+  panier: number
+  closing: number
+  resultSegments: AnalyticsSegment[]
+  financingSegments: AnalyticsSegment[]
+}
+
+export type AnalyticsSetterPerf = {
   id: string
   name: string
   initials: string
@@ -137,7 +178,7 @@ export type SetterPerformance = {
   efficiency: number
 }
 
-export type CommercialPerformance = {
+export type AnalyticsCommercialPerf = {
   id: string
   name: string
   initials: string
@@ -148,30 +189,31 @@ export type CommercialPerformance = {
   ca: number
 }
 
-export type AnalyticsResponse = {
+export type AnalyticsAdminSummary = {
   calls: number
-  loggedCalls: number
-  syntheticCalls: number
-  callsPerDay: number
   classified: number
-  unclassified: number
-  connected: number
   qualified: number
+  unclassified: number
+  syntheticCalls: number
   rdvPris: number
   rdvRate: number
-  connectionRate: number
   qualificationRate: number
   ca: number
   signed: number
-  total: number
-  honored: number
-  closing: number
-  panier: number
   resultSegments: AnalyticsSegment[]
-  financingSegments: AnalyticsSegment[]
-  dailyCalls: number[]
-  setters: SetterPerformance[]
-  commercials: CommercialPerformance[]
+  setters: AnalyticsSetterPerf[]
+  commercials: AnalyticsCommercialPerf[]
+}
+
+export type AnalyticsSummaryResponse = {
+  generatedAt: string
+  engine: 'backend-olap-etl'
+  role: Role
+  days: number | null
+  range: AnalyticsRange
+  admin: AnalyticsAdminSummary | null
+  setter: AnalyticsSetterSummary | null
+  commercial: AnalyticsCommercialSummary | null
 }
 
 export type RdvStatus = 'planifie' | 'honore' | 'no_show' | 'reporte' | 'annule'

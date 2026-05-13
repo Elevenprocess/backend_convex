@@ -1,43 +1,105 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
-import { useCallLogs, useLeads, useRdvList, useUsers } from '../lib/hooks'
-import { CALL_RESULT_LABEL, type CallLogResponse, type CallResult, type LeadResponse, type RdvResponse, type UserResponse } from '../lib/types'
+import { useAnalyticsSummary } from '../lib/hooks'
+import type { AnalyticsAdminSummary, AnalyticsCommercialSummary, AnalyticsSegment, AnalyticsSetterSummary } from '../lib/types'
 
-const QUALIFIED_STATUSES = new Set(['qualifie', 'rdv_pris', 'rdv_honore', 'signe'])
-const RDV_STATUSES = new Set(['rdv_pris', 'rdv_honore', 'signe'])
-const NOT_QUALIFIED_STATUSES = new Set(['pas_qualifie', 'perdu'])
-const RELANCE_STATUSES = new Set(['relance', 'a_rappeler', 'pas_de_reponse'])
-const ANSWERED_RESULTS: ReadonlySet<CallResult> = new Set(['joint', 'rdv_pris', 'refus'])
-const RELANCE_RESULTS: ReadonlySet<CallResult> = new Set(['non_joint', 'rappel_planifie', 'injoignable', 'messagerie'])
-const CLASSIFIED_STATUSES = new Set(['qualifie', 'rdv_pris', 'rdv_honore', 'signe', 'perdu', 'relance', 'pas_qualifie', 'a_rappeler', 'pas_de_reponse'])
-const COLORS = ['#D4AF37', '#B87333', '#3DA86A', '#6B7C8C', '#B7410E', '#2F4858']
+type Segment = AnalyticsSegment
+
+type PeriodMode = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'custom'
+type PeriodState = { mode: PeriodMode; customFrom: string; customTo: string }
+type PeriodRange = { from: string; to: string; label: string; days: number }
+
+const PERIOD_OPTIONS: { id: PeriodMode; label: string }[] = [
+  { id: 'today', label: "Aujourd'hui" },
+  { id: 'yesterday', label: 'Hier' },
+  { id: 'this_week', label: 'Cette semaine' },
+  { id: 'last_week', label: 'Semaine dernière' },
+  { id: 'this_month', label: 'Ce mois-ci' },
+  { id: 'last_month', label: 'Mois dernier' },
+  { id: 'this_year', label: 'Cette année' },
+  { id: 'last_year', label: "L'année dernière" },
+  { id: 'custom', label: 'Plage de dates' },
+]
+
+const todayInput = toDateInputValue(new Date())
+const DEFAULT_PERIOD: PeriodState = { mode: 'today', customFrom: todayInput, customTo: todayInput }
+
+const EMPTY_SETTER_STATS: AnalyticsSetterSummary = {
+  newLeads: 0,
+  calls: 0,
+  loggedCalls: 0,
+  syntheticCalls: 0,
+  callsPerDay: 0,
+  classified: 0,
+  unclassified: 0,
+  answered: 0,
+  connected: 0,
+  relance: 0,
+  notQualified: 0,
+  qualified: 0,
+  rdvPris: 0,
+  responseRate: 0,
+  rdvAfterAnswerRate: 0,
+  globalRdvRate: 0,
+  connectionRate: 0,
+  qualificationRate: 0,
+  rdvRate: 0,
+  resultSegments: [],
+  dailyCalls: [],
+}
+
+const EMPTY_COMMERCIAL_STATS: AnalyticsCommercialSummary = {
+  total: 0,
+  honored: 0,
+  signed: 0,
+  ca: 0,
+  panier: 0,
+  closing: 0,
+  resultSegments: [],
+  financingSegments: [],
+}
+
+const EMPTY_ADMIN_STATS: AnalyticsAdminSummary = {
+  calls: 0,
+  classified: 0,
+  qualified: 0,
+  unclassified: 0,
+  syntheticCalls: 0,
+  rdvPris: 0,
+  rdvRate: 0,
+  qualificationRate: 0,
+  ca: 0,
+  signed: 0,
+  resultSegments: [],
+  setters: [],
+  commercials: [],
+}
 
 export function Analytics() {
   const me = useAuth((s) => s.user)
 
   if (me?.role === 'admin') return <AnalyticsAdmin />
-  if (me?.role === 'commercial') return <AnalyticsCommercial name={me.name} userId={me.id} />
-  return <AnalyticsSetter name={me?.name ?? 'Setter'} userId={me?.id} />
+  if (me?.role === 'commercial') return <AnalyticsCommercial name={me.name} />
+  return <AnalyticsSetter name={me?.name ?? 'Setter'} />
 }
 
 // ----- F11 Setter -----
-function AnalyticsSetter({ name, userId }: { name: string; userId?: string }) {
-  const [period, setPeriod] = useState<'1' | '7' | '30' | '90'>('1')
-  const days = Number(period)
-  const { data: leads = [] } = useLeads({ limit: 3000 })
-  const { data: calls = [] } = useCallLogs(userId ? { setterId: userId, limit: 3000 } : { limit: 3000 })
-  const { data: rdvs = [] } = useRdvList(userId ? { setterId: userId, limit: 1000 } : { limit: 1000 })
-
-  const stats = useMemo(() => buildSetterStats(leads ?? [], calls ?? [], rdvs ?? [], userId, days), [leads, calls, rdvs, userId, days])
+function AnalyticsSetter({ name }: { name: string }) {
+  const [period, setPeriod] = useState<PeriodState>(DEFAULT_PERIOD)
+  const range = buildPeriodRange(period)
+  const { data, loading, error } = useAnalyticsSummary({ from: range.from, to: range.to })
+  const stats = data?.setter ?? EMPTY_SETTER_STATS
 
   return (
     <AppShell blobsKey="setter">
       <Topbar eyebrow="ANALYTICS / SETTER" title={`Mes performances — ${name}`} />
-      <div className="px-8 pt-4 flex items-center justify-between flex-shrink-0">
-        <div className="text-xs text-faint font-semibold">Moteur OLAP local : call_logs + statuts leads + RDV, sans données fictives.</div>
-        <PeriodSwitch value={period} onChange={setPeriod} options={[{ id: '1', label: "Aujourd'hui" }, { id: '7', label: '7j' }, { id: '30', label: '30j' }, { id: '90', label: '90j' }]} />
+      <div className="px-8 pt-4 flex items-center justify-between gap-4 flex-shrink-0">
+        <div className="text-xs text-faint font-semibold">
+          Moteur OLAP/ETL backend : {range.label}.{loading ? ' Chargement…' : ''}{error ? ` Erreur: ${error}` : ''}
+        </div>
+        <PeriodSelector value={period} onChange={setPeriod} />
       </div>
       <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
         <div className="grid grid-cols-4 gap-6">
@@ -47,11 +109,13 @@ function AnalyticsSetter({ name, userId }: { name: string; userId?: string }) {
           <BigStatCard label="RDV PRIS" value={fmtInt(stats.rdvPris)} delta={`${stats.globalRdvRate}%`} sub="Taux global RDV = RDV / nouveaux leads" />
         </div>
 
+        <AnalyticsStatsTable title="Tableau statistiques setter" rows={setterTableRows(stats)} />
+
         <div className="grid grid-cols-12 gap-6">
           <div className="glass-card p-6 col-span-7">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold">Pipeline setter — nouveau lead → RDV</h3>
-              <span className="eyebrow">données live</span>
+              <span className="eyebrow">backend live</span>
             </div>
             <PipelineFlow stats={stats} />
           </div>
@@ -87,17 +151,18 @@ function AnalyticsSetter({ name, userId }: { name: string; userId?: string }) {
 }
 
 // ----- F12 Commercial -----
-function AnalyticsCommercial({ name, userId }: { name: string; userId: string }) {
-  const [period, setPeriod] = useState<'mois' | 'trim'>('mois')
-  const { data: rdvs = [] } = useRdvList({ commercialId: userId, limit: 1000 })
-  const stats = useMemo(() => buildCommercialStats(rdvs ?? [], period === 'mois' ? 30 : 90), [rdvs, period])
+function AnalyticsCommercial({ name }: { name: string }) {
+  const [period, setPeriod] = useState<PeriodState>(DEFAULT_PERIOD)
+  const range = buildPeriodRange(period)
+  const { data, loading, error } = useAnalyticsSummary({ from: range.from, to: range.to })
+  const stats = data?.commercial ?? EMPTY_COMMERCIAL_STATS
 
   return (
     <AppShell blobsKey="commercial">
       <Topbar eyebrow="ANALYTICS / COMMERCIAL" title={`Mes performances — ${name}`} />
-      <div className="px-8 pt-4 flex items-center justify-between flex-shrink-0">
-        <div className="text-xs text-faint font-semibold">Analyse live des RDV honorés, ventes et modes de financement.</div>
-        <PeriodSwitch value={period} onChange={setPeriod} options={[{ id: 'mois', label: 'Ce mois' }, { id: 'trim', label: 'Trimestre' }]} />
+      <div className="px-8 pt-4 flex items-center justify-between gap-4 flex-shrink-0">
+        <div className="text-xs text-faint font-semibold">OLAP/ETL backend sur {range.label}.{loading ? ' Chargement…' : ''}{error ? ` Erreur: ${error}` : ''}</div>
+        <PeriodSelector value={period} onChange={setPeriod} />
       </div>
       <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
         <div className="grid grid-cols-4 gap-6">
@@ -106,6 +171,8 @@ function AnalyticsCommercial({ name, userId }: { name: string; userId: string })
           <BigStatCard label="PANIER MOYEN" value={fmtKEur(stats.panier)} />
           <BigStatCard label="RDV HONORÉS" value={`${stats.honored}/${stats.total}`} />
         </div>
+
+        <AnalyticsStatsTable title="Tableau statistiques commercial" rows={commercialTableRows(stats)} />
 
         <div className="grid grid-cols-2 gap-6">
           <div className="glass-card p-6">
@@ -124,15 +191,18 @@ function AnalyticsCommercial({ name, userId }: { name: string; userId: string })
 
 // ----- F13 Admin -----
 function AnalyticsAdmin() {
-  const { data: leads = [] } = useLeads({ limit: 5000 })
-  const { data: calls = [] } = useCallLogs({ limit: 5000 })
-  const { data: rdvs = [] } = useRdvList({ limit: 2000 })
-  const { data: users = [] } = useUsers()
-  const stats = useMemo(() => buildAdminStats(leads ?? [], calls ?? [], rdvs ?? [], users ?? []), [leads, calls, rdvs, users])
+  const [period, setPeriod] = useState<PeriodState>(DEFAULT_PERIOD)
+  const range = buildPeriodRange(period)
+  const { data, loading, error } = useAnalyticsSummary({ from: range.from, to: range.to })
+  const stats = data?.admin ?? EMPTY_ADMIN_STATS
 
   return (
     <AppShell blobsKey="admin">
       <Topbar eyebrow="ANALYTICS / ADMIN" title="Performance globale équipe" />
+      <div className="px-8 pt-4 flex items-center justify-between gap-4 flex-shrink-0">
+        <div className="text-xs text-faint font-semibold">Requête unique backend /analytics/summary : {range.label}.{loading ? ' Chargement…' : ''}{error ? ` Erreur: ${error}` : ''}</div>
+        <PeriodSelector value={period} onChange={setPeriod} />
+      </div>
       <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
         <div className="grid grid-cols-4 gap-6">
           <BigStatCard label="APPELS LOGIQUES" value={fmtInt(stats.calls)} delta={`${stats.syntheticCalls} ETL`} sub="call_logs + classifications" />
@@ -141,11 +211,13 @@ function AnalyticsAdmin() {
           <BigStatCard label="CA SIGNÉ" value={fmtKEur(stats.ca)} delta={`${stats.signed} ventes`} />
         </div>
 
+        <AnalyticsStatsTable title="Tableau statistiques global" rows={adminTableRows(stats)} />
+
         <div className="grid grid-cols-12 gap-6">
           <div className="glass-card p-6 col-span-7">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold">Camembert OLAP — issues d'appel</h3>
-              <span className="eyebrow">requête agrégée par résultat</span>
+              <span className="eyebrow">requête backend agrégée</span>
             </div>
             <PieChart segments={stats.resultSegments} center={`${stats.calls}\nappels`} />
           </div>
@@ -213,262 +285,9 @@ function AnalyticsAdmin() {
   )
 }
 
-// ===== Analytics ETL/OLAP helpers =====
-
-type Segment = { label: string; value: number; color: string }
-type SetterPerf = { id: string; name: string; initials: string; calls: number; connected: number; classified: number; qualified: number; rdvPris: number; efficiency: number }
-type CommercialPerf = { id: string; name: string; initials: string; honored: number; signed: number; closing: number; panier: number; ca: number }
-
-function buildSetterStats(leads: LeadResponse[], calls: CallLogResponse[], rdvs: RdvResponse[], setterId: string | undefined, days: number) {
-  const ownLeads = leads.filter((l) => belongsToSetter(l, setterId))
-  const scopedCalls = filterRecent(calls, days)
-  const scopedLeads = ownLeads.filter((l) => isRecent(l.updatedAt, days) || isRecent(l.latestCallAt ?? l.lastContactAt ?? l.updatedAt, days))
-  const newLeadRows = ownLeads.filter((l) => isRecent(l.createdAt, days))
-  const classifiedLeads = scopedLeads.filter(isClassifiedLead)
-  const classifiedWithoutLoggedCall = classifiedLeads.filter((l) => !scopedCalls.some((c) => c.leadId === l.id))
-  const syntheticCalls = classifiedWithoutLoggedCall.length
-  const resultCounts = countResults(scopedCalls)
-  addSyntheticResults(resultCounts, classifiedWithoutLoggedCall, syntheticCalls)
-  const callsTotal = scopedCalls.length + syntheticCalls
-
-  const answeredIds = new Set<string>()
-  const relanceIds = new Set<string>()
-  const notQualifiedIds = new Set<string>()
-  const qualifiedIds = new Set<string>()
-  const rdvIds = new Set<string>()
-
-  for (const call of scopedCalls) {
-    if (ANSWERED_RESULTS.has(call.result)) answeredIds.add(call.leadId)
-    if (RELANCE_RESULTS.has(call.result)) relanceIds.add(call.leadId)
-    if (call.result === 'refus') notQualifiedIds.add(call.leadId)
-    if (call.result === 'rdv_pris') rdvIds.add(call.leadId)
-  }
-
-  for (const lead of classifiedLeads) {
-    if (RELANCE_STATUSES.has(lead.status)) relanceIds.add(lead.id)
-    if (NOT_QUALIFIED_STATUSES.has(lead.status)) {
-      notQualifiedIds.add(lead.id)
-      answeredIds.add(lead.id)
-    }
-    if (QUALIFIED_STATUSES.has(lead.status)) {
-      qualifiedIds.add(lead.id)
-      answeredIds.add(lead.id)
-    }
-    if (RDV_STATUSES.has(lead.status)) rdvIds.add(lead.id)
-  }
-
-  for (const r of rdvs.filter((r) => isRecent(r.createdAt, days))) {
-    rdvIds.add(r.leadId)
-    answeredIds.add(r.leadId)
-    qualifiedIds.add(r.leadId)
-  }
-
-  const answered = answeredIds.size
-  const rdvPris = rdvIds.size
-
-  return {
-    newLeads: newLeadRows.length,
-    calls: callsTotal,
-    loggedCalls: scopedCalls.length,
-    syntheticCalls,
-    callsPerDay: days ? Math.round(callsTotal / days) : 0,
-    classified: classifiedLeads.length,
-    unclassified: scopedLeads.length - classifiedLeads.length,
-    answered,
-    connected: answered,
-    relance: relanceIds.size,
-    notQualified: notQualifiedIds.size,
-    qualified: qualifiedIds.size,
-    rdvPris,
-    responseRate: pct(answered, newLeadRows.length),
-    rdvAfterAnswerRate: pct(rdvPris, answered),
-    globalRdvRate: pct(rdvPris, newLeadRows.length),
-    connectionRate: pct(answered, callsTotal),
-    qualificationRate: pct(qualifiedIds.size, answered),
-    rdvRate: pct(rdvPris, callsTotal),
-    resultSegments: resultSegments(resultCounts),
-    dailyCalls: dailyLogicalCalls(scopedCalls, classifiedLeads, days),
-  }
-}
-
-function buildCommercialStats(rdvs: RdvResponse[], days: number) {
-  const scoped = filterRecent(rdvs, days, (r) => r.scheduledAt)
-  const honored = scoped.filter((r) => r.status === 'honore')
-  const signed = honored.filter((r) => r.result === 'signe')
-  const ca = signed.reduce((sum, r) => sum + money(r.montantTotal), 0)
-  return {
-    total: scoped.length,
-    honored: honored.length,
-    signed: signed.length,
-    ca,
-    panier: signed.length ? ca / signed.length : 0,
-    closing: pct(signed.length, honored.length),
-    resultSegments: pieFromCounts([
-      ['Signé', signed.length],
-      ['Réflexion', honored.filter((r) => r.result === 'reflexion').length],
-      ['Perdu', honored.filter((r) => r.result === 'perdu').length],
-      ['No-show', scoped.filter((r) => r.status === 'no_show').length],
-      ['Reporté', scoped.filter((r) => r.status === 'reporte').length],
-    ]),
-    financingSegments: pieFromCounts([
-      ['Comptant', signed.filter((r) => r.financingType === 'comptant').length],
-      ['Financement', signed.filter((r) => r.financingType === 'financement').length],
-      ['À définir', signed.filter((r) => !r.financingType).length],
-    ]),
-  }
-}
-
-function buildAdminStats(leads: LeadResponse[], calls: CallLogResponse[], rdvs: RdvResponse[], users: UserResponse[]) {
-  const classifiedLeads = leads.filter(isClassifiedLead)
-  const syntheticCalls = Math.max(0, classifiedLeads.length - calls.length)
-  const resultCounts = countResults(calls)
-  addSyntheticResults(resultCounts, classifiedLeads, syntheticCalls)
-  const callsTotal = calls.length + syntheticCalls
-  const qualified = classifiedLeads.filter(isQualifiedLead).length
-  const rdvPris = Math.max(resultCounts.rdv_pris ?? 0, leads.filter((l) => l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe').length)
-  const honored = rdvs.filter((r) => r.status === 'honore')
-  const signed = honored.filter((r) => r.result === 'signe')
-  const ca = signed.reduce((sum, r) => sum + money(r.montantTotal), 0)
-  return {
-    calls: callsTotal,
-    classified: classifiedLeads.length,
-    qualified,
-    unclassified: leads.length - classifiedLeads.length,
-    syntheticCalls,
-    rdvPris,
-    rdvRate: pct(rdvPris, callsTotal),
-    qualificationRate: pct(qualified, callsTotal),
-    ca,
-    signed: signed.length,
-    resultSegments: resultSegments(resultCounts),
-    setters: buildSetterRows(leads, calls, rdvs, users),
-    commercials: buildCommercialRows(rdvs, users),
-  }
-}
-
-function buildSetterRows(leads: LeadResponse[], calls: CallLogResponse[], _rdvs: RdvResponse[], users: UserResponse[]): SetterPerf[] {
-  return users
-    .filter((u) => u.role === 'setter')
-    .map((u) => {
-      const ownLeads = leads.filter((l) => belongsToSetter(l, u.id))
-      const classified = ownLeads.filter(isClassifiedLead)
-      const ownCalls = calls.filter((c) => c.setterId === u.id)
-      const synthetic = Math.max(0, classified.length - ownCalls.length)
-      const counts = countResults(ownCalls)
-      addSyntheticResults(counts, classified, synthetic)
-      const callsTotal = ownCalls.length + synthetic
-      const connected = (counts.joint ?? 0) + (counts.rdv_pris ?? 0)
-      const qualified = classified.filter(isQualifiedLead).length
-      const rdvPris = Math.max(counts.rdv_pris ?? 0, classified.filter((l) => l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe').length)
-      return { id: u.id, name: u.name, initials: initialsFromName(u.name), calls: callsTotal, connected, classified: classified.length, qualified, rdvPris, efficiency: pct(qualified + rdvPris, callsTotal) }
-    })
-    .sort((a, b) => b.calls - a.calls)
-}
-
-function buildCommercialRows(rdvs: RdvResponse[], users: UserResponse[]): CommercialPerf[] {
-  return users
-    .filter((u) => u.role === 'commercial')
-    .map((u) => {
-      const honored = rdvs.filter((r) => r.commercialId === u.id && r.status === 'honore')
-      const signed = honored.filter((r) => r.result === 'signe')
-      const ca = signed.reduce((sum, r) => sum + money(r.montantTotal), 0)
-      return { id: u.id, name: u.name, initials: initialsFromName(u.name), honored: honored.length, signed: signed.length, closing: pct(signed.length, honored.length), panier: signed.length ? ca / signed.length : 0, ca }
-    })
-    .filter((p) => p.honored > 0 || p.signed > 0)
-    .sort((a, b) => b.ca - a.ca)
-}
-
-function belongsToSetter(lead: LeadResponse, setterId: string | undefined): boolean {
-  if (!setterId) return true
-  return lead.setterId === setterId || lead.assignedSetterIds.includes(setterId)
-}
-
-function isClassifiedLead(lead: LeadResponse) {
-  return CLASSIFIED_STATUSES.has(lead.status)
-}
-
-function isQualifiedLead(lead: LeadResponse) {
-  return QUALIFIED_STATUSES.has(lead.status)
-}
-
-function countResults(calls: CallLogResponse[]): Record<CallResult, number> {
-  const counts = { joint: 0, non_joint: 0, rappel_planifie: 0, rdv_pris: 0, refus: 0, injoignable: 0, messagerie: 0 }
-  for (const call of calls) counts[call.result] += 1
-  return counts
-}
-
-function addSyntheticResults(counts: Record<CallResult, number>, leads: LeadResponse[], maxToAdd: number) {
-  if (maxToAdd <= 0) return
-  for (const lead of leads.slice(0, maxToAdd)) {
-    counts[statusToResult(lead.status)] += 1
-  }
-}
-
-function statusToResult(status: LeadResponse['status']): CallResult {
-  if (status === 'rdv_pris' || status === 'rdv_honore' || status === 'signe') return 'rdv_pris'
-  if (status === 'qualifie') return 'joint'
-  if (status === 'a_rappeler' || status === 'relance') return 'rappel_planifie'
-  if (status === 'pas_de_reponse') return 'non_joint'
-  if (status === 'pas_qualifie' || status === 'perdu') return 'refus'
-  return 'non_joint'
-}
-
-function resultSegments(counts: Record<CallResult, number>): Segment[] {
-  return pieFromCounts((Object.keys(counts) as CallResult[]).map((key) => [CALL_RESULT_LABEL[key], counts[key]]))
-}
-
-function pieFromCounts(rows: [string, number][]): Segment[] {
-  return rows.filter(([, value]) => value > 0).map(([label, value], i) => ({ label, value, color: COLORS[i % COLORS.length] }))
-}
-
-function dailyLogicalCalls(calls: CallLogResponse[], classified: LeadResponse[], days: number): number[] {
-  const keys = lastNDays(days)
-  return keys.map((day) => {
-    const logged = calls.filter((c) => reunionDayKey(c.calledAt) === day).length
-    const classifs = classified.filter((l) => reunionDayKey(l.updatedAt) === day).length
-    return Math.max(logged, classifs)
-  })
-}
-
-function filterRecent<T>(rows: T[], days: number, getIso: (row: T) => string = (row) => (row as { calledAt?: string; updatedAt?: string }).calledAt ?? (row as { updatedAt: string }).updatedAt): T[] {
-  return rows.filter((row) => isRecent(getIso(row), days))
-}
-
-function isRecent(iso: string, days: number): boolean {
-  if (days === 1) return reunionDayKey(iso) === reunionDayKey(new Date())
-  const d = new Date(iso)
-  const from = new Date()
-  from.setDate(from.getDate() - days)
-  return d >= from
-}
-
-function reunionDayKey(value: string | Date): string {
-  const date = value instanceof Date ? value : new Date(value)
-  const parts = new Intl.DateTimeFormat('fr-CA', {
-    timeZone: 'Indian/Reunion',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(date)
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
-  return `${get('year')}-${get('month')}-${get('day')}`
-}
-
-function lastNDays(n: number): string[] {
-  return Array.from({ length: n }, (_, i) => {
-    const d = new Date()
-    d.setDate(d.getDate() - (n - 1 - i))
-    return reunionDayKey(d)
-  })
-}
-
 function pct(num: number, denom: number): number {
   if (denom <= 0) return 0
   return Math.min(100, Math.round((num / denom) * 100))
-}
-
-function money(value: string | null): number {
-  return parseFloat(value ?? '0') || 0
 }
 
 function fmtInt(n: number): string {
@@ -481,9 +300,117 @@ function fmtKEur(val: number): string {
   return `${Math.round(val)}€`
 }
 
-function initialsFromName(name: string): string {
-  const parts = name.split(' ').filter(Boolean)
-  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '??'
+function buildPeriodRange(period: PeriodState): PeriodRange {
+  const now = new Date()
+  const today = startOfDay(now)
+  let from = today
+  let to = endOfDay(today)
+
+  if (period.mode === 'yesterday') {
+    from = addDays(today, -1)
+    to = endOfDay(from)
+  } else if (period.mode === 'this_week') {
+    from = startOfWeek(today)
+    to = endOfDay(today)
+  } else if (period.mode === 'last_week') {
+    const thisWeek = startOfWeek(today)
+    from = addDays(thisWeek, -7)
+    to = endOfDay(addDays(thisWeek, -1))
+  } else if (period.mode === 'this_month') {
+    from = new Date(today.getFullYear(), today.getMonth(), 1)
+    to = endOfDay(today)
+  } else if (period.mode === 'last_month') {
+    from = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+    to = endOfDay(new Date(today.getFullYear(), today.getMonth(), 0))
+  } else if (period.mode === 'this_year') {
+    from = new Date(today.getFullYear(), 0, 1)
+    to = endOfDay(today)
+  } else if (period.mode === 'last_year') {
+    from = new Date(today.getFullYear() - 1, 0, 1)
+    to = endOfDay(new Date(today.getFullYear() - 1, 11, 31))
+  } else if (period.mode === 'custom') {
+    from = parseDateInput(period.customFrom)
+    to = endOfDay(parseDateInput(period.customTo))
+    if (from > to) [from, to] = [startOfDay(to), endOfDay(from)]
+  }
+
+  const days = Math.max(1, Math.round((endOfDay(to).getTime() - startOfDay(from).getTime()) / 86_400_000) + 1)
+  const option = PERIOD_OPTIONS.find((p) => p.id === period.mode)?.label ?? 'Période'
+  return { from: startOfDay(from).toISOString(), to: endOfDay(to).toISOString(), label: `${option} · ${formatShortDate(from)} → ${formatShortDate(to)}`, days }
+}
+
+function toDateInputValue(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+
+function parseDateInput(value: string): Date {
+  const today = startOfDay(new Date())
+  if (!value) return today
+  const [year, month, day] = value.split('-').map(Number)
+  const parsed = new Date(year, (month || 1) - 1, day || 1)
+  return parsed > today ? today : startOfDay(parsed)
+}
+
+function startOfDay(date: Date): Date {
+  const next = new Date(date)
+  next.setHours(0, 0, 0, 0)
+  return next
+}
+
+function endOfDay(date: Date): Date {
+  const next = new Date(date)
+  next.setHours(23, 59, 59, 999)
+  return next
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date)
+  next.setDate(next.getDate() + days)
+  return next
+}
+
+function startOfWeek(date: Date): Date {
+  const d = startOfDay(date)
+  const day = d.getDay() || 7
+  return addDays(d, 1 - day)
+}
+
+function formatShortDate(date: Date): string {
+  return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+function setterTableRows(stats: AnalyticsSetterSummary) {
+  return [
+    ['Nouveaux leads', fmtInt(stats.newLeads), 'Entrées sur la période'],
+    ['Appels logiques', fmtInt(stats.calls), `${stats.loggedCalls} réels + ${stats.syntheticCalls} ETL`],
+    ['Leads ayant répondu', fmtInt(stats.answered), `${stats.responseRate}% des nouveaux leads`],
+    ['Qualifiés', fmtInt(stats.qualified), `${stats.qualificationRate}% après réponse`],
+    ['RDV pris', fmtInt(stats.rdvPris), `${stats.globalRdvRate}% global`],
+    ['Relance', fmtInt(stats.relance), 'À rappeler / pas de réponse'],
+    ['Pas qualifiés', fmtInt(stats.notQualified), 'Refus / hors cible'],
+  ]
+}
+
+function commercialTableRows(stats: AnalyticsCommercialSummary) {
+  return [
+    ['RDV total', fmtInt(stats.total), 'Planifiés sur la période'],
+    ['RDV honorés', fmtInt(stats.honored), 'Présents'],
+    ['Ventes', fmtInt(stats.signed), `${stats.closing}% closing`],
+    ['CA signé', fmtKEur(stats.ca), 'Montant total signé'],
+    ['Panier moyen', fmtKEur(stats.panier), 'CA / ventes'],
+  ]
+}
+
+function adminTableRows(stats: AnalyticsAdminSummary) {
+  return [
+    ['Appels logiques', fmtInt(stats.calls), `${stats.syntheticCalls} ajoutés par ETL`],
+    ['Leads classifiés', fmtInt(stats.classified), `${stats.qualificationRate}% qualifiés`],
+    ['Qualifiés', fmtInt(stats.qualified), 'Leads prêts / avancés'],
+    ['RDV pris', fmtInt(stats.rdvPris), `${stats.rdvRate}% / appels`],
+    ['Ventes signées', fmtInt(stats.signed), 'RDV signés'],
+    ['CA signé', fmtKEur(stats.ca), 'Total ventes'],
+    ['Non traités', fmtInt(stats.unclassified), 'Leads sans classification'],
+  ]
 }
 
 // ===== Atoms =====
@@ -501,7 +428,7 @@ function BigStatCard({ label, value, delta, sub }: { label: string; value: strin
   )
 }
 
-function PipelineFlow({ stats }: { stats: ReturnType<typeof buildSetterStats> }) {
+function PipelineFlow({ stats }: { stats: AnalyticsSetterSummary }) {
   const nodes = [
     { label: 'Nouveau lead', value: stats.newLeads, color: '#6B7C8C', sub: 'entrées' },
     { label: 'Appel setter', value: stats.calls, color: '#D4AF37', sub: 'actions' },
@@ -620,22 +547,66 @@ function Row({ label, value, highlight = false }: { label: string; value: string
   )
 }
 
-function PeriodSwitch<T extends string>({ value, onChange, options }: {
-  value: T
-  onChange: (v: T) => void
-  options: { id: T; label: string }[]
-}) {
+function AnalyticsStatsTable({ title, rows }: { title: string; rows: string[][] }) {
   return (
-    <div className="flex bg-or-tint p-1 rounded-xl">
-      {options.map((opt) => (
-        <button
-          key={opt.id}
-          onClick={() => onChange(opt.id)}
-          className={`px-3 py-1 text-xs font-semibold rounded-lg ${value === opt.id ? 'bg-white shadow-sm text-text' : 'text-muted'}`}
-        >
-          {opt.label}
-        </button>
-      ))}
+    <div className="glass-card p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-bold">{title}</h3>
+        <span className="eyebrow">vue tableau</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[720px]">
+          <thead className="bg-or-tint">
+            <tr className="text-left eyebrow">
+              <Th>INDICATEUR</Th>
+              <Th>VALEUR</Th>
+              <Th>DÉTAIL</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(([label, value, detail]) => (
+              <tr key={label} className="border-b border-line-soft last:border-0">
+                <td className="px-3 py-2.5 font-semibold">{label}</td>
+                <td className="px-3 py-2.5 text-lg font-extrabold text-or-dark">{value}</td>
+                <td className="px-3 py-2.5 text-muted">{detail}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function PeriodSelector({ value, onChange }: { value: PeriodState; onChange: (v: PeriodState) => void }) {
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <select
+        value={value.mode}
+        onChange={(e) => onChange({ ...value, mode: e.target.value as PeriodMode })}
+        className="px-3 py-2 rounded-xl bg-white border border-line-soft text-xs font-bold text-text shadow-sm"
+      >
+        {PERIOD_OPTIONS.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
+      </select>
+      {value.mode === 'custom' && (
+        <>
+          <input
+            type="date"
+            max={todayInput}
+            value={value.customFrom}
+            onChange={(e) => onChange({ ...value, customFrom: e.target.value > todayInput ? todayInput : e.target.value })}
+            className="px-3 py-2 rounded-xl bg-white border border-line-soft text-xs font-semibold"
+          />
+          <span className="text-xs text-faint font-bold">à</span>
+          <input
+            type="date"
+            max={todayInput}
+            value={value.customTo}
+            onChange={(e) => onChange({ ...value, customTo: e.target.value > todayInput ? todayInput : e.target.value })}
+            className="px-3 py-2 rounded-xl bg-white border border-line-soft text-xs font-semibold"
+          />
+        </>
+      )}
     </div>
   )
 }
@@ -684,3 +655,4 @@ function CommercialRow({ initials, name, honored, ventes, closing, panier, ca }:
     </tr>
   )
 }
+
