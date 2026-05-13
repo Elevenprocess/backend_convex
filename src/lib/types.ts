@@ -89,6 +89,10 @@ export type LeadResponse = {
   joursRelance: number | null
   callCount: number
   callsToday: number
+  /** Appels consécutifs sans réponse depuis le plus récent. 0 si le dernier
+   * appel a été décroché ou si aucun appel. Bascule "Nouveaux" → "Sans réponse"
+   * dans LeadsList à partir de ≥ 7. */
+  consecutiveNoAnswerCount: number
   nextCallbackAt: string | null
   firstCallUnderFiveMin: boolean | null
 }
@@ -342,11 +346,31 @@ export const STATUS_BADGE: Record<LeadStatus, string> = {
 }
 
 export function fullName(l: { firstName: string | null; lastName: string | null }): string {
-  return [l.firstName, l.lastName].filter(Boolean).join(' ') || '—'
+  return [cleanField(l.firstName), cleanField(l.lastName)].filter(Boolean).join(' ') || '—'
 }
 
 export function initials(l: { firstName: string | null; lastName: string | null }): string {
-  const f = l.firstName?.[0] ?? ''
-  const ln = l.lastName?.[0] ?? ''
+  const f = cleanField(l.firstName)?.[0] ?? ''
+  const ln = cleanField(l.lastName)?.[0] ?? ''
   return (f + ln).toUpperCase() || '··'
+}
+
+/**
+ * DATA-1 défensif : certains imports legacy (Airtable) ont stocké les littéraux
+ * "undefined" / "null" en BDD au lieu de NULL. Ce helper les normalise côté
+ * affichage. Toujours afficher le lead, mais les champs vides → null (rendu '—').
+ */
+export function cleanField<T extends string | null | undefined>(v: T): string | null {
+  if (v == null) return null
+  if (typeof v !== 'string') return v as unknown as string
+  const s = v.trim()
+  if (!s) return null
+  const lower = s.toLowerCase()
+  if (lower === 'undefined' || lower === 'null') return null
+  return s
+}
+
+/** Pratique pour `value` props : retourne le tiret EM si vide. */
+export function fieldOrDash(v: string | null | undefined): string {
+  return cleanField(v) ?? '—'
 }

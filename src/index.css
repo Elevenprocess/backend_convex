@@ -63,82 +63,51 @@ body {
 }
 
 .glass-card {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(32px) saturate(140%);
+  -webkit-backdrop-filter: blur(32px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 20px;
-  box-shadow: 0 4px 24px rgba(58, 45, 28, 0.04);
+  box-shadow: 0 1px 2px rgba(58, 45, 28, 0.03);
   position: relative;
   overflow: hidden;
 }
 
 .kpi-card {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(32px) saturate(140%);
+  -webkit-backdrop-filter: blur(32px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 20px;
-  padding: 24px 24px;
+  padding: 22px 24px;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 4px 24px rgba(58, 45, 28, 0.04);
+  box-shadow: 0 1px 2px rgba(58, 45, 28, 0.03);
 }
-.kpi-halo {
-  position: absolute;
-  width: 200px;
-  height: 200px;
-  border-radius: 999px;
-  filter: blur(40px);
-  pointer-events: none;
-  z-index: 0;
-}
-.kpi-halo.tr { top: -60px; right: -40px; }
-.kpi-halo.bl { bottom: -60px; left: -40px; }
 .kpi-content { position: relative; z-index: 1; }
 
 .big-number-card {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(32px) saturate(140%);
+  -webkit-backdrop-filter: blur(32px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 20px;
   padding: 24px;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 4px 24px rgba(58, 45, 28, 0.04);
-}
-.big-halo {
-  position: absolute;
-  width: 240px;
-  height: 240px;
-  border-radius: 999px;
-  filter: blur(50px);
-  pointer-events: none;
-  z-index: 0;
-  bottom: -80px;
-  left: -60px;
-  opacity: 0.5;
+  box-shadow: 0 1px 2px rgba(58, 45, 28, 0.03);
 }
 
 .promo-card {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(32px) saturate(140%);
+  -webkit-backdrop-filter: blur(32px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 20px;
   padding: 24px;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 4px 24px rgba(58, 45, 28, 0.04);
-}
-.promo-halo {
-  position: absolute;
-  width: 280px;
-  height: 280px;
-  border-radius: 999px;
-  filter: blur(50px);
-  pointer-events: none;
-  z-index: 0;
-  top: -80px;
-  right: -80px;
-  opacity: 0.4;
+  box-shadow: 0 1px 2px rgba(58, 45, 28, 0.03);
 }
 
 /* === Shell === */

@@ -13,6 +13,8 @@ import { DEFAULT_LEAD_FILTERS, applyLeadFilters, type LeadListFilters } from '..
 import {
   STATUS_BADGE,
   STATUS_LABEL,
+  cleanField,
+  fieldOrDash,
   fullName,
   initials,
   type LeadResponse,
@@ -97,8 +99,14 @@ export function LeadsList() {
 }
 
 // ----- F5 Setter -----
+// Seuil au-delà duquel un lead "ne répond pas" sort de l'onglet "Nouveaux"
+// pour rejoindre la catégorie dédiée "Sans réponse". Tant que < 7 tentatives
+// consécutives infructueuses, le lead reste visible avec les nouveaux pour
+// que le setter continue à le travailler.
+const SANS_REPONSE_THRESHOLD = 7
+
 function LeadsSetter() {
-  const [filter, setFilter] = useState<'nouveau' | 'rappel' | 'qualifie' | 'perdu'>('nouveau')
+  const [filter, setFilter] = useState<'nouveau' | 'rappel' | 'qualifie' | 'sans_reponse' | 'perdu'>('nouveau')
   const [leadFilters, setLeadFilters] = useState<LeadListFilters>(DEFAULT_LEAD_FILTERS)
   const [searchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('search') ?? '')
@@ -122,10 +130,16 @@ function LeadsSetter() {
 
   const counts = useMemo(() => ({
     all: mine.length,
-    nouveau: mine.filter((l) => l.status === 'nouveau').length,
+    // "Nouveaux" inclut les leads status=nouveau ET les leads pas_de_reponse
+    // tant qu'ils n'ont pas atteint le seuil de SANS_REPONSE_THRESHOLD appels
+    // consécutifs sans réponse. Idée : le setter doit continuer à essayer.
+    nouveau: mine.filter(isNouveauLead).length,
     rappel: mine.filter(isCallbackLead).length,
     qualifie: mine.filter((l) => l.status === 'qualifie').length,
-    perdu: mine.filter((l) => l.status === 'perdu').length,
+    sansReponse: mine.filter(isSansReponseLead).length,
+    // DATA-2: le compteur doit refléter le même filtre que l'onglet (ligne ~143).
+    // L'onglet "Perdus" inclut perdu + pas_qualifie.
+    perdu: mine.filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie').length,
   }), [mine])
 
   const filtered = useMemo(() => {
@@ -137,9 +151,10 @@ function LeadsSetter() {
     if (q) {
       list = list.filter((l) => [fullName(l), l.phone, l.email, l.city].filter(Boolean).join(' ').toLowerCase().includes(q))
     } else {
-      if (filter === 'nouveau') list = list.filter((l) => l.status === 'nouveau')
+      if (filter === 'nouveau') list = list.filter(isNouveauLead)
       if (filter === 'rappel') list = list.filter(isCallbackLead)
       if (filter === 'qualifie') list = list.filter((l) => l.status === 'qualifie')
+      if (filter === 'sans_reponse') list = list.filter(isSansReponseLead)
       if (filter === 'perdu') list = list.filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie')
     }
     list = applyLeadFilters(list, leadFilters)
@@ -181,6 +196,7 @@ function LeadsSetter() {
               <FilterPill active={filter === 'nouveau'} onClick={() => setFilter('nouveau')}>Nouveaux ({counts.nouveau})</FilterPill>
               <FilterPill active={filter === 'rappel'} onClick={() => setFilter('rappel')}>À rappeler ({counts.rappel})</FilterPill>
               <FilterPill active={filter === 'qualifie'} onClick={() => setFilter('qualifie')}>Qualifiés ({counts.qualifie})</FilterPill>
+              <FilterPill active={filter === 'sans_reponse'} onClick={() => setFilter('sans_reponse')}>Sans réponse ({counts.sansReponse})</FilterPill>
               <FilterPill active={filter === 'perdu'} onClick={() => setFilter('perdu')}>Perdus ({counts.perdu})</FilterPill>
               <LeadFiltersBar filters={leadFilters} onChange={setLeadFilters} total={mine.length} filtered={filtered.length} />
               <ColumnVisibilityMenu columns={SETTER_COLUMNS} visible={visibleColumns} onChange={setVisibleColumns} />
@@ -441,16 +457,16 @@ function LeadsAdmin() {
                   >
                     {showColumn('nom') && <Td className="lead-sticky-cell"><span className="font-semibold truncate" title={fullName(l)}>{fullName(l)}</span></Td>}
                     {showColumn('statut') && <Td><span className={`status-badge ${STATUS_BADGE[l.status]}`}>{STATUS_LABEL[l.status]}</span></Td>}
-                    {showColumn('email') && <Td className="text-muted truncate" title={l.email ?? undefined}>{l.email ?? '—'}</Td>}
-                    {showColumn('telephone') && <Td className="text-muted truncate" title={l.phone ?? undefined}>{l.phone ?? '—'}</Td>}
-                    {showColumn('adresse') && <Td className="text-muted truncate" title={l.addressLine ?? undefined}>{l.addressLine ?? '—'}</Td>}
-                    {showColumn('ville') && <Td className="text-muted truncate" title={l.city ?? undefined}>{l.city ?? '—'}</Td>}
-                    {showColumn('codePostal') && <Td className="text-muted truncate" title={l.postalCode ?? undefined}>{l.postalCode ?? '—'}</Td>}
+                    {showColumn('email') && <Td className="text-muted truncate" title={cleanField(l.email) ?? undefined}>{fieldOrDash(l.email)}</Td>}
+                    {showColumn('telephone') && <Td className="text-muted truncate" title={cleanField(l.phone) ?? undefined}>{fieldOrDash(l.phone)}</Td>}
+                    {showColumn('adresse') && <Td className="text-muted truncate" title={cleanField(l.addressLine) ?? undefined}>{fieldOrDash(l.addressLine)}</Td>}
+                    {showColumn('ville') && <Td className="text-muted truncate" title={cleanField(l.city) ?? undefined}>{fieldOrDash(l.city)}</Td>}
+                    {showColumn('codePostal') && <Td className="text-muted truncate" title={cleanField(l.postalCode) ?? undefined}>{fieldOrDash(l.postalCode)}</Td>}
                     {showColumn('leadGenere') && <Td className="text-faint">{fullDateTime(l.createdAt)}</Td>}
                     {showColumn('canal') && <Td className="text-muted truncate" title={prettySource(l)}>{prettySource(l)}</Td>}
-                    {showColumn('campagne') && <Td className="text-muted truncate" title={campaignName(l) ?? undefined}>{campaignName(l) ?? '—'}</Td>}
-                    {showColumn('adset') && <Td className="text-muted truncate" title={l.adset ?? l.utmMedium ?? undefined}>{l.adset ?? l.utmMedium ?? '—'}</Td>}
-                    {showColumn('ad') && <Td className="text-muted truncate" title={l.ad ?? l.utmSource ?? undefined}>{l.ad ?? l.utmSource ?? '—'}</Td>}
+                    {showColumn('campagne') && <Td className="text-muted truncate" title={cleanField(campaignName(l)) ?? undefined}>{fieldOrDash(campaignName(l))}</Td>}
+                    {showColumn('adset') && <Td className="text-muted truncate" title={cleanField(l.adset) ?? cleanField(l.utmMedium) ?? undefined}>{fieldOrDash(l.adset ?? l.utmMedium)}</Td>}
+                    {showColumn('ad') && <Td className="text-muted truncate" title={cleanField(l.ad) ?? cleanField(l.utmSource) ?? undefined}>{fieldOrDash(l.ad ?? l.utmSource)}</Td>}
                     {showColumn('creationLead') && <Td className="text-faint">{fullDateTime(l.createdAt)}</Td>}
                     {showColumn('datePassageRelance') && <Td className="text-faint">{l.datePassageRelance ? fullDateTime(l.datePassageRelance) : '—'}</Td>}
                     {showColumn('setter') && <Td><SetterChips lead={l} userMap={userMap} /></Td>}
@@ -511,6 +527,28 @@ function isCallbackLead(lead: LeadResponse): boolean {
   return lead.status === 'a_rappeler' || lead.status === 'relance' || Boolean(lead.nextCallbackAt)
 }
 
+/**
+ * "Nouveau" inclut les leads jamais traités (status=nouveau) ET les leads en
+ * pas_de_reponse tant qu'ils ont moins de SANS_REPONSE_THRESHOLD tentatives
+ * consécutives sans décroché. On veut que le setter continue à les essayer
+ * plutôt que de les oublier dans une catégorie séparée.
+ */
+function isNouveauLead(lead: LeadResponse): boolean {
+  if (lead.status === 'nouveau') return true
+  if (lead.status === 'pas_de_reponse' && (lead.consecutiveNoAnswerCount ?? 0) < SANS_REPONSE_THRESHOLD) return true
+  return false
+}
+
+/**
+ * "Sans réponse" : lead avec ≥ SANS_REPONSE_THRESHOLD appels consécutifs
+ * infructueux. Sortir de la vue "Nouveaux" évite que le setter perde du temps
+ * à rappeler des numéros morts ; ces leads sont à retravailler autrement
+ * (relance email, WhatsApp, ou suppression).
+ */
+function isSansReponseLead(lead: LeadResponse): boolean {
+  return (lead.consecutiveNoAnswerCount ?? 0) >= SANS_REPONSE_THRESHOLD
+}
+
 function lastCallDateTime(iso: string | null): string {
   if (!iso) return 'Jamais'
   const d = new Date(iso)
@@ -525,6 +563,9 @@ function prettySource(l: Pick<LeadResponse, 'source' | 'canalAcquisition' | 'utm
     case 'airtable_migration': return 'Migration'
     case 'manual': return 'Manuel'
     case 'referrer': return 'Parrain'
+    // DATA-4: si l'enum LeadResponse['source'] s'enrichit côté backend
+    // sans MAJ ici, on retombe sur un fallback explicite plutôt qu'undefined.
+    default: return l.source ?? '—'
   }
 }
 
@@ -534,11 +575,11 @@ function fullDateTime(iso: string): string {
 }
 
 function campaignName(l: Pick<LeadResponse, 'campaign' | 'utmCampaign'>): string | null {
-  return l.campaign ?? l.utmCampaign ?? null
+  return cleanField(l.campaign) ?? cleanField(l.utmCampaign)
 }
 
 function campaignSummary(l: Pick<LeadResponse, 'campaign' | 'utmCampaign' | 'adset' | 'utmMedium' | 'ad' | 'utmSource'>): string {
-  return [campaignName(l), l.adset ?? l.utmMedium, l.ad ?? l.utmSource].filter(Boolean).join(' / ') || '—'
+  return [campaignName(l), cleanField(l.adset) ?? cleanField(l.utmMedium), cleanField(l.ad) ?? cleanField(l.utmSource)].filter(Boolean).join(' / ') || '—'
 }
 
 function rdvLabel(l: Pick<LeadResponse, 'latestRdvAt' | 'latestRdvStatus'>): string {
@@ -548,7 +589,14 @@ function rdvLabel(l: Pick<LeadResponse, 'latestRdvAt' | 'latestRdvStatus'>): str
 }
 
 function addressFull(l: Pick<LeadResponse, 'addressLine' | 'postalCode' | 'city'>): string {
-  return [l.addressLine, [l.postalCode, l.city].filter(Boolean).join(' ')].filter(Boolean).join(', ') || '—'
+  // DATA-1 défensif : cleanField filtre les "undefined"/"null" littéraux stockés
+  // par certains imports legacy. On affiche toujours le lead — juste un tiret
+  // pour les pièces manquantes.
+  const addr = cleanField(l.addressLine)
+  const postal = cleanField(l.postalCode)
+  const city = cleanField(l.city)
+  const tail = [postal, city].filter(Boolean).join(' ')
+  return [addr, tail].filter(Boolean).join(', ') || '—'
 }
 
 function formatDays(days: number | null | undefined): string {
@@ -814,13 +862,14 @@ function DailyCallGauge({ count }: { count: number }) {
 }
 
 function PhoneCell({ lead, onStartCall }: { lead: LeadResponse; onStartCall: ReturnType<typeof useStartCall> }) {
-  if (!lead.phone) return <span className="text-faint">—</span>
+  const phone = cleanField(lead.phone)
+  if (!phone) return <span className="text-faint">—</span>
   return (
     <button
       type="button"
       onClick={(e) => {
         e.stopPropagation()
-        onStartCall({ leadId: lead.id, leadName: fullName(lead), toNumber: lead.phone! }).catch((err) => {
+        onStartCall({ leadId: lead.id, leadName: fullName(lead), toNumber: phone }).catch((err) => {
           console.error('Phone copy failed', err)
           alert(err instanceof Error ? err.message : 'Impossible de copier le numéro')
         })
@@ -829,7 +878,7 @@ function PhoneCell({ lead, onStartCall }: { lead: LeadResponse; onStartCall: Ret
       title="Copier le numéro pour appeler"
     >
       <Icon name="phone" size={13} />
-      <span className="truncate">{lead.phone}</span>
+      <span className="truncate">{phone}</span>
     </button>
   )
 }

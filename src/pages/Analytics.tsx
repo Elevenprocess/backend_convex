@@ -122,24 +122,15 @@ function AnalyticsSetter({ name }: { name: string }) {
           ]} />
         </div>
 
-        <div className="grid grid-cols-12 gap-6">
-          <div className="glass-card p-6 col-span-7">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold">Pipeline setter — nouveau lead → RDV</h3>
-              <span className="eyebrow">backend live</span>
-            </div>
-            <PipelineFlow stats={stats} />
-          </div>
-          <div className="glass-card p-6 col-span-5">
-            <h3 className="font-bold mb-4">Taux de conversion</h3>
-            <div className="space-y-4">
-              <Goal label="Taux de réponse" value={`${stats.answered} / ${Math.max(1, stats.newLeads)} · ${stats.responseRate}%`} pct={stats.responseRate} color="#D4AF37" />
-              <Goal label="RDV après réponse" value={`${stats.rdvPris} / ${Math.max(1, stats.answered)} · ${stats.rdvAfterAnswerRate}%`} pct={stats.rdvAfterAnswerRate} color="#3DA86A" />
-              <Goal label="Taux global RDV" value={`${stats.rdvPris} / ${Math.max(1, stats.newLeads)} · ${stats.globalRdvRate}%`} pct={stats.globalRdvRate} color="#B87333" />
-              <Row label="Leads en relance" value={String(stats.relance)} />
-              <Row label="Pas qualifiés" value={String(stats.notQualified)} />
-              <Row label="Qualifiés" value={String(stats.qualified)} highlight />
-            </div>
+        <div className="glass-card p-6">
+          <h3 className="font-bold mb-4">Taux de conversion</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+            <Goal label="Taux de réponse" value={`${stats.answered} / ${Math.max(1, stats.newLeads)} · ${stats.responseRate}%`} pct={stats.responseRate} color="#D4AF37" />
+            <Goal label="RDV après réponse" value={`${stats.rdvPris} / ${Math.max(1, stats.answered)} · ${stats.rdvAfterAnswerRate}%`} pct={stats.rdvAfterAnswerRate} color="#3DA86A" />
+            <Goal label="Taux global RDV" value={`${stats.rdvPris} / ${Math.max(1, stats.newLeads)} · ${stats.globalRdvRate}%`} pct={stats.globalRdvRate} color="#B87333" />
+            <Row label="Leads en relance" value={String(stats.relance)} />
+            <Row label="Pas qualifiés" value={String(stats.notQualified)} />
+            <Row label="Qualifiés" value={String(stats.qualified)} highlight />
           </div>
         </div>
 
@@ -465,50 +456,6 @@ function BigStatCard({ label, value, delta, sub }: { label: string; value: strin
         {delta && <span className="delta-badge delta-success">{delta}</span>}
       </div>
       {sub && <div className="text-xs text-faint mt-2">{sub}</div>}
-    </div>
-  )
-}
-
-function PipelineFlow({ stats }: { stats: AnalyticsSetterSummary }) {
-  const nodes = [
-    { label: 'Nouveau lead', value: stats.newLeads, color: '#6B7C8C', sub: 'entrées' },
-    { label: 'Appel setter', value: stats.calls, color: '#D4AF37', sub: 'actions' },
-    { label: 'A répondu', value: stats.answered, color: '#3DA86A', sub: `${stats.responseRate}% réponse` },
-    { label: 'Qualifié', value: stats.qualified, color: '#B87333', sub: `${stats.notQualified} pas qualifiés` },
-    { label: 'Prise de RDV', value: stats.rdvPris, color: '#B7410E', sub: `${stats.globalRdvRate}% global` },
-  ]
-  return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-5 gap-3 items-stretch">
-        {nodes.map((n, i) => (
-          <div key={n.label} className="relative rounded-2xl bg-white/60 border border-line-soft p-4 min-h-[112px] overflow-hidden">
-            <div className="absolute -right-8 -top-8 w-20 h-20 rounded-full opacity-20" style={{ background: n.color }} />
-            <div className="relative z-10">
-              <div className="text-[10px] font-extrabold uppercase tracking-widest text-faint mb-2">Étape {i + 1}</div>
-              <div className="font-bold leading-tight">{n.label}</div>
-              <div className="text-[34px] font-extrabold leading-none mt-3" style={{ color: n.color }}>{fmtInt(n.value)}</div>
-              <div className="text-[11px] text-muted mt-1">{n.sub}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-3 gap-3 text-sm">
-        <div className="rounded-2xl bg-cuivre-tint/60 border border-line-soft p-4">
-          <div className="eyebrow mb-1">Non répondu → relance</div>
-          <div className="text-2xl font-extrabold text-cuivre">{stats.relance}</div>
-          <div className="text-xs text-muted">À rappeler / pas de réponse / relance</div>
-        </div>
-        <div className="rounded-2xl bg-rouille-tint/60 border border-line-soft p-4">
-          <div className="eyebrow mb-1">Répondu → pas qualifié</div>
-          <div className="text-2xl font-extrabold text-rouille">{stats.notQualified}</div>
-          <div className="text-xs text-muted">Refus / hors cible / pas budget</div>
-        </div>
-        <div className="rounded-2xl bg-success-tint/60 border border-line-soft p-4">
-          <div className="eyebrow mb-1">Répondu → RDV</div>
-          <div className="text-2xl font-extrabold text-success">{stats.rdvPris}</div>
-          <div className="text-xs text-muted">{stats.rdvAfterAnswerRate}% des leads répondus</div>
-        </div>
-      </div>
     </div>
   )
 }

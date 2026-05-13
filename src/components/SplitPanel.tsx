@@ -6,6 +6,8 @@ import {
   STATUS_LABEL,
   STATUS_BADGE,
   CALL_RESULT_LABEL,
+  cleanField,
+  fieldOrDash,
   fullName,
   initials as leadInitials,
   type CallResult,
@@ -79,9 +81,10 @@ export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, chi
   const callState = useCall()
   const isActiveCallForThisLead = callState.active && callState.leadId === lead.id
 
+  const cleanPhone = cleanField(lead.phone)
   async function copyPhoneOnly() {
-    if (!lead.phone) return
-    await copyText(lead.phone)
+    if (!cleanPhone) return
+    await copyText(cleanPhone)
     notifyClipboardCopied()
     setActive('notes')
   }
@@ -93,7 +96,7 @@ export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, chi
         <div className="w-12 h-12 rounded-full bg-cuivre-tint flex items-center justify-center text-sm font-bold">{leadInitials(lead)}</div>
         <div className="flex-grow min-w-0">
           <div className="font-bold text-sm">{fullName(lead)}</div>
-          <div className="text-xs text-faint truncate">{lead.phone ?? '—'}</div>
+          <div className="text-xs text-faint truncate">{fieldOrDash(lead.phone)}</div>
           <div className="mt-1 flex items-center gap-2 flex-wrap">
             <span className={`status-badge ${STATUS_BADGE[lead.status]}`}>{STATUS_LABEL[lead.status]}</span>
           </div>
@@ -118,7 +121,7 @@ export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, chi
           icon="phone"
           onClick={() => { copyPhoneOnly().catch((err) => alert(err instanceof Error ? err.message : 'Impossible de copier le numéro')) }}
           primary
-          disabled={!lead.phone}
+          disabled={!cleanPhone}
         />
         <ActionBtn icon="calendar" onClick={() => setActive('rdv')} />
         <ActionBtn icon="edit" onClick={() => setActive('notes')} />
@@ -230,14 +233,17 @@ type InfosEditable = {
 }
 
 function leadToInfosForm(lead: LeadResponse): InfosEditable {
+  // DATA-1 défensif : si la BDD contient encore des "undefined" littéraux,
+  // on les efface en chargeant le formulaire — sinon l'utilisateur sauverait
+  // à nouveau "undefined" sans s'en rendre compte.
   return {
-    firstName: lead.firstName ?? '',
-    lastName: lead.lastName ?? '',
-    email: lead.email ?? '',
-    phone: lead.phone ?? '',
-    addressLine: lead.addressLine ?? '',
-    city: lead.city ?? '',
-    postalCode: lead.postalCode ?? '',
+    firstName: cleanField(lead.firstName) ?? '',
+    lastName: cleanField(lead.lastName) ?? '',
+    email: cleanField(lead.email) ?? '',
+    phone: cleanField(lead.phone) ?? '',
+    addressLine: cleanField(lead.addressLine) ?? '',
+    city: cleanField(lead.city) ?? '',
+    postalCode: cleanField(lead.postalCode) ?? '',
     status: lead.status,
   }
 }
@@ -304,10 +310,10 @@ function InfosTab({ lead, userMap, onSaved }: { lead: LeadResponse; userMap?: Ma
           </button>
         </div>
         <Field label="NOM" value={[lead.firstName, lead.lastName].filter(Boolean).join(' ') || '—'} />
-        <Field label="TÉLÉPHONE" value={lead.phone ?? '—'} />
-        <Field label="EMAIL" value={lead.email ?? '—'} />
-        <Field label="ADRESSE" value={[lead.addressLine, lead.postalCode, lead.city].filter(Boolean).join(', ') || '—'} />
-        <Field label="VILLE" value={lead.city ?? '—'} />
+        <Field label="TÉLÉPHONE" value={fieldOrDash(lead.phone)} />
+        <Field label="EMAIL" value={fieldOrDash(lead.email)} />
+        <Field label="ADRESSE" value={[cleanField(lead.addressLine), cleanField(lead.postalCode), cleanField(lead.city)].filter(Boolean).join(', ') || '—'} />
+        <Field label="VILLE" value={fieldOrDash(lead.city)} />
         <Field label="SOURCE" value={prettySource(lead)} />
         {lead.utmSource && <Field label="UTM" value={lead.utmSource} />}
         <Field label="STATUT" value={STATUS_LABEL[lead.status]} />
@@ -522,7 +528,12 @@ function NotesTab({
   type Step = 'eligibility' | 'qualification' | 'secteur' | 'rdv' | 'confirmation' | 'done'
 
   const [setterStatus, setSetterStatus] = useState<SetterStatus>(() => statusToSetterStatus(lead.status))
-  const [step, setStep] = useState<Step>('eligibility')
+  // Un lead déjà classifié (a_rappeler, pas_de_reponse, qualifie, perdu, etc.)
+  // saute l'éligibilité — pas besoin de re-demander propriétaire/activité/etc.
+  // pour planifier un rappel ou changer le statut sur un lead déjà travaillé.
+  const initialStep = (status: LeadResponse['status']): Step =>
+    status === 'nouveau' ? 'eligibility' : 'qualification'
+  const [step, setStep] = useState<Step>(() => initialStep(lead.status))
   const [eligibilityNotes, setEligibilityNotes] = useState<EligibilityNotes>(EMPTY_ELIGIBILITY_NOTES)
   const [commentaire, setCommentaire] = useState('')
   const [callbackAt, setCallbackAt] = useState('')
@@ -530,14 +541,14 @@ function NotesTab({
   const [rdvDate, setRdvDate] = useState(todayInputValue())
   const [rdvAt, setRdvAt] = useState('')
   const [form, setForm] = useState({
-    firstName: lead.firstName ?? '',
-    lastName: lead.lastName ?? '',
-    email: lead.email ?? '',
-    phone: lead.phone ?? '',
-    addressLine: lead.addressLine ?? '',
-    city: lead.city ?? '',
-    postalCode: lead.postalCode ?? '',
-    typeLogement: lead.typeLogement ?? '',
+    firstName: cleanField(lead.firstName) ?? '',
+    lastName: cleanField(lead.lastName) ?? '',
+    email: cleanField(lead.email) ?? '',
+    phone: cleanField(lead.phone) ?? '',
+    addressLine: cleanField(lead.addressLine) ?? '',
+    city: cleanField(lead.city) ?? '',
+    postalCode: cleanField(lead.postalCode) ?? '',
+    typeLogement: cleanField(lead.typeLogement) ?? '',
     revenuFiscal: lead.revenuFiscal?.toString() ?? '',
   })
   const [saving, setSaving] = useState(false)
@@ -570,14 +581,14 @@ function NotesTab({
   // refetch, F5, déconnexion WS, etc.) sans faire perdre la saisie en cours.
   useEffect(() => {
     const defaultForm = {
-      firstName: lead.firstName ?? '',
-      lastName: lead.lastName ?? '',
-      email: lead.email ?? '',
-      phone: lead.phone ?? '',
-      addressLine: lead.addressLine ?? '',
-      city: lead.city ?? '',
-      postalCode: lead.postalCode ?? '',
-      typeLogement: lead.typeLogement ?? '',
+      firstName: cleanField(lead.firstName) ?? '',
+      lastName: cleanField(lead.lastName) ?? '',
+      email: cleanField(lead.email) ?? '',
+      phone: cleanField(lead.phone) ?? '',
+      addressLine: cleanField(lead.addressLine) ?? '',
+      city: cleanField(lead.city) ?? '',
+      postalCode: cleanField(lead.postalCode) ?? '',
+      typeLogement: cleanField(lead.typeLogement) ?? '',
       revenuFiscal: lead.revenuFiscal?.toString() ?? '',
     }
     try {
@@ -595,7 +606,7 @@ function NotesTab({
           form: typeof defaultForm
         }>
         setSetterStatus(parsed.setterStatus ?? statusToSetterStatus(lead.status))
-        setStep(parsed.step ?? 'eligibility')
+        setStep(parsed.step ?? initialStep(lead.status))
         setEligibilityNotes(parsed.eligibilityNotes ?? EMPTY_ELIGIBILITY_NOTES)
         setCommentaire(parsed.commentaire ?? '')
         setCallbackAt(parsed.callbackAt ?? '')
@@ -609,7 +620,7 @@ function NotesTab({
       }
     } catch {}
     setSetterStatus(statusToSetterStatus(lead.status))
-    setStep('eligibility')
+    setStep(initialStep(lead.status))
     setEligibilityNotes(EMPTY_ELIGIBILITY_NOTES)
     setCommentaire('')
     setCallbackAt('')
@@ -776,6 +787,42 @@ function NotesTab({
 
       {step === 'eligibility' && (
         <div className="space-y-4">
+          <div className="rounded-[18px] border border-or/30 bg-or-tint/40 p-4 space-y-3">
+            <div>
+              <div className="text-[10px] font-bold tracking-widest uppercase text-or-dark mb-1">Avant tout — le lead a-t-il pu répondre ?</div>
+              <p className="text-xs text-muted">Si le lead n’a pas répondu ou demande à être rappelé, enregistre le statut ici sans passer par l’éligibilité.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-2">
+              <StatusChoice active={setterStatus === 'a_rappeler'} icon="clock" title="À rappeler" text="Date et heure du rappel" onClick={() => { setSetterStatus('a_rappeler'); setResult('rappel_planifie') }} />
+              <StatusChoice active={setterStatus === 'pas_de_reponse'} icon="phone-off" title="Pas de réponse" text="Aucun champ requis" onClick={() => { setSetterStatus('pas_de_reponse'); setResult('non_joint') }} />
+            </div>
+            {setterStatus === 'a_rappeler' && (
+              <div className="space-y-3">
+                <DateTimeSlotInput label="Date et heure du rappel" value={callbackAt} onChange={setCallbackAt} />
+                <textarea
+                  value={commentaire}
+                  onChange={(e) => setCommentaire(e.target.value)}
+                  placeholder="Commentaire rappel : disponibilité, contexte…"
+                  className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full h-20 resize-none"
+                />
+              </div>
+            )}
+            {setterStatus === 'pas_de_reponse' && (
+              <p className="text-sm text-muted">Aucun champ obligatoire : tu peux enregistrer directement.</p>
+            )}
+            {(setterStatus === 'a_rappeler' || setterStatus === 'pas_de_reponse') && (
+              <button
+                type="button"
+                onClick={() => saveCallAndLead(setterStatus)}
+                disabled={saving}
+                className="btn-primary w-full rounded-xl py-2 text-sm disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {saving ? <Spinner size={16} stroke={2} /> : null}
+                Enregistrer le statut
+              </button>
+            )}
+          </div>
+
           <div className="rounded-[18px] border border-line bg-white/70 p-4 space-y-4">
             <div>
               <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-1">Notes d’éligibilité</div>
@@ -833,42 +880,6 @@ function NotesTab({
               placeholder="Petite note sur le budget envisagé…"
               className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full h-20 resize-none"
             />
-
-            <div className="rounded-[18px] border border-line bg-white/80 p-3 space-y-3">
-              <div>
-                <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-1">Si le lead ne peut pas répondre</div>
-                <p className="text-xs text-muted">Enregistre directement le statut depuis les notes.</p>
-              </div>
-              <div className="grid grid-cols-1 gap-2">
-                <StatusChoice active={setterStatus === 'a_rappeler'} icon="clock" title="À rappeler" text="Date et heure du rappel" onClick={() => { setSetterStatus('a_rappeler'); setResult('rappel_planifie') }} />
-                <StatusChoice active={setterStatus === 'pas_de_reponse'} icon="phone-off" title="Pas de réponse" text="Aucun champ requis" onClick={() => { setSetterStatus('pas_de_reponse'); setResult('non_joint') }} />
-              </div>
-              {setterStatus === 'a_rappeler' && (
-                <div className="space-y-3">
-                  <DateTimeSlotInput label="Date et heure du rappel" value={callbackAt} onChange={setCallbackAt} />
-                  <textarea
-                    value={commentaire}
-                    onChange={(e) => setCommentaire(e.target.value)}
-                    placeholder="Commentaire rappel : disponibilité, contexte…"
-                    className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full h-20 resize-none"
-                  />
-                </div>
-              )}
-              {setterStatus === 'pas_de_reponse' && (
-                <p className="text-sm text-muted">Aucun champ obligatoire : tu peux enregistrer directement.</p>
-              )}
-              {(setterStatus === 'a_rappeler' || setterStatus === 'pas_de_reponse') && (
-                <button
-                  type="button"
-                  onClick={() => saveCallAndLead(setterStatus)}
-                  disabled={saving}
-                  className="btn-primary w-full rounded-xl py-2 text-sm disabled:opacity-60 flex items-center justify-center gap-2"
-                >
-                  {saving ? <Spinner size={16} stroke={2} /> : null}
-                  Enregistrer le statut
-                </button>
-              )}
-            </div>
 
             <button type="button" onClick={continueToQualification} className="btn-primary w-full rounded-xl py-2 text-sm">
               Continuer vers qualification

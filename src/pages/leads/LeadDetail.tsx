@@ -9,6 +9,7 @@ import {
   STATUS_BADGE,
   STATUS_LABEL,
   CALL_RESULT_LABEL,
+  cleanField,
   fullName,
   initials as leadInitials,
   type LeadResponse,
@@ -97,13 +98,14 @@ export function LeadDetail() {
           </button>
           <button
             onClick={() => {
-              if (!lead.phone) return
-              startCall({ leadId: lead.id, leadName: fullName(lead), toNumber: lead.phone }).catch((e) => {
+              const phone = cleanField(lead.phone)
+              if (!phone) return
+              startCall({ leadId: lead.id, leadName: fullName(lead), toNumber: phone }).catch((e) => {
                 console.error('Phone copy failed', e)
                 alert(e instanceof Error ? e.message : 'Impossible de copier le numéro')
               })
             }}
-            disabled={!lead.phone}
+            disabled={!cleanField(lead.phone)}
             className="btn-primary px-5 py-2 rounded-[14px] text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Icon name="phone" size={14} />
@@ -120,9 +122,9 @@ export function LeadDetail() {
             <h3 className="text-xl font-bold">{fullName(lead)}</h3>
             <span className={`status-badge ${STATUS_BADGE[lead.status]} mt-2 inline-block`}>{STATUS_LABEL[lead.status]}</span>
             <div className="mt-4 space-y-2 text-sm text-muted">
-              {lead.phone && <div className="flex items-center justify-center gap-2"><Icon name="phone" size={14} /> {lead.phone}</div>}
-              {lead.email && <div className="flex items-center justify-center gap-2"><Icon name="mail" size={14} /> {lead.email}</div>}
-              {lead.city && <div className="flex items-center justify-center gap-2"><Icon name="map-pin" size={14} /> {lead.city}</div>}
+              {cleanField(lead.phone) && <div className="flex items-center justify-center gap-2"><Icon name="phone" size={14} /> {cleanField(lead.phone)}</div>}
+              {cleanField(lead.email) && <div className="flex items-center justify-center gap-2"><Icon name="mail" size={14} /> {cleanField(lead.email)}</div>}
+              {cleanField(lead.city) && <div className="flex items-center justify-center gap-2"><Icon name="map-pin" size={14} /> {cleanField(lead.city)}</div>}
             </div>
           </div>
 
