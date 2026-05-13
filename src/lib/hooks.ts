@@ -32,7 +32,7 @@ type FetchCacheEntry = {
 
 const FETCH_CACHE_TTL_MS = 5 * 60 * 1000
 const PERSISTED_CACHE_PREFIX = 'ecoi.fetchCache.v1:'
-const PERSISTED_CACHE_PATHS = ['/leads', '/users']
+const PERSISTED_CACHE_PATHS = ['/leads', '/users', '/analytics/summary']
 const fetchCache = new Map<string, FetchCacheEntry>()
 
 function buildFetchCacheKey(path: string | null, queryKey: string): string | null {

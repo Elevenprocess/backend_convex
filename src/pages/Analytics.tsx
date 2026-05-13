@@ -225,7 +225,7 @@ function AnalyticsAdmin() {
       </div>
       <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
         <div className="grid grid-cols-4 gap-6">
-          <BigStatCard label="APPELS LOGIQUES" value={fmtInt(stats.calls)} delta={`${stats.syntheticCalls} ETL`} sub="call_logs + classifications" />
+          <BigStatCard label="APPELS CRM" value={fmtInt(stats.calls)} delta={`${stats.classified} traités`} sub="Appels et statuts suivis dans le CRM" />
           <BigStatCard label="LEADS CLASSIFIÉS" value={fmtInt(stats.classified)} sub={`${stats.qualificationRate}% qualifiés`} />
           <BigStatCard label="RDV PRIS" value={fmtInt(stats.rdvPris)} sub={`${stats.rdvRate}% / appels`} />
           <BigStatCard label="CA SIGNÉ" value={fmtKEur(stats.ca)} delta={`${stats.signed} ventes`} />
@@ -432,13 +432,13 @@ function commercialTableRows(stats: AnalyticsCommercialSummary) {
 
 function adminTableRows(stats: AnalyticsAdminSummary) {
   return [
-    ['Appels logiques', fmtInt(stats.calls), `${stats.syntheticCalls} ajoutés par ETL`],
-    ['Leads classifiés', fmtInt(stats.classified), `${stats.qualificationRate}% qualifiés`],
-    ['Qualifiés', fmtInt(stats.qualified), 'Leads prêts / avancés'],
-    ['RDV pris', fmtInt(stats.rdvPris), `${stats.rdvRate}% / appels`],
-    ['Ventes signées', fmtInt(stats.signed), 'RDV signés'],
-    ['CA signé', fmtKEur(stats.ca), 'Total ventes'],
-    ['Non traités', fmtInt(stats.unclassified), 'Leads sans classification'],
+    ['Appels CRM enregistrés', fmtInt(stats.calls), 'Nombre d’appels suivis dans le CRM sur la période'],
+    ['Leads travaillés', fmtInt(stats.classified), 'Leads qui ont eu un vrai statut commercial : qualifié, relance, refus ou RDV'],
+    ['Leads qualifiés', fmtInt(stats.qualified), `${stats.qualificationRate}% des appels deviennent des opportunités qualifiées`],
+    ['RDV créés', fmtInt(stats.rdvPris), `${stats.rdvRate}% de transformation appel → RDV`],
+    ['Ventes signées', fmtInt(stats.signed), 'Nombre de dossiers signés après RDV honoré'],
+    ['Chiffre d’affaires signé', fmtKEur(stats.ca), stats.signed > 0 ? `Panier moyen estimé : ${fmtKEur(stats.ca / stats.signed)}` : 'Aucune vente signée sur cette période'],
+    ['Leads à traiter', fmtInt(stats.unclassified), 'Leads encore sans qualification claire dans le CRM'],
   ]
 }
 
@@ -747,7 +747,7 @@ function AnalyticsStatsTable({ title, rows }: { title: string; rows: string[][] 
             <tr className="text-left eyebrow">
               <Th>INDICATEUR</Th>
               <Th>VALEUR</Th>
-              <Th>DÉTAIL</Th>
+              <Th>LECTURE CRM</Th>
             </tr>
           </thead>
           <tbody>
