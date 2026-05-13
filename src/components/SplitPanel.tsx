@@ -553,7 +553,7 @@ function NotesTab({
   const { data: ghlConfig } = useGhlCalendarConfig()
   const selectedSectorConfig = ghlConfig?.sectors.find((item) => normalizeSectorKey(item.sector) === normalizeSectorKey(sector))
   const slotRange = buildDayRange(rdvDate)
-  const { data: ghlSlotsData, loading: ghlSlotsLoading } = useGhlFreeSlots({
+  const { data: ghlSlotsData, loading: ghlSlotsLoading, refetch: refetchGhlSlots } = useGhlFreeSlots({
     sector: sector || undefined,
     calendarId: selectedSectorConfig?.calendarId || undefined,
     from: slotRange?.from,
@@ -720,6 +720,8 @@ function NotesTab({
           addressLine: form.addressLine || null,
           city: form.city || null,
           postalCode: form.postalCode || null,
+          typeLogement: form.typeLogement || null,
+          revenuFiscal: revenu,
         })
       } else {
         await createRdv({
@@ -732,7 +734,8 @@ function NotesTab({
       }
       await createCallLog({ leadId: lead.id, result: 'joint', notes: noteFinale || null })
       refetchAgenda()
-      setSuccess('RDV créé, agenda mis à jour et lead qualifié. Les infos envoyées incluent email, nom complet, numéro et note d’appel.')
+      refetchGhlSlots()
+      setSuccess(ghlConfig?.configured ? 'RDV créé dans GHL + remarque prospect envoyée, agenda actualisé.' : 'RDV créé en local. Agenda actualisé.')
       setStep('done')
       onSaved?.()
     } catch (e) {

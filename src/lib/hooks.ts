@@ -405,6 +405,8 @@ export type CreateGhlAppointmentInput = CreateRdvInput & {
   addressLine?: string | null
   city?: string | null
   postalCode?: string | null
+  typeLogement?: string | null
+  revenuFiscal?: number | null
 }
 
 export async function createGhlAppointment(input: CreateGhlAppointmentInput): Promise<{ rdv: RdvResponse; ghl: unknown }> {
