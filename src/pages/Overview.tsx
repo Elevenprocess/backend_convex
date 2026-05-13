@@ -484,8 +484,6 @@ function AdminLeadFunnel({
         <div className="py-10 text-center text-faint text-sm">Aucune donnée funnel disponible.</div>
       ) : (
         <div className="grid grid-cols-12 gap-4">
-          <FunnelFlowMap totals={totals} />
-
           <div className="col-span-12 grid grid-cols-12 gap-4">
             <FunnelTopCard label="1. Nouveaux leads" value={totals.newLeads} sub="Leads créés sur la période" color="#6B7C8C" />
             <FunnelTopCard label="2. Appels setters" value={totals.calls} sub={`${callsPerLead(totals.calls, totals.newLeads)} appels / lead`} color="#D4AF37" />
@@ -507,6 +505,8 @@ function AdminLeadFunnel({
             <h4 className="font-bold mb-3">Comparaison commerciaux</h4>
             <FunnelComparisonTable rows={funnel.commercialComparison.slice(0, 5)} empty="Aucun RDV commercial sur la période." />
           </div>
+
+          <FunnelFlowMap totals={totals} />
         </div>
       )}
     </section>
@@ -515,27 +515,34 @@ function AdminLeadFunnel({
 
 function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }) {
   return (
-    <div className="col-span-12 rounded-3xl border border-line-soft bg-gradient-to-r from-white/75 via-or-tint/35 to-emerald-50/70 p-4">
-      <div className="flex items-center justify-between gap-3 mb-4">
+    <div className="col-span-12 mt-3 rounded-3xl border border-line-soft bg-gradient-to-br from-white/85 via-or-tint/35 to-emerald-50/80 p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <div className="eyebrow">Lecture rapide du parcours</div>
-          <div className="font-extrabold">Le chemin exact d’un nouveau lead jusqu’au rendez-vous</div>
+          <div className="eyebrow">Lecture détaillée du parcours</div>
+          <div className="text-xl font-extrabold">Funnel visuel des leads, étape par étape</div>
+          <div className="text-xs text-faint mt-1">Placée en bas pour lire calmement le chemin CRM sans compresser les chiffres.</div>
         </div>
-        <div className="rounded-full bg-white/70 border border-line px-3 py-1 text-xs font-bold text-emerald-700">
-          {totals.globalConversionRate}% conversion globale
+        <div className="rounded-full bg-white/80 border border-line px-4 py-2 text-sm font-extrabold text-emerald-700">
+          {totals.rdv} RDV · {totals.globalConversionRate}% conversion globale
         </div>
       </div>
-      <div className="grid grid-cols-7 gap-2 items-stretch text-center">
-        <FlowStep title="Nouveaux leads" value={totals.newLeads} sub="entrée CRM" color="#6B7C8C" />
+
+      <div className="max-w-5xl mx-auto space-y-4">
+        <FlowStep title="1. Nouveaux leads" value={totals.newLeads} sub="Leads entrés dans le CRM sur la période" color="#6B7C8C" />
         <FlowArrow />
-        <FlowStep title="Appels setters" value={totals.calls} sub="activité setter" color="#D4AF37" />
+        <FlowStep title="2. Appels setters" value={totals.calls} sub={`${callsPerLead(totals.calls, totals.newLeads)} appels par lead en moyenne`} color="#D4AF37" />
         <FlowArrow />
         <FlowDecision
-          yes={`${totals.answered} oui · ${totals.responseRate}%`}
-          no={`${totals.noAnswer} non · ${totals.relances} relances`}
+          yes={`${totals.answered} leads ont répondu · ${totals.responseRate}% des appels`}
+          no={`${totals.noAnswer} leads sans réponse · ${totals.relances} relances effectuées`}
         />
         <FlowArrow />
-        <FlowStep title="RDV pris" value={totals.rdv} sub={`${totals.qualified} qualifiés · ${totals.notQualified} pas qualifiés`} color="#3DA86A" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FlowStep title="4A. Qualifiés" value={totals.qualified} sub={`${totals.qualificationRate}% des leads ayant répondu · ${totals.rdv} RDV pris`} color="#D4AF37" />
+          <FlowStep title="4B. Pas qualifiés" value={totals.notQualified} sub={`${totals.notQualifiedRate}% des leads ayant répondu · perte commerciale`} color="#B7410E" />
+        </div>
+        <FlowArrow />
+        <FlowStep title="5. Conversion finale" value={totals.rdv} sub={`${totals.globalConversionRate}% des nouveaux leads ont obtenu un rendez-vous`} color="#3DA86A" />
       </div>
     </div>
   )
@@ -543,26 +550,36 @@ function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }
 
 function FlowStep({ title, value, sub, color }: { title: string; value: number; sub: string; color: string }) {
   return (
-    <div className="rounded-2xl bg-white/75 border border-line-soft p-3 flex flex-col justify-center min-h-[112px]">
-      <div className="text-[10px] font-bold uppercase text-faint">{title}</div>
-      <div className="text-3xl font-extrabold mt-1" style={{ color }}>{fmtCompact(value)}</div>
-      <div className="text-[11px] text-muted mt-1">{sub}</div>
+    <div className="rounded-3xl bg-white/80 border border-line-soft p-5 flex items-center justify-between gap-4 shadow-sm">
+      <div>
+        <div className="text-xs font-black uppercase text-faint tracking-wide">{title}</div>
+        <div className="text-sm text-muted mt-1">{sub}</div>
+      </div>
+      <div className="text-4xl font-extrabold shrink-0" style={{ color }}>{fmtCompact(value)}</div>
     </div>
   )
 }
 
 function FlowDecision({ yes, no }: { yes: string; no: string }) {
   return (
-    <div className="rounded-2xl bg-white/75 border border-line-soft p-3 min-h-[112px]">
-      <div className="text-[10px] font-bold uppercase text-faint">A répondu ?</div>
-      <div className="mt-2 rounded-xl bg-emerald-50 text-emerald-700 px-2 py-1 text-xs font-extrabold">OUI : {yes}</div>
-      <div className="mt-2 rounded-xl bg-amber-50 text-amber-700 px-2 py-1 text-xs font-extrabold">NON : {no}</div>
+    <div className="rounded-3xl bg-white/80 border border-line-soft p-5 shadow-sm">
+      <div className="text-center text-sm font-black uppercase text-faint tracking-wide">3. Le lead a répondu ?</div>
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-4 text-emerald-800">
+          <div className="text-xs font-black uppercase">Oui</div>
+          <div className="mt-1 text-lg font-extrabold">{yes}</div>
+        </div>
+        <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 text-amber-800">
+          <div className="text-xs font-black uppercase">Non</div>
+          <div className="mt-1 text-lg font-extrabold">{no}</div>
+        </div>
+      </div>
     </div>
   )
 }
 
 function FlowArrow() {
-  return <div className="hidden md:flex items-center justify-center text-3xl font-black text-or">→</div>
+  return <div className="flex items-center justify-center text-3xl font-black text-or">↓</div>
 }
 
 function FunnelTopCard({ label, value, sub, color }: { label: string; value: number; sub: string; color: string }) {
