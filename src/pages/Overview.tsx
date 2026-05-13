@@ -342,13 +342,15 @@ function OverviewAdmin() {
           if (id === 'commerciaux' || id === 'ventes') navigate('/analytics')
         }}
       />
-      <main className="p-6 grid grid-cols-12 auto-rows-auto gap-4 flex-grow overflow-auto">
-        <SmallKpi title="CA TOTAL" value={fmtKEur(stats.caMois)} haloColor="#D4AF37" lineColor="#D4AF37" linePoints="0,16 15,12 30,14 45,8 60,10 75,4 100,6" />
-        <SmallKpi title="VENTES" value={String(stats.ventes)} haloColor="#B87333" lineColor="#B87333" linePoints="0,14 15,16 30,10 45,12 60,6 75,8 100,4" />
-        <SmallKpi title="CLOSING" value={`${stats.closing}%`} haloColor="#3DA86A" lineColor="#3DA86A" linePoints="0,12 15,14 30,10 45,12 60,8 75,10 100,6" />
-        <SmallKpi title="LEADS" value={fmtCompact(stats.leads)} haloColor="#6B7C8C" lineColor="#6B7C8C" linePoints="0,16 15,14 30,10 45,8 60,12 75,6 100,4" />
-        <SmallKpi title="PANIER MOY." value={fmtKEur(stats.panier)} haloColor="#B7410E" lineColor="#B7410E" linePoints="0,8 15,10 30,12 45,10 60,14 75,12 100,16" />
-        <SmallKpi title="APPELS" value={fmtCompact(stats.appels)} haloColor="#D4AF37" lineColor="#D4AF37" linePoints="0,12 15,8 30,10 45,6 60,8 75,4 100,6" />
+      <main className="p-8 pt-6 flex-grow overflow-auto space-y-8">
+        <section className="grid grid-cols-12 gap-5">
+          <SmallKpi title="CA TOTAL" value={fmtKEur(stats.caMois)} haloColor="#D4AF37" lineColor="#D4AF37" linePoints="0,16 15,12 30,14 45,8 60,10 75,4 100,6" />
+          <SmallKpi title="VENTES" value={String(stats.ventes)} haloColor="#B87333" lineColor="#B87333" linePoints="0,14 15,16 30,10 45,12 60,6 75,8 100,4" />
+          <SmallKpi title="CLOSING" value={`${stats.closing}%`} haloColor="#3DA86A" lineColor="#3DA86A" linePoints="0,12 15,14 30,10 45,12 60,8 75,10 100,6" />
+          <SmallKpi title="LEADS" value={fmtCompact(stats.leads)} haloColor="#6B7C8C" lineColor="#6B7C8C" linePoints="0,16 15,14 30,10 45,8 60,12 75,6 100,4" />
+          <SmallKpi title="PANIER MOY." value={fmtKEur(stats.panier)} haloColor="#B7410E" lineColor="#B7410E" linePoints="0,8 15,10 30,12 45,10 60,14 75,12 100,16" />
+          <SmallKpi title="APPELS" value={fmtCompact(stats.appels)} haloColor="#D4AF37" lineColor="#D4AF37" linePoints="0,12 15,8 30,10 45,6 60,8 75,4 100,6" />
+        </section>
 
         <AdminLeadFunnel
           funnel={funnel}
@@ -362,7 +364,8 @@ function OverviewAdmin() {
           onSectorChange={setFunnelSector}
         />
 
-        <div className="glass-card col-span-8 p-5">
+        <section className="grid grid-cols-12 gap-6">
+          <div className="glass-card col-span-8 p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-bold">Évolution CA — par mode de paiement</h3>
             <PillTabs items={[{ id: 'w', label: 'Sem' }, { id: 'm', label: 'Mois' }, { id: 't', label: 'Trim' }]} active="m" onChange={() => {}} />
@@ -429,6 +432,7 @@ function OverviewAdmin() {
             </p>
           </div>
         </div>
+        </section>
 
         {funnel?.totals && <FunnelFlowMap totals={funnel.totals} />}
       </main>
@@ -454,7 +458,7 @@ function AdminLeadFunnel({
   const totals = funnel?.totals
   const setters = users.filter((u) => u.role === 'setter')
   return (
-    <section className="glass-card col-span-12 p-5 overflow-hidden">
+    <section className="glass-card w-full p-7 overflow-visible">
       <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
         <div>
           <span className="eyebrow">FUNNEL LEADS CRM</span>
@@ -485,25 +489,25 @@ function AdminLeadFunnel({
       ) : !funnel || !totals ? (
         <div className="py-10 text-center text-faint text-sm">Aucune donnée funnel disponible.</div>
       ) : (
-        <div className="grid grid-cols-12 gap-4">
-          <div className="col-span-12 grid grid-cols-12 gap-4">
+        <div className="grid grid-cols-12 gap-6">
+          <div className="col-span-12 grid grid-cols-12 gap-5">
             <FunnelTopCard label="1. Nouveaux leads" value={totals.newLeads} sub="Leads créés sur la période" color="#6B7C8C" />
             <FunnelTopCard label="2. Appels setters" value={totals.calls} sub={`${callsPerLead(totals.calls, totals.newLeads)} appels / lead`} color="#D4AF37" />
             <FunnelTopCard label="3. Conversion finale" value={totals.rdv} sub={`${totals.globalConversionRate}% des nouveaux leads`} color="#3DA86A" />
           </div>
 
-          <div className="col-span-7">
+          <div className="col-span-12 xl:col-span-7">
             <FunnelLogicTree totals={totals} />
           </div>
-          <div className="col-span-5 space-y-4">
+          <div className="col-span-12 xl:col-span-5 space-y-6">
             <FunnelBranchChart totals={totals} />
             <FunnelDailyChart data={funnel.daily} />
           </div>
-          <div className="col-span-6 glass-card !p-4 bg-white/35">
+          <div className="col-span-12 lg:col-span-6 glass-card !p-5 bg-white/35">
             <h4 className="font-bold mb-3">Comparaison setters</h4>
             <FunnelComparisonTable rows={funnel.setterComparison.slice(0, 5)} empty="Aucune activité setter sur la période." />
           </div>
-          <div className="col-span-6 glass-card !p-4 bg-white/35">
+          <div className="col-span-12 lg:col-span-6 glass-card !p-5 bg-white/35">
             <h4 className="font-bold mb-3">Comparaison commerciaux</h4>
             <FunnelComparisonTable rows={funnel.commercialComparison.slice(0, 5)} empty="Aucun RDV commercial sur la période." />
           </div>
@@ -577,7 +581,7 @@ function MiniArrow() {
 
 function FunnelTopCard({ label, value, sub, color }: { label: string; value: number; sub: string; color: string }) {
   return (
-    <div className="col-span-4 rounded-2xl border border-line-soft bg-white/55 p-4">
+    <div className="col-span-12 md:col-span-4 rounded-2xl border border-line-soft bg-white/55 p-5 min-h-[132px]">
       <div className="text-[10px] font-bold uppercase text-faint">{label}</div>
       <div className="mt-1 text-3xl font-extrabold" style={{ color }}>{fmtCompact(value)}</div>
       <div className="text-xs text-muted mt-1">{sub}</div>
@@ -940,7 +944,7 @@ function SmallKpi({
   linePoints: string
 }) {
   return (
-    <div className="kpi-card col-span-2">
+    <div className="col-span-12 sm:col-span-6 xl:col-span-2 kpi-card min-h-[132px]">
       <div className="kpi-halo tr" style={{ background: haloColor, opacity: 0.4 }} />
       <div className="kpi-content">
         <span className="eyebrow block mb-1">{title}</span>
