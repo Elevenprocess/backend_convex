@@ -61,7 +61,7 @@ function OverviewSetter() {
   }, [leads, calls, me?.id])
 
   return (
-    <AppShell blobsKey="setter">
+    <AppShell flat>
       <Topbar
         eyebrow="SETTER"
         title={`Bonjour, ${display.firstName}`}
@@ -771,12 +771,9 @@ function FuturisticLineChart({ values, color }: { values: number[]; color: strin
   const last = values.at(-1) ?? 0
   const total = values.reduce((a, b) => a + b, 0)
   return (
-    <div className="relative h-full rounded-2xl bg-white/35 border border-line-soft overflow-hidden p-4">
-      <div className="absolute inset-0 opacity-40" style={{ background: `radial-gradient(circle at 75% 20%, ${color}55, transparent 38%)` }} />
+    <div className="relative h-full rounded-2xl bg-white/35 border border-line-soft overflow-hidden p-4 flat-target">
       <svg viewBox="0 0 300 150" className="relative z-10 w-full h-full" preserveAspectRatio="none">
-        <defs><linearGradient id={`line-${color.replace('#', '')}`} x1="0" x2="0" y1="0" y2="1"><stop stopColor={color} stopOpacity="0.35"/><stop stopColor={color} stopOpacity="0"/></linearGradient></defs>
         {[30, 60, 90, 120].map((y) => <line key={y} x1="0" x2="300" y1={y} y2={y} stroke="#E5E1DA" strokeDasharray="4 6" />)}
-        <polygon points={`0,150 ${points} 300,150`} fill={`url(#line-${color.replace('#', '')})`} />
         <polyline points={points} fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
       <div className="absolute top-4 right-4 text-right z-20">
@@ -791,7 +788,6 @@ function FuturisticAreaChart({ values, color }: { values: number[]; color: strin
   const points = chartPoints(values)
   return (
     <div className="relative h-full rounded-2xl bg-white/35 border border-line-soft overflow-hidden p-4">
-      <div className="absolute inset-0 opacity-50" style={{ background: `linear-gradient(135deg, ${color}22, transparent 55%)` }} />
       <svg viewBox="0 0 300 150" className="relative z-10 w-full h-full" preserveAspectRatio="none">
         <polygon points={`0,150 ${points} 300,150`} fill={color} opacity="0.18" />
         <polyline points={points} fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
@@ -805,7 +801,6 @@ function FuturisticBars({ values, colors }: { values: number[]; colors: string[]
   const max = Math.max(1, ...values)
   return (
     <div className="h-full rounded-2xl bg-white/35 border border-line-soft p-4 flex items-end gap-3 overflow-hidden relative">
-      <div className="absolute inset-0 opacity-40" style={{ background: `radial-gradient(circle at 15% 15%, ${colors[0]}55, transparent 35%)` }} />
       {values.map((v, i) => (
         <div key={i} className="relative z-10 flex-1 flex flex-col items-center gap-2">
           <div className="w-full rounded-t-xl shadow-sm" style={{ height: `${Math.max(8, (v / max) * 150)}px`, background: colors[i % colors.length], opacity: 0.72 + (i / values.length) * 0.25 }} />

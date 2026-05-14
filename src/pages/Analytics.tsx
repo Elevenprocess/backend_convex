@@ -130,7 +130,7 @@ function AnalyticsSetter({ name }: { name: string }) {
   const stats = data?.setter ?? EMPTY_SETTER_STATS
 
   return (
-    <AppShell blobsKey="setter">
+    <AppShell flat>
       <Topbar eyebrow="ANALYTICS / SETTER" title={`Mes performances — ${name}`} />
       <div className="px-8 pt-4 flex items-center justify-between gap-4 flex-shrink-0">
         <div className="text-xs text-faint font-semibold">
@@ -517,8 +517,8 @@ function PipelineFlow({ stats }: { stats: AnalyticsSetterSummary }) {
     <div className="space-y-5">
       <div className="grid grid-cols-5 gap-3 items-stretch">
         {nodes.map((n, i) => (
-          <div key={n.label} className="relative rounded-2xl bg-white/60 border border-line-soft p-4 min-h-[112px] overflow-hidden">
-            <div className="absolute -right-8 -top-8 w-20 h-20 rounded-full opacity-20" style={{ background: n.color }} />
+          <div key={n.label} className="relative rounded-2xl bg-white/60 border border-line-soft p-4 min-h-[112px] overflow-hidden flat-target">
+            <div className="absolute -right-8 -top-8 w-20 h-20 rounded-full opacity-20 decor-bubble" style={{ background: n.color }} />
             <div className="relative z-10">
               <div className="text-[10px] font-extrabold uppercase tracking-widest text-faint mb-2">Étape {i + 1}</div>
               <div className="font-bold leading-tight">{n.label}</div>
@@ -529,17 +529,17 @@ function PipelineFlow({ stats }: { stats: AnalyticsSetterSummary }) {
         ))}
       </div>
       <div className="grid grid-cols-3 gap-3 text-sm">
-        <div className="rounded-2xl bg-cuivre-tint/60 border border-line-soft p-4">
+        <div className="rounded-2xl bg-cuivre-tint/60 border border-line-soft p-4 flat-target">
           <div className="eyebrow mb-1">Non répondu → relance</div>
           <div className="text-2xl font-extrabold text-cuivre">{stats.relance}</div>
           <div className="text-xs text-muted">À rappeler / pas de réponse / relance</div>
         </div>
-        <div className="rounded-2xl bg-rouille-tint/60 border border-line-soft p-4">
+        <div className="rounded-2xl bg-rouille-tint/60 border border-line-soft p-4 flat-target">
           <div className="eyebrow mb-1">Répondu → pas qualifié</div>
           <div className="text-2xl font-extrabold text-rouille">{stats.notQualified}</div>
           <div className="text-xs text-muted">Refus / hors cible / pas budget</div>
         </div>
-        <div className="rounded-2xl bg-success-tint/60 border border-line-soft p-4">
+        <div className="rounded-2xl bg-success-tint/60 border border-line-soft p-4 flat-target">
           <div className="eyebrow mb-1">Répondu → RDV</div>
           <div className="text-2xl font-extrabold text-success">{stats.rdvPris}</div>
           <div className="text-xs text-muted">{stats.rdvAfterAnswerRate}% des leads répondus</div>
@@ -551,23 +551,12 @@ function PipelineFlow({ stats }: { stats: AnalyticsSetterSummary }) {
 
 function PieChart({ segments, center }: { segments: Segment[]; center: string }) {
   const total = segments.reduce((sum, s) => sum + s.value, 0)
-  let cursor = 0
-  const gradient = total === 0
-    ? '#E5E1DA 0deg 360deg'
-    : segments.map((s) => {
-      const start = cursor
-      const end = cursor + (s.value / total) * 360
-      cursor = end
-      return `${s.color} ${start}deg ${end}deg`
-    }).join(', ')
   return (
-    <div className="grid grid-cols-[220px_1fr] gap-8 items-center">
-      <div className="relative w-[220px] h-[220px] rounded-full shadow-[0_0_45px_rgba(212,175,55,0.18)]" style={{ background: `conic-gradient(${gradient})` }}>
-        <div className="absolute inset-8 rounded-full bg-white/90 border border-line-soft flex items-center justify-center text-center">
-          <div>
-            {center.split('\n').map((line) => <div key={line} className="font-extrabold text-xl leading-tight">{line}</div>)}
-            <div className="eyebrow mt-1">total</div>
-          </div>
+    <div className="grid grid-cols-[180px_1fr] gap-6 items-center">
+      <div className="w-[180px] h-[180px] rounded-[28px] bg-white border border-line flex items-center justify-center text-center shadow-sm">
+        <div>
+          {center.split('\n').map((line) => <div key={line} className="font-extrabold text-xl leading-tight">{line}</div>)}
+          <div className="eyebrow mt-1">total</div>
         </div>
       </div>
       <div className="space-y-3">
@@ -589,8 +578,7 @@ function Heatline({ values, color }: { values: number[]; color: string }) {
   const max = Math.max(1, ...values)
   const sample = values.length > 18 ? values.filter((_, i) => i % Math.ceil(values.length / 18) === 0) : values
   return (
-    <div className="h-[180px] rounded-2xl bg-white/35 border border-line-soft p-4 flex items-end gap-2 overflow-hidden relative">
-      <div className="absolute inset-0 opacity-40" style={{ background: `radial-gradient(circle at 75% 20%, ${color}55, transparent 38%)` }} />
+    <div className="h-[180px] rounded-2xl bg-white/35 border border-line-soft p-4 flex items-end gap-2 overflow-hidden relative flat-target">
       {sample.map((v, i) => (
         <div key={i} className="relative z-10 flex-1 flex flex-col items-center gap-2">
           <div className="w-full rounded-t-xl" style={{ height: `${Math.max(8, (v / max) * 135)}px`, background: color, opacity: 0.45 + (v / max) * 0.5 }} />
@@ -690,24 +678,13 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
             })}
           </div>
 
-          <div className="relative rounded-[28px] bg-gradient-to-br from-white/80 via-white/55 to-or-tint/30 border border-line-soft p-3 shadow-inner overflow-hidden">
+          <div className="relative rounded-[28px] bg-white border border-line-soft p-3 shadow-inner overflow-hidden flat-target">
             <div className="absolute right-4 top-4 rounded-2xl bg-white/80 border border-line-soft px-3 py-2 shadow-sm">
               <div className="text-[10px] font-extrabold uppercase tracking-widest text-faint">Dernier jour</div>
               <div className="text-2xl font-extrabold" style={{ color: active.color }}>{formatMetric(active.key, last?.[active.key] || 0)}</div>
               <div className={`text-[11px] font-bold ${delta >= 0 ? 'text-success' : 'text-rouille'}`}>{delta >= 0 ? '+' : ''}{formatMetric(active.key, delta)} vs début</div>
             </div>
             <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-[260px]" role="img" aria-label={title}>
-              <defs>
-                <linearGradient id={`area-${active.key}`} x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stopColor={active.color} stopOpacity="0.35" />
-                  <stop offset="70%" stopColor={active.color} stopOpacity="0.08" />
-                  <stop offset="100%" stopColor={active.color} stopOpacity="0" />
-                </linearGradient>
-                <filter id="softGlow">
-                  <feGaussianBlur stdDeviation="3" result="blur" />
-                  <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-                </filter>
-              </defs>
               {[0, 0.5, 1].map((ratio) => {
                 const y = padTop + ratio * chartHeight
                 const label = Math.round(max * (1 - ratio))
@@ -721,7 +698,7 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
               {series.filter((serie) => serie.key !== active.key).map((serie) => (
                 <polyline key={serie.key} points={ghostPointsFor(serie)} fill="none" stroke={serie.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.2" strokeDasharray="5 8" />
               ))}
-              <polygon points={areaPoints} fill={`url(#area-${active.key})`} opacity="0.95" />
+              <polygon points={areaPoints} fill={active.color} opacity="0.08" />
               <polyline
                 points={linePoints}
                 fill="none"
@@ -729,7 +706,6 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
                 strokeWidth="5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                filter="url(#softGlow)"
                 style={{ strokeDasharray: 1100, strokeDashoffset: 0, animation: 'dashDraw 1.05s ease both' }}
               />
               {sample.map((point, idx) => {

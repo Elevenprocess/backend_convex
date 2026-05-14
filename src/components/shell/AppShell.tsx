@@ -9,9 +9,10 @@ import { useRole } from '../../lib/role'
 type AppShellProps = {
   children: ReactNode
   blobsKey?: keyof typeof BLOB_PRESETS
+  flat?: boolean
 }
 
-export function AppShell({ children, blobsKey }: AppShellProps) {
+export function AppShell({ children, blobsKey, flat = false }: AppShellProps) {
   const role = useRole((s) => s.role)
   const authRole = useAuth((s) => s.user?.role)
   const selectedLeadId = useLeadSidebar((s) => s.selectedLeadId)
@@ -21,8 +22,8 @@ export function AppShell({ children, blobsKey }: AppShellProps) {
   const reserveLeadSidebar = Boolean(selectedLeadId && !isLeadSidebarExcluded(pathname, authRole))
 
   return (
-    <div className="relative w-full h-screen bg-cream overflow-hidden">
-      <Blobs blobs={blobs} />
+    <div className={`relative w-full h-screen overflow-hidden ${flat ? 'bg-white appshell-flat' : 'bg-cream'}`}>
+      {!flat && <Blobs blobs={blobs} />}
       <div className="relative z-20 w-full h-full flex">
         <Sidebar />
         <div
