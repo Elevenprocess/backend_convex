@@ -758,3 +758,47 @@ body {
   background: rgba(42, 31, 16, 0.72) !important;
   border-color: rgba(224, 190, 85, 0.22) !important;
 }
+
+[data-theme="dark"] .appshell-flat .flow-map,
+[data-theme="dark"] .appshell-flat .flow-response,
+[data-theme="dark"] .appshell-flat .flow-step,
+[data-theme="dark"] .appshell-flat .daily-chart-panel,
+[data-theme="dark"] .appshell-flat .flow-pill,
+[data-theme="dark"] .evolution-chart,
+[data-theme="dark"] .evolution-last-card,
+[data-theme="dark"] .evolution-summary,
+[data-theme="dark"] .evolution-tab {
+  background: rgba(9, 15, 19, 0.66) !important;
+  border-color: rgba(220, 232, 238, 0.16) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+
+[data-theme="dark"] .appshell-flat .flow-response-yes {
+  background: rgba(18, 38, 30, 0.74) !important;
+  color: #B7F3CC !important;
+  border: 1px solid rgba(79, 190, 125, 0.2) !important;
+}
+
+[data-theme="dark"] .appshell-flat .flow-response-no {
+  background: rgba(42, 31, 16, 0.74) !important;
+  color: #F5D892 !important;
+  border: 1px solid rgba(224, 190, 85, 0.2) !important;
+}
+
+[data-theme="dark"] .appshell-flat .flow-pill-success {
+  background: rgba(18, 38, 30, 0.74) !important;
+  color: #B7F3CC !important;
+  border-color: rgba(79, 190, 125, 0.24) !important;
+}
+
+[data-theme="dark"] .evolution-tab-active {
+  background: rgba(15, 24, 30, 0.92) !important;
+  border-color: rgba(212, 175, 55, 0.42) !important;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28) !important;
+}
+
+[data-theme="dark"] .evolution-chart {
+  --chart-grid: rgba(220, 232, 238, 0.16);
+  --chart-label: #8D9AA1;
+  --chart-point-fill: #10181E;
+}

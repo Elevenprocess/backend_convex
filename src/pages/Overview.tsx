@@ -473,13 +473,13 @@ function AdminLeadFunnel({
 
 function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }) {
   return (
-    <div className="col-span-12 mt-4 rounded-2xl border border-line-soft bg-white/65 p-4">
+    <div className="flow-map col-span-12 mt-4 rounded-2xl border border-line-soft bg-white/65 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div>
           <div className="eyebrow">Flux leads CRM</div>
           <div className="text-sm font-extrabold">Lecture minimaliste du parcours jusqu’au RDV</div>
         </div>
-        <div className="rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-extrabold text-emerald-700">
+        <div className="flow-pill flow-pill-success rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-extrabold text-emerald-700">
           {totals.rdv} RDV · {totals.globalConversionRate}% conv.
         </div>
       </div>
@@ -489,15 +489,15 @@ function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }
         <MiniArrow />
         <MiniFlowStep title="Appels" value={totals.calls} sub={`${callsPerLead(totals.calls, totals.newLeads)} / lead`} color="#D4AF37" />
         <MiniArrow />
-        <div className="rounded-xl border border-line-soft bg-white/70 p-3">
+        <div className="flow-response rounded-xl border border-line-soft bg-white/70 p-3">
           <div className="text-[10px] font-black uppercase text-faint">A répondu ?</div>
           <div className="mt-2 grid grid-cols-2 gap-2">
-            <div className="rounded-lg bg-emerald-50 px-2 py-1.5 text-emerald-800">
+            <div className="flow-response-yes rounded-lg bg-emerald-50 px-2 py-1.5 text-emerald-800">
               <div className="text-[10px] font-bold">Oui</div>
               <div className="text-lg font-black">{totals.answered}</div>
               <div className="text-[10px]">{totals.responseRate}% appels</div>
             </div>
-            <div className="rounded-lg bg-amber-50 px-2 py-1.5 text-amber-800">
+            <div className="flow-response-no rounded-lg bg-amber-50 px-2 py-1.5 text-amber-800">
               <div className="text-[10px] font-bold">Non</div>
               <div className="text-lg font-black">{totals.noAnswer}</div>
               <div className="text-[10px]">{totals.relances} relances</div>
@@ -512,8 +512,8 @@ function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted">
-        <span className="rounded-full bg-white/70 px-2 py-1 border border-line-soft">Pas qualifiés : <b>{totals.notQualified}</b> · {totals.notQualifiedRate}% réponses</span>
-        <span className="rounded-full bg-white/70 px-2 py-1 border border-line-soft">Formule : RDV / nouveaux leads</span>
+        <span className="flow-pill rounded-full bg-white/70 px-2 py-1 border border-line-soft">Pas qualifiés : <b>{totals.notQualified}</b> · {totals.notQualifiedRate}% réponses</span>
+        <span className="flow-pill rounded-full bg-white/70 px-2 py-1 border border-line-soft">Formule : RDV / nouveaux leads</span>
       </div>
     </div>
   )
@@ -521,7 +521,7 @@ function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }
 
 function MiniFlowStep({ title, value, sub, color }: { title: string; value: number; sub: string; color: string }) {
   return (
-    <div className="rounded-xl bg-white/70 border border-line-soft p-3 min-h-[82px]">
+    <div className="flow-step rounded-xl bg-white/70 border border-line-soft p-3 min-h-[82px]">
       <div className="text-[10px] font-black uppercase text-faint">{title}</div>
       <div className="text-2xl font-extrabold leading-none mt-1" style={{ color }}>{fmtCompact(value)}</div>
       <div className="text-[11px] text-muted mt-1">{sub}</div>
@@ -617,7 +617,7 @@ function FunnelDailyChart({ data }: { data: AnalyticsFunnelResponse['daily'] }) 
   const values = data.map((d) => d.rdv)
   const max = Math.max(1, ...values)
   return (
-    <div className="rounded-2xl border border-line-soft bg-white/45 p-4 h-[190px]">
+    <div className="daily-chart-panel rounded-2xl border border-line-soft bg-white/45 p-4 h-[190px]">
       <div className="flex items-center justify-between mb-3">
         <h4 className="font-bold">Vue chronologique</h4>
         <span className="eyebrow">RDV / jour</span>

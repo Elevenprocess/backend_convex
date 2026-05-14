@@ -253,7 +253,7 @@ function AnalyticsAdmin() {
   const stats = data?.admin ?? EMPTY_ADMIN_STATS
 
   return (
-    <AppShell blobsKey="admin">
+    <AppShell blobsKey="admin" flat>
       <Topbar eyebrow="ANALYTICS / ADMIN" title="Performance globale équipe" />
       <div className="px-8 pt-4 flex items-center justify-between gap-4 flex-shrink-0">
         <div className="text-xs text-faint font-semibold">Requête unique backend /analytics/summary : {range.label}.{loading && <AnalyticsInlineLoading />}{error ? ` Erreur: ${error}` : ''}</div>
@@ -667,7 +667,7 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
                   key={serie.key}
                   type="button"
                   onClick={() => setActiveKey(serie.key)}
-                  className={`text-left rounded-2xl border px-3 py-2 transition-all ${isActive ? 'bg-white shadow-lg border-or/40 scale-[1.02]' : 'bg-white/45 border-line-soft hover:bg-white/75'}`}
+                  className={`evolution-tab text-left rounded-2xl border px-3 py-2 transition-all ${isActive ? 'evolution-tab-active bg-white shadow-lg border-or/40 scale-[1.02]' : 'bg-white/45 border-line-soft hover:bg-white/75'}`}
                 >
                   <span className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-widest text-faint">
                     <i className="w-2.5 h-2.5 rounded-full" style={{ background: serie.color }} />{serie.label}
@@ -678,8 +678,8 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
             })}
           </div>
 
-          <div className="relative rounded-[28px] bg-white border border-line-soft p-3 shadow-inner overflow-hidden flat-target">
-            <div className="absolute right-4 top-4 rounded-2xl bg-white/80 border border-line-soft px-3 py-2 shadow-sm">
+          <div className="evolution-chart relative rounded-[28px] bg-white border border-line-soft p-3 shadow-inner overflow-hidden flat-target">
+            <div className="evolution-last-card absolute right-4 top-4 rounded-2xl bg-white/80 border border-line-soft px-3 py-2 shadow-sm">
               <div className="text-[10px] font-extrabold uppercase tracking-widest text-faint">Dernier jour</div>
               <div className="text-2xl font-extrabold" style={{ color: active.color }}>{formatMetric(active.key, last?.[active.key] || 0)}</div>
               <div className={`text-[11px] font-bold ${delta >= 0 ? 'text-success' : 'text-rouille'}`}>{delta >= 0 ? '+' : ''}{formatMetric(active.key, delta)} vs début</div>
@@ -690,8 +690,8 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
                 const label = Math.round(max * (1 - ratio))
                 return (
                   <g key={ratio}>
-                    <line x1={padX} x2={width - padX} y1={y} y2={y} stroke="#DDD6C9" strokeDasharray="6 8" strokeWidth="1" />
-                    <text x="8" y={y + 4} fill="#6B7C8C" fontSize="11" fontWeight="700">{formatMetric(active.key, label)}</text>
+                    <line x1={padX} x2={width - padX} y1={y} y2={y} stroke="var(--chart-grid, #DDD6C9)" strokeDasharray="6 8" strokeWidth="1" />
+                    <text x="8" y={y + 4} fill="var(--chart-label, #6B7C8C)" fontSize="11" fontWeight="700">{formatMetric(active.key, label)}</text>
                   </g>
                 )
               })}
@@ -715,9 +715,9 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
                 const showLabel = sample.length <= 10 || idx === 0 || idx === sample.length - 1 || isPeak
                 return (
                   <g key={point.date}>
-                    <circle cx={x} cy={y} r={isPeak ? 6 : 4} fill="white" stroke={active.color} strokeWidth={isPeak ? 4 : 3} />
+                    <circle cx={x} cy={y} r={isPeak ? 6 : 4} fill="var(--chart-point-fill, white)" stroke={active.color} strokeWidth={isPeak ? 4 : 3} />
                     {isPeak && <text x={x} y={y - 12} fill={active.color} fontSize="11" fontWeight="800" textAnchor="middle">pic {formatMetric(active.key, point[active.key] || 0)}</text>}
-                    {showLabel && <text x={x} y={height - 13} fill="#6B7C8C" fontSize="11" fontWeight="700" textAnchor={idx === 0 ? 'start' : idx === sample.length - 1 ? 'end' : 'middle'}>{point.label}</text>}
+                    {showLabel && <text x={x} y={height - 13} fill="var(--chart-label, #6B7C8C)" fontSize="11" fontWeight="700" textAnchor={idx === 0 ? 'start' : idx === sample.length - 1 ? 'end' : 'middle'}>{point.label}</text>}
                   </g>
                 )
               })}
@@ -725,16 +725,16 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
           </div>
 
           <div className="grid grid-cols-3 gap-3 mt-4 text-sm">
-            <div className="rounded-2xl bg-white/60 border border-line-soft p-3">
+            <div className="evolution-summary rounded-2xl bg-white/60 border border-line-soft p-3">
               <div className="eyebrow mb-1">Total période</div>
               <div className="text-xl font-extrabold">{formatMetric(active.key, total)}</div>
             </div>
-            <div className="rounded-2xl bg-white/60 border border-line-soft p-3">
+            <div className="evolution-summary rounded-2xl bg-white/60 border border-line-soft p-3">
               <div className="eyebrow mb-1">Pic</div>
               <div className="text-xl font-extrabold">{peak ? formatMetric(active.key, peak[active.key] || 0) : '0'}</div>
               <div className="text-[11px] text-faint">{peak?.label}</div>
             </div>
-            <div className="rounded-2xl bg-white/60 border border-line-soft p-3">
+            <div className="evolution-summary rounded-2xl bg-white/60 border border-line-soft p-3">
               <div className="eyebrow mb-1">Tendance</div>
               <div className={`text-xl font-extrabold ${delta >= 0 ? 'text-success' : 'text-rouille'}`}>{delta >= 0 ? 'Hausse' : 'Baisse'}</div>
               <div className="text-[11px] text-faint">début → fin</div>
