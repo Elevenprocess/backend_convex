@@ -144,7 +144,7 @@ body {
 /* === Flat (strict minimalist) mode === */
 /* Applied via <AppShell flat>. Wraps a `.appshell-flat` class on the root container.
    Hides decorative halos/blobs/glass and converts soft glass cards into solid
-   white cards with thin borders. Only impacts the setter Overview/Analytics. */
+   white cards with thin borders for minimalist dashboard pages. */
 .appshell-flat .blob,
 .appshell-flat .glass-overlay,
 .appshell-flat .kpi-halo,

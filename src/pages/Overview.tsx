@@ -323,7 +323,7 @@ function OverviewAdmin() {
   }, [leads, rdvs, calls, usersList])
 
   return (
-    <AppShell blobsKey="admin">
+    <AppShell blobsKey="admin" flat>
       <Topbar
         eyebrow="ADMIN — TABLEAU DE BORD"
         title="Performance équipe"
