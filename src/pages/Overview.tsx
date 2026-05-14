@@ -68,14 +68,15 @@ function OverviewSetter() {
         tabs={[
           { id: 'overview', label: 'Overview' },
           { id: 'performance', label: 'Performance' },
-          { id: 'activity', label: 'Activité' },
+          { id: 'notifications', label: 'Notification' },
           { id: 'leads', label: 'Leads' },
         ]}
         activeTab={tab}
         onTabChange={(id) => {
           setTab(id)
           if (id === 'leads') navigate('/leads')
-          if (id === 'performance' || id === 'activity') navigate('/analytics')
+          if (id === 'notifications') navigate('/notifications')
+          if (id === 'performance') navigate('/analytics')
         }}
       />
       <main className="p-6 grid grid-cols-12 grid-rows-[auto_1fr_1fr] gap-4 flex-grow overflow-auto">
