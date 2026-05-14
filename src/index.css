@@ -724,3 +724,18 @@ body {
 [data-theme="dark"] .topbar-menu {
   -webkit-backdrop-filter: blur(28px) saturate(155%);
 }
+
+[data-theme="dark"] .appshell-flat {
+  background: var(--color-cream-darker) !important;
+  color: var(--color-text);
+}
+
+[data-theme="dark"] .appshell-flat .glass-card,
+[data-theme="dark"] .appshell-flat .kpi-card,
+[data-theme="dark"] .appshell-flat .big-number-card,
+[data-theme="dark"] .appshell-flat .promo-card,
+[data-theme="dark"] .appshell-flat .flat-target {
+  background: rgba(9, 15, 19, 0.64) !important;
+  border-color: rgba(220, 232, 238, 0.16) !important;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+}
