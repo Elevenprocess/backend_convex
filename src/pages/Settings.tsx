@@ -4,6 +4,7 @@ import { Navigate } from 'react-router-dom'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Icon } from '../components/Icon'
+import { UserEditModal } from '../components/UserEditModal'
 import { useAuth } from '../lib/auth'
 import { inviteUser, useInvitations, useUsers } from '../lib/hooks'
 import { useTheme } from '../lib/theme'
@@ -51,8 +52,16 @@ function SettingsAdmin() {
   const isDark = useTheme((s) => s.isDark)
   const toggleTheme = useTheme((s) => s.toggleTheme)
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [editingUser, setEditingUser] = useState<UserResponse | null>(null)
   const team = users ?? []
   const pendingInvitations = (invitations ?? []).filter((i) => i.status === 'pending')
+  const pendingInvitationByUserId = useMemo(() => {
+    const map = new Map<string, InvitationResponse>()
+    for (const invitation of invitations ?? []) {
+      if (invitation.status === 'pending' && invitation.targetUserId) map.set(invitation.targetUserId, invitation)
+    }
+    return map
+  }, [invitations])
 
   const counts = useMemo(() => ({
     total: team.length,
@@ -98,7 +107,7 @@ function SettingsAdmin() {
                   <Th className="text-right">ACTIONS</Th>
                 </tr>
               </thead>
-              <tbody>{team.map((m) => <UserRow key={m.id} user={m} />)}</tbody>
+              <tbody>{team.map((m) => <UserRow key={m.id} user={m} onEdit={setEditingUser} />)}</tbody>
             </table>
           )}
         </div>
@@ -140,6 +149,17 @@ function SettingsAdmin() {
         <InviteModal
           onClose={() => setInviteOpen(false)}
           onInvited={() => {
+            refetchUsers()
+            refetchInvitations()
+          }}
+        />
+      )}
+      {editingUser && (
+        <UserEditModal
+          user={editingUser}
+          pendingInvitation={pendingInvitationByUserId.get(editingUser.id) ?? null}
+          onClose={() => setEditingUser(null)}
+          onChanged={() => {
             refetchUsers()
             refetchInvitations()
           }}
@@ -233,7 +253,7 @@ function Field({ label, value, onChange, type = 'text', required = false }: { la
   )
 }
 
-function UserRow({ user }: { user: UserResponse }) {
+function UserRow({ user, onEdit }: { user: UserResponse; onEdit: (user: UserResponse) => void }) {
   const inits = userInitials(user.name)
   return (
     <tr className="border-b border-line-soft last:border-0 hover:bg-white/40">
@@ -241,7 +261,7 @@ function UserRow({ user }: { user: UserResponse }) {
       <td className="px-3 py-3 text-muted">{user.email}</td>
       <td className="px-3 py-3"><span className={`status-badge ${ROLE_BADGE[user.role]}`}>{ROLE_LABEL[user.role]}</span></td>
       <td className="px-3 py-3"><span className={`status-badge ${user.active ? 'bg-success-tint text-success' : 'bg-rouille-tint text-rouille'}`}>{user.active ? 'Actif' : 'Inactif'}</span></td>
-      <td className="px-3 py-3 text-right"><button className="text-xs text-muted hover:text-text font-semibold">Modifier</button></td>
+      <td className="px-3 py-3 text-right"><button onClick={() => onEdit(user)} className="text-xs text-muted hover:text-text font-semibold">Modifier</button></td>
     </tr>
   )
 }

@@ -318,6 +318,40 @@ export async function acceptInvitation(input: { token: string; password: string 
   return api<UserResponse>('/users/invitations/accept', { method: 'POST', body: input })
 }
 
+export type UpdateUserPayload = {
+  name?: string
+  phone?: string | null
+  role?: UserResponse['role']
+  team?: UserResponse['team']
+  active?: boolean
+}
+
+export async function updateUser(id: string, input: UpdateUserPayload): Promise<UserResponse> {
+  return api<UserResponse>(`/users/${id}`, { method: 'PATCH', body: input })
+}
+
+export type RenewUserPayload = {
+  email?: string
+  name?: string
+  phone?: string | null
+  role?: UserResponse['role']
+  team?: UserResponse['team']
+}
+
+export type RenewUserResponse = {
+  user: UserResponse
+  inviteUrl: string
+  emailSent: boolean
+}
+
+export async function renewUser(id: string, input: RenewUserPayload): Promise<RenewUserResponse> {
+  return api<RenewUserResponse>(`/users/${id}/renew`, { method: 'POST', body: input })
+}
+
+export async function deleteUser(id: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/users/${id}`, { method: 'DELETE' })
+}
+
 export function useUser(id: string | undefined): Async<UserResponse> {
   return useFetch<UserResponse>(id ? `/users/${id}` : null)
 }

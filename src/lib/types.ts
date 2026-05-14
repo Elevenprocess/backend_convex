@@ -30,6 +30,7 @@ export type InvitationResponse = {
   expiresAt: string
   createdAt: string
   acceptedAt: string | null
+  targetUserId: string | null
   inviteUrl?: string
   emailSent?: boolean
 }
