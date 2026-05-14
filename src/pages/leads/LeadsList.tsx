@@ -201,7 +201,7 @@ function LeadsSetter() {
               <div className="glass-card !p-0 overflow-hidden flex-grow min-h-0">
                 <div ref={tableScrollRef} data-preserve-scroll="true" className="overflow-auto h-full">
                 <table className="min-w-[1640px] w-full text-sm table-fixed lead-table">
-                  <thead className="text-left eyebrow bg-or-tint sticky top-0 z-10 shadow-sm">
+                  <thead className="text-left eyebrow sticky top-0 z-10 border-b border-white/60 bg-white/65 shadow-sm shadow-text/5 backdrop-blur-2xl">
                     <tr>
                       {orderedColumns.map((column) => renderSetterHeader(column.key))}
                     </tr>
@@ -357,7 +357,7 @@ function LeadsAdmin() {
           <div className="glass-card !p-0 overflow-hidden flex-grow min-h-0">
             <div ref={tableScrollRef} data-preserve-scroll="true" className="overflow-auto h-full">
             <table className="min-w-[5480px] w-full text-sm table-fixed lead-table">
-              <thead className="text-left eyebrow bg-or-tint sticky top-0 z-10 shadow-sm">
+              <thead className="text-left eyebrow sticky top-0 z-10 border-b border-white/60 bg-white/65 shadow-sm shadow-text/5 backdrop-blur-2xl">
                 <tr>
                   {orderedColumns.map((column) => renderAdminHeader(column.key))}
                 </tr>
@@ -882,7 +882,7 @@ function ColumnVisibilityMenu({
 
 
 function Th({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <th className={`px-4 py-3 whitespace-nowrap ${className}`}>{children}</th>
+  return <th className={`px-4 py-3 whitespace-nowrap bg-white/25 backdrop-blur-xl ${className}`}>{children}</th>
 }
 
 function Td({ children, className = '', title }: { children: React.ReactNode; className?: string; title?: string }) {
