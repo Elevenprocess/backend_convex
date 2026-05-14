@@ -18,13 +18,14 @@ type TopbarProps = {
 const MAIN_NAV_TABS = [
   { id: 'overview', label: 'Overview', to: '/overview' },
   { id: 'performance', label: 'Performance', to: '/analytics' },
-  { id: 'activity', label: 'Activité', to: '/analytics' },
+  { id: 'notifications', label: 'Notification', to: '/notifications' },
   { id: 'leads', label: 'Leads', to: '/leads' },
 ]
 
 function currentMainTab(pathname: string, activeTab?: string): string {
   if (activeTab && MAIN_NAV_TABS.some((tab) => tab.id === activeTab)) return activeTab
   if (pathname.startsWith('/leads')) return 'leads'
+  if (pathname.startsWith('/notifications')) return 'notifications'
   if (pathname.startsWith('/analytics')) return 'performance'
   return 'overview'
 }
@@ -38,6 +39,7 @@ export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) 
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const mainActiveTab = currentMainTab(pathname, activeTab)
+  const isNotificationsPage = pathname.startsWith('/notifications')
   const topbarRef = useRef<HTMLElement | null>(null)
   const [openMenu, setOpenMenu] = useState<'search' | 'settings' | 'profile' | null>(null)
   const [search, setSearch] = useState('')
@@ -45,8 +47,8 @@ export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) 
   const { data: rdvsData } = useRdvList({ limit: 1000 })
   const [seenNotificationVersion, setSeenNotificationVersion] = useState(0)
   const notificationCount = useMemo(
-    () => countUnreadNotifications(leadsData ?? [], rdvsData ?? []),
-    [leadsData, rdvsData, seenNotificationVersion],
+    () => isNotificationsPage ? 0 : countUnreadNotifications(leadsData ?? [], rdvsData ?? []),
+    [isNotificationsPage, leadsData, rdvsData, seenNotificationVersion],
   )
 
   useEffect(() => {
@@ -91,27 +93,28 @@ export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) 
 
   return (
     <header ref={topbarRef} className="app-topbar">
-      <div className="flex items-center gap-6 min-w-0">
+      <div className="min-w-0 max-w-[320px] pr-4">
         {(eyebrow || title) && (
           <div className="min-w-0">
             {eyebrow && <span className="eyebrow block">{eyebrow}</span>}
             {title && <h2 className="text-base font-bold truncate">{title}</h2>}
           </div>
         )}
-        <div className="flex bg-or-tint p-1 rounded-full">
-          {MAIN_NAV_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              className={`pill-tab ${mainActiveTab === tab.id ? 'active' : ''}`}
-              onClick={() => {
-                onTabChange?.(tab.id)
-                navigate(tab.to)
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+      </div>
+
+      <div className="main-nav-center flex bg-or-tint p-1 rounded-full">
+        {MAIN_NAV_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            className={`pill-tab ${mainActiveTab === tab.id ? 'active' : ''}`}
+            onClick={() => {
+              onTabChange?.(tab.id)
+              navigate(tab.to)
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       <div className="topbar-actions">

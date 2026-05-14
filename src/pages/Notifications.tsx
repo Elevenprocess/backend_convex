@@ -200,7 +200,7 @@ function readSeenNotificationIds(): Set<string> {
 }
 
 function writeSeenNotificationIds(ids: Set<string>) {
-  localStorage.setItem('ecoi.seenNotificationIds', JSON.stringify(Array.from(ids).slice(-300)))
+  localStorage.setItem('ecoi.seenNotificationIds', JSON.stringify(Array.from(ids).slice(-5000)))
 }
 
 function useBrowserNotifications(notifs: Notif[]) {
