@@ -41,6 +41,11 @@ export function Login() {
 
   return (
     <div className="relative w-full h-screen bg-cream overflow-hidden">
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: "url('/images/40793.jpg')" }}
+      />
+      <div className="absolute inset-0 bg-ivoire/72 backdrop-blur-[2px]" />
       <Blobs blobs={BLOB_PRESETS.login} />
 
       <div className="relative z-20 w-full h-full flex items-center justify-center p-6">
