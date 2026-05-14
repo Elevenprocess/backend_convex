@@ -426,6 +426,10 @@ export async function updateLead(id: string, input: UpdateLeadInput): Promise<Le
   return api<LeadResponse>(`/leads/${id}`, { method: 'PATCH', body: input })
 }
 
+export async function deleteLead(id: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/leads/${id}`, { method: 'DELETE' })
+}
+
 export type CreateRdvInput = {
   leadId: string
   commercialId?: string | null

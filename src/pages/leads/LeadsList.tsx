@@ -6,7 +6,7 @@ import { Icon } from '../../components/Icon'
 import { EmptyState } from '../../components/EmptyState'
 import { LeadFiltersBar } from '../../components/LeadFiltersBar'
 import { useAuth } from '../../lib/auth'
-import { useLeads, useUsers, useStartCall } from '../../lib/hooks'
+import { deleteLead, useLeads, useUsers, useStartCall } from '../../lib/hooks'
 import { useLeadSidebar } from '../../lib/leadSidebar'
 import { DEFAULT_LEAD_FILTERS, applyLeadFilters, type LeadListFilters } from '../../lib/leadFilters'
 import {
@@ -82,6 +82,7 @@ const ADMIN_COLUMNS: ColumnChoice[] = [
   { key: 'dateIso', label: 'Date ISO' },
   { key: 'kpis', label: "KPI's" },
   { key: 'commercialRdv', label: 'Commercial (from Rendez-vous)' },
+  { key: 'actions', label: 'Actions' },
 ]
 
 
@@ -105,9 +106,9 @@ function LeadsSetter() {
   const selectedId = useLeadSidebar((s) => s.selectedLeadId)
   const selectLead = useLeadSidebar((s) => s.selectLead)
   const [openComment, setOpenComment] = useState<{ leadName: string; comment: string } | null>(null)
-  const [visibleColumns, setVisibleColumns] = useColumnVisibility('ecoi.leads.setter.columns.v2', SETTER_COLUMNS)
+  const [visibleColumns, setVisibleColumns] = useColumnVisibility('ecoi.leads.setter.columns.v3', SETTER_COLUMNS)
   const startCall = useStartCall()
-  const showColumn = (key: ColumnKey) => visibleColumns.includes(key)
+  const orderedColumns = useOrderedColumns(SETTER_COLUMNS, visibleColumns)
 
   // Côté setter, l'écran s'ouvre directement sur les nouveaux leads.
   // Le filtre global "Tous" n'est pas affiché aux setters.
@@ -202,17 +203,7 @@ function LeadsSetter() {
                 <table className="min-w-[1640px] w-full text-sm table-fixed lead-table">
                   <thead className="text-left eyebrow bg-or-tint sticky top-0 z-10 shadow-sm">
                     <tr>
-                      {showColumn('nom') && <Th className="w-[240px] lead-sticky-head">NOM</Th>}
-                      {showColumn('telephone') && <Th className="w-[190px]">TÉLÉPHONE DU PROSPECT</Th>}
-                      {showColumn('adresseComplete') && <Th className="w-[260px]">ADRESSE COMPLÈTE</Th>}
-                      {showColumn('setter') && <Th className="w-[210px]">SETTER ASSIGNÉ</Th>}
-                      {showColumn('jaugeAppels') && <Th className="w-[160px]">JAUGE APPELS (4/JOUR)</Th>}
-                      {showColumn('dernierAppel') && <Th className="w-[170px]">DERNIER APPEL</Th>}
-                      {showColumn('statut') && <Th className="w-[160px]">STATUT OPPORTUNITÉ</Th>}
-                      {showColumn('appelDate') && <Th className="w-[190px]">DATE/HEURE DE L'APPEL</Th>}
-                      {showColumn('jauge') && <Th className="w-[160px]">JAUGE 11 JOURS</Th>}
-                      {showColumn('logAppel') && <Th className="w-[120px]">LOG APPEL</Th>}
-                      {showColumn('appelsCommercial') && <Th className="w-[220px]">APPELS COMMERCIAL</Th>}
+                      {orderedColumns.map((column) => renderSetterHeader(column.key))}
                     </tr>
                   </thead>
                   <tbody>
@@ -225,25 +216,7 @@ function LeadsSetter() {
                         }`}
                         onClick={() => selectLead(l.id)}
                       >
-                        {showColumn('nom') && (
-                          <Td className="lead-sticky-cell">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <LeadCommentButton comment={l.latestCallComment} leadName={fullName(l)} onOpen={setOpenComment} />
-                              <div className="w-8 h-8 rounded-full bg-cuivre-tint flex flex-shrink-0 items-center justify-center text-xs font-bold">{initials(l)}</div>
-                              <span className="font-semibold truncate" title={fullName(l)}>{fullName(l)}</span>
-                            </div>
-                          </Td>
-                        )}
-                        {showColumn('telephone') && <Td><PhoneCell lead={l} onStartCall={startCall} /></Td>}
-                        {showColumn('adresseComplete') && <Td className="text-muted truncate" title={addressFull(l)}>{addressFull(l)}</Td>}
-                        {showColumn('setter') && <Td><SetterChips lead={l} userMap={userMap} /></Td>}
-                        {showColumn('jaugeAppels') && <Td><DailyCallGauge count={l.callsToday ?? 0} /></Td>}
-                        {showColumn('dernierAppel') && <Td className="text-faint">{lastCallDateTime(l.latestCallAt ?? l.lastContactAt)}</Td>}
-                        {showColumn('statut') && <Td><span className={`status-badge ${statusBadgeForLead(l)}`}>{statusLabelForLead(l)}</span></Td>}
-                        {showColumn('appelDate') && <Td className="text-faint">{lastCallDateTime(l.latestCallAt ?? l.lastContactAt)}</Td>}
-                        {showColumn('jauge') && <Td><ElevenDayGauge jours={l.joursRelance ?? l.joursSansContact} airtableGauge={l.jauge11Jours} /></Td>}
-                        {showColumn('logAppel') && <Td><LeadCommentButton comment={l.latestCallComment} leadName={fullName(l)} onOpen={setOpenComment} /></Td>}
-                        {showColumn('appelsCommercial') && <Td className="text-muted truncate" title={commercialLabel(l, userMap)}>{commercialLabel(l, userMap)}</Td>}
+                        {orderedColumns.map((column) => renderSetterCell(column.key, l, userMap, startCall, setOpenComment))}
                       </tr>
                     ))}
                   </tbody>
@@ -278,12 +251,14 @@ function LeadsAdmin() {
   const [commercialFilter, setCommercialFilter] = useState('all')
   const [leadFilters, setLeadFilters] = useState<LeadListFilters>(DEFAULT_LEAD_FILTERS)
   const [openComment, setOpenComment] = useState<{ leadName: string; comment: string } | null>(null)
-  const [visibleColumns, setVisibleColumns] = useColumnVisibility('ecoi.leads.admin.columns.v2', ADMIN_COLUMNS)
+  const [visibleColumns, setVisibleColumns] = useColumnVisibility('ecoi.leads.admin.columns.v3', ADMIN_COLUMNS)
   const selectedId = useLeadSidebar((s) => s.selectedLeadId)
   const selectLead = useLeadSidebar((s) => s.selectLead)
-  const showColumn = (key: ColumnKey) => visibleColumns.includes(key)
+  const clearLead = useLeadSidebar((s) => s.clearLead)
+  const orderedColumns = useOrderedColumns(ADMIN_COLUMNS, visibleColumns)
+  const [deletingLeadId, setDeletingLeadId] = useState<string | null>(null)
 
-  const { data: leadsData, loading, error } = useLeads({ limit: 1500 })
+  const { data: leadsData, loading, error, refetch } = useLeads({ limit: 1500 })
   const { data: users = [] } = useUsers()
   const leads = leadsData ?? []
 
@@ -312,6 +287,24 @@ function LeadsAdmin() {
     perdus: (leads ?? []).filter((l) => l.status === 'perdu').length,
   }), [leads])
   const tableScrollRef = useRememberedLeadTableScroll('ecoi.leads.admin.tableScroll.v1', filtered, selectedId)
+
+  const handleDeleteLead = async (lead: LeadResponse) => {
+    if (deletingLeadId) return
+    const label = fullName(lead) || lead.email || lead.phone || 'ce lead'
+    const confirmed = window.confirm(`Supprimer le lead ${label} ? Cette action le retirera du tableau.`)
+    if (!confirmed) return
+
+    setDeletingLeadId(lead.id)
+    try {
+      await deleteLead(lead.id)
+      if (selectedId === lead.id) clearLead()
+      refetch()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Impossible de supprimer le lead')
+    } finally {
+      setDeletingLeadId(null)
+    }
+  }
 
   return (
     <AppShell>
@@ -366,48 +359,7 @@ function LeadsAdmin() {
             <table className="min-w-[5480px] w-full text-sm table-fixed lead-table">
               <thead className="text-left eyebrow bg-or-tint sticky top-0 z-10 shadow-sm">
                 <tr>
-                  {showColumn('nom') && <Th className="w-[240px] lead-sticky-head">NOM</Th>}
-                  {showColumn('statut') && <Th className="w-[160px]">STATUT OPPORTUNITÉ</Th>}
-                  {showColumn('email') && <Th className="w-[220px]">EMAIL</Th>}
-                  {showColumn('telephone') && <Th className="w-[180px]">TÉLÉPHONE DU PROSPECT</Th>}
-                  {showColumn('adresse') && <Th className="w-[220px]">ADRESSE</Th>}
-                  {showColumn('ville') && <Th className="w-[140px]">VILLE</Th>}
-                  {showColumn('codePostal') && <Th className="w-[120px]">CODE POSTAL</Th>}
-                  {showColumn('leadGenere') && <Th className="w-[180px]">DATE/HEURE LEAD GÉNÉRÉ</Th>}
-                  {showColumn('canal') && <Th className="w-[180px]">CANAL D'ACQUISITION</Th>}
-                  {showColumn('campagne') && <Th className="w-[180px]">CAMPAGNE</Th>}
-                  {showColumn('adset') && <Th className="w-[160px]">ADSET</Th>}
-                  {showColumn('ad') && <Th className="w-[160px]">AD</Th>}
-                  {showColumn('creationLead') && <Th className="w-[190px]">DATE DE CRÉATION DU LEAD</Th>}
-                  {showColumn('datePassageRelance') && <Th className="w-[190px]">DATE DE PASSAGE EN RELANCE</Th>}
-                  {showColumn('setter') && <Th className="w-[210px]">SETTER ASSIGNÉ</Th>}
-                  {showColumn('appels') && <Th className="w-[160px]">APPELS</Th>}
-                  {showColumn('premierAppel') && <Th className="w-[180px]">PREMIER APPEL</Th>}
-                  {showColumn('jourRelance') && <Th className="w-[170px]">JOUR DE RELANCE</Th>}
-                  {showColumn('nbAppelTotal') && <Th className="w-[140px]">NB D'APPEL TOTAL</Th>}
-                  {showColumn('appel5min') && <Th className="w-[150px]">1ER APPEL &lt; 5 MIN ?</Th>}
-                  {showColumn('urlFormulaireAppel') && <Th className="w-[190px]">URL FORMULAIRE APPEL</Th>}
-                  {showColumn('logAppel') && <Th className="w-[120px]">LOG APPEL</Th>}
-                  {showColumn('nbAppelsAujourdhui') && <Th className="w-[150px]">NB APPELS AUJOURD'HUI</Th>}
-                  {showColumn('recordId') && <Th className="w-[180px]">RECORD ID</Th>}
-                  {showColumn('modification') && <Th className="w-[180px]">DERNIÈRE MODIFICATION</Th>}
-                  {showColumn('dernierAppel') && <Th className="w-[180px]">DERNIER APPEL</Th>}
-                  {showColumn('appelDate') && <Th className="w-[190px]">DATE/HEURE DE L'APPEL</Th>}
-                  {showColumn('pctLeadAppele5min') && <Th className="w-[160px]">% LEAD APPELÉ &lt; 5MIN</Th>}
-                  {showColumn('campagnes') && <Th className="w-[240px]">CAMPAGNES</Th>}
-                  {showColumn('jaugeAppels') && <Th className="w-[160px]">JAUGE APPELS (4/JOUR)</Th>}
-                  {showColumn('prochainRappel') && <Th className="w-[220px]">DATE/HEURE PROCHAIN RAPPEL</Th>}
-                  {showColumn('relanceMax') && <Th className="w-[160px]">JOUR RELANCE MAX</Th>}
-                  {showColumn('jauge') && <Th className="w-[170px]">JAUGE 11 JOURS</Th>}
-                  {showColumn('projets') && <Th className="w-[160px]">PROJETS</Th>}
-                  {showColumn('localisationMap') && <Th className="w-[220px]">LOCALISATION MAP</Th>}
-                  {showColumn('contactId') && <Th className="w-[180px]">CONTACT ID (GHL)</Th>}
-                  {showColumn('adresseComplete') && <Th className="w-[260px]">ADRESSE COMPLÈTE</Th>}
-                  {showColumn('creation') && <Th className="w-[160px]">DATE DE CRÉATION</Th>}
-                  {showColumn('rdv') && <Th className="w-[190px]">RENDEZ-VOUS</Th>}
-                  {showColumn('dateIso') && <Th className="w-[240px]">DATE ISO</Th>}
-                  {showColumn('kpis') && <Th className="w-[160px]">KPI'S</Th>}
-                  {showColumn('commercialRdv') && <Th className="w-[220px]">COMMERCIAL (FROM RENDEZ-VOUS)</Th>}
+                  {orderedColumns.map((column) => renderAdminHeader(column.key))}
                 </tr>
               </thead>
               <tbody>
@@ -420,48 +372,7 @@ function LeadsAdmin() {
                     }`}
                     onClick={() => selectLead(l.id)}
                   >
-                    {showColumn('nom') && <Td className="lead-sticky-cell"><span className="font-semibold truncate" title={fullName(l)}>{fullName(l)}</span></Td>}
-                    {showColumn('statut') && <Td><span className={`status-badge ${statusBadgeForLead(l)}`}>{statusLabelForLead(l)}</span></Td>}
-                    {showColumn('email') && <Td className="text-muted truncate" title={l.email ?? undefined}>{l.email ?? '—'}</Td>}
-                    {showColumn('telephone') && <Td className="text-muted truncate" title={l.phone ?? undefined}>{l.phone ?? '—'}</Td>}
-                    {showColumn('adresse') && <Td className="text-muted truncate" title={l.addressLine ?? undefined}>{l.addressLine ?? '—'}</Td>}
-                    {showColumn('ville') && <Td className="text-muted truncate" title={l.city ?? undefined}>{l.city ?? '—'}</Td>}
-                    {showColumn('codePostal') && <Td className="text-muted truncate" title={l.postalCode ?? undefined}>{l.postalCode ?? '—'}</Td>}
-                    {showColumn('leadGenere') && <Td className="text-faint">{fullDateTime(l.createdAt)}</Td>}
-                    {showColumn('canal') && <Td className="text-muted truncate" title={prettySource(l)}>{prettySource(l)}</Td>}
-                    {showColumn('campagne') && <Td className="text-muted truncate" title={campaignName(l) ?? undefined}>{campaignName(l) ?? '—'}</Td>}
-                    {showColumn('adset') && <Td className="text-muted truncate" title={l.adset ?? l.utmMedium ?? undefined}>{l.adset ?? l.utmMedium ?? '—'}</Td>}
-                    {showColumn('ad') && <Td className="text-muted truncate" title={l.ad ?? l.utmSource ?? undefined}>{l.ad ?? l.utmSource ?? '—'}</Td>}
-                    {showColumn('creationLead') && <Td className="text-faint">{fullDateTime(l.createdAt)}</Td>}
-                    {showColumn('datePassageRelance') && <Td className="text-faint">{l.datePassageRelance ? fullDateTime(l.datePassageRelance) : '—'}</Td>}
-                    {showColumn('setter') && <Td><SetterChips lead={l} userMap={userMap} /></Td>}
-                    {showColumn('appels') && <Td className="text-faint">{l.callCount ?? 0} appel{(l.callCount ?? 0) > 1 ? 's' : ''}</Td>}
-                    {showColumn('premierAppel') && <Td className="text-faint">{lastCallDateTime(l.firstCallAt ?? null)}</Td>}
-                    {showColumn('jourRelance') && <Td className="text-faint">{formatDays(l.joursRelance)}</Td>}
-                    {showColumn('nbAppelTotal') && <Td className="text-faint">{l.callCount ?? 0}</Td>}
-                    {showColumn('appel5min') && <Td>{yesNo(l.firstCallUnderFiveMin)}</Td>}
-                    {showColumn('urlFormulaireAppel') && <Td className="text-faint">—</Td>}
-                    {showColumn('logAppel') && <Td><LeadCommentButton comment={l.latestCallComment} leadName={fullName(l)} onOpen={setOpenComment} /></Td>}
-                    {showColumn('nbAppelsAujourdhui') && <Td className="text-faint">{l.callsToday ?? 0}</Td>}
-                    {showColumn('recordId') && <Td className="text-muted truncate" title={l.externalId ?? l.id}>{l.externalId ?? l.id}</Td>}
-                    {showColumn('modification') && <Td className="text-faint">{fullDateTime(l.updatedAt)}</Td>}
-                    {showColumn('dernierAppel') && <Td className="text-faint">{lastCallDateTime(l.latestCallAt ?? l.lastContactAt)}</Td>}
-                    {showColumn('appelDate') && <Td className="text-faint">{lastCallDateTime(l.latestCallAt ?? l.lastContactAt)}</Td>}
-                    {showColumn('pctLeadAppele5min') && <Td>{yesNo(l.firstCallUnderFiveMin)}</Td>}
-                    {showColumn('campagnes') && <Td className="text-muted truncate" title={campaignSummary(l)}>{campaignSummary(l)}</Td>}
-                    {showColumn('jaugeAppels') && <Td><DailyCallGauge count={l.callsToday ?? 0} /></Td>}
-                    {showColumn('prochainRappel') && <Td className="text-faint">{lastCallDateTime(l.nextCallbackAt ?? null)}</Td>}
-                    {showColumn('relanceMax') && <Td className="text-faint">{formatDays(l.joursRelance)}</Td>}
-                    {showColumn('jauge') && <Td><ElevenDayGauge jours={l.joursRelance ?? l.joursSansContact} airtableGauge={l.jauge11Jours} /></Td>}
-                    {showColumn('projets') && <Td className="text-muted truncate" title={l.typeLogement ?? undefined}>{l.typeLogement ?? '—'}</Td>}
-                    {showColumn('localisationMap') && <Td className="text-muted truncate" title={l.localisationMap ?? undefined}>{l.localisationMap ?? '—'}</Td>}
-                    {showColumn('contactId') && <Td className="text-muted truncate" title={l.externalId ?? undefined}>{l.externalId ?? '—'}</Td>}
-                    {showColumn('adresseComplete') && <Td className="text-muted truncate" title={addressFull(l)}>{addressFull(l)}</Td>}
-                    {showColumn('creation') && <Td className="text-faint">{shortDate(l.createdAt)}</Td>}
-                    {showColumn('rdv') && <Td className="text-faint">{rdvLabel(l)}</Td>}
-                    {showColumn('dateIso') && <Td className="text-muted truncate" title={l.latestRdvAt ?? l.createdAt}>{l.latestRdvAt ?? l.createdAt}</Td>}
-                    {showColumn('kpis') && <Td className="text-muted truncate" title={kpiSummary(l)}>{kpiSummary(l)}</Td>}
-                    {showColumn('commercialRdv') && <Td className="text-muted truncate" title={commercialLabel(l, userMap)}>{commercialLabel(l, userMap)}</Td>}
+                    {orderedColumns.map((column) => renderAdminCell(column.key, l, userMap, setOpenComment, { onDelete: handleDeleteLead, deletingLeadId }))}
                   </tr>
                 ))}
               </tbody>
@@ -585,6 +496,176 @@ function shortDate(iso: string): string {
   return `${dd}/${mm}`
 }
 
+function renderSetterHeader(key: ColumnKey) {
+  switch (key) {
+    case 'nom': return <Th key={key} className="w-[240px] lead-sticky-head">NOM</Th>
+    case 'telephone': return <Th key={key} className="w-[190px]">TÉLÉPHONE DU PROSPECT</Th>
+    case 'adresseComplete': return <Th key={key} className="w-[260px]">ADRESSE COMPLÈTE</Th>
+    case 'setter': return <Th key={key} className="w-[210px]">SETTER ASSIGNÉ</Th>
+    case 'jaugeAppels': return <Th key={key} className="w-[160px]">JAUGE APPELS (4/JOUR)</Th>
+    case 'dernierAppel': return <Th key={key} className="w-[170px]">DERNIER APPEL</Th>
+    case 'statut': return <Th key={key} className="w-[160px]">STATUT OPPORTUNITÉ</Th>
+    case 'appelDate': return <Th key={key} className="w-[190px]">DATE/HEURE DE L'APPEL</Th>
+    case 'jauge': return <Th key={key} className="w-[160px]">JAUGE 11 JOURS</Th>
+    case 'logAppel': return <Th key={key} className="w-[120px]">LOG APPEL</Th>
+    case 'appelsCommercial': return <Th key={key} className="w-[220px]">APPELS COMMERCIAL</Th>
+    default: return null
+  }
+}
+
+function renderSetterCell(
+  key: ColumnKey,
+  lead: LeadResponse,
+  userMap: Map<string, UserResponse>,
+  startCall: ReturnType<typeof useStartCall>,
+  setOpenComment: (data: { leadName: string; comment: string }) => void,
+) {
+  switch (key) {
+    case 'nom':
+      return (
+        <Td key={key} className="lead-sticky-cell">
+          <div className="flex items-center gap-3 min-w-0">
+            <LeadCommentButton comment={lead.latestCallComment} leadName={fullName(lead)} onOpen={setOpenComment} />
+            <div className="w-8 h-8 rounded-full bg-cuivre-tint flex flex-shrink-0 items-center justify-center text-xs font-bold">{initials(lead)}</div>
+            <span className="font-semibold truncate" title={fullName(lead)}>{fullName(lead)}</span>
+          </div>
+        </Td>
+      )
+    case 'telephone': return <Td key={key}><PhoneCell lead={lead} onStartCall={startCall} /></Td>
+    case 'adresseComplete': return <Td key={key} className="text-muted truncate" title={addressFull(lead)}>{addressFull(lead)}</Td>
+    case 'setter': return <Td key={key}><SetterChips lead={lead} userMap={userMap} /></Td>
+    case 'jaugeAppels': return <Td key={key}><DailyCallGauge count={lead.callsToday ?? 0} /></Td>
+    case 'dernierAppel': return <Td key={key} className="text-faint">{lastCallDateTime(lead.latestCallAt ?? lead.lastContactAt)}</Td>
+    case 'statut': return <Td key={key}><span className={`status-badge ${statusBadgeForLead(lead)}`}>{statusLabelForLead(lead)}</span></Td>
+    case 'appelDate': return <Td key={key} className="text-faint">{lastCallDateTime(lead.latestCallAt ?? lead.lastContactAt)}</Td>
+    case 'jauge': return <Td key={key}><ElevenDayGauge jours={lead.joursRelance ?? lead.joursSansContact} airtableGauge={lead.jauge11Jours} /></Td>
+    case 'logAppel': return <Td key={key}><LeadCommentButton comment={lead.latestCallComment} leadName={fullName(lead)} onOpen={setOpenComment} /></Td>
+    case 'appelsCommercial': return <Td key={key} className="text-muted truncate" title={commercialLabel(lead, userMap)}>{commercialLabel(lead, userMap)}</Td>
+    default: return null
+  }
+}
+
+function renderAdminHeader(key: ColumnKey) {
+  switch (key) {
+    case 'nom': return <Th key={key} className="w-[240px] lead-sticky-head">NOM</Th>
+    case 'statut': return <Th key={key} className="w-[160px]">STATUT OPPORTUNITÉ</Th>
+    case 'email': return <Th key={key} className="w-[220px]">EMAIL</Th>
+    case 'telephone': return <Th key={key} className="w-[180px]">TÉLÉPHONE DU PROSPECT</Th>
+    case 'adresse': return <Th key={key} className="w-[220px]">ADRESSE</Th>
+    case 'ville': return <Th key={key} className="w-[140px]">VILLE</Th>
+    case 'codePostal': return <Th key={key} className="w-[120px]">CODE POSTAL</Th>
+    case 'leadGenere': return <Th key={key} className="w-[180px]">DATE/HEURE LEAD GÉNÉRÉ</Th>
+    case 'canal': return <Th key={key} className="w-[180px]">CANAL D'ACQUISITION</Th>
+    case 'campagne': return <Th key={key} className="w-[180px]">CAMPAGNE</Th>
+    case 'adset': return <Th key={key} className="w-[160px]">ADSET</Th>
+    case 'ad': return <Th key={key} className="w-[160px]">AD</Th>
+    case 'creationLead': return <Th key={key} className="w-[190px]">DATE DE CRÉATION DU LEAD</Th>
+    case 'datePassageRelance': return <Th key={key} className="w-[190px]">DATE DE PASSAGE EN RELANCE</Th>
+    case 'setter': return <Th key={key} className="w-[210px]">SETTER ASSIGNÉ</Th>
+    case 'appels': return <Th key={key} className="w-[160px]">APPELS</Th>
+    case 'premierAppel': return <Th key={key} className="w-[180px]">PREMIER APPEL</Th>
+    case 'jourRelance': return <Th key={key} className="w-[170px]">JOUR DE RELANCE</Th>
+    case 'nbAppelTotal': return <Th key={key} className="w-[140px]">NB D'APPEL TOTAL</Th>
+    case 'appel5min': return <Th key={key} className="w-[150px]">1ER APPEL &lt; 5 MIN ?</Th>
+    case 'urlFormulaireAppel': return <Th key={key} className="w-[190px]">URL FORMULAIRE APPEL</Th>
+    case 'logAppel': return <Th key={key} className="w-[120px]">LOG APPEL</Th>
+    case 'nbAppelsAujourdhui': return <Th key={key} className="w-[150px]">NB APPELS AUJOURD'HUI</Th>
+    case 'recordId': return <Th key={key} className="w-[180px]">RECORD ID</Th>
+    case 'modification': return <Th key={key} className="w-[180px]">DERNIÈRE MODIFICATION</Th>
+    case 'dernierAppel': return <Th key={key} className="w-[180px]">DERNIER APPEL</Th>
+    case 'appelDate': return <Th key={key} className="w-[190px]">DATE/HEURE DE L'APPEL</Th>
+    case 'pctLeadAppele5min': return <Th key={key} className="w-[160px]">% LEAD APPELÉ &lt; 5MIN</Th>
+    case 'campagnes': return <Th key={key} className="w-[240px]">CAMPAGNES</Th>
+    case 'jaugeAppels': return <Th key={key} className="w-[160px]">JAUGE APPELS (4/JOUR)</Th>
+    case 'prochainRappel': return <Th key={key} className="w-[220px]">DATE/HEURE PROCHAIN RAPPEL</Th>
+    case 'relanceMax': return <Th key={key} className="w-[160px]">JOUR RELANCE MAX</Th>
+    case 'jauge': return <Th key={key} className="w-[170px]">JAUGE 11 JOURS</Th>
+    case 'projets': return <Th key={key} className="w-[160px]">PROJETS</Th>
+    case 'localisationMap': return <Th key={key} className="w-[220px]">LOCALISATION MAP</Th>
+    case 'contactId': return <Th key={key} className="w-[180px]">CONTACT ID (GHL)</Th>
+    case 'adresseComplete': return <Th key={key} className="w-[260px]">ADRESSE COMPLÈTE</Th>
+    case 'creation': return <Th key={key} className="w-[160px]">DATE DE CRÉATION</Th>
+    case 'rdv': return <Th key={key} className="w-[190px]">RENDEZ-VOUS</Th>
+    case 'dateIso': return <Th key={key} className="w-[240px]">DATE ISO</Th>
+    case 'kpis': return <Th key={key} className="w-[160px]">KPI'S</Th>
+    case 'commercialRdv': return <Th key={key} className="w-[220px]">COMMERCIAL (FROM RENDEZ-VOUS)</Th>
+    case 'actions': return <Th key={key} className="w-[130px]">ACTIONS</Th>
+    default: return null
+  }
+}
+
+function renderAdminCell(
+  key: ColumnKey,
+  lead: LeadResponse,
+  userMap: Map<string, string>,
+  setOpenComment: (data: { leadName: string; comment: string }) => void,
+  actions: { onDelete: (lead: LeadResponse) => void; deletingLeadId: string | null },
+) {
+  switch (key) {
+    case 'nom': return <Td key={key} className="lead-sticky-cell"><span className="font-semibold truncate" title={fullName(lead)}>{fullName(lead)}</span></Td>
+    case 'statut': return <Td key={key}><span className={`status-badge ${statusBadgeForLead(lead)}`}>{statusLabelForLead(lead)}</span></Td>
+    case 'email': return <Td key={key} className="text-muted truncate" title={lead.email ?? undefined}>{lead.email ?? '—'}</Td>
+    case 'telephone': return <Td key={key} className="text-muted truncate" title={lead.phone ?? undefined}>{lead.phone ?? '—'}</Td>
+    case 'adresse': return <Td key={key} className="text-muted truncate" title={lead.addressLine ?? undefined}>{lead.addressLine ?? '—'}</Td>
+    case 'ville': return <Td key={key} className="text-muted truncate" title={lead.city ?? undefined}>{lead.city ?? '—'}</Td>
+    case 'codePostal': return <Td key={key} className="text-muted truncate" title={lead.postalCode ?? undefined}>{lead.postalCode ?? '—'}</Td>
+    case 'leadGenere': return <Td key={key} className="text-faint">{fullDateTime(lead.createdAt)}</Td>
+    case 'canal': return <Td key={key} className="text-muted truncate" title={prettySource(lead)}>{prettySource(lead)}</Td>
+    case 'campagne': return <Td key={key} className="text-muted truncate" title={campaignName(lead) ?? undefined}>{campaignName(lead) ?? '—'}</Td>
+    case 'adset': return <Td key={key} className="text-muted truncate" title={lead.adset ?? lead.utmMedium ?? undefined}>{lead.adset ?? lead.utmMedium ?? '—'}</Td>
+    case 'ad': return <Td key={key} className="text-muted truncate" title={lead.ad ?? lead.utmSource ?? undefined}>{lead.ad ?? lead.utmSource ?? '—'}</Td>
+    case 'creationLead': return <Td key={key} className="text-faint">{fullDateTime(lead.createdAt)}</Td>
+    case 'datePassageRelance': return <Td key={key} className="text-faint">{lead.datePassageRelance ? fullDateTime(lead.datePassageRelance) : '—'}</Td>
+    case 'setter': return <Td key={key}><SetterChips lead={lead} userMap={userMap} /></Td>
+    case 'appels': return <Td key={key} className="text-faint">{lead.callCount ?? 0} appel{(lead.callCount ?? 0) > 1 ? 's' : ''}</Td>
+    case 'premierAppel': return <Td key={key} className="text-faint">{lastCallDateTime(lead.firstCallAt ?? null)}</Td>
+    case 'jourRelance': return <Td key={key} className="text-faint">{formatDays(lead.joursRelance)}</Td>
+    case 'nbAppelTotal': return <Td key={key} className="text-faint">{lead.callCount ?? 0}</Td>
+    case 'appel5min': return <Td key={key}>{yesNo(lead.firstCallUnderFiveMin)}</Td>
+    case 'urlFormulaireAppel': return <Td key={key} className="text-faint">—</Td>
+    case 'logAppel': return <Td key={key}><LeadCommentButton comment={lead.latestCallComment} leadName={fullName(lead)} onOpen={setOpenComment} /></Td>
+    case 'nbAppelsAujourdhui': return <Td key={key} className="text-faint">{lead.callsToday ?? 0}</Td>
+    case 'recordId': return <Td key={key} className="text-muted truncate" title={lead.externalId ?? lead.id}>{lead.externalId ?? lead.id}</Td>
+    case 'modification': return <Td key={key} className="text-faint">{fullDateTime(lead.updatedAt)}</Td>
+    case 'dernierAppel': return <Td key={key} className="text-faint">{lastCallDateTime(lead.latestCallAt ?? lead.lastContactAt)}</Td>
+    case 'appelDate': return <Td key={key} className="text-faint">{lastCallDateTime(lead.latestCallAt ?? lead.lastContactAt)}</Td>
+    case 'pctLeadAppele5min': return <Td key={key}>{yesNo(lead.firstCallUnderFiveMin)}</Td>
+    case 'campagnes': return <Td key={key} className="text-muted truncate" title={campaignSummary(lead)}>{campaignSummary(lead)}</Td>
+    case 'jaugeAppels': return <Td key={key}><DailyCallGauge count={lead.callsToday ?? 0} /></Td>
+    case 'prochainRappel': return <Td key={key} className="text-faint">{lastCallDateTime(lead.nextCallbackAt ?? null)}</Td>
+    case 'relanceMax': return <Td key={key} className="text-faint">{formatDays(lead.joursRelance)}</Td>
+    case 'jauge': return <Td key={key}><ElevenDayGauge jours={lead.joursRelance ?? lead.joursSansContact} airtableGauge={lead.jauge11Jours} /></Td>
+    case 'projets': return <Td key={key} className="text-muted truncate" title={lead.typeLogement ?? undefined}>{lead.typeLogement ?? '—'}</Td>
+    case 'localisationMap': return <Td key={key} className="text-muted truncate" title={lead.localisationMap ?? undefined}>{lead.localisationMap ?? '—'}</Td>
+    case 'contactId': return <Td key={key} className="text-muted truncate" title={lead.externalId ?? undefined}>{lead.externalId ?? '—'}</Td>
+    case 'adresseComplete': return <Td key={key} className="text-muted truncate" title={addressFull(lead)}>{addressFull(lead)}</Td>
+    case 'creation': return <Td key={key} className="text-faint">{shortDate(lead.createdAt)}</Td>
+    case 'rdv': return <Td key={key} className="text-faint">{rdvLabel(lead)}</Td>
+    case 'dateIso': return <Td key={key} className="text-muted truncate" title={lead.latestRdvAt ?? lead.createdAt}>{lead.latestRdvAt ?? lead.createdAt}</Td>
+    case 'kpis': return <Td key={key} className="text-muted truncate" title={kpiSummary(lead)}>{kpiSummary(lead)}</Td>
+    case 'commercialRdv': return <Td key={key} className="text-muted truncate" title={commercialLabel(lead, userMap)}>{commercialLabel(lead, userMap)}</Td>
+    case 'actions':
+      return (
+        <Td key={key}>
+          <button
+            type="button"
+            disabled={actions.deletingLeadId === lead.id}
+            onClick={(event) => {
+              event.stopPropagation()
+              actions.onDelete(lead)
+            }}
+            className="inline-flex items-center gap-2 rounded-xl border border-rouille/30 bg-rouille-tint px-3 py-1.5 text-xs font-bold text-rouille hover:bg-rouille hover:text-white disabled:opacity-60"
+            title="Supprimer ce lead"
+          >
+            <Icon name="trash" size={13} />
+            {actions.deletingLeadId === lead.id ? 'Suppression…' : 'Supprimer'}
+          </button>
+        </Td>
+      )
+    default: return null
+  }
+}
+
 // ===== Atoms =====
 
 function FilterPill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
@@ -661,7 +742,9 @@ function useColumnVisibility(storageKey: string, columns: ColumnChoice[]) {
       const parsed = JSON.parse(raw)
       if (!Array.isArray(parsed)) return defaultKeys
       const valid = parsed.filter((key): key is string => defaultKeys.includes(String(key)))
-      return valid.length ? valid : defaultKeys
+      const missing = defaultKeys.filter((key) => !valid.includes(key))
+      const merged = [...valid, ...missing]
+      return merged.length ? merged : defaultKeys
     } catch {
       return defaultKeys
     }
@@ -672,6 +755,13 @@ function useColumnVisibility(storageKey: string, columns: ColumnChoice[]) {
   }, [storageKey, visible])
 
   return [visible, setVisible] as const
+}
+
+function useOrderedColumns(columns: ColumnChoice[], visible: ColumnKey[]) {
+  return useMemo(() => {
+    const byKey = new Map(columns.map((column) => [column.key, column]))
+    return visible.map((key) => byKey.get(key)).filter((column): column is ColumnChoice => Boolean(column))
+  }, [columns, visible])
 }
 
 function ColumnVisibilityMenu({
@@ -686,18 +776,32 @@ function ColumnVisibilityMenu({
   const [query, setQuery] = useState('')
   const filteredColumns = columns.filter((column) => column.label.toLowerCase().includes(query.trim().toLowerCase()))
   const hiddenCount = columns.length - visible.length
+  const lockedKeys = new Set<ColumnKey>(['nom', 'actions'])
   const toggle = (key: ColumnKey) => {
-    if (key === 'nom') return
+    if (lockedKeys.has(key)) return
     if (visible.includes(key)) {
       if (visible.length === 1) return
       onChange(visible.filter((k) => k !== key))
       return
     }
-    onChange([...visible, key])
+    const order = columns.map((column) => column.key)
+    const insertAt = visible.findIndex((visibleKey) => order.indexOf(visibleKey) > order.indexOf(key))
+    if (insertAt === -1) onChange([...visible, key])
+    else onChange([...visible.slice(0, insertAt), key, ...visible.slice(insertAt)])
+  }
+
+  const moveColumn = (key: ColumnKey, direction: -1 | 1) => {
+    if (key === 'nom') return
+    const index = visible.indexOf(key)
+    const nextIndex = index + direction
+    if (index <= 0 || nextIndex <= 0 || nextIndex >= visible.length) return
+    const next = [...visible]
+    ;[next[index], next[nextIndex]] = [next[nextIndex], next[index]]
+    onChange(next)
   }
 
   const showAll = () => onChange(columns.map((c) => c.key))
-  const showEssentials = () => onChange(columns.filter((c) => ['nom', 'telephone', 'statut', 'setter', 'dernierAppel', 'jauge'].includes(c.key)).map((c) => c.key))
+  const showEssentials = () => onChange(columns.filter((c) => ['nom', 'telephone', 'statut', 'setter', 'dernierAppel', 'jauge', 'actions'].includes(c.key)).map((c) => c.key))
 
   return (
     <details className="relative group">
@@ -711,8 +815,8 @@ function ColumnVisibilityMenu({
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="eyebrow">Vue du tableau</p>
-              <h4 className="font-bold">Masquer / afficher les colonnes</h4>
-              <p className="text-xs text-faint mt-1">Le nom reste fixé à gauche comme sur Airtable.</p>
+              <h4 className="font-bold">Masquer / déplacer les colonnes</h4>
+              <p className="text-xs text-faint mt-1">Utilise les flèches pour déplacer les colonnes. Nom reste fixé à gauche.</p>
             </div>
             <span className="rounded-full bg-line-soft px-2.5 py-1 text-xs font-bold text-muted">{hiddenCount} masquée{hiddenCount > 1 ? 's' : ''}</span>
           </div>
@@ -733,9 +837,10 @@ function ColumnVisibilityMenu({
         <div className="max-h-[330px] overflow-auto p-2">
           {filteredColumns.map((column) => {
             const checked = visible.includes(column.key)
-            const locked = column.key === 'nom'
+            const locked = lockedKeys.has(column.key)
+            const visibleIndex = visible.indexOf(column.key)
             return (
-              <label key={column.key} className="flex items-center gap-3 rounded-[14px] px-3 py-2.5 text-sm hover:bg-line-soft cursor-pointer">
+              <div key={column.key} className="flex items-center gap-2 rounded-[14px] px-3 py-2.5 text-sm hover:bg-line-soft">
                 <input
                   type="checkbox"
                   checked={checked}
@@ -743,10 +848,30 @@ function ColumnVisibilityMenu({
                   onChange={() => toggle(column.key)}
                   className="accent-[var(--color-or)]"
                 />
-                <span className="flex-grow truncate" title={column.label}>{column.label}</span>
+                <button
+                  type="button"
+                  disabled={!checked || locked || visibleIndex <= 1}
+                  onClick={() => moveColumn(column.key, -1)}
+                  className="h-7 w-7 rounded-full border border-line text-xs font-bold text-muted disabled:opacity-30 disabled:cursor-not-allowed hover:text-or"
+                  title="Déplacer à gauche"
+                >
+                  ←
+                </button>
+                <button
+                  type="button"
+                  disabled={!checked || visibleIndex === -1 || visibleIndex >= visible.length - 1}
+                  onClick={() => moveColumn(column.key, 1)}
+                  className="h-7 w-7 rounded-full border border-line text-xs font-bold text-muted disabled:opacity-30 disabled:cursor-not-allowed hover:text-or"
+                  title="Déplacer à droite"
+                >
+                  →
+                </button>
+                <label className="flex min-w-0 flex-grow cursor-pointer items-center gap-2">
+                  <span className="truncate" title={column.label}>{column.label}</span>
+                </label>
                 {locked && <span className="rounded-full bg-cuivre-tint px-2 py-0.5 text-[10px] font-bold text-cuivre">fixe</span>}
                 {!checked && !locked && <span className="text-[11px] font-semibold text-faint">masquée</span>}
-              </label>
+              </div>
             )
           })}
         </div>
