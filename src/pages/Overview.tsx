@@ -545,26 +545,26 @@ function FunnelTopCard({ label, value, sub, color }: { label: string; value: num
 
 function FunnelLogicTree({ totals }: { totals: AnalyticsFunnelResponse['totals'] }) {
   return (
-    <div className="rounded-3xl border border-line-soft bg-white/45 p-5">
+    <div className="funnel-tree rounded-3xl border border-line-soft bg-white/45 p-5">
       <div className="text-center">
         <div className="eyebrow">Question centrale</div>
         <h4 className="text-lg font-extrabold">Après les appels setters, le lead a répondu ?</h4>
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-4">
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
+        <div className="funnel-branch funnel-branch-success rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
           <div className="text-xs font-bold uppercase text-emerald-700">Oui, a répondu</div>
           <div className="mt-1 text-4xl font-extrabold text-emerald-700">{fmtCompact(totals.answered)}</div>
           <div className="text-sm font-bold text-emerald-800">{totals.responseRate}% des appels</div>
 
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <div className="rounded-xl bg-white/70 p-3">
+            <div className="funnel-subcard rounded-xl bg-white/70 p-3">
               <div className="text-[10px] font-bold uppercase text-faint">Qualifiés</div>
               <div className="text-2xl font-extrabold text-or-dark">{fmtCompact(totals.qualified)}</div>
               <div className="text-[11px] text-muted">{totals.qualificationRate}% des réponses</div>
               <div className="mt-2 text-[11px] font-bold text-emerald-700">→ {fmtCompact(totals.rdv)} RDV pris</div>
             </div>
-            <div className="rounded-xl bg-white/70 p-3">
+            <div className="funnel-subcard rounded-xl bg-white/70 p-3">
               <div className="text-[10px] font-bold uppercase text-faint">Pas qualifiés</div>
               <div className="text-2xl font-extrabold text-rouille">{fmtCompact(totals.notQualified)}</div>
               <div className="text-[11px] text-muted">{totals.notQualifiedRate}% des réponses</div>
@@ -573,11 +573,11 @@ function FunnelLogicTree({ totals }: { totals: AnalyticsFunnelResponse['totals']
           </div>
         </div>
 
-        <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
+        <div className="funnel-branch funnel-branch-warning rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
           <div className="text-xs font-bold uppercase text-amber-700">Non, pas de réponse</div>
           <div className="mt-1 text-4xl font-extrabold text-amber-700">{fmtCompact(totals.noAnswer)}</div>
           <div className="text-sm font-bold text-amber-800">leads appelés sans réponse</div>
-          <div className="mt-4 rounded-xl bg-white/70 p-3">
+          <div className="funnel-subcard mt-4 rounded-xl bg-white/70 p-3">
             <div className="text-[10px] font-bold uppercase text-faint">Relances effectuées</div>
             <div className="text-2xl font-extrabold text-amber-700">{fmtCompact(totals.relances)}</div>
             <div className="text-[11px] text-muted">appels non joints, injoignables, messagerie ou rappel planifié</div>
@@ -585,7 +585,7 @@ function FunnelLogicTree({ totals }: { totals: AnalyticsFunnelResponse['totals']
         </div>
       </div>
 
-      <div className="mt-4 rounded-2xl border border-emerald-200 bg-white/65 p-4 flex items-center justify-between">
+      <div className="funnel-final mt-4 rounded-2xl border border-emerald-200 bg-white/65 p-4 flex items-center justify-between">
         <div>
           <div className="eyebrow">Résultat final</div>
           <div className="font-extrabold">Nouveaux leads qui ont obtenu un rendez-vous</div>
