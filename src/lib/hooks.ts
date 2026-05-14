@@ -472,7 +472,13 @@ export type CreateGhlAppointmentInput = CreateRdvInput & {
 }
 
 export async function createGhlAppointment(input: CreateGhlAppointmentInput): Promise<{ rdv: RdvResponse; ghl: unknown }> {
-  return api<{ rdv: RdvResponse; ghl: unknown }>('/ghl-calendar/appointments', { method: 'POST', body: input })
+  // GHL appointment creation does several external calls (contact upsert, note,
+  // appointment). On Render free tier this can exceed the default API timeout.
+  return api<{ rdv: RdvResponse; ghl: unknown }>('/ghl-calendar/appointments', {
+    method: 'POST',
+    body: input,
+    timeoutMs: 90_000,
+  })
 }
 
 export async function createRdv(input: CreateRdvInput): Promise<RdvResponse> {
