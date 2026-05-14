@@ -810,8 +810,8 @@ function ColumnVisibilityMenu({
         Colonnes
         <span className="rounded-full bg-or-tint px-2 py-0.5 text-[11px] text-or-dark">{visible.length}/{columns.length}</span>
       </summary>
-      <div className="absolute right-0 mt-3 w-[340px] max-h-[520px] overflow-hidden rounded-[22px] border border-line bg-white shadow-2xl z-40">
-        <div className="border-b border-line-soft p-4">
+      <div className="absolute right-0 mt-3 w-[340px] max-h-[520px] overflow-hidden rounded-[22px] border border-white/70 bg-white/70 shadow-2xl shadow-text/10 backdrop-blur-2xl z-40">
+        <div className="border-b border-white/50 bg-white/35 p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="eyebrow">Vue du tableau</p>
@@ -826,7 +826,7 @@ function ColumnVisibilityMenu({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Rechercher une colonne…"
-              className="w-full rounded-[12px] border border-line bg-cream px-8 py-2 text-sm focus:outline-none focus:border-or"
+              className="w-full rounded-[12px] border border-white/70 bg-white/55 px-8 py-2 text-sm backdrop-blur-md focus:outline-none focus:border-or"
             />
           </div>
           <div className="mt-3 flex items-center gap-2">
@@ -834,13 +834,13 @@ function ColumnVisibilityMenu({
             <button type="button" className="rounded-full border border-line px-3 py-1.5 text-xs font-bold text-muted hover:text-text" onClick={showEssentials}>Essentiel</button>
           </div>
         </div>
-        <div className="max-h-[330px] overflow-auto p-2">
+        <div className="max-h-[330px] overflow-auto bg-white/20 p-2 backdrop-blur-xl">
           {filteredColumns.map((column) => {
             const checked = visible.includes(column.key)
             const locked = lockedKeys.has(column.key)
             const visibleIndex = visible.indexOf(column.key)
             return (
-              <div key={column.key} className="flex items-center gap-2 rounded-[14px] px-3 py-2.5 text-sm hover:bg-line-soft">
+              <div key={column.key} className="flex items-center gap-2 rounded-[14px] px-3 py-2.5 text-sm hover:bg-white/45">
                 <input
                   type="checkbox"
                   checked={checked}
