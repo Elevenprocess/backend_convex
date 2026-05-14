@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Blobs, BLOB_PRESETS } from '../components/shell/Blobs'
 import { useAuth } from '../lib/auth'
 import { ApiError } from '../lib/api'
 
@@ -45,8 +44,7 @@ export function Login() {
         className="absolute inset-0 bg-cover bg-center"
         style={{ backgroundImage: "url('/images/40793.jpg')" }}
       />
-      <div className="absolute inset-0 bg-ivoire/72 backdrop-blur-[2px]" />
-      <Blobs blobs={BLOB_PRESETS.login} />
+      <div className="absolute inset-0 bg-noir/28" />
 
       <div className="relative z-20 w-full h-full flex items-center justify-center p-6">
         <div className="glass-card w-[480px] text-center p-12">
