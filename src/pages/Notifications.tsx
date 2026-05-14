@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Icon, type IconName } from '../components/Icon'
-import { useLeadsProgressive, useRdvListProgressive } from '../lib/hooks'
-import { Spinner, LoadingBlock } from '../components/Spinner'
+import { useLeads, useRdvList } from '../lib/hooks'
 import { fullName, type LeadResponse, type RdvResponse } from '../lib/types'
 
 type Notif = {
@@ -17,69 +16,28 @@ type Notif = {
   title: string
   body: React.ReactNode
   time: string
-  // Sort key: event timestamp (lead.createdAt, nextCallbackAt, scheduledAt).
-  // Most recent first → top of the feed.
-  timestamp: number
   urgency: 'now' | 'soon' | 'info'
-  // `handled = true` quand l'utilisateur a déjà fait quelque chose côté lead
-  // (call log enregistré APRÈS l'événement déclencheur). Affiche un check.
-  handled: boolean
   to?: string
 }
 
-const INITIAL_PAGE_SIZE = 20
-const PAGE_INCREMENT = 20
-const LOAD_DELAY_MS = 200
-
 export function Notifications() {
-  // Two-phase fetch : 50 leads + 100 RDV peignent l'écran tout de suite,
-  // puis 500 leads + 1000 RDV hydratent le reste en arrière-plan.
-  const leadsState = useLeadsProgressive({ quickLimit: 50, fullLimit: 500 })
-  const rdvsState = useRdvListProgressive({ quickLimit: 100, fullLimit: 1000 })
-  const leads = leadsState.data ?? []
-  const rdvs = rdvsState.data ?? []
+  const { data: leadsData, loading: leadsLoading } = useLeads({ limit: 3000 })
+  const { data: rdvsData, loading: rdvLoading } = useRdvList({ limit: 1000 })
+  const leads = leadsData ?? []
+  const rdvs = rdvsData ?? []
   const notifs = useMemo(() => buildNotifications(leads, rdvs), [leads, rdvs])
-  const initialLoading = leadsState.loading || rdvsState.loading
-  const backgroundLoading = leadsState.backgroundLoading || rdvsState.backgroundLoading
+  const groups = Array.from(new Set(notifs.map((n) => n.group)))
+  const loading = leadsLoading || rdvLoading
   const [permission, setPermission] = useState(notificationPermission())
-  const [visibleCount, setVisibleCount] = useState(INITIAL_PAGE_SIZE)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const sentinelRef = useRef<HTMLDivElement | null>(null)
-  const visibleNotifs = useMemo(() => notifs.slice(0, visibleCount), [notifs, visibleCount])
-  const hasMore = visibleCount < notifs.length
 
   useBrowserNotifications(notifs)
-
-  useEffect(() => {
-    if (!hasMore) return
-    const target = sentinelRef.current
-    if (!target) return
-    const observer = new IntersectionObserver((entries) => {
-      if (!entries[0]?.isIntersecting || loadingMore) return
-      setLoadingMore(true)
-      window.setTimeout(() => {
-        setVisibleCount((c) => c + PAGE_INCREMENT)
-        setLoadingMore(false)
-      }, LOAD_DELAY_MS)
-    }, { rootMargin: '300px' })
-    observer.observe(target)
-    return () => observer.disconnect()
-  }, [hasMore, loadingMore])
 
   return (
     <AppShell>
       <Topbar eyebrow="NOTIFICATIONS" title="Notifications et rappels" />
       <div className="px-8 pt-4 flex items-center justify-between flex-shrink-0 gap-4">
         <div className="text-sm text-muted">
-          {initialLoading ? (
-            <Spinner size={14} stroke={2} label="Chargement des notifications…" />
-          ) : (
-            <span>
-              {notifs.length} notification{notifs.length > 1 ? 's' : ''} active{notifs.length > 1 ? 's' : ''}
-              {hasMore ? ` · ${visibleCount} affichées` : ''}
-              {backgroundLoading && <> · <Spinner size={12} stroke={2} label="synchronisation…" /></>}
-            </span>
-          )}
+          {loading && notifs.length === 0 ? 'Chargement des notifications…' : `${notifs.length} notification${notifs.length > 1 ? 's' : ''} active${notifs.length > 1 ? 's' : ''}`}
         </div>
         <button
           onClick={async () => setPermission(await requestNotificationPermission())}
@@ -91,25 +49,14 @@ export function Notifications() {
       </div>
 
       <main className="p-8 pt-4 max-w-3xl mx-auto w-full overflow-y-auto space-y-3 flex-grow">
-        {initialLoading && notifs.length === 0 ? (
-          <LoadingBlock label="Chargement des notifications…" />
-        ) : notifs.length === 0 ? (
+        {notifs.length === 0 ? (
           <div className="glass-card p-6 text-sm text-muted">Aucune notification urgente : pas de nouveau lead récent, pas de rappel à traiter, pas de RDV imminent.</div>
-        ) : (
-          <>
-            {visibleNotifs.map((n) => <NotificationCard key={n.id} notif={n} />)}
-            {hasMore && (
-              <div ref={sentinelRef} className="glass-card p-4 text-center text-xs text-faint">
-                {loadingMore ? <Spinner size={16} stroke={2} label="Chargement des notifications suivantes…" /> : 'Continue à descendre pour voir la suite'}
-              </div>
-            )}
-            {!hasMore && backgroundLoading && (
-              <div className="glass-card p-4 text-center text-xs text-faint">
-                <Spinner size={14} stroke={2} label="Mise à jour en arrière-plan…" />
-              </div>
-            )}
-          </>
-        )}
+        ) : groups.map((g) => (
+          <div key={g} className="space-y-3">
+            <div className="text-xs eyebrow text-muted mt-4 first:mt-0">{g}</div>
+            {notifs.filter((n) => n.group === g).map((n) => <NotificationCard key={n.id} notif={n} />)}
+          </div>
+        ))}
       </main>
     </AppShell>
   )
@@ -118,29 +65,20 @@ export function Notifications() {
 function NotificationCard({ notif }: { notif: Notif }) {
   const content = (
     <>
-      <div className={`relative w-10 h-10 rounded-full ${notif.iconBg} flex items-center justify-center shrink-0`}>
+      <div className={`w-10 h-10 rounded-full ${notif.iconBg} flex items-center justify-center shrink-0`}>
         <Icon name={notif.icon} size={18} className={notif.iconColor} />
-        {notif.handled && (
-          <span
-            title="Lead déjà contacté"
-            className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-success text-white border-2 border-white flex items-center justify-center"
-          >
-            <Icon name="check" size={10} className="stroke-[3]" />
-          </span>
-        )}
       </div>
       <div className="flex-grow min-w-0">
         <div className="flex justify-between items-start gap-2">
-          <span className={`font-semibold text-sm ${notif.handled ? 'text-faint line-through decoration-1' : ''}`}>{notif.title}</span>
+          <span className="font-semibold text-sm">{notif.title}</span>
           <span className="text-xs text-faint shrink-0">{notif.time}</span>
         </div>
-        <p className={`text-sm mt-1 ${notif.handled ? 'text-faint' : 'text-muted'}`}>{notif.body}</p>
+        <p className="text-sm text-muted mt-1">{notif.body}</p>
       </div>
     </>
   )
 
-  const opacity = notif.handled ? 'opacity-70' : ''
-  const className = `glass-card p-4 flex items-start gap-4 ${notif.borderColor ? `border-l-4 ${notif.borderColor}` : ''} ${opacity}`
+  const className = `glass-card p-4 flex items-start gap-4 ${notif.borderColor ? `border-l-4 ${notif.borderColor}` : ''}`
   if (!notif.to) return <div className={className}>{content}</div>
   return <Link to={notif.to} className={`${className} hover:border-or transition-colors`}>{content}</Link>
 }
@@ -148,15 +86,13 @@ function NotificationCard({ notif }: { notif: Notif }) {
 export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): Notif[] {
   const now = Date.now()
   const in10Min = now + 10 * 60 * 1000
-  const in24hPast = now - 24 * 60 * 60 * 1000
-  const in24hFuture = now + 24 * 60 * 60 * 1000
+  const in24h = now - 24 * 60 * 60 * 1000
   const notifications: Notif[] = []
 
   for (const lead of leads) {
     const name = fullName(lead)
     const leadLink = `/leads?search=${encodeURIComponent(name)}`
     const callbackAt = lead.nextCallbackAt ? new Date(lead.nextCallbackAt).getTime() : null
-    const lastContactAt = lead.lastContactAt ? new Date(lead.lastContactAt).getTime() : null
 
     if (callbackAt && callbackAt <= now && (lead.status === 'a_rappeler' || lead.status === 'relance' || lead.nextCallbackAt)) {
       notifications.push({
@@ -169,9 +105,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         title: 'Appel à rappeler maintenant',
         body: <><strong>{name}</strong>{lead.phone ? ` · ${lead.phone}` : ''}</>,
         time: formatDateTime(lead.nextCallbackAt!),
-        timestamp: callbackAt,
         urgency: 'now',
-        handled: lastContactAt != null && lastContactAt >= callbackAt,
         to: leadLink,
       })
     } else if (callbackAt && callbackAt <= in10Min && callbackAt > now) {
@@ -185,14 +119,10 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         title: 'Rappel téléphonique imminent',
         body: <><strong>{name}</strong>{lead.phone ? ` · ${lead.phone}` : ''}</>,
         time: formatDateTime(lead.nextCallbackAt!),
-        timestamp: callbackAt,
         urgency: 'soon',
-        handled: lastContactAt != null && lastContactAt >= callbackAt - 10 * 60 * 1000,
         to: leadLink,
       })
-    } else if (callbackAt && lead.status === 'a_rappeler' && callbackAt <= in24hFuture) {
-      // Fenêtre de 24h max : un rappel programmé dans 11 jours ne pollue plus la liste.
-      // `handled` = contact dans la dernière heure (le commercial vient probablement d'appeler).
+    } else if (callbackAt && lead.status === 'a_rappeler') {
       notifications.push({
         id: `callback-planned-${lead.id}`,
         group: 'RAPPELS PROGRAMMÉS',
@@ -203,15 +133,12 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         title: 'Client à rappeler',
         body: <><strong>{name}</strong>{lead.phone ? ` · ${lead.phone}` : ''}</>,
         time: formatDateTime(lead.nextCallbackAt!),
-        timestamp: callbackAt,
         urgency: 'info',
-        handled: lastContactAt != null && lastContactAt >= now - 60 * 60 * 1000,
         to: leadLink,
       })
     }
 
-    if (lead.status === 'nouveau' && new Date(lead.createdAt).getTime() >= in24hPast) {
-      const createdAt = new Date(lead.createdAt).getTime()
+    if (lead.status === 'nouveau' && new Date(lead.createdAt).getTime() >= in24h) {
       notifications.push({
         id: `new-lead-${lead.id}`,
         group: 'NOUVEAUX LEADS',
@@ -222,28 +149,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         title: 'Nouveau lead arrivé',
         body: <><strong>{name}</strong>{lead.city ? ` · ${lead.city}` : ''}{lead.phone ? ` · ${lead.phone}` : ''}</>,
         time: relativeTime(lead.createdAt),
-        timestamp: createdAt,
         urgency: 'info',
-        handled: lastContactAt != null && lastContactAt >= createdAt,
-        to: leadLink,
-      })
-    }
-
-    if (lead.status === 'qualifie' && new Date(lead.updatedAt).getTime() >= in24hPast) {
-      const updatedAt = new Date(lead.updatedAt).getTime()
-      notifications.push({
-        id: `qualified-${lead.id}`,
-        group: 'LEADS QUALIFIÉS',
-        icon: 'eye',
-        iconBg: 'bg-or-tint',
-        iconColor: 'text-or-dark',
-        borderColor: 'border-l-or',
-        title: 'Lead qualifié',
-        body: <><strong>{name}</strong>{lead.city ? ` · ${lead.city}` : ''}{lead.phone ? ` · ${lead.phone}` : ''}</>,
-        time: relativeTime(lead.updatedAt),
-        timestamp: updatedAt,
-        urgency: 'info',
-        handled: lastContactAt != null && lastContactAt >= updatedAt,
         to: leadLink,
       })
     }
@@ -263,18 +169,13 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         title: 'RDV dans moins de 10 minutes',
         body: <>Prépare le RDV {rdv.locationType} prévu à {formatDateTime(rdv.scheduledAt)}.</>,
         time: formatDateTime(rdv.scheduledAt),
-        timestamp: scheduled,
         urgency: 'soon',
-        handled: false,
         to: '/rdv',
       })
     }
   }
 
-  // Tri "feed" : la notif la plus récente en haut.
-  // Pour les events futurs (RDV imminent, callback programmé), on plafonne à `now`
-  // pour éviter qu'un RDV dans 2 semaines passe devant un nouveau lead arrivé à l'instant.
-  return notifications.sort((a, b) => Math.min(b.timestamp, now) - Math.min(a.timestamp, now))
+  return notifications.sort((a, b) => urgencyRank(a) - urgencyRank(b))
 }
 
 function useBrowserNotifications(notifs: Notif[]) {
@@ -302,6 +203,11 @@ function readNotifiedIds(): Set<string> {
 
 function writeNotifiedIds(ids: Set<string>) {
   localStorage.setItem('ecoi.notifiedIds', JSON.stringify(Array.from(ids).slice(-100)))
+}
+
+function urgencyRank(notif: Notif): number {
+  const groupRank = notif.group === 'RAPPELS EN RETARD' ? 0 : notif.group === 'DANS 10 MIN' ? 1 : notif.group === 'NOUVEAUX LEADS' ? 2 : 3
+  return groupRank * 10 + (notif.urgency === 'now' ? 0 : notif.urgency === 'soon' ? 1 : 2)
 }
 
 function supportsBrowserNotifications(): boolean {

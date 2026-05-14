@@ -4,7 +4,6 @@ import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { SplitPanel } from '../../components/SplitPanel'
 import { Icon } from '../../components/Icon'
-import { Spinner } from '../../components/Spinner'
 import { useLead, useLeads, useUsers, createCallLog } from '../../lib/hooks'
 import { useCall } from '../../lib/call'
 import {
@@ -172,7 +171,7 @@ export function CallSplit() {
               className="w-14 h-14 rounded-full bg-rouille text-white flex items-center justify-center hover:scale-105 transition-transform shadow-lg disabled:opacity-50"
               title="Raccrocher"
             >
-              {saving ? <Spinner size={20} stroke={3} color="white" /> : <Icon name="phone-off" size={22} />}
+              <Icon name="phone-off" size={22} />
             </button>
           </div>
         </main>

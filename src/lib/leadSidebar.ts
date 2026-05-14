@@ -24,14 +24,3 @@ export const useLeadSidebar = create<LeadSidebarState>((set) => ({
     set({ selectedLeadId: null })
   },
 }))
-
-export function isLeadSidebarExcludedPath(pathname: string): boolean {
-  return (
-    pathname === '/overview' ||
-    pathname === '/analytics' ||
-    pathname === '/notifications' ||
-    pathname === '/settings' ||
-    pathname.startsWith('/rdv') ||
-    pathname.startsWith('/team/setters')
-  )
-}

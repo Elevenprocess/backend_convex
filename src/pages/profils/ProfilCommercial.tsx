@@ -3,7 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
-import { LoadingBlock } from '../../components/Spinner'
 import { useUser, useRdvList, useLeads } from '../../lib/hooks'
 import { fullName, type LeadResponse, type RdvResponse } from '../../lib/types'
 
@@ -32,7 +31,7 @@ export function ProfilCommercial() {
     return (
       <AppShell>
         <Topbar eyebrow="PROFIL COMMERCIAL" title="Chargement…" />
-        <main className="flex-grow flex items-center justify-center"><LoadingBlock /></main>
+        <main className="flex-grow flex items-center justify-center text-faint text-sm">Chargement…</main>
       </AppShell>
     )
   }

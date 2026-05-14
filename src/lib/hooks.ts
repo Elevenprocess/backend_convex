@@ -82,6 +82,22 @@ function writeCache(cacheKey: string | null, entry: FetchCacheEntry) {
   }
 }
 
+async function prefetchFetchCache<T>(
+  path: string,
+  query?: Record<string, string | number | undefined | null>,
+  options?: { force?: boolean },
+): Promise<T | null> {
+  const queryKey = JSON.stringify(query ?? {})
+  const cacheKey = buildFetchCacheKey(path, queryKey)
+  if (!options?.force) {
+    const cached = readCachedData<T>(cacheKey)
+    if (cached !== null) return cached
+  }
+  const data = await api<T>(path, { query })
+  writeCache(cacheKey, { data, timestamp: Date.now() })
+  return data
+}
+
 function deleteCache(cacheKey: string) {
   fetchCache.delete(cacheKey)
   if (typeof window === 'undefined') return
@@ -117,12 +133,13 @@ function deleteCachesForPrefixes(prefixes: string[]) {
 function useFetch<T>(
   path: string | null,
   query?: Record<string, string | number | undefined | null>,
+  options?: { refreshCachedOnMount?: boolean; silentInitialLoading?: boolean },
 ): Async<T> {
   const queryKey = JSON.stringify(query ?? {})
   const cacheKey = buildFetchCacheKey(path, queryKey)
   const cachedData = readCachedData<T>(cacheKey)
   const [data, setData] = useState<T | null>(cachedData)
-  const [loading, setLoading] = useState(path !== null && cachedData === null)
+  const [loading, setLoading] = useState(path !== null && cachedData === null && !options?.silentInitialLoading)
   const [error, setError] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
   const abortRef = useRef<AbortController | null>(null)
@@ -145,12 +162,12 @@ function useFetch<T>(
 
     // Si la page revient rapidement sur une liste déjà chargée, on réutilise le cache
     // sans relancer l'API. Le bouton/flow qui appelle refetch() force toujours un refresh.
-    if (latestCachedEntry && tick === 0) return
+    if (latestCachedEntry && tick === 0 && !options?.refreshCachedOnMount) return
 
     abortRef.current?.abort()
     const ctrl = new AbortController()
     abortRef.current = ctrl
-    setLoading(latestCachedData === undefined)
+    setLoading(latestCachedData === undefined && !options?.silentInitialLoading)
     setError(null)
     api<T>(path, { query, signal: ctrl.signal })
       .then((d) => {
@@ -311,7 +328,18 @@ export function useAnalyticsSummary(filters?: {
   from?: string
   to?: string
 }): Async<AnalyticsSummaryResponse> {
-  return useFetch<AnalyticsSummaryResponse>('/analytics/summary', filters)
+  return useFetch<AnalyticsSummaryResponse>('/analytics/summary', filters, {
+    refreshCachedOnMount: true,
+    silentInitialLoading: true,
+  })
+}
+
+export function prefetchAnalyticsSummary(filters?: {
+  days?: number
+  from?: string
+  to?: string
+}, options?: { force?: boolean }): Promise<AnalyticsSummaryResponse | null> {
+  return prefetchFetchCache<AnalyticsSummaryResponse>('/analytics/summary', filters, options)
 }
 
 export function useAnalyticsFunnel(filters?: {

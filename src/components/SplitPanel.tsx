@@ -528,12 +528,7 @@ function NotesTab({
   type Step = 'eligibility' | 'qualification' | 'secteur' | 'rdv' | 'confirmation' | 'done'
 
   const [setterStatus, setSetterStatus] = useState<SetterStatus>(() => statusToSetterStatus(lead.status))
-  // Un lead déjà classifié (a_rappeler, pas_de_reponse, qualifie, perdu, etc.)
-  // saute l'éligibilité — pas besoin de re-demander propriétaire/activité/etc.
-  // pour planifier un rappel ou changer le statut sur un lead déjà travaillé.
-  const initialStep = (status: LeadResponse['status']): Step =>
-    status === 'nouveau' ? 'eligibility' : 'qualification'
-  const [step, setStep] = useState<Step>(() => initialStep(lead.status))
+  const [step, setStep] = useState<Step>('eligibility')
   const [eligibilityNotes, setEligibilityNotes] = useState<EligibilityNotes>(EMPTY_ELIGIBILITY_NOTES)
   const [commentaire, setCommentaire] = useState('')
   const [callbackAt, setCallbackAt] = useState('')
@@ -606,7 +601,7 @@ function NotesTab({
           form: typeof defaultForm
         }>
         setSetterStatus(parsed.setterStatus ?? statusToSetterStatus(lead.status))
-        setStep(parsed.step ?? initialStep(lead.status))
+        setStep(parsed.step ?? 'eligibility')
         setEligibilityNotes(parsed.eligibilityNotes ?? EMPTY_ELIGIBILITY_NOTES)
         setCommentaire(parsed.commentaire ?? '')
         setCallbackAt(parsed.callbackAt ?? '')
@@ -620,7 +615,7 @@ function NotesTab({
       }
     } catch {}
     setSetterStatus(statusToSetterStatus(lead.status))
-    setStep(initialStep(lead.status))
+    setStep('eligibility')
     setEligibilityNotes(EMPTY_ELIGIBILITY_NOTES)
     setCommentaire('')
     setCallbackAt('')
@@ -702,18 +697,28 @@ function NotesTab({
     try {
       if (!sector) throw new Error('Sélectionne un secteur.')
       if (!rdvAt) throw new Error('Choisis une date de rendez-vous.')
-      const revenu = form.revenuFiscal.trim() ? Number(form.revenuFiscal) : null
-      if (revenu !== null && Number.isNaN(revenu)) throw new Error('Le revenu fiscal doit être un nombre.')
+      const revenu = parseRevenuFiscal(form.revenuFiscal)
+      const firstName = cleanField(form.firstName)
+      const lastName = cleanField(form.lastName)
+      const email = cleanField(form.email)
+      const phone = cleanField(form.phone)
+      const addressLine = cleanField(form.addressLine)
+      const city = cleanField(form.city)
+      const postalCode = cleanField(form.postalCode)
+      const typeLogement = cleanField(form.typeLogement)
+      if (email && !isValidEmail(email)) throw new Error('Email invalide : corrige ou vide le champ email.')
+      if (postalCode && postalCode.length > 20) throw new Error('Code postal trop long : 20 caractères maximum.')
+      if (typeLogement && typeLogement.length > 80) throw new Error('Type logement trop long : 80 caractères maximum.')
       await updateLead(lead.id, {
         status: 'qualifie',
-        firstName: form.firstName || null,
-        lastName: form.lastName || null,
-        email: form.email || null,
-        phone: form.phone || null,
-        addressLine: form.addressLine || null,
-        city: form.city || null,
-        postalCode: form.postalCode || null,
-        typeLogement: form.typeLogement || null,
+        firstName,
+        lastName,
+        email,
+        phone,
+        addressLine,
+        city,
+        postalCode,
+        typeLogement,
         revenuFiscal: revenu,
       })
       if (ghlConfig?.configured) {
@@ -724,14 +729,14 @@ function NotesTab({
           scheduledAt: rdvAtToReunionIso(rdvAt),
           locationType: 'domicile',
           notes: rdvTransferNote,
-          firstName: form.firstName || null,
-          lastName: form.lastName || null,
-          email: form.email || null,
-          phone: form.phone || null,
-          addressLine: form.addressLine || null,
-          city: form.city || null,
-          postalCode: form.postalCode || null,
-          typeLogement: form.typeLogement || null,
+          firstName,
+          lastName,
+          email,
+          phone,
+          addressLine,
+          city,
+          postalCode,
+          typeLogement,
           revenuFiscal: revenu,
         })
       } else {
@@ -1335,6 +1340,22 @@ function rdvAtToReunionIso(value: string): string {
   const [date, time] = value.split('T')
   if (!date || !time) return new Date(value).toISOString()
   return new Date(`${date}T${time}:00+04:00`).toISOString()
+}
+
+function parseRevenuFiscal(value: string): number | null {
+  const cleaned = cleanField(value)
+  if (!cleaned) return null
+  const normalized = cleaned.replace(/[\s\u00a0]/g, '').replace(',', '.')
+  const parsed = Number(normalized)
+  if (!Number.isFinite(parsed)) throw new Error('Le revenu fiscal doit être un nombre.')
+  if (!Number.isInteger(parsed)) throw new Error('Le revenu fiscal doit être un nombre entier.')
+  if (parsed < 0) throw new Error('Le revenu fiscal ne peut pas être négatif.')
+  if (parsed > 10_000_000) throw new Error('Le revenu fiscal doit être inférieur à 10 000 000.')
+  return parsed
+}
+
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 }
 
 function uniqueStrings(values: string[]): string[] {

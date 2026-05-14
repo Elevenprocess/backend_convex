@@ -6,15 +6,12 @@ import { Icon } from '../../components/Icon'
 import { useGhlCalendarEvents, useRdvList, useLeads, type GhlCalendarEvent } from '../../lib/hooks'
 import { fullName, type LeadResponse, type RdvResponse, type RdvStatus } from '../../lib/types'
 
+const DEFAULT_HOURS = Array.from({ length: 12 }, (_, i) => 8 + i)
 const DAY_LABELS = ['LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM', 'DIM']
-const REUNION_TZ = 'Indian/Reunion'
-const DEFAULT_DURATION_MIN = 60
-const BASE_START_HOUR = 8
-const BASE_END_HOUR = 19
 type CalendarView = 'day' | 'week' | 'month'
 type CalendarItem =
-  | { source: 'local'; id: string; scheduledAt: string; status: RdvStatus; sector: string | null; rdv: RdvResponse }
-  | { source: 'ghl'; id: string; scheduledAt: string; status: 'ghl'; sector: string | null; event: GhlCalendarEvent }
+  | { source: 'local'; id: string; scheduledAt: string; status: RdvStatus; rdv: RdvResponse }
+  | { source: 'ghl'; id: string; scheduledAt: string; status: 'ghl'; event: GhlCalendarEvent }
 
 const STATUS_TONE: Record<RdvStatus, string> = {
   planifie: 'bg-cuivre-tint text-cuivre',
@@ -24,30 +21,12 @@ const STATUS_TONE: Record<RdvStatus, string> = {
   annule: 'bg-rouille-tint text-rouille',
 }
 
-const SECTORS = ['Nord', 'Sud', 'Est', 'Ouest'] as const
-type Sector = typeof SECTORS[number]
-type Density = 'compact' | 'normal' | 'spacious'
-const DENSITY_PX_PER_HOUR: Record<Density, number> = { compact: 32, normal: 48, spacious: 72 }
-
 export function RdvCalendar() {
   const [view, setView] = useState<CalendarView>('week')
   const [cursorDate, setCursorDate] = useState(() => startOfDay(new Date()))
-  const [selectedSectors, setSelectedSectors] = useState<Set<Sector>>(new Set())
-  const [density, setDensity] = useState<Density>('normal')
-  const [searchTerm, setSearchTerm] = useState('')
   const navigate = useNavigate()
 
-  const pxPerHour = DENSITY_PX_PER_HOUR[density]
   const period = useMemo(() => buildPeriod(cursorDate, view), [cursorDate, view])
-
-  function toggleSector(s: Sector) {
-    setSelectedSectors((prev) => {
-      const next = new Set(prev)
-      if (next.has(s)) next.delete(s)
-      else next.add(s)
-      return next
-    })
-  }
 
   const { data: rdvs, loading, error } = useRdvList({
     fromDate: period.from.toISOString(),
@@ -68,59 +47,37 @@ export function RdvCalendar() {
 
   const calendarItems = useMemo(() => {
     const localRdvs = rdvs ?? []
-    const ghlEvents = ghlEventsData?.events ?? []
-    const sectorByExternalId = new Map<string, string | null>()
-    for (const e of ghlEvents) sectorByExternalId.set(e.id, e.sector ?? null)
-    const sectorFromNotes = (notes: string | null): string | null => {
-      if (!notes) return null
-      const m = notes.match(/Secteur\s*:\s*([A-Za-zÀ-ÿ]+)/)
-      return m ? m[1] : null
-    }
     const localExternalIds = new Set(localRdvs.map((r) => r.externalId).filter(Boolean))
     const localItems: CalendarItem[] = localRdvs.map((rdv) => ({
       source: 'local',
       id: rdv.id,
       scheduledAt: rdv.scheduledAt,
       status: rdv.status,
-      sector: (rdv.externalId && sectorByExternalId.get(rdv.externalId)) || sectorFromNotes(rdv.notes),
       rdv,
     }))
-    const ghlItems: CalendarItem[] = ghlEvents
+    const ghlItems: CalendarItem[] = (ghlEventsData?.events ?? [])
       .filter((event) => !localExternalIds.has(event.id))
       .map((event) => ({
         source: 'ghl',
         id: event.id,
         scheduledAt: event.startTime,
         status: 'ghl',
-        sector: event.sector ?? null,
         event,
       }))
-    const all = [...localItems, ...ghlItems].sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
-    if (selectedSectors.size === 0) return all
-    const wanted = new Set([...selectedSectors].map(normalizeSectorKey))
-    return all.filter((item) => {
-      if (!item.sector) return false
-      return wanted.has(normalizeSectorKey(item.sector))
-    })
-  }, [ghlEventsData?.events, rdvs, selectedSectors])
+    return [...localItems, ...ghlItems].sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
+  }, [ghlEventsData?.events, rdvs])
 
-  const searchMatchIds = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase()
-    if (!term) return null
-    const matched = new Set<string>()
-    for (const item of calendarItems) {
-      const haystack = item.source === 'local'
-        ? `${leadMap.get(item.rdv.leadId) ? fullName(leadMap.get(item.rdv.leadId)!) : ''}`.toLowerCase()
-        : `${item.event.title ?? ''} ${item.event.sector ?? ''}`.toLowerCase()
-      if (haystack.includes(term)) matched.add(`${item.source}-${item.id}`)
-    }
-    return matched
-  }, [calendarItems, leadMap, searchTerm])
+  const visibleHours = useMemo(() => {
+    const hours = new Set(DEFAULT_HOURS)
+    for (const item of calendarItems) hours.add(new Date(item.scheduledAt).getHours())
+    return [...hours].sort((a, b) => a - b)
+  }, [calendarItems])
 
-  const rdvByDay = useMemo(() => {
+  const rdvByHourCell = useMemo(() => {
     const m = new Map<string, CalendarItem[]>()
     for (const item of calendarItems) {
-      const key = reunionParts(item.scheduledAt).dateKey
+      const d = new Date(item.scheduledAt)
+      const key = `${isoDay(d)}:${d.getHours()}`
       const list = m.get(key) ?? []
       list.push(item)
       list.sort(byCalendarItemAt)
@@ -129,27 +86,17 @@ export function RdvCalendar() {
     return m
   }, [calendarItems])
 
-  const hourRange = useMemo(() => {
-    let minMin = BASE_START_HOUR * 60
-    let maxMin = BASE_END_HOUR * 60
+  const rdvByDay = useMemo(() => {
+    const m = new Map<string, CalendarItem[]>()
     for (const item of calendarItems) {
-      const start = reunionParts(item.scheduledAt).minutesFromMidnight
-      const end = start + getDurationMin(item)
-      if (start < minMin) minMin = start
-      if (end > maxMin) maxMin = end
-    }
-    const startHour = Math.max(0, Math.min(BASE_START_HOUR, Math.floor(minMin / 60)))
-    const endHour = Math.min(24, Math.max(BASE_END_HOUR, Math.ceil(maxMin / 60)))
-    return { startHour, endHour }
-  }, [calendarItems])
-
-  const placementsByDay = useMemo(() => {
-    const m = new Map<string, EventPlacement[]>()
-    for (const [key, items] of rdvByDay) {
-      m.set(key, placeDayEvents(items, hourRange.startHour, pxPerHour))
+      const key = isoDay(new Date(item.scheduledAt))
+      const list = m.get(key) ?? []
+      list.push(item)
+      list.sort(byCalendarItemAt)
+      m.set(key, list)
     }
     return m
-  }, [rdvByDay, hourRange.startHour, pxPerHour])
+  }, [calendarItems])
 
   return (
     <AppShell>
@@ -157,7 +104,7 @@ export function RdvCalendar() {
         eyebrow="RDV / AGENDA"
         title={period.label}
       />
-      <div className="px-8 pt-4 flex items-center gap-3 flex-shrink-0 flex-wrap">
+      <div className="px-8 pt-4 flex items-center gap-3 flex-shrink-0">
         <button onClick={() => setCursorDate((d) => moveDate(d, view, -1))} className="btn-secondary p-2 rounded-xl text-muted" aria-label="Période précédente">
           <Icon name="chevron-down" size={14} className="rotate-90" />
         </button>
@@ -176,72 +123,7 @@ export function RdvCalendar() {
             </button>
           ))}
         </div>
-
-        <div className="h-6 w-px bg-line-soft mx-1" />
-
-        <div className="flex items-center gap-1.5">
-          {SECTORS.map((s) => {
-            const active = selectedSectors.has(s)
-            return (
-              <button
-                key={s}
-                onClick={() => toggleSector(s)}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors ${active ? 'bg-or text-white border-or' : 'bg-white/70 text-muted border-line hover:bg-or-tint'}`}
-                title={`Secteur ${s}${active ? ' (actif)' : ''}`}
-              >
-                {s}
-              </button>
-            )
-          })}
-          {selectedSectors.size > 0 && (
-            <button
-              onClick={() => setSelectedSectors(new Set())}
-              className="px-2 py-1 text-[11px] font-semibold text-faint hover:text-or"
-              title="Effacer le filtre secteur"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-
-        <div className="h-6 w-px bg-line-soft mx-1" />
-
-        {view !== 'month' && (
-          <div className="flex bg-or-tint p-1 rounded-xl" title="Densité visuelle">
-            {(['compact', 'normal', 'spacious'] as const).map((d) => (
-              <button
-                key={d}
-                onClick={() => setDensity(d)}
-                className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg ${density === d ? 'bg-white shadow-sm text-text' : 'text-muted'}`}
-                title={d === 'compact' ? 'Compact (32 px/h)' : d === 'normal' ? 'Normal (48 px/h)' : 'Aéré (72 px/h)'}
-              >
-                {d === 'compact' ? 'Compact' : d === 'normal' ? 'Normal' : 'Aéré'}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="relative ml-auto flex items-center">
-          <Icon name="search" size={14} className="absolute left-2.5 text-faint pointer-events-none" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Rechercher un lead…"
-            className="bg-white/80 border border-line rounded-xl pl-8 pr-3 py-1.5 text-xs w-52 focus:outline-none focus:border-or"
-          />
-          {searchTerm && (
-            <button
-              onClick={() => setSearchTerm('')}
-              className="absolute right-2 text-faint hover:text-or text-xs"
-              title="Effacer la recherche"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-
-        {ghlLoading && <span className="text-xs text-muted">Sync GHL…</span>}
+        {ghlLoading && <span className="text-xs text-muted ml-auto">Sync GHL…</span>}
         <button onClick={() => navigate('/rdv/split')} className="btn-primary px-4 py-2 rounded-xl text-sm flex items-center gap-2">
           <Icon name="plus" size={14} />
           Nouveau RDV
@@ -266,11 +148,9 @@ export function RdvCalendar() {
           ) : (
             <TimeGridView
               days={period.days}
-              hourRange={hourRange}
-              placementsByDay={placementsByDay}
+              visibleHours={visibleHours}
+              rdvByCell={rdvByHourCell}
               leadMap={leadMap}
-              pxPerHour={pxPerHour}
-              searchMatchIds={searchMatchIds}
               onOpen={(rdvId) => navigate(`/rdv/${rdvId}`)}
               onOpenDay={(date) => { setCursorDate(date); setView('day') }}
             />
@@ -285,35 +165,24 @@ type DayCell = { key: string; date: Date; dayNum: string; today: boolean; muted?
 
 function TimeGridView({
   days,
-  hourRange,
-  placementsByDay,
+  visibleHours,
+  rdvByCell,
   leadMap,
-  pxPerHour,
-  searchMatchIds,
   onOpen,
   onOpenDay,
 }: {
   days: DayCell[]
-  hourRange: { startHour: number; endHour: number }
-  placementsByDay: Map<string, EventPlacement[]>
+  visibleHours: number[]
+  rdvByCell: Map<string, CalendarItem[]>
   leadMap: Map<string, LeadResponse>
-  pxPerHour: number
-  searchMatchIds: Set<string> | null
   onOpen: (rdvId: string) => void
   onOpenDay: (date: Date) => void
 }) {
-  const hours = useMemo(
-    () => Array.from({ length: hourRange.endHour - hourRange.startHour + 1 }, (_, i) => hourRange.startHour + i),
-    [hourRange.startHour, hourRange.endHour],
-  )
-  const totalHeight = (hourRange.endHour - hourRange.startHour) * pxPerHour
-  const gridCols = `64px repeat(${days.length}, minmax(0, 1fr))`
-
   return (
     <>
       <div
         className="grid border-b border-line-soft flex-shrink-0 bg-white/70"
-        style={{ gridTemplateColumns: gridCols }}
+        style={{ gridTemplateColumns: `64px repeat(${days.length}, minmax(0, 1fr))` }}
       >
         <div className="border-r border-line-soft" />
         {days.map((d, i) => (
@@ -327,144 +196,52 @@ function TimeGridView({
           </button>
         ))}
       </div>
-      <div className="flex-grow overflow-y-auto bg-white/30">
-        <div
-          className="grid relative"
-          style={{ gridTemplateColumns: gridCols, height: totalHeight + pxPerHour }}
-        >
-          <div className="relative border-r border-line-soft bg-white/50">
-            {hours.map((h, i) => (
-              <div
-                key={h}
-                className="absolute right-2 text-[11px] text-faint font-semibold"
-                style={{ top: i * pxPerHour - 7 }}
-              >
-                {String(h).padStart(2, '0')}:00
-              </div>
-            ))}
-          </div>
-          {days.map((d) => {
-            const placements = placementsByDay.get(d.key) ?? []
-            return (
-              <DayColumn
-                key={d.key}
-                day={d}
-                placements={placements}
-                hours={hours}
-                leadMap={leadMap}
-                pxPerHour={pxPerHour}
-                searchMatchIds={searchMatchIds}
-                onOpen={onOpen}
-              />
-            )
-          })}
-        </div>
+      <div
+        className="grid flex-grow overflow-y-auto bg-white/30"
+        style={{ gridTemplateColumns: `64px repeat(${days.length}, minmax(0, 1fr))`, gridAutoRows: 'minmax(76px, auto)' }}
+      >
+        {visibleHours.map((hour) => (
+          <RowHour
+            key={hour}
+            hour={hour}
+            days={days}
+            rdvByCell={rdvByCell}
+            leadMap={leadMap}
+            onOpen={onOpen}
+          />
+        ))}
       </div>
     </>
   )
 }
 
-function DayColumn({
-  day,
-  placements,
-  hours,
+function RowHour({
+  hour,
+  days,
+  rdvByCell,
   leadMap,
-  pxPerHour,
-  searchMatchIds,
   onOpen,
 }: {
-  day: DayCell
-  placements: EventPlacement[]
-  hours: number[]
+  hour: number
+  days: DayCell[]
+  rdvByCell: Map<string, CalendarItem[]>
   leadMap: Map<string, LeadResponse>
-  pxPerHour: number
-  searchMatchIds: Set<string> | null
   onOpen: (rdvId: string) => void
 }) {
   return (
-    <div className={`relative border-l border-line-soft ${day.today ? 'bg-cuivre-tint/15' : ''}`}>
-      {hours.map((_, i) => (
-        <div
-          key={i}
-          className="absolute left-0 right-0 border-t border-line-soft/60 pointer-events-none"
-          style={{ top: i * pxPerHour }}
-        />
-      ))}
-      {hours.map((_, i) => (
-        <div
-          key={`half-${i}`}
-          className="absolute left-0 right-0 border-t border-dashed border-line-soft/30 pointer-events-none"
-          style={{ top: i * pxPerHour + pxPerHour / 2 }}
-        />
-      ))}
-      {placements.map((p) => {
-        const widthPct = 100 / p.colCount
-        const leftPct = p.colIdx * widthPct
-        const lead = p.item.source === 'local' ? leadMap.get(p.item.rdv.leadId) : undefined
-        const key = `${p.item.source}-${p.item.id}`
-        const matched = searchMatchIds === null ? null : searchMatchIds.has(key)
+    <>
+      <div className="border-t border-line-soft text-xs text-faint text-right pr-2 pt-1 bg-white/50">{formatHour(hour)}</div>
+      {days.map((d) => {
+        const list = rdvByCell.get(`${d.key}:${hour}`) ?? []
         return (
-          <RdvBlock
-            key={key}
-            item={p.item}
-            lead={lead}
-            top={p.top}
-            height={p.height}
-            leftPct={leftPct}
-            widthPct={widthPct}
-            matched={matched}
-            onClick={() => p.item.source === 'local' && onOpen(p.item.id)}
-          />
+          <div key={d.key} className={`border-l border-t border-line-soft p-1 relative ${d.today ? 'bg-cuivre-tint/20' : ''}`}>
+            {list.map((item) => (
+              <RdvButton key={`${item.source}-${item.id}`} item={item} lead={item.source === 'local' ? leadMap.get(item.rdv.leadId) : undefined} onClick={() => item.source === 'local' && onOpen(item.id)} />
+            ))}
+          </div>
         )
       })}
-    </div>
-  )
-}
-
-function RdvBlock({
-  item,
-  lead,
-  top,
-  height,
-  leftPct,
-  widthPct,
-  matched,
-  onClick,
-}: {
-  item: CalendarItem
-  lead?: LeadResponse
-  top: number
-  height: number
-  leftPct: number
-  widthPct: number
-  matched: boolean | null
-  onClick: () => void
-}) {
-  const isGhl = item.source === 'ghl'
-  const label = isGhl ? item.event.title || `RDV GHL ${item.event.sector ?? ''}`.trim() : (lead ? fullName(lead) : 'Lead inconnu')
-  const tone = isGhl ? 'bg-info-tint text-info border-info/30' : `${STATUS_TONE[item.rdv.status]} border-line-soft`
-  const title = `${formatTime(item.scheduledAt)} — ${label}${isGhl ? ' — GHL temps réel' : ''}`
-  const dense = height < 36
-  const searchClass = matched === null ? '' : matched ? 'ring-2 ring-or shadow-md z-10' : 'opacity-30'
-  return (
-    <button
-      onClick={onClick}
-      title={title}
-      className={`absolute rounded-lg border px-2 py-1 text-left font-semibold overflow-hidden transition-all ${tone} ${searchClass} ${isGhl ? 'cursor-default' : 'hover:shadow-md hover:z-10'}`}
-      style={{
-        top,
-        height: Math.max(20, height - 2),
-        left: `calc(${leftPct}% + 2px)`,
-        width: `calc(${widthPct}% - 4px)`,
-      }}
-    >
-      <span className={`block truncate ${dense ? 'text-[10px]' : 'text-[11px]'}`}>
-        {formatTime(item.scheduledAt)} — {label}
-      </span>
-      {!dense && isGhl && (
-        <span className="block text-[10px] opacity-75 truncate">GHL live{item.event.sector ? ` · ${item.event.sector}` : ''}</span>
-      )}
-    </button>
+    </>
   )
 }
 
@@ -643,85 +420,10 @@ function byCalendarItemAt(a: CalendarItem, b: CalendarItem): number {
   return new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
 }
 
+function formatHour(hour: number): string {
+  return `${String(hour).padStart(2, '0')}:00`
+}
+
 function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: REUNION_TZ })
-}
-
-type EventPlacement = {
-  item: CalendarItem
-  top: number
-  height: number
-  colIdx: number
-  colCount: number
-}
-
-function normalizeSectorKey(value: string): string {
-  return value.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-}
-
-function reunionParts(iso: string): { dateKey: string; hour: number; minute: number; minutesFromMidnight: number } {
-  const fmt = new Intl.DateTimeFormat('en-CA', {
-    timeZone: REUNION_TZ,
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  })
-  const parts = fmt.formatToParts(new Date(iso))
-  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '0'
-  const hour = parseInt(get('hour'), 10) % 24
-  const minute = parseInt(get('minute'), 10)
-  return {
-    dateKey: `${get('year')}-${get('month')}-${get('day')}`,
-    hour,
-    minute,
-    minutesFromMidnight: hour * 60 + minute,
-  }
-}
-
-function getDurationMin(item: CalendarItem): number {
-  if (item.source === 'ghl' && item.event.endTime) {
-    const start = new Date(item.event.startTime).getTime()
-    const end = new Date(item.event.endTime).getTime()
-    const min = Math.round((end - start) / 60000)
-    if (min > 0 && min < 480) return min
-  }
-  return DEFAULT_DURATION_MIN
-}
-
-function placeDayEvents(items: CalendarItem[], gridStartHour: number, pxPerHour: number): EventPlacement[] {
-  const gridStartMin = gridStartHour * 60
-  const pxPerMin = pxPerHour / 60
-  const sorted = [...items].sort((a, b) => {
-    const da = reunionParts(a.scheduledAt).minutesFromMidnight
-    const db = reunionParts(b.scheduledAt).minutesFromMidnight
-    return da - db
-  })
-  type Placed = { item: CalendarItem; start: number; end: number; colIdx: number; groupId: number }
-  const placed: Placed[] = []
-  let lastGroupEnd = -1
-  let groupId = -1
-  let colEnds: number[] = []
-  for (const item of sorted) {
-    const start = reunionParts(item.scheduledAt).minutesFromMidnight
-    const end = start + getDurationMin(item)
-    if (start >= lastGroupEnd) {
-      groupId++
-      colEnds = []
-    }
-    let col = colEnds.findIndex((e) => e <= start)
-    if (col === -1) col = colEnds.length
-    colEnds[col] = end
-    lastGroupEnd = Math.max(lastGroupEnd, end)
-    placed.push({ item, start, end, colIdx: col, groupId })
-  }
-  const groupCols = new Map<number, number>()
-  for (const p of placed) {
-    groupCols.set(p.groupId, Math.max(groupCols.get(p.groupId) ?? 0, p.colIdx + 1))
-  }
-  return placed.map((p) => ({
-    item: p.item,
-    top: (p.start - gridStartMin) * pxPerMin,
-    height: (p.end - p.start) * pxPerMin,
-    colIdx: p.colIdx,
-    colCount: groupCols.get(p.groupId) ?? 1,
-  }))
+  return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
 }

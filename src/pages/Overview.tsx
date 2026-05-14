@@ -80,10 +80,10 @@ function OverviewSetter() {
       />
       <main className="p-6 grid grid-cols-12 grid-rows-[auto_1fr_1fr] gap-4 flex-grow overflow-auto">
         {/* KPI row — appels/connexions réels + classifications converties en appels logiques */}
-        <KpiCard title="APPELS PASSÉS" value={String(stats.appels)} className="col-span-3" />
-        <KpiCard title="CONNEXIONS" value={String(stats.connexions)} delta={`${stats.connectionRate}%`} deltaType="success" className="col-span-3" />
-        <KpiCard title="LEADS QUALIFIÉS" value={String(stats.qualifies)} className="col-span-3" />
-        <KpiCard title="RDV PRIS" value={String(stats.rdvPris)} className="col-span-3" />
+        <KpiCard title="APPELS PASSÉS" value={String(stats.appels)} haloColor="#D4AF37" lineColor="#D4AF37" sparkPoints="0,20 10,16 20,18 30,10 40,12 50,6 64,8" className="col-span-3" />
+        <KpiCard title="CONNEXIONS" value={String(stats.connexions)} delta={`${stats.connectionRate}%`} deltaType="success" haloColor="#B87333" lineColor="#B87333" sparkPoints="0,16 10,18 20,12 30,14 40,10 50,8 64,6" className="col-span-3" />
+        <KpiCard title="LEADS QUALIFIÉS" value={String(stats.qualifies)} haloColor="#3DA86A" lineColor="#3DA86A" sparkPoints="0,22 10,20 20,18 30,14 40,10 50,12 64,4" className="col-span-3" />
+        <KpiCard title="RDV PRIS" value={String(stats.rdvPris)} haloColor="#6B7C8C" lineColor="#6B7C8C" sparkPoints="0,12 10,14 20,12 30,16 40,12 50,14 64,12" className="col-span-3" />
 
         {/* Activité de la journée — graph aggregat call_logs en Phase B */}
         <div className="glass-card col-span-8 p-5">
@@ -100,6 +100,9 @@ function OverviewSetter() {
           eyebrow="TAUX QUALIFICATION"
           value={`${stats.qualifRate}%`}
           desc={`${stats.qualifies} leads qualifiés sur ${stats.total} dans ton portefeuille.`}
+          haloColor="#D4AF37"
+          spark={[30, 55, 42, 68, 50, 80, 95]}
+          sparkColor="#D4AF37"
           className="col-span-4"
         />
 
@@ -114,12 +117,13 @@ function OverviewSetter() {
         </div>
 
         <div className="promo-card col-span-4 flex flex-col justify-between">
-          <div>
+          <div className="promo-halo" style={{ background: '#B7410E' }} />
+          <div className="relative z-10">
             <span className="eyebrow block mb-2">BOOSTER MON SCORE</span>
             <h3 className="text-lg font-bold leading-tight">Améliore ton taux de connexion</h3>
             <p className="text-xs text-muted mt-2 leading-relaxed">Découvre les meilleurs créneaux d'appel et les scripts qui convertissent le mieux selon tes données.</p>
           </div>
-          <button onClick={() => navigate('/analytics')} className="btn-primary text-xs px-4 py-2.5 rounded-xl self-start mt-3">Voir les insights</button>
+          <button onClick={() => navigate('/analytics')} className="btn-primary text-xs px-4 py-2.5 rounded-xl self-start mt-3 relative z-10">Voir les insights</button>
         </div>
 
         <div className="glass-card col-span-4 p-5 min-h-0 flex flex-col">
@@ -207,10 +211,10 @@ function OverviewCommercial() {
         }}
       />
       <main className="p-6 grid grid-cols-12 grid-rows-[auto_1fr_1fr] gap-4 flex-grow overflow-auto">
-        <KpiCard title="CA SIGNÉ" value={fmtKEur(stats.ca)} valueSize={28} className="col-span-3" />
-        <KpiCard title="CLOSING RATE" value={`${stats.closing}%`} valueSize={28} className="col-span-3" />
-        <KpiCard title="PANIER MOY." value={fmtKEur(stats.panier)} valueSize={28} className="col-span-3" />
-        <KpiCard title="RDV HONORÉS" value={`${stats.totalHonored}/${stats.totalHonored + stats.totalPlanifie}`} valueSize={28} className="col-span-3" />
+        <KpiCard title="CA SIGNÉ" value={fmtKEur(stats.ca)} valueSize={28} haloColor="#D4AF37" lineColor="#D4AF37" sparkPoints="0,20 10,18 20,14 30,16 40,8 50,10 64,4" className="col-span-3" />
+        <KpiCard title="CLOSING RATE" value={`${stats.closing}%`} valueSize={28} haloColor="#3DA86A" lineColor="#3DA86A" sparkPoints="0,18 10,16 20,12 30,14 40,8 50,6 64,10" className="col-span-3" />
+        <KpiCard title="PANIER MOY." value={fmtKEur(stats.panier)} valueSize={28} haloColor="#B87333" lineColor="#B87333" sparkPoints="0,16 10,12 20,14 30,8 40,12 50,6 64,10" className="col-span-3" />
+        <KpiCard title="RDV HONORÉS" value={`${stats.totalHonored}/${stats.totalHonored + stats.totalPlanifie}`} valueSize={28} haloColor="#B7410E" lineColor="#B7410E" sparkPoints="0,8 10,10 20,12 30,8 40,14 50,10 64,12" className="col-span-3" />
 
         <div className="glass-card col-span-7 p-5">
           <div className="flex items-center justify-between mb-4">
@@ -223,12 +227,13 @@ function OverviewCommercial() {
         </div>
 
         <div className="big-number-card col-span-5 flex flex-col justify-between">
-          <div>
+          <div className="big-halo" style={{ background: '#3DA86A' }} />
+          <div className="relative z-10">
             <span className="eyebrow block mb-2">CLOSING RATE</span>
-            <div className="text-[56px] font-bold leading-none">{stats.closing}%</div>
+            <div className="text-[56px] font-extrabold leading-none">{stats.closing}%</div>
             <p className="text-xs text-muted mt-2 leading-relaxed">{stats.totalHonored} RDV honorés, {stats.signed} signatures.</p>
           </div>
-          <div className="grid grid-cols-3 gap-2 mt-3 text-xs">
+          <div className="relative z-10 grid grid-cols-3 gap-2 mt-3 text-xs">
             <div><div className="font-bold text-sm">{stats.totalPlanifie + stats.totalHonored}</div><div className="eyebrow">RDV</div></div>
             <div><div className="font-bold text-sm">{stats.totalHonored}</div><div className="eyebrow">HONORÉS</div></div>
             <div><div className="font-bold text-sm text-success">{stats.signed}</div><div className="eyebrow">VENTES</div></div>
@@ -246,11 +251,12 @@ function OverviewCommercial() {
         </div>
 
         <div className="promo-card col-span-3 flex flex-col justify-between">
-          <div>
+          <div className="promo-halo" style={{ background: '#D4AF37' }} />
+          <div className="relative z-10">
             <span className="eyebrow block mb-2">PRÉPARATION RDV</span>
             <h3 className="text-base font-bold leading-tight">{stats.upcoming.length} RDV à venir</h3>
           </div>
-          <button onClick={() => navigate('/rdv')} className="btn-primary text-xs px-4 py-2.5 rounded-xl self-start mt-3">Préparer</button>
+          <button onClick={() => navigate('/rdv')} className="btn-primary text-xs px-4 py-2.5 rounded-xl self-start mt-3 relative z-10">Préparer</button>
         </div>
 
         <div className="glass-card col-span-4 p-5">
@@ -336,12 +342,12 @@ function OverviewAdmin() {
       />
       <main className="p-8 pt-6 flex-grow overflow-auto space-y-8">
         <section className="grid grid-cols-12 gap-5">
-          <SmallKpi title="CA TOTAL" value={fmtKEur(stats.caMois)} />
-          <SmallKpi title="VENTES" value={String(stats.ventes)} />
-          <SmallKpi title="CLOSING" value={`${stats.closing}%`} />
-          <SmallKpi title="LEADS" value={fmtCompact(stats.leads)} />
-          <SmallKpi title="PANIER MOY." value={fmtKEur(stats.panier)} />
-          <SmallKpi title="APPELS" value={fmtCompact(stats.appels)} />
+          <SmallKpi title="CA TOTAL" value={fmtKEur(stats.caMois)} haloColor="#D4AF37" lineColor="#D4AF37" linePoints="0,16 15,12 30,14 45,8 60,10 75,4 100,6" />
+          <SmallKpi title="VENTES" value={String(stats.ventes)} haloColor="#B87333" lineColor="#B87333" linePoints="0,14 15,16 30,10 45,12 60,6 75,8 100,4" />
+          <SmallKpi title="CLOSING" value={`${stats.closing}%`} haloColor="#3DA86A" lineColor="#3DA86A" linePoints="0,12 15,14 30,10 45,12 60,8 75,10 100,6" />
+          <SmallKpi title="LEADS" value={fmtCompact(stats.leads)} haloColor="#6B7C8C" lineColor="#6B7C8C" linePoints="0,16 15,14 30,10 45,8 60,12 75,6 100,4" />
+          <SmallKpi title="PANIER MOY." value={fmtKEur(stats.panier)} haloColor="#B7410E" lineColor="#B7410E" linePoints="0,8 15,10 30,12 45,10 60,14 75,12 100,16" />
+          <SmallKpi title="APPELS" value={fmtCompact(stats.appels)} haloColor="#D4AF37" lineColor="#D4AF37" linePoints="0,12 15,8 30,10 45,6 60,8 75,4 100,6" />
         </section>
 
         <AdminLeadFunnel
@@ -375,6 +381,9 @@ function OverviewAdmin() {
           eyebrow="VENTES SIGNÉES"
           value={String(stats.ventes)}
           desc={`Total des RDV signés sur la période — ${fmtKEur(stats.caMois)} de CA cumulé.`}
+          haloColor="#B7410E"
+          spark={[30, 48, 60, 55, 75, 90, 100]}
+          sparkColor="#B7410E"
           className="col-span-4"
         />
         </section>
@@ -762,13 +771,16 @@ function FuturisticLineChart({ values, color }: { values: number[]; color: strin
   const last = values.at(-1) ?? 0
   const total = values.reduce((a, b) => a + b, 0)
   return (
-    <div className="relative h-full rounded-2xl bg-white/30 border border-line-soft overflow-hidden p-4">
-      <svg viewBox="0 0 300 150" className="relative w-full h-full" preserveAspectRatio="none">
-        {[30, 60, 90, 120].map((y) => <line key={y} x1="0" x2="300" y1={y} y2={y} stroke="#E5E1DA" strokeDasharray="2 6" />)}
-        <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <div className="relative h-full rounded-2xl bg-white/35 border border-line-soft overflow-hidden p-4">
+      <div className="absolute inset-0 opacity-40" style={{ background: `radial-gradient(circle at 75% 20%, ${color}55, transparent 38%)` }} />
+      <svg viewBox="0 0 300 150" className="relative z-10 w-full h-full" preserveAspectRatio="none">
+        <defs><linearGradient id={`line-${color.replace('#', '')}`} x1="0" x2="0" y1="0" y2="1"><stop stopColor={color} stopOpacity="0.35"/><stop stopColor={color} stopOpacity="0"/></linearGradient></defs>
+        {[30, 60, 90, 120].map((y) => <line key={y} x1="0" x2="300" y1={y} y2={y} stroke="#E5E1DA" strokeDasharray="4 6" />)}
+        <polygon points={`0,150 ${points} 300,150`} fill={`url(#line-${color.replace('#', '')})`} />
+        <polyline points={points} fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-      <div className="absolute top-4 right-4 text-right">
-        <div className="text-2xl font-bold">{last}</div>
+      <div className="absolute top-4 right-4 text-right z-20">
+        <div className="text-2xl font-extrabold">{last}</div>
         <div className="eyebrow">Aujourd'hui · {total} / 7j</div>
       </div>
     </div>
@@ -778,12 +790,13 @@ function FuturisticLineChart({ values, color }: { values: number[]; color: strin
 function FuturisticAreaChart({ values, color }: { values: number[]; color: string }) {
   const points = chartPoints(values)
   return (
-    <div className="relative h-full rounded-2xl bg-white/30 border border-line-soft overflow-hidden p-4">
-      <svg viewBox="0 0 300 150" className="relative w-full h-full" preserveAspectRatio="none">
-        {[30, 60, 90, 120].map((y) => <line key={y} x1="0" x2="300" y1={y} y2={y} stroke="#E5E1DA" strokeDasharray="2 6" />)}
-        <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <div className="relative h-full rounded-2xl bg-white/35 border border-line-soft overflow-hidden p-4">
+      <div className="absolute inset-0 opacity-50" style={{ background: `linear-gradient(135deg, ${color}22, transparent 55%)` }} />
+      <svg viewBox="0 0 300 150" className="relative z-10 w-full h-full" preserveAspectRatio="none">
+        <polygon points={`0,150 ${points} 300,150`} fill={color} opacity="0.18" />
+        <polyline points={points} fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-      <div className="absolute top-4 right-4 text-right"><span className="eyebrow">Projection CA</span></div>
+      <div className="absolute top-4 right-4 z-20 text-right"><span className="eyebrow">Projection CA</span></div>
     </div>
   )
 }
@@ -791,10 +804,11 @@ function FuturisticAreaChart({ values, color }: { values: number[]; color: strin
 function FuturisticBars({ values, colors }: { values: number[]; colors: string[] }) {
   const max = Math.max(1, ...values)
   return (
-    <div className="h-full rounded-2xl bg-white/30 border border-line-soft p-4 flex items-end gap-3 overflow-hidden">
+    <div className="h-full rounded-2xl bg-white/35 border border-line-soft p-4 flex items-end gap-3 overflow-hidden relative">
+      <div className="absolute inset-0 opacity-40" style={{ background: `radial-gradient(circle at 15% 15%, ${colors[0]}55, transparent 35%)` }} />
       {values.map((v, i) => (
-        <div key={i} className="flex-1 flex flex-col items-center gap-2">
-          <div className="w-full rounded-t-md" style={{ height: `${Math.max(8, (v / max) * 150)}px`, background: colors[i % colors.length], opacity: 0.55 }} />
+        <div key={i} className="relative z-10 flex-1 flex flex-col items-center gap-2">
+          <div className="w-full rounded-t-xl shadow-sm" style={{ height: `${Math.max(8, (v / max) * 150)}px`, background: colors[i % colors.length], opacity: 0.72 + (i / values.length) * 0.25 }} />
           <span className="text-[10px] text-faint font-semibold">{v}</span>
         </div>
       ))}
@@ -803,59 +817,88 @@ function FuturisticBars({ values, colors }: { values: number[]; colors: string[]
 }
 
 function KpiCard({
-  title, value, valueSize = 32, delta, deltaType, className = '',
+  title, value, valueSize = 32, delta, deltaType, haloColor, lineColor, sparkPoints, className = '',
 }: {
   title: string
   value: string
   valueSize?: number
   delta?: string
   deltaType?: DeltaType
+  haloColor: string
+  lineColor: string
+  sparkPoints: string
   className?: string
 }) {
   return (
     <div className={`kpi-card ${className}`}>
-      <div className="flex items-center justify-between mb-2">
-        <span className="eyebrow">{title}</span>
-        {delta && <span className={`delta-badge delta-${deltaType}`}>{delta}</span>}
+      <div className="kpi-halo tr" style={{ background: haloColor, opacity: 0.45 }} />
+      <div className="kpi-content">
+        <div className="flex items-center justify-between mb-2">
+          <span className="eyebrow">{title}</span>
+          {delta && <span className={`delta-badge delta-${deltaType}`}>{delta}</span>}
+        </div>
+        <div className="flex items-end justify-between">
+          <span className="font-bold leading-none" style={{ fontSize: valueSize }}>{value}</span>
+          <svg width="64" height="28" viewBox="0 0 64 28">
+            <polyline points={sparkPoints} fill="none" stroke={lineColor} strokeWidth="2" />
+          </svg>
+        </div>
       </div>
-      <span className="font-bold leading-none" style={{ fontSize: valueSize }}>{value}</span>
     </div>
   )
 }
 
 function SmallKpi({
-  title, value, delta, deltaType,
+  title, value, delta, deltaType, haloColor, lineColor, linePoints,
 }: {
   title: string
   value: string
   delta?: string
   deltaType?: DeltaType
+  haloColor: string
+  lineColor: string
+  linePoints: string
 }) {
   return (
-    <div className="col-span-12 sm:col-span-6 xl:col-span-2 kpi-card min-h-[108px]">
-      <span className="eyebrow block mb-2">{title}</span>
-      <div className="flex items-end justify-between">
-        <span className="text-[26px] font-bold leading-none">{value}</span>
-        {delta && <span className={`delta-badge delta-${deltaType}`}>{delta}</span>}
+    <div className="col-span-12 sm:col-span-6 xl:col-span-2 kpi-card min-h-[132px]">
+      <div className="kpi-halo tr" style={{ background: haloColor, opacity: 0.4 }} />
+      <div className="kpi-content">
+        <span className="eyebrow block mb-1">{title}</span>
+        <div className="flex items-end justify-between">
+          <span className="text-[24px] font-bold leading-none">{value}</span>
+          {delta && <span className={`delta-badge delta-${deltaType}`}>{delta}</span>}
+        </div>
+        <svg className="mt-2" width="100%" height="20" viewBox="0 0 100 20" preserveAspectRatio="none">
+          <polyline points={linePoints} fill="none" stroke={lineColor} strokeWidth="2" />
+        </svg>
       </div>
     </div>
   )
 }
 
 function BigNumberCard({
-  eyebrow, value, desc, className = '',
+  eyebrow, value, desc, haloColor, spark, sparkColor, className = '',
 }: {
   eyebrow: string
   value: string
   desc: string
+  haloColor: string
+  spark: number[]
+  sparkColor: string
   className?: string
 }) {
   return (
     <div className={`big-number-card ${className} flex flex-col justify-between`}>
-      <div>
+      <div className="big-halo" style={{ background: haloColor }} />
+      <div className="relative z-10">
         <span className="eyebrow block mb-2">{eyebrow}</span>
-        <div className="text-[56px] font-bold leading-none">{value}</div>
+        <div className="text-[56px] font-extrabold leading-none">{value}</div>
         <p className="text-xs text-muted mt-2 leading-relaxed">{desc}</p>
+      </div>
+      <div className="relative z-10 flex items-end gap-1 h-10 mt-2">
+        {spark.map((h, i) => (
+          <div key={i} className="rounded-t-sm w-3" style={{ height: `${h}%`, background: sparkColor, opacity: i === spark.length - 1 ? 0.95 : 1 }} />
+        ))}
       </div>
     </div>
   )

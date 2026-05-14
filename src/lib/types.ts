@@ -89,10 +89,6 @@ export type LeadResponse = {
   joursRelance: number | null
   callCount: number
   callsToday: number
-  /** Appels consécutifs sans réponse depuis le plus récent. 0 si le dernier
-   * appel a été décroché ou si aucun appel. Bascule "Nouveaux" → "Sans réponse"
-   * dans LeadsList à partir de ≥ 7. */
-  consecutiveNoAnswerCount: number
   nextCallbackAt: string | null
   firstCallUnderFiveMin: boolean | null
 }
@@ -325,11 +321,11 @@ export const STATUS_LABEL: Record<LeadStatus, string> = {
   rdv_pris: 'RDV pris',
   rdv_honore: 'RDV honoré',
   signe: 'Signé',
-  perdu: 'Perdu',
+  perdu: 'Non qualifié',
   relance: 'Relance',
-  pas_qualifie: 'Pas qualifié',
+  pas_qualifie: 'Non qualifié',
   a_rappeler: 'À rappeler',
-  pas_de_reponse: 'Pas de réponse',
+  pas_de_reponse: 'Sans réponse',
 }
 
 export const STATUS_BADGE: Record<LeadStatus, string> = {

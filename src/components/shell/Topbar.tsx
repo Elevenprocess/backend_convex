@@ -5,6 +5,7 @@ import { Icon } from '../Icon'
 import { useDisplayUser } from '../../lib/role'
 import { useAuth } from '../../lib/auth'
 import { useLeads, useRdvList } from '../../lib/hooks'
+import { useTheme } from '../../lib/theme'
 
 type TopbarProps = {
   eyebrow?: string
@@ -32,13 +33,15 @@ export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) 
   const user = useDisplayUser()
   const isAdmin = user.role === 'admin'
   const signOut = useAuth((s) => s.signOut)
+  const isDark = useTheme((s) => s.isDark)
+  const toggleTheme = useTheme((s) => s.toggleTheme)
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const mainActiveTab = currentMainTab(pathname, activeTab)
   const topbarRef = useRef<HTMLElement | null>(null)
   const [openMenu, setOpenMenu] = useState<'search' | 'settings' | 'profile' | null>(null)
   const [search, setSearch] = useState('')
-  const { data: leadsData } = useLeads({ limit: 500 })
+  const { data: leadsData } = useLeads({ limit: 3000 })
   const { data: rdvsData } = useRdvList({ limit: 1000 })
   const notificationCount = useMemo(() => countActiveNotifications(leadsData ?? [], rdvsData ?? []), [leadsData, rdvsData])
 
@@ -155,6 +158,13 @@ export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) 
             <DropdownFrame className="w-64 p-2">
               {isAdmin && <MenuButton icon="settings" label="Paramètres" hint="Préférences du SaaS" onClick={() => { setOpenMenu(null); navigate('/settings') }} />}
               <MenuButton icon="chart" label="Analytics" hint="Performance & pipeline" onClick={() => { setOpenMenu(null); navigate('/analytics') }} />
+              <ThemeMenuButton
+                isDark={isDark}
+                onClick={() => {
+                  toggleTheme()
+                  setOpenMenu(null)
+                }}
+              />
               <div className="h-px bg-line-soft my-2 mx-2" />
               <MenuButton icon="logout" label="Se déconnecter" danger onClick={handleSignOut} />
             </DropdownFrame>
@@ -191,21 +201,18 @@ export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) 
 }
 
 function countActiveNotifications(
-  leads: { status: string; createdAt: string; updatedAt: string; nextCallbackAt: string | null }[],
+  leads: { status: string; createdAt: string; nextCallbackAt: string | null }[],
   rdvs: { status: string; scheduledAt: string }[],
 ): number {
   const now = Date.now()
   const in10Min = now + 10 * 60 * 1000
-  const in24hPast = now - 24 * 60 * 60 * 1000
-  const in24hFuture = now + 24 * 60 * 60 * 1000
+  const in24h = now - 24 * 60 * 60 * 1000
   const leadCount = leads.filter((lead) => {
     const callbackAt = lead.nextCallbackAt ? new Date(lead.nextCallbackAt).getTime() : null
     const hasCallback = callbackAt != null && (lead.status === 'a_rappeler' || lead.status === 'relance' || Boolean(lead.nextCallbackAt))
-    // Callback en retard (passé) ou imminent (10 min) ou planifié à <=24h.
-    const callbackInWindow = hasCallback && (callbackAt <= in10Min || (lead.status === 'a_rappeler' && callbackAt <= in24hFuture))
-    const isNewLead = lead.status === 'nouveau' && new Date(lead.createdAt).getTime() >= in24hPast
-    const isQualifiedRecent = lead.status === 'qualifie' && new Date(lead.updatedAt).getTime() >= in24hPast
-    return callbackInWindow || isNewLead || isQualifiedRecent
+    const hasUrgentOrPlannedCallback = hasCallback && (callbackAt <= in10Min || lead.status === 'a_rappeler')
+    const isNewLead = lead.status === 'nouveau' && new Date(lead.createdAt).getTime() >= in24h
+    return hasUrgentOrPlannedCallback || isNewLead
   }).length
   const rdvCount = rdvs.filter((rdv) => {
     const scheduled = new Date(rdv.scheduledAt).getTime()
@@ -220,6 +227,21 @@ function DropdownFrame({ children, className }: { children: ReactNode; className
       <span className="topbar-menu-arrow" />
       {children}
     </div>
+  )
+}
+
+function ThemeMenuButton({ isDark, onClick }: { isDark: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="menu-button theme-menu-button" aria-pressed={isDark}>
+      <span className="menu-icon-badge"><Icon name={isDark ? 'moon' : 'sun'} size={15} /></span>
+      <span className="min-w-0 text-left flex-grow">
+        <span className="block truncate">Apparence</span>
+        <span className="block text-[11px] font-medium text-faint truncate">{isDark ? 'Mode sombre' : 'Mode clair'}</span>
+      </span>
+      <span className={`theme-switch ${isDark ? 'active' : ''}`} aria-hidden="true">
+        <span />
+      </span>
+    </button>
   )
 }
 

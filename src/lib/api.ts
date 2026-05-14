@@ -34,11 +34,10 @@ type FetchOpts = {
   timeoutMs?: number
 }
 
+const DEFAULT_TIMEOUT_MS = 20_000
+
 export async function api<T>(path: string, opts: FetchOpts = {}): Promise<T> {
-  const { method = 'GET', body, query, signal, timeoutMs = 25_000 } = opts
-  const timeoutController = new AbortController()
-  const timeout = window.setTimeout(() => timeoutController.abort(), timeoutMs)
-  const combinedSignal = signal ? anySignal([signal, timeoutController.signal]) : timeoutController.signal
+  const { method = 'GET', body, query, signal, timeoutMs = DEFAULT_TIMEOUT_MS } = opts
 
   const url = new URL(buildApiUrl(path))
   if (query) {
@@ -47,10 +46,15 @@ export async function api<T>(path: string, opts: FetchOpts = {}): Promise<T> {
     }
   }
 
+  const timeoutCtrl = new AbortController()
+  const timeoutId = window.setTimeout(() => timeoutCtrl.abort(), timeoutMs)
+  const abortFromCaller = () => timeoutCtrl.abort()
+  signal?.addEventListener('abort', abortFromCaller, { once: true })
+
   const init: RequestInit = {
     method,
     credentials: 'include',
-    signal: combinedSignal,
+    signal: timeoutCtrl.signal,
     headers: { Accept: 'application/json' },
   }
   if (body !== undefined) {
@@ -58,47 +62,71 @@ export async function api<T>(path: string, opts: FetchOpts = {}): Promise<T> {
     ;(init.headers as Record<string, string>)['Content-Type'] = 'application/json'
   }
 
-  let res: Response
   try {
-    res = await fetch(url.toString(), init)
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new ApiError(408, 'La requête a expiré. Réessaie dans quelques secondes.', 'TIMEOUT')
+    const res = await fetch(url.toString(), init)
+    const text = await res.text()
+    const data = text ? safeParse(text) : null
+
+    if (!res.ok) {
+      const msg = extractApiErrorMessage(data, `${res.status} ${res.statusText}`)
+      const code = data && typeof data === 'object' && 'code' in data ? (data as { code?: string }).code : undefined
+      throw new ApiError(res.status, msg, code)
     }
-    throw error
+    return data as T
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new ApiError(0, 'La requête a expiré. Vérifie ta connexion puis réessaie.')
+    }
+    throw err
   } finally {
-    window.clearTimeout(timeout)
+    window.clearTimeout(timeoutId)
+    signal?.removeEventListener('abort', abortFromCaller)
   }
-
-  const text = await res.text()
-  const data = text ? safeParse(text) : null
-
-  if (!res.ok) {
-    const msg = (data && typeof data === 'object' && 'message' in data && (data as { message?: string }).message) ||
-      `${res.status} ${res.statusText}`
-    const code = data && typeof data === 'object' && 'code' in data ? (data as { code?: string }).code : undefined
-    throw new ApiError(res.status, String(msg), code)
-  }
-  return data as T
 }
 
 function safeParse(s: string): unknown {
   try { return JSON.parse(s) } catch { return s }
 }
 
-function anySignal(signals: AbortSignal[]): AbortSignal {
-  const controller = new AbortController()
+function extractApiErrorMessage(data: unknown, fallback: string): string {
+  if (typeof data === 'string') return data || fallback
+  if (!data || typeof data !== 'object') return fallback
+  const obj = data as Record<string, unknown>
+  const message = obj.message
+  const fromMessage = formatUnknownErrorMessage(message)
+  if (fromMessage) return fromMessage
+  const fromErrors = formatUnknownErrorMessage(obj.errors)
+  if (fromErrors) return fromErrors
+  const fromDetails = formatUnknownErrorMessage(obj.details)
+  if (fromDetails) return fromDetails
+  return fallback
+}
 
-  const abort = () => controller.abort()
-  for (const signal of signals) {
-    if (signal.aborted) {
-      abort()
-      break
-    }
-    signal.addEventListener('abort', abort, { once: true })
+function formatUnknownErrorMessage(value: unknown): string | null {
+  if (!value) return null
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) {
+    const parts = value.map(formatUnknownErrorMessage).filter(Boolean)
+    return parts.length ? parts.join(' · ') : null
   }
+  if (typeof value !== 'object') return String(value)
 
-  return controller.signal
+  const obj = value as Record<string, unknown>
+  if (Array.isArray(obj.issues)) return formatZodIssues(obj.issues)
+  if (Array.isArray(obj.errors)) return formatZodIssues(obj.errors)
+  if (typeof obj.message === 'string') return obj.message
+  return JSON.stringify(obj)
+}
+
+function formatZodIssues(issues: unknown[]): string | null {
+  const parts = issues.map((issue) => {
+    if (!issue || typeof issue !== 'object') return String(issue)
+    const obj = issue as Record<string, unknown>
+    const path = Array.isArray(obj.path) ? obj.path.join('.') : ''
+    const message = typeof obj.message === 'string' ? obj.message : 'valeur invalide'
+    return path ? `${path}: ${message}` : message
+  })
+  return parts.length ? parts.join(' · ') : null
 }
 
 export { API_BASE }

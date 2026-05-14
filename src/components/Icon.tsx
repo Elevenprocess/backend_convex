@@ -32,6 +32,8 @@ export type IconName =
   | 'pause'
   | 'video'
   | 'sparkles'
+  | 'sun'
+  | 'moon'
   | 'flame'
   | 'target'
   | 'trophy'
@@ -72,6 +74,8 @@ const PATHS: Record<IconName, React.ReactNode> = {
   pause: (<><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>),
   video: (<><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></>),
   sparkles: (<path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z"/>),
+  sun: (<><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"/><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"/><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"/></>),
+  moon: (<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>),
   flame: (<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>),
   target: (<><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></>),
   trophy: (<><line x1="6" y1="9" x2="6" y2="2"/><line x1="18" y1="9" x2="18" y2="2"/><path d="M6 9a6 6 0 0 0 12 0"/><path d="M6 9H3a3 3 0 0 0 3 3"/><path d="M18 9h3a3 3 0 0 1-3 3"/><line x1="9" y1="22" x2="15" y2="22"/><line x1="12" y1="15" x2="12" y2="22"/></>),

@@ -3,7 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
-import { LoadingBlock } from '../../components/Spinner'
 import { useUser, useCallLogs, useLeads, useRdvList } from '../../lib/hooks'
 import type { CallLogResponse, CallResult } from '../../lib/types'
 
@@ -23,7 +22,7 @@ export function ProfilSetter() {
     return (
       <AppShell>
         <Topbar eyebrow="PROFIL SETTER" title="Chargement…" />
-        <main className="flex-grow flex items-center justify-center"><LoadingBlock /></main>
+        <main className="flex-grow flex items-center justify-center text-faint text-sm">Chargement…</main>
       </AppShell>
     )
   }

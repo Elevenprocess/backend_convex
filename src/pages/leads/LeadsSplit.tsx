@@ -3,19 +3,21 @@ import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { SplitPanel } from '../../components/SplitPanel'
 import { LeadFiltersBar } from '../../components/LeadFiltersBar'
-import { useLeadsProgressive, useUsers } from '../../lib/hooks'
-import { LoadingBlock } from '../../components/Spinner'
+import { useLeads, useUsers } from '../../lib/hooks'
 import { DEFAULT_LEAD_FILTERS, applyLeadFilters, type LeadListFilters } from '../../lib/leadFilters'
 import {
   STATUS_BADGE,
   STATUS_LABEL,
   fullName,
   initials as leadInitials,
+  type LeadResponse,
   type UserResponse,
 } from '../../lib/types'
 
+const LONG_TERM_RELANCE_THRESHOLD_DAYS = 11
+
 export function LeadsSplit() {
-  const { data: leads, loading, error, refetch, backgroundLoading } = useLeadsProgressive({ quickLimit: 50, fullLimit: 200 })
+  const { data: leads, loading, error, refetch } = useLeads({ limit: 200 })
   const { data: users } = useUsers()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -56,14 +58,14 @@ export function LeadsSplit() {
         {/* Main: leads table */}
         <main className="flex-grow p-6 overflow-y-auto min-w-0">
           {loading ? (
-            <LoadingBlock label="Chargement des leads…" />
+            <div className="py-16 text-center text-faint text-sm">Chargement des leads…</div>
           ) : error ? (
             <div className="py-16 text-center text-rouille text-sm">Erreur : {error}</div>
           ) : (
             <div className="glass-card !p-0 overflow-hidden">
               <div className="px-5 py-4 border-b border-line-soft flex items-center justify-between">
                 <div>
-                  <div className="font-semibold">{counts.total} leads{backgroundLoading ? ' · synchronisation…' : ''}</div>
+                  <div className="font-semibold">{counts.total} leads</div>
                   <div className="text-xs text-muted">{counts.nouveau} nouveaux · {counts.qualifie} qualifiés · {counts.relance} en relance</div>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -104,7 +106,7 @@ export function LeadsSplit() {
                       <td className="px-5 py-3 text-muted">{l.phone ?? '—'}</td>
                       <td className="px-5 py-3 text-muted">{l.city ?? '—'}</td>
                       <td className="px-5 py-3">
-                        <span className={`status-badge ${STATUS_BADGE[l.status]}`}>{STATUS_LABEL[l.status]}</span>
+                        <span className={`status-badge ${statusBadgeForLead(l)}`}>{statusLabelForLead(l)}</span>
                       </td>
                     </tr>
                   ))}
@@ -133,4 +135,24 @@ export function LeadsSplit() {
       </div>
     </AppShell>
   )
+}
+
+function isLongTermRelanceLead(lead: LeadResponse): boolean {
+  const canAgeToLongTerm = lead.status === 'pas_de_reponse' || lead.status === 'a_rappeler' || lead.status === 'relance'
+  if (!canAgeToLongTerm) return false
+  const noAnswerAttempts = 'consecutiveNoAnswerCount' in lead ? Number(lead.consecutiveNoAnswerCount ?? 0) : 0
+  const relanceAge = Math.max(lead.joursRelance ?? 0, noAnswerAttempts)
+  return relanceAge >= LONG_TERM_RELANCE_THRESHOLD_DAYS
+}
+
+function statusLabelForLead(lead: LeadResponse): string {
+  if (isLongTermRelanceLead(lead)) return 'Relance à long terme'
+  if (lead.status === 'perdu' || lead.status === 'pas_qualifie') return 'Non qualifié'
+  return STATUS_LABEL[lead.status]
+}
+
+function statusBadgeForLead(lead: LeadResponse): string {
+  if (isLongTermRelanceLead(lead)) return 'bg-cuivre-tint text-cuivre'
+  if (lead.status === 'perdu' || lead.status === 'pas_qualifie') return 'bg-rouille-tint text-rouille'
+  return STATUS_BADGE[lead.status]
 }

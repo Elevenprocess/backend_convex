@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Blobs, BLOB_PRESETS } from '../../components/shell/Blobs'
 import { Icon } from '../../components/Icon'
-import { Spinner, LoadingBlock } from '../../components/Spinner'
 import { useLead, createCallLog } from '../../lib/hooks'
 import { useCall } from '../../lib/call'
 import {
@@ -63,7 +62,7 @@ export function CallFullScreen() {
   if (loading) {
     return (
       <div className="w-full h-screen flex items-center justify-center bg-cream">
-        <LoadingBlock label="Chargement du lead…" />
+        <p className="text-faint">Chargement du lead…</p>
       </div>
     )
   }
@@ -197,7 +196,7 @@ export function CallFullScreen() {
             className="w-[72px] h-[72px] rounded-full bg-rouille text-white flex items-center justify-center hover:scale-105 transition-transform shadow-lg disabled:opacity-50"
             title="Raccrocher"
           >
-            {saving ? <Spinner size={24} stroke={3} color="white" /> : <Icon name="phone-off" size={28} />}
+            <Icon name="phone-off" size={28} />
           </button>
         </div>
 

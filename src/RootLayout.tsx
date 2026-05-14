@@ -6,9 +6,15 @@ import { SidebarRevealPill } from './components/call/SidebarRevealPill'
 import { PersistentLeadSidebar } from './components/leads/PersistentLeadSidebar'
 import { ClipboardToast } from './components/ClipboardToast'
 import { useRealtimeSocket } from './lib/realtime'
+import { useTheme } from './lib/theme'
 
 export function RootLayout() {
   useRealtimeSocket()
+  const hydrateTheme = useTheme((s) => s.hydrateTheme)
+
+  useEffect(() => {
+    hydrateTheme()
+  }, [hydrateTheme])
 
   return (
     <>

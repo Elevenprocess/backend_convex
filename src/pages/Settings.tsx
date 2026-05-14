@@ -4,9 +4,9 @@ import { Navigate } from 'react-router-dom'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Icon } from '../components/Icon'
-import { Spinner, LoadingBlock } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
 import { inviteUser, useInvitations, useUsers } from '../lib/hooks'
+import { useTheme } from '../lib/theme'
 import type { InvitationResponse, Role, Team, UserResponse } from '../lib/types'
 
 const ROLE_BADGE: Record<Role, string> = {
@@ -48,6 +48,8 @@ export function Settings() {
 function SettingsAdmin() {
   const { data: users, loading, error, refetch: refetchUsers } = useUsers()
   const { data: invitations, refetch: refetchInvitations } = useInvitations()
+  const isDark = useTheme((s) => s.isDark)
+  const toggleTheme = useTheme((s) => s.toggleTheme)
   const [inviteOpen, setInviteOpen] = useState(false)
   const team = users ?? []
   const pendingInvitations = (invitations ?? []).filter((i) => i.status === 'pending')
@@ -80,7 +82,7 @@ function SettingsAdmin() {
         <div className="glass-card p-6">
           <h3 className="font-bold mb-4">Membres de l'équipe</h3>
           {loading ? (
-            <LoadingBlock />
+            <div className="py-8 text-center text-faint text-sm">Chargement…</div>
           ) : error ? (
             <div className="py-8 text-center text-rouille text-sm">Erreur : {error}</div>
           ) : team.length === 0 ? (
@@ -127,7 +129,7 @@ function SettingsAdmin() {
             <div className="space-y-4 text-sm">
               <PrefRow label="Notifications email" enabled />
               <PrefRow label="Notifications in-app" enabled />
-              <PrefRow label="Mode sombre" enabled={false} />
+              <PrefRow label="Mode sombre" enabled={isDark} onClick={toggleTheme} />
               <PrefRow label="Débrief obligatoire post-RDV" enabled />
             </div>
           </div>
@@ -213,8 +215,8 @@ function InviteModal({ onClose, onInvited }: { onClose: () => void; onInvited: (
 
         <div className="flex justify-end gap-3 pt-2">
           <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-semibold text-muted hover:text-text">Fermer</button>
-          <button disabled={saving} className="btn-primary px-4 py-2 rounded-xl text-sm disabled:opacity-60 inline-flex items-center justify-center gap-2">
-            {saving ? <Spinner size={14} stroke={2} label="Envoi…" /> : 'Envoyer invitation'}
+          <button disabled={saving} className="btn-primary px-4 py-2 rounded-xl text-sm disabled:opacity-60">
+            {saving ? 'Envoi…' : 'Envoyer invitation'}
           </button>
         </div>
       </form>
@@ -279,6 +281,10 @@ function IntegrationRow({ name, desc, status }: { name: string; desc: string; st
   return <div className="flex items-center gap-3 p-3 bg-white/40 rounded-xl border border-line"><div className={`w-2 h-2 rounded-full ${dot}`} /><div className="flex-grow"><div className="text-sm font-semibold">{name}</div><div className="text-xs text-faint">{desc}</div></div><span className="text-xs text-muted">{label}</span></div>
 }
 
-function PrefRow({ label, enabled }: { label: string; enabled: boolean }) {
-  return <div className="flex items-center justify-between"><span>{label}</span><div className={`w-10 h-6 rounded-full p-0.5 transition-colors ${enabled ? 'bg-or' : 'bg-line'}`}><div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-4' : ''}`} /></div></div>
+function PrefRow({ label, enabled, onClick }: { label: string; enabled: boolean; onClick?: () => void }) {
+  const content = <><span>{label}</span><div className={`theme-switch ${enabled ? 'active' : ''}`}><span /></div></>
+  if (onClick) {
+    return <button type="button" onClick={onClick} className="w-full flex items-center justify-between text-left rounded-xl p-1 -m-1 hover:bg-white/40 transition-colors">{content}</button>
+  }
+  return <div className="flex items-center justify-between">{content}</div>
 }
