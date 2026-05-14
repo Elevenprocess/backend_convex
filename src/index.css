@@ -304,12 +304,20 @@ body {
   box-shadow: 0 10px 34px rgba(58, 45, 28, 0.06);
 }
 
+.main-nav-center {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 125;
+}
+
 .topbar-actions {
   position: relative;
   z-index: 130;
   display: flex;
   align-items: center;
   gap: 10px;
+  margin-left: auto;
 }
 
 .topbar-action,

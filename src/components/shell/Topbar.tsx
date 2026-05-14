@@ -43,7 +43,21 @@ export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) 
   const [search, setSearch] = useState('')
   const { data: leadsData } = useLeads({ limit: 3000 })
   const { data: rdvsData } = useRdvList({ limit: 1000 })
-  const notificationCount = useMemo(() => countActiveNotifications(leadsData ?? [], rdvsData ?? []), [leadsData, rdvsData])
+  const [seenNotificationVersion, setSeenNotificationVersion] = useState(0)
+  const notificationCount = useMemo(
+    () => countUnreadNotifications(leadsData ?? [], rdvsData ?? []),
+    [leadsData, rdvsData, seenNotificationVersion],
+  )
+
+  useEffect(() => {
+    const refreshSeenNotifications = () => setSeenNotificationVersion((version) => version + 1)
+    window.addEventListener('storage', refreshSeenNotifications)
+    window.addEventListener('ecoi:notifications-seen', refreshSeenNotifications)
+    return () => {
+      window.removeEventListener('storage', refreshSeenNotifications)
+      window.removeEventListener('ecoi:notifications-seen', refreshSeenNotifications)
+    }
+  }, [])
 
   useEffect(() => {
     if (!openMenu) return
@@ -200,25 +214,50 @@ export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) 
   )
 }
 
-function countActiveNotifications(
-  leads: { status: string; createdAt: string; nextCallbackAt: string | null }[],
-  rdvs: { status: string; scheduledAt: string }[],
+function countUnreadNotifications(
+  leads: { id: string; status: string; createdAt: string; nextCallbackAt: string | null }[],
+  rdvs: { id: string; status: string; scheduledAt: string }[],
 ): number {
+  const seen = readSeenNotificationIds()
+  return activeNotificationIds(leads, rdvs).filter((id) => !seen.has(id)).length
+}
+
+function activeNotificationIds(
+  leads: { id: string; status: string; createdAt: string; nextCallbackAt: string | null }[],
+  rdvs: { id: string; status: string; scheduledAt: string }[],
+): string[] {
   const now = Date.now()
   const in10Min = now + 10 * 60 * 1000
   const in24h = now - 24 * 60 * 60 * 1000
-  const leadCount = leads.filter((lead) => {
+  const ids: string[] = []
+
+  for (const lead of leads) {
     const callbackAt = lead.nextCallbackAt ? new Date(lead.nextCallbackAt).getTime() : null
-    const hasCallback = callbackAt != null && (lead.status === 'a_rappeler' || lead.status === 'relance' || Boolean(lead.nextCallbackAt))
-    const hasUrgentOrPlannedCallback = hasCallback && (callbackAt <= in10Min || lead.status === 'a_rappeler')
-    const isNewLead = lead.status === 'nouveau' && new Date(lead.createdAt).getTime() >= in24h
-    return hasUrgentOrPlannedCallback || isNewLead
-  }).length
-  const rdvCount = rdvs.filter((rdv) => {
+    if (callbackAt && callbackAt <= now && (lead.status === 'a_rappeler' || lead.status === 'relance' || lead.nextCallbackAt)) {
+      ids.push(`callback-late-${lead.id}`)
+    } else if (callbackAt && callbackAt <= in10Min && callbackAt > now) {
+      ids.push(`callback-soon-${lead.id}`)
+    } else if (callbackAt && lead.status === 'a_rappeler') {
+      ids.push(`callback-planned-${lead.id}`)
+    }
+
+    if (lead.status === 'nouveau' && new Date(lead.createdAt).getTime() >= in24h) {
+      ids.push(`new-lead-${lead.id}`)
+    }
+  }
+
+  for (const rdv of rdvs) {
     const scheduled = new Date(rdv.scheduledAt).getTime()
-    return rdv.status === 'planifie' && scheduled > now && scheduled <= in10Min
-  }).length
-  return leadCount + rdvCount
+    if (rdv.status === 'planifie' && scheduled > now && scheduled <= in10Min) {
+      ids.push(`rdv-soon-${rdv.id}`)
+    }
+  }
+
+  return ids
+}
+
+function readSeenNotificationIds(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem('ecoi.seenNotificationIds') ?? '[]')) } catch { return new Set() }
 }
 
 function DropdownFrame({ children, className }: { children: ReactNode; className?: string }) {

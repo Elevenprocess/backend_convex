@@ -31,6 +31,7 @@ export function Notifications() {
   const [permission, setPermission] = useState(notificationPermission())
 
   useBrowserNotifications(notifs)
+  useMarkNotificationsSeen(notifs)
 
   return (
     <AppShell>
@@ -176,6 +177,30 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
   }
 
   return notifications.sort((a, b) => urgencyRank(a) - urgencyRank(b))
+}
+
+function useMarkNotificationsSeen(notifs: Notif[]) {
+  useEffect(() => {
+    if (notifs.length === 0) return
+    const seen = readSeenNotificationIds()
+    let changed = false
+    for (const notif of notifs) {
+      if (seen.has(notif.id)) continue
+      seen.add(notif.id)
+      changed = true
+    }
+    if (!changed) return
+    writeSeenNotificationIds(seen)
+    window.dispatchEvent(new Event('ecoi:notifications-seen'))
+  }, [notifs])
+}
+
+function readSeenNotificationIds(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem('ecoi.seenNotificationIds') ?? '[]')) } catch { return new Set() }
+}
+
+function writeSeenNotificationIds(ids: Set<string>) {
+  localStorage.setItem('ecoi.seenNotificationIds', JSON.stringify(Array.from(ids).slice(-300)))
 }
 
 function useBrowserNotifications(notifs: Notif[]) {
