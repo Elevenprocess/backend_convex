@@ -230,6 +230,8 @@ type InfosEditable = {
   city: string
   postalCode: string
   status: LeadResponse['status']
+  typeLogement: string
+  revenuFiscal: string
 }
 
 function leadToInfosForm(lead: LeadResponse): InfosEditable {
@@ -245,6 +247,8 @@ function leadToInfosForm(lead: LeadResponse): InfosEditable {
     city: cleanField(lead.city) ?? '',
     postalCode: cleanField(lead.postalCode) ?? '',
     status: lead.status,
+    typeLogement: cleanField(lead.typeLogement) ?? '',
+    revenuFiscal: lead.revenuFiscal?.toString() ?? '',
   }
 }
 
@@ -274,15 +278,17 @@ function InfosTab({ lead, userMap, onSaved }: { lead: LeadResponse; userMap?: Ma
       const patch: Record<string, unknown> = {}
       const initial = leadToInfosForm(lead)
       for (const key of Object.keys(form) as (keyof InfosEditable)[]) {
-        if (form[key] !== initial[key]) {
-          if (key !== 'status') {
-            // Champs texte : on envoie null si vide pour que le back nettoie la valeur.
-            const trimmed = (form[key] as string).trim()
-            patch[key] = trimmed === '' ? null : trimmed
-          } else {
-            patch[key] = form[key]
-          }
+        if (form[key] === initial[key]) continue
+        if (key === 'status') {
+          patch.status = form.status
+          continue
         }
+        if (key === 'revenuFiscal') {
+          patch.revenuFiscal = parseRevenuFiscal(form.revenuFiscal)
+          continue
+        }
+        const trimmed = (form[key] as string).trim()
+        patch[key] = trimmed === '' ? null : trimmed
       }
       if (Object.keys(patch).length === 0) {
         setEditing(false)
@@ -314,6 +320,8 @@ function InfosTab({ lead, userMap, onSaved }: { lead: LeadResponse; userMap?: Ma
         <Field label="EMAIL" value={fieldOrDash(lead.email)} />
         <Field label="ADRESSE" value={[cleanField(lead.addressLine), cleanField(lead.postalCode), cleanField(lead.city)].filter(Boolean).join(', ') || '—'} />
         <Field label="VILLE" value={fieldOrDash(lead.city)} />
+        <Field label="TYPE LOGEMENT" value={fieldOrDash(lead.typeLogement)} />
+        <Field label="REVENU FISCAL" value={lead.revenuFiscal != null ? lead.revenuFiscal.toLocaleString('fr-FR') : '—'} />
         <Field label="SOURCE" value={prettySource(lead)} />
         {lead.utmSource && <Field label="UTM" value={lead.utmSource} />}
         <Field label="STATUT" value={STATUS_LABEL[lead.status]} />
@@ -351,6 +359,8 @@ function InfosTab({ lead, userMap, onSaved }: { lead: LeadResponse; userMap?: Ma
       <EditableField label="ADRESSE" value={form.addressLine} onChange={(v) => setForm((f) => ({ ...f, addressLine: v }))} />
       <EditableField label="CODE POSTAL" value={form.postalCode} onChange={(v) => setForm((f) => ({ ...f, postalCode: v }))} placeholder="97400" />
       <EditableField label="VILLE" value={form.city} onChange={(v) => setForm((f) => ({ ...f, city: v }))} />
+      <EditableField label="TYPE LOGEMENT" value={form.typeLogement} onChange={(v) => setForm((f) => ({ ...f, typeLogement: v }))} placeholder="ex: maison" />
+      <EditableField label="REVENU FISCAL" value={form.revenuFiscal} onChange={(v) => setForm((f) => ({ ...f, revenuFiscal: v }))} placeholder="ex: 25000" />
       <div>
         <div className="text-[10px] font-bold text-faint uppercase tracking-widest mb-1">STATUT</div>
         <select
