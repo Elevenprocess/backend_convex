@@ -704,15 +704,27 @@ function isClassifiedLead(lead: LeadResponse): boolean {
 
 function belongsToSetter(lead: LeadResponse, setterId: string | undefined): boolean {
   if (!setterId) return true
-  return lead.setterId === setterId || lead.assignedSetterIds.includes(setterId)
+  return lead.setterId === setterId || (lead.assignedSetterIds ?? []).includes(setterId)
 }
 
 type ActivityPoint = { label: string; value: number }
 
+function isoDayKey(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  return iso.slice(0, 10)
+}
+
+function isoHour(iso: string | null | undefined): number | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  const hour = d.getHours()
+  return Number.isNaN(hour) ? null : hour
+}
+
 function weekLogicalCallSeries(calls: CallLogResponse[], classified: LeadResponse[]): ActivityPoint[] {
   return lastNDays(7).map((day) => {
-    const logged = calls.filter((c) => c.calledAt.slice(0, 10) === day).length
-    const classifs = classified.filter((l) => l.updatedAt.slice(0, 10) === day).length
+    const logged = calls.filter((c) => isoDayKey(c.calledAt) === day).length
+    const classifs = classified.filter((l) => isoDayKey(l.updatedAt) === day).length
     return { label: dayLabel(day), value: Math.max(logged, classifs) }
   })
 }
@@ -721,8 +733,8 @@ function todayLogicalCallSeries(calls: CallLogResponse[], classified: LeadRespon
   const today = new Date().toISOString().slice(0, 10)
   const hours = Array.from({ length: 12 }, (_, i) => 8 + i)
   return hours.map((hour) => {
-    const logged = calls.filter((c) => c.calledAt.slice(0, 10) === today && new Date(c.calledAt).getHours() === hour).length
-    const classifs = classified.filter((l) => l.updatedAt.slice(0, 10) === today && new Date(l.updatedAt).getHours() === hour).length
+    const logged = calls.filter((c) => isoDayKey(c.calledAt) === today && isoHour(c.calledAt) === hour).length
+    const classifs = classified.filter((l) => isoDayKey(l.updatedAt) === today && isoHour(l.updatedAt) === hour).length
     return { label: `${hour}h`, value: Math.max(logged, classifs) }
   })
 }
