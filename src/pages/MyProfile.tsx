@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
-import { updateMyProfile, useGhlCalendarConfig, useGhlCalendarEvents } from '../lib/hooks'
+import { updateMyProfile, useGhlMySector } from '../lib/hooks'
 import { useAuth, useCurrentUser } from '../lib/auth'
 import { roleLabel, teamLabel } from '../lib/role'
 import { Icon } from '../components/Icon'
@@ -26,10 +26,8 @@ export function MyProfile() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const ghlRange = useMemo(() => buildGhlDetectionRange(), [])
-  const { data: ghlConfig } = useGhlCalendarConfig()
-  const { data: ghlEventsData } = useGhlCalendarEvents(user.role === 'commercial' && user.ghlUserId ? ghlRange : undefined)
-  const sectorInfo = useMemo(() => deriveSectorInfo(user, ghlConfig?.sectors ?? [], ghlEventsData?.events ?? []), [ghlConfig?.sectors, ghlEventsData?.events, user])
+  const { data: ghlSector } = useGhlMySector(user.role === 'commercial' && Boolean(user.ghlUserId))
+  const sectorInfo = useMemo(() => deriveSectorInfo(user, ghlSector), [ghlSector, user])
 
   const initials = useMemo(() => {
     const parts = (name || user.email).split(/[\s@._-]+/).filter(Boolean)
@@ -86,8 +84,8 @@ export function MyProfile() {
     ['Dernière activité', user.lastActionAt ? `${formatDate(user.lastActionAt)}${user.lastActionType ? ` · ${user.lastActionType}` : ''}` : '—'],
     ['Créé le', formatDate(user.createdAt)],
     ['Mis à jour le', formatDate(user.updatedAt)],
-    ['Secteur GHL', sectorInfo.label],
-    ['RDV GHL détectés', `${sectorInfo.count}`],
+    ['Secteur GHL principal', sectorInfo.label],
+    ['Tous secteurs GHL', sectorInfo.allLabels],
     ['GHL user ID', user.ghlUserId || '—'],
     ['GHL calendar ID', user.ghlCalendarId || sectorInfo.calendarId || '—'],
     ['GHL location ID', user.ghlLocationId || '—'],
@@ -214,47 +212,23 @@ export function MyProfile() {
 }
 
 
-type GhlSectorInfo = { label: string; calendarId: string | null; count: number }
 
-function buildGhlDetectionRange(): { from: string; to: string } {
-  const now = new Date()
-  const from = new Date(now)
-  from.setDate(from.getDate() - 120)
-  from.setHours(0, 0, 0, 0)
-  const to = new Date(now)
-  to.setDate(to.getDate() + 45)
-  to.setHours(23, 59, 59, 999)
-  return { from: from.toISOString(), to: to.toISOString() }
-}
+type GhlSectorInfo = { label: string; calendarId: string | null; count: number; allLabels: string }
 
 function deriveSectorInfo(
   user: { role: string; ghlUserId?: string | null; ghlCalendarId?: string | null },
-  sectors: Array<{ sector: string; calendarId: string; label: string }>,
-  events: Array<{ assignedUserId?: string | null; commercialId?: string | null; sector?: string | null; calendarId: string }>,
+  sector?: { linked: boolean; primarySector: string | null; primaryCalendarId: string | null; sectors: Array<{ label: string; calendarId: string }> } | null,
 ): GhlSectorInfo {
-  if (user.role !== 'commercial') return { label: '—', calendarId: null, count: 0 }
-  if (!user.ghlUserId) return { label: 'Non relié', calendarId: null, count: 0 }
-
-  const matchingEvents = events.filter((event) => event.assignedUserId === user.ghlUserId)
-  const counts = new Map<string, { label: string; calendarId: string; count: number }>()
-  for (const event of matchingEvents) {
-    const config = sectors.find((sector) => sector.calendarId === event.calendarId)
-    const key = event.sector || config?.sector || config?.label || event.calendarId
-    const label = event.sector || config?.label || config?.sector || 'Secteur GHL'
-    const current = counts.get(key) ?? { label, calendarId: event.calendarId, count: 0 }
-    current.count += 1
-    counts.set(key, current)
+  if (user.role !== 'commercial') return { label: '—', calendarId: null, count: 0, allLabels: '—' }
+  if (!user.ghlUserId) return { label: 'Non relié', calendarId: null, count: 0, allLabels: 'Non relié' }
+  const labels = Array.from(new Set((sector?.sectors ?? []).map((row) => row.label).filter(Boolean)))
+  const label = sector?.primarySector || labels[0] || 'À détecter'
+  return {
+    label,
+    calendarId: sector?.primaryCalendarId || user.ghlCalendarId || null,
+    count: labels.length,
+    allLabels: labels.length > 1 ? labels.join(', ') : label,
   }
-
-  const best = [...counts.values()].sort((a, b) => b.count - a.count)[0]
-  if (best) return best
-
-  if (user.ghlCalendarId) {
-    const config = sectors.find((sector) => sector.calendarId === user.ghlCalendarId)
-    return { label: config?.label || config?.sector || 'Calendrier lié', calendarId: user.ghlCalendarId, count: 0 }
-  }
-
-  return { label: 'À détecter', calendarId: null, count: 0 }
 }
 
 function resizeProfilePhoto(file: File): Promise<string> {

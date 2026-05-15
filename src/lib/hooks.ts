@@ -534,12 +534,26 @@ export type GhlUser = {
   role: string | null
 }
 
+export type GhlMySector = {
+  configured: boolean
+  linked: boolean
+  userId: string
+  ghlUserId: string | null
+  primarySector: string | null
+  primaryCalendarId: string | null
+  sectors: Array<{ sector: string; calendarId: string; label: string; primary: boolean }>
+}
+
 export function useGhlCalendarConfig(): Async<GhlCalendarConfig> {
   return useFetch<GhlCalendarConfig>('/ghl-calendar/config')
 }
 
 export function useGhlUsers(): Async<GhlUser[]> {
   return useFetch<GhlUser[]>('/ghl-calendar/users')
+}
+
+export function useGhlMySector(enabled = true): Async<GhlMySector> {
+  return useFetch<GhlMySector>(enabled ? '/ghl-calendar/my-sector' : null)
 }
 
 export function useGhlFreeSlots(filters?: {
