@@ -4,8 +4,8 @@ import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
 import { useAuth } from '../../lib/auth'
-import { updateLead, updateRdv, useCommercialAnalytics, useGhlCalendarConfig, useGhlCalendarEvents, useUser, useRdvList, useLeads } from '../../lib/hooks'
-import { fullName, type LeadResponse, type LeadStatus, type RdvResponse, type RdvStatus } from '../../lib/types'
+import { updateLead, updateRdv, useCallLogs, useCommercialAnalytics, useGhlCalendarConfig, useGhlCalendarEvents, useUser, useUsers, useRdvList, useLeads } from '../../lib/hooks'
+import { CALL_RESULT_LABEL, STATUS_LABEL, fullName, type CallLogResponse, type LeadResponse, type LeadStatus, type RdvResponse, type RdvStatus, type UserResponse } from '../../lib/types'
 
 type PipelineStageId =
   | 'rdv_planifie'
@@ -75,12 +75,21 @@ export function ProfilCommercial() {
   const { data: ghlEventsData } = useGhlCalendarEvents(member?.ghlUserId ? { from: periodRange.from, to: periodRange.to } : undefined)
   const [draggedCardId, setDraggedCardId] = useState<string | null>(null)
   const [movingId, setMovingId] = useState<string | null>(null)
+  const [selectedCard, setSelectedCard] = useState<ProspectCard | null>(null)
+  const { data: users } = useUsers()
+  const { data: selectedCallLogs } = useCallLogs(selectedCard ? { leadId: selectedCard.rdv.leadId, limit: 50 } : null)
 
   const leadMap = useMemo(() => {
     const m = new Map<string, LeadResponse>()
     for (const l of leads ?? []) m.set(l.id, l)
     return m
   }, [leads])
+
+  const userMap = useMemo(() => {
+    const m = new Map<string, UserResponse>()
+    for (const u of users ?? []) m.set(u.id, u)
+    return m
+  }, [users])
 
   const rdvList = rdvs ?? []
   const liveGhlEvents = useMemo(() => (ghlEventsData?.events ?? []).filter((event) => event.commercialId === profileId || event.assignedUserId === member?.ghlUserId), [ghlEventsData?.events, member?.ghlUserId, profileId])
@@ -231,6 +240,7 @@ export function ProfilCommercial() {
                           key={card.id}
                           card={card}
                           moving={movingId === card.id}
+                          onOpen={() => setSelectedCard(card)}
                           onDragStart={(event) => {
                             setDraggedCardId(card.id)
                             event.dataTransfer.effectAllowed = 'move'
@@ -246,6 +256,14 @@ export function ProfilCommercial() {
           </div>
         </section>
       </main>
+      {selectedCard && (
+        <ProspectDetailModal
+          card={selectedCard}
+          callLogs={selectedCallLogs ?? []}
+          userMap={userMap}
+          onClose={() => setSelectedCard(null)}
+        />
+      )}
     </AppShell>
   )
 }
@@ -351,16 +369,20 @@ function Metric({ label, value, hint }: { label: string; value: string; hint?: s
   )
 }
 
-function ProspectKanbanCard({ card, moving, onDragStart }: { card: ProspectCard; moving: boolean; onDragStart: (event: DragEvent<HTMLDivElement>) => void }) {
+function ProspectKanbanCard({ card, moving, onOpen, onDragStart }: { card: ProspectCard; moving: boolean; onOpen: () => void; onDragStart: (event: DragEvent<HTMLDivElement>) => void }) {
   const { rdv, lead } = card
   const name = lead ? fullName(lead) || lead.email || lead.phone || 'Prospect' : 'Prospect lié'
   const value = rdv.montantTotal ? Number(rdv.montantTotal) : null
   return (
     <div
+      role="button"
+      tabIndex={0}
       draggable={!moving}
+      onClick={onOpen}
+      onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') onOpen() }}
       onDragStart={onDragStart}
-      className={`rounded-[18px] bg-white border border-line-soft p-3 shadow-sm cursor-grab active:cursor-grabbing transition ${moving ? 'opacity-50 scale-[0.98]' : 'hover:-translate-y-0.5 hover:shadow-md'}`}
-      title="Glisser vers une autre colonne"
+      className={`rounded-[18px] border p-3 shadow-sm cursor-pointer active:cursor-grabbing transition ${stageCardTone(card.stageId)} ${moving ? 'opacity-50 scale-[0.98]' : 'hover:-translate-y-0.5 hover:shadow-md'}`}
+      title="Cliquer pour voir la fiche complète. Glisser pour déplacer."
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -383,6 +405,144 @@ function ProspectKanbanCard({ card, moving, onDragStart }: { card: ProspectCard;
       </div>
     </div>
   )
+}
+
+
+function ProspectDetailModal({ card, callLogs, userMap, onClose }: { card: ProspectCard; callLogs: CallLogResponse[]; userMap: Map<string, UserResponse>; onClose: () => void }) {
+  const { lead, rdv, stageId } = card
+  const setterIds = Array.from(new Set([
+    lead?.setterId,
+    ...(lead?.assignedSetterIds ?? []),
+    ...callLogs.map((log) => log.setterId),
+  ].filter(Boolean) as string[]))
+  const setters = setterIds.map((id) => userMap.get(id)?.name ?? id)
+  const commercial = rdv.commercialId ? userMap.get(rdv.commercialId)?.name ?? rdv.commercialId : '—'
+  const latestComments = [
+    lead?.latestCallComment ? { label: 'Dernier commentaire setter', value: lead.latestCallComment } : null,
+    rdv.notes ? { label: 'Note RDV', value: rdv.notes } : null,
+    rdv.objections ? { label: 'Objections', value: rdv.objections } : null,
+    rdv.nonSaleReason ? { label: 'Raison de non-vente', value: rdv.nonSaleReason } : null,
+  ].filter(Boolean) as Array<{ label: string; value: string }>
+
+  return (
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-noir/35 backdrop-blur-sm px-4" onClick={onClose}>
+      <div className="w-full max-w-4xl max-h-[88vh] overflow-hidden rounded-[28px] border border-white/70 bg-white/95 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className={`px-6 py-5 border-b border-line-soft ${stageModalTone(stageId)}`}>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="eyebrow text-[10px]">FICHE PROSPECT</p>
+              <h3 className="text-2xl font-black truncate">{lead ? fullName(lead) : 'Prospect lié'}</h3>
+              <p className="text-sm text-muted mt-1">{STATUS_LABEL[lead?.status ?? 'nouveau']} · {formatDateTime(rdv.scheduledAt)}</p>
+            </div>
+            <button onClick={onClose} className="w-10 h-10 rounded-full bg-white/80 border border-line-soft flex items-center justify-center text-muted hover:text-text" title="Fermer">
+              <Icon name="x" size={18} />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6 overflow-y-auto max-h-[calc(88vh-116px)] space-y-5">
+          <div className="grid md:grid-cols-3 gap-3">
+            <InfoTile label="Téléphone" value={lead?.phone} />
+            <InfoTile label="Email" value={lead?.email} />
+            <InfoTile label="Ville" value={[lead?.postalCode, lead?.city].filter(Boolean).join(' ') || null} />
+            <InfoTile label="Adresse" value={lead?.addressLine} />
+            <InfoTile label="Logement" value={lead?.typeLogement} />
+            <InfoTile label="Revenu fiscal" value={lead?.revenuFiscal != null ? String(lead.revenuFiscal) : null} />
+            <InfoTile label="Source" value={lead?.source} />
+            <InfoTile label="Campagne" value={lead?.campaign ?? lead?.utmCampaign} />
+            <InfoTile label="Canal" value={lead?.canalAcquisition ?? lead?.utmSource} />
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <section className="rounded-[22px] border border-line-soft bg-cream/45 p-4">
+              <h4 className="font-black text-sm mb-3">Attribution & RDV</h4>
+              <DetailRow label="Setter envoyé par" value={setters.length ? setters.join(', ') : '—'} />
+              <DetailRow label="Commercial" value={commercial} />
+              <DetailRow label="RDV" value={formatDateTime(rdv.scheduledAt)} />
+              <DetailRow label="Lieu" value={rdv.locationType} />
+              <DetailRow label="Statut RDV" value={rdv.status} />
+              <DetailRow label="Résultat" value={rdv.result ?? '—'} />
+              <DetailRow label="Montant" value={rdv.montantTotal ? formatCurrency(Number(rdv.montantTotal)) : '—'} />
+              <DetailRow label="Financement" value={rdv.financingType ?? '—'} />
+            </section>
+
+            <section className="rounded-[22px] border border-line-soft bg-cream/45 p-4">
+              <h4 className="font-black text-sm mb-3">Historique rapide</h4>
+              <DetailRow label="Créé le" value={formatDateTime(lead?.createdAt ?? rdv.createdAt)} />
+              <DetailRow label="Dernier contact" value={lead?.lastContactAt ? formatDateTime(lead.lastContactAt) : '—'} />
+              <DetailRow label="Dernier appel" value={lead?.latestCallAt ? formatDateTime(lead.latestCallAt) : '—'} />
+              <DetailRow label="Nb appels" value={`${lead?.callCount ?? callLogs.length}`} />
+              <DetailRow label="Prochain rappel" value={lead?.nextCallbackAt ? formatDateTime(lead.nextCallbackAt) : '—'} />
+              <DetailRow label="Jauge 11 jours" value={lead?.jauge11Jours ?? '—'} />
+            </section>
+          </div>
+
+          <section className="rounded-[22px] border border-line-soft bg-white p-4">
+            <h4 className="font-black text-sm mb-3">Commentaires</h4>
+            {latestComments.length === 0 && callLogs.every((log) => !log.notes) ? (
+              <p className="text-sm text-faint">Aucun commentaire enregistré.</p>
+            ) : (
+              <div className="space-y-3">
+                {latestComments.map((comment) => <CommentBlock key={comment.label} label={comment.label} value={comment.value} />)}
+                {callLogs.filter((log) => log.notes).map((log) => (
+                  <CommentBlock
+                    key={log.id}
+                    label={`${CALL_RESULT_LABEL[log.result]} · ${formatDateTime(log.calledAt)} · ${userMap.get(log.setterId)?.name ?? 'Setter'}`}
+                    value={log.notes ?? ''}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function InfoTile({ label, value }: { label: string; value: string | number | null | undefined }) {
+  return (
+    <div className="rounded-2xl border border-line-soft bg-cream/50 px-4 py-3 min-w-0">
+      <p className="text-[10px] font-black uppercase tracking-widest text-faint">{label}</p>
+      <p className="mt-1 text-sm font-bold truncate" title={value == null ? '—' : String(value)}>{value == null || value === '' ? '—' : value}</p>
+    </div>
+  )
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return <div className="flex items-start justify-between gap-3 py-1.5 text-sm"><span className="text-muted">{label}</span><span className="font-bold text-right break-words">{value}</span></div>
+}
+
+function CommentBlock({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-2xl bg-cream/55 border border-line-soft p-3"><p className="text-[10px] font-black uppercase tracking-widest text-faint mb-1">{label}</p><p className="text-sm whitespace-pre-wrap">{value}</p></div>
+}
+
+function stageCardTone(stageId: PipelineStageId): string {
+  return {
+    rdv_planifie: 'bg-sky-50/70 border-sky-100',
+    no_show_bis: 'bg-slate-50/80 border-slate-200',
+    rdv_annule: 'bg-rose-50/70 border-rose-100',
+    rdv_pas_qualifie: 'bg-red-50/60 border-red-100',
+    rdv_reprogramme: 'bg-amber-50/70 border-amber-100',
+    relance_long_terme: 'bg-orange-50/60 border-orange-100',
+    devis_en_attente: 'bg-violet-50/60 border-violet-100',
+    devis_signe: 'bg-emerald-50/70 border-emerald-100',
+    devis_perdu: 'bg-stone-50/80 border-stone-200',
+  }[stageId]
+}
+
+function stageModalTone(stageId: PipelineStageId): string {
+  return {
+    rdv_planifie: 'bg-sky-50/80',
+    no_show_bis: 'bg-slate-50/90',
+    rdv_annule: 'bg-rose-50/80',
+    rdv_pas_qualifie: 'bg-red-50/70',
+    rdv_reprogramme: 'bg-amber-50/80',
+    relance_long_terme: 'bg-orange-50/70',
+    devis_en_attente: 'bg-violet-50/70',
+    devis_signe: 'bg-emerald-50/80',
+    devis_perdu: 'bg-stone-50/90',
+  }[stageId]
 }
 
 function MiniLine({ icon, text }: { icon: 'calendar' | 'phone' | 'map-pin'; text: string }) {

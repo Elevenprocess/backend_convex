@@ -422,8 +422,8 @@ export function useCallLogs(filters?: {
   setterId?: string
   limit?: number
   offset?: number
-}): Async<CallLogResponse[]> {
-  return useFetch<CallLogResponse[]>('/call-logs', { ...filters, limit: clampLimit(filters?.limit, 50, CALL_LOGS_LIMIT_MAX) })
+} | null): Async<CallLogResponse[]> {
+  return useFetch<CallLogResponse[]>(filters === null ? null : '/call-logs', filters === null ? undefined : { ...filters, limit: clampLimit(filters?.limit, 50, CALL_LOGS_LIMIT_MAX) })
 }
 
 export type CreateCallLogInput = {
