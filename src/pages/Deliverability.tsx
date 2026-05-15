@@ -4,7 +4,7 @@ import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Icon } from '../components/Icon'
 import { useAuth } from '../lib/auth'
-import { updateLead, updateRdv, useCallLogs, useLeads, useRdvList, useUsers } from '../lib/hooks'
+import { updateLead, updateRdv, useCallLogs, useGhlOpportunities, useLeads, useRdvList, useUsers, type GhlOpportunity, type GhlOpportunityStage } from '../lib/hooks'
 import { CALL_RESULT_LABEL, STATUS_LABEL, fullName, type CallLogResponse, type LeadResponse, type LeadStatus, type RdvResponse, type RdvStatus, type UserResponse } from '../lib/types'
 
 type PipelineStageId =
@@ -58,6 +58,7 @@ export function Deliverability() {
   const { data: rdvs, loading: rdvLoading, error: rdvError, refetch: refetchRdvs } = useRdvList({ limit: 200 })
   const { data: leads, refetch: refetchLeads } = useLeads({ limit: 2000 })
   const { data: users } = useUsers()
+  const { data: ghlOpps, loading: ghlLoading, error: ghlError } = useGhlOpportunities({ limit: 5000 })
   const { data: selectedCallLogs } = useCallLogs(selectedCard ? { leadId: selectedCard.rdv.leadId, limit: 50 } : null)
 
   const leadMap = useMemo(() => {
@@ -85,6 +86,24 @@ export function Deliverability() {
       stageId: resolveStageId(rdv, lead),
     }
   }), [leadMap, rdvList, userMap])
+
+  const ghlCardsByStage = useMemo(() => {
+    const grouped = new Map<string, GhlOpportunity[]>()
+    for (const stage of ghlOpps?.stages ?? []) grouped.set(stage.id, [])
+    for (const opportunity of ghlOpps?.opportunities ?? []) {
+      if (!grouped.has(opportunity.pipelineStageId)) grouped.set(opportunity.pipelineStageId, [])
+      grouped.get(opportunity.pipelineStageId)?.push(opportunity)
+    }
+    for (const rows of grouped.values()) rows.sort((a, b) => new Date(b.updatedAt ?? b.createdAt ?? 0).getTime() - new Date(a.updatedAt ?? a.createdAt ?? 0).getTime())
+    return grouped
+  }, [ghlOpps])
+
+  const ghlTotals = useMemo(() => ({
+    total: ghlOpps?.total ?? 0,
+    amount: ghlOpps?.amount ?? 0,
+    signed: (ghlCardsByStage.get(findGhlStageId(ghlOpps?.stages, 'Devis Signé')) ?? []).length,
+    planned: (ghlCardsByStage.get(findGhlStageId(ghlOpps?.stages, 'RDV Planifié')) ?? []).length,
+  }), [ghlCardsByStage, ghlOpps])
 
   const cardsByStage = useMemo(() => {
     const grouped = new Map<PipelineStageId, ProspectCard[]>()
@@ -132,7 +151,39 @@ export function Deliverability() {
           <Metric label="Total RDV" value={`${totals.total}`} hint={`${totals.planned} planifiés · ${totals.honored} honorés`} />
           <Metric label="Commerciaux" value={`${totals.commercials}`} hint={`${totals.withCommercial} RDV assignés`} />
           <Metric label="CA signé" value={formatCurrency(totals.ca)} hint={`${totals.signed} ventes signées`} />
-          <Metric label="GHL" value={`${totals.ghl}`} hint={`${formatPercent(totals.ghlRate)} des RDV chargés`} />
+          <Metric label="GHL" value={`${ghlDisplayTotal(ghlTotals.total, totals.ghl)}`} hint={`${ghlTotals.total ? 'opportunités live GHL' : `${formatPercent(totals.ghlRate)} des RDV chargés`}`} />
+        </section>
+
+        <section className="commercial-pipeline-board glass-card px-4 py-3 flex flex-col h-[760px] flex-shrink-0 bg-white border border-line-soft">
+          <div className="flex items-center justify-between gap-3 mb-2 flex-shrink-0">
+            <div className="min-w-0">
+              <span className="eyebrow text-[10px]">GHL LIVE / ADMIN</span>
+              <h3 className="text-base font-black leading-tight">Pipeline {ghlOpps?.pipeline?.name ?? 'CRM Vente'}</h3>
+              <p className="text-[11px] text-muted mt-0.5">Scan direct des opportunités GHL, toutes les colonnes et cartes.</p>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted">
+              {ghlLoading && <span>Scan GHL…</span>}
+              {ghlError && <span className="text-rouille">{ghlError}</span>}
+              {ghlOpps?.truncated && <span className="text-amber-600">Limité à {ghlOpps.total} cartes</span>}
+              <span className="rounded-full border border-line-soft bg-success-tint px-2.5 py-1 text-[11px] font-bold text-success whitespace-nowrap">{ghlTotals.total} opp. · {formatCurrency(ghlTotals.amount)}</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-4 gap-2 text-xs mb-3 flex-shrink-0">
+            <MiniStat label="Opp. GHL" value={`${ghlTotals.total}`} />
+            <MiniStat label="RDV planifiés" value={`${ghlTotals.planned}`} />
+            <MiniStat label="Devis signés" value={`${ghlTotals.signed}`} />
+            <MiniStat label="Valeur GHL" value={formatCurrency(ghlTotals.amount)} />
+          </div>
+          <div className="overflow-x-auto overflow-y-hidden flex-grow min-h-0 pb-1">
+            <div className="flex gap-3 min-w-max h-full">
+              {(ghlOpps?.stages ?? []).map((stage) => (
+                <GhlStageColumn key={stage.id} stage={stage} rows={ghlCardsByStage.get(stage.id) ?? []} />
+              ))}
+              {!ghlLoading && !ghlError && (ghlOpps?.stages ?? []).length === 0 && (
+                <div className="rounded-[18px] border border-dashed border-line-soft bg-white/70 p-8 text-center text-sm text-faint">Aucun contenu GHL scanné.</div>
+              )}
+            </div>
+          </div>
         </section>
 
         <section className="grid grid-cols-12 gap-3 flex-shrink-0">
@@ -248,6 +299,62 @@ export function Deliverability() {
         />
       )}
     </AppShell>
+  )
+}
+
+function GhlStageColumn({ stage, rows }: { stage: GhlOpportunityStage; rows: GhlOpportunity[] }) {
+  return (
+    <div className="commercial-pipeline-column w-[252px] rounded-[18px] border border-line-soft bg-cream/45 p-2.5 flex flex-col min-h-0">
+      <div className="commercial-pipeline-column-head bg-white rounded-[14px] border border-line-soft p-2.5 mb-2 flex-shrink-0">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h4 className="font-black text-xs leading-snug">{cleanGhlStageName(stage.name)}</h4>
+            <p className="text-[10px] text-muted mt-0.5 truncate">Position GHL {stage.position + 1}</p>
+          </div>
+          <span className="rounded-full border border-line-soft px-1.5 py-0.5 text-[10px] font-bold text-muted">{rows.length}</span>
+        </div>
+        <div className="grid grid-cols-2 gap-1.5 mt-2 text-[11px]">
+          <div>
+            <p className="text-faint uppercase tracking-wide text-[9px]">Opp.</p>
+            <p className="font-black">{stage.opportunities}</p>
+          </div>
+          <div>
+            <p className="text-faint uppercase tracking-wide text-[9px]">Valeur</p>
+            <p className="font-black truncate">{formatCurrency(stage.amount)}</p>
+          </div>
+        </div>
+      </div>
+      <div className="space-y-1.5 overflow-y-auto pr-1 flex-grow min-h-0">
+        {rows.length === 0 ? (
+          <div className="commercial-pipeline-empty rounded-[18px] border border-dashed border-line-soft bg-white/70 p-5 text-center text-[11px] text-faint">Aucune opportunité</div>
+        ) : rows.map((opportunity) => <GhlOpportunityCard key={opportunity.id} opportunity={opportunity} />)}
+      </div>
+    </div>
+  )
+}
+
+function GhlOpportunityCard({ opportunity }: { opportunity: GhlOpportunity }) {
+  const name = opportunity.contactName || opportunity.name || opportunity.contactEmail || opportunity.contactPhone || 'Opportunité GHL'
+  return (
+    <div className="commercial-prospect-card rounded-[18px] border border-emerald-100 bg-emerald-50/60 p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md" title={opportunity.id}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-black text-sm truncate">{name}</p>
+          <p className="text-[11px] text-muted mt-0.5 truncate">{opportunity.source || 'GHL'} · {opportunity.status || 'open'}</p>
+        </div>
+        <span className="rounded-full bg-success-tint px-2 py-0.5 text-[10px] font-bold text-success flex-shrink-0">GHL</span>
+      </div>
+      <div className="mt-3 space-y-1.5 text-[11px] text-muted">
+        {opportunity.assignedToName && <MiniLine icon="users" text={opportunity.assignedToName} />}
+        {opportunity.contactPhone && <MiniLine icon="phone" text={opportunity.contactPhone} />}
+        {opportunity.contactCity && <MiniLine icon="map-pin" text={opportunity.contactCity} />}
+        {(opportunity.updatedAt || opportunity.createdAt) && <MiniLine icon="calendar" text={formatDateTime(opportunity.updatedAt || opportunity.createdAt || '')} />}
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <span className="text-[10px] text-faint truncate">{opportunity.contactEmail || opportunity.contactId || '—'}</span>
+        <span className={`text-xs font-black ${opportunity.monetaryValue ? 'text-text' : 'text-faint'}`}>{opportunity.monetaryValue ? formatCurrency(opportunity.monetaryValue) : '—'}</span>
+      </div>
+    </div>
   )
 }
 
@@ -510,6 +617,23 @@ function stageModalTone(stageId: PipelineStageId): string {
 
 function MiniLine({ icon, text }: { icon: 'calendar' | 'phone' | 'map-pin' | 'users'; text: string }) {
   return <div className="flex items-center gap-1.5 min-w-0"><Icon name={icon} size={12} className="text-faint flex-shrink-0" /><span className="truncate">{text}</span></div>
+}
+
+function findGhlStageId(stages: GhlOpportunityStage[] | undefined, needle: string): string {
+  const normalizedNeedle = normalizeGhlLabel(needle)
+  return stages?.find((stage) => normalizeGhlLabel(stage.name).includes(normalizedNeedle))?.id ?? ''
+}
+
+function cleanGhlStageName(value: string): string {
+  return value.trim().replace(/^\d+\.\s*/, '')
+}
+
+function normalizeGhlLabel(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, ' ').trim().toLowerCase()
+}
+
+function ghlDisplayTotal(ghlTotal: number, fallbackTotal: number): number {
+  return ghlTotal || fallbackTotal
 }
 
 function formatCurrency(value: number): string {

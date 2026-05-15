@@ -526,6 +526,45 @@ export type GhlCalendarEvent = {
   contactPostalCode?: string | null
 }
 
+export type GhlOpportunityStage = {
+  id: string
+  name: string
+  position: number
+  opportunities: number
+  amount: number
+}
+
+export type GhlOpportunity = {
+  id: string
+  name: string
+  monetaryValue: number
+  pipelineId: string
+  pipelineStageId: string
+  assignedTo?: string | null
+  assignedToName?: string | null
+  mappedCommercialId?: string | null
+  status?: string | null
+  source?: string | null
+  contactId?: string | null
+  contactName?: string | null
+  contactEmail?: string | null
+  contactPhone?: string | null
+  contactCity?: string | null
+  createdAt?: string | null
+  updatedAt?: string | null
+  lastStageChangeAt?: string | null
+}
+
+export type GhlOpportunitiesResponse = {
+  configured: boolean
+  pipeline: { id: string; name: string } | null
+  stages: GhlOpportunityStage[]
+  opportunities: GhlOpportunity[]
+  total: number
+  amount: number
+  truncated: boolean
+}
+
 export type GhlUser = {
   id: string
   name: string
@@ -573,6 +612,14 @@ export function useGhlCalendarEvents(filters?: {
   to?: string
 }): Async<{ configured: boolean; events: GhlCalendarEvent[] }> {
   return useFetch<{ configured: boolean; events: GhlCalendarEvent[] }>(filters?.from && filters?.to ? '/ghl-calendar/events' : null, filters)
+}
+
+export function useGhlOpportunities(filters?: {
+  pipelineId?: string
+  pipelineName?: string
+  limit?: number
+}): Async<GhlOpportunitiesResponse> {
+  return useFetch<GhlOpportunitiesResponse>('/ghl-calendar/opportunities', { pipelineName: 'CRM Vente', limit: 5000, ...filters })
 }
 
 export function syncGhlCalendarEvents(filters: { from: string; to: string; sector?: string; calendarId?: string }): Promise<{ configured: boolean; created: number; updated: number; skipped: number; events: GhlCalendarEvent[] }> {
