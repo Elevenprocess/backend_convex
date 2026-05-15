@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type PointerEvent, type WheelEvent } from 'react'
+import { useMemo, useState, type WheelEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
@@ -24,8 +24,6 @@ const STATUS_TONE: Record<RdvStatus, string> = {
 export function RdvCalendar() {
   const [view, setView] = useState<CalendarView>('week')
   const [cursorDate, setCursorDate] = useState(() => startOfDay(new Date()))
-  const scrollNavLockRef = useRef(0)
-  const swipeStartRef = useRef<{ x: number; y: number; at: number } | null>(null)
   const navigate = useNavigate()
 
   const period = useMemo(() => buildPeriod(cursorDate, view), [cursorDate, view])
@@ -89,38 +87,12 @@ export function RdvCalendar() {
   }, [calendarItems])
 
   const handleHorizontalCalendarScroll = (event: WheelEvent<HTMLDivElement>) => {
-    const horizontal = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.shiftKey ? event.deltaY : 0
-    if (Math.abs(horizontal) < 36) return
-
+    if (!event.shiftKey || Math.abs(event.deltaY) < 8 || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return
     const target = event.target instanceof HTMLElement ? event.target : null
     const nativeScroller = target?.closest('[data-native-horizontal-scroll="true"]') as HTMLElement | null
-    if (nativeScroller && nativeScroller.scrollWidth > nativeScroller.clientWidth) {
-      const maxScroll = nativeScroller.scrollWidth - nativeScroller.clientWidth
-      const canScrollRight = horizontal > 0 && nativeScroller.scrollLeft < maxScroll - 2
-      const canScrollLeft = horizontal < 0 && nativeScroller.scrollLeft > 2
-      if (canScrollRight || canScrollLeft) return
-    }
-
+    if (!nativeScroller || nativeScroller.scrollWidth <= nativeScroller.clientWidth) return
     event.preventDefault()
-    const now = Date.now()
-    if (now - scrollNavLockRef.current < 240) return
-    scrollNavLockRef.current = now
-    setCursorDate((date) => moveDate(date, view, horizontal > 0 ? 1 : -1, view === 'week' ? 'day' : undefined))
-  }
-
-  const handleCalendarPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType === 'mouse' && event.button !== 0) return
-    swipeStartRef.current = { x: event.clientX, y: event.clientY, at: Date.now() }
-  }
-
-  const handleCalendarPointerUp = (event: PointerEvent<HTMLDivElement>) => {
-    const start = swipeStartRef.current
-    swipeStartRef.current = null
-    if (!start) return
-    const dx = event.clientX - start.x
-    const dy = event.clientY - start.y
-    if (Date.now() - start.at > 900 || Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.4) return
-    setCursorDate((date) => moveDate(date, view, dx < 0 ? 1 : -1, view === 'week' ? 'day' : undefined))
+    nativeScroller.scrollBy({ left: event.deltaY, behavior: 'smooth' })
   }
 
   const rdvByDay = useMemo(() => {
@@ -160,7 +132,7 @@ export function RdvCalendar() {
             </button>
           ))}
         </div>
-        <span className="text-xs text-faint ml-auto hidden lg:inline">Scroll horizontal ou glisse le calendrier pour changer de date</span>
+        <span className="text-xs text-faint ml-auto hidden lg:inline">Scroll horizontal fluide dans le calendrier</span>
         {ghlLoading && <span className="text-xs text-muted">Sync GHL…</span>}
         <button onClick={() => navigate('/rdv/split')} className="btn-primary px-4 py-2 rounded-xl text-sm flex items-center gap-2">
           <Icon name="plus" size={14} />
@@ -172,10 +144,7 @@ export function RdvCalendar() {
         <div
           className="glass-card !p-0 overflow-hidden h-full flex flex-col select-none"
           onWheel={handleHorizontalCalendarScroll}
-          onPointerDown={handleCalendarPointerDown}
-          onPointerUp={handleCalendarPointerUp}
-          onPointerCancel={() => { swipeStartRef.current = null }}
-          style={{ touchAction: 'pan-y' }}
+          style={{ touchAction: 'pan-x pan-y' }}
         >
           {loading && !rdvs ? (
             <div className="flex-grow flex items-center justify-center text-faint text-sm">Chargement…</div>
@@ -227,7 +196,7 @@ function TimeGridView({
   const minWidth = days.length > 1 ? Math.max(980, 64 + days.length * 150) : 520
 
   return (
-    <div data-native-horizontal-scroll="true" className="flex-grow overflow-x-auto overflow-y-hidden bg-white/30">
+    <div data-native-horizontal-scroll="true" className="flex-grow overflow-x-auto overflow-y-hidden bg-white/30 scroll-smooth">
       <div className="h-full flex flex-col" style={{ minWidth }}>
         <div
           className="grid border-b border-line-soft flex-shrink-0 bg-white/70 sticky top-0 z-10"
