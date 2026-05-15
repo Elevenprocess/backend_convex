@@ -617,6 +617,7 @@ type EvolutionSeries = { key: keyof Pick<AnalyticsDailyPoint, 'calls' | 'rdv' | 
 
 function EvolutionChart({ title, data, series }: { title: string; data?: AnalyticsDailyPoint[]; series: EvolutionSeries[] }) {
   const [activeKey, setActiveKey] = useState<EvolutionSeries['key']>(series[0]?.key ?? 'calls')
+  const [hoveredPoint, setHoveredPoint] = useState<{ point: AnalyticsDailyPoint; x: number; y: number } | null>(null)
   const width = 620
   const height = 260
   const padX = 44
@@ -644,6 +645,7 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
   }).join(' ')
   const formatMetric = (key: EvolutionSeries['key'], value: number) => key === 'ca' ? fmtKEur(value) : fmtInt(value)
   const delta = active && sample.length >= 2 ? (last?.[active.key] || 0) - (sample[0]?.[active.key] || 0) : 0
+  const hoveredValue = hoveredPoint && active ? hoveredPoint.point[active.key] || 0 : 0
 
   return (
     <div className="glass-card p-6 col-span-12 xl:col-span-5 overflow-hidden">
@@ -712,16 +714,44 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
                 const x = xFor(idx)
                 const y = yFor(point[active.key] || 0)
                 const isPeak = peak?.date === point.date
+                const isHovered = hoveredPoint?.point.date === point.date
                 const showLabel = sample.length <= 10 || idx === 0 || idx === sample.length - 1 || isPeak
                 return (
-                  <g key={point.date}>
-                    <circle cx={x} cy={y} r={isPeak ? 6 : 4} fill="var(--chart-point-fill, white)" stroke={active.color} strokeWidth={isPeak ? 4 : 3} />
+                  <g key={point.date} onMouseEnter={() => setHoveredPoint({ point, x, y })} onMouseLeave={() => setHoveredPoint(null)}>
+                    <title>{`${point.label} — ${active.label}: ${formatMetric(active.key, point[active.key] || 0)}`}</title>
+                    {isHovered && <line x1={x} x2={x} y1={padTop} y2={height - padBottom} stroke={active.color} strokeWidth="1.5" opacity="0.35" strokeDasharray="4 5" />}
+                    <circle cx={x} cy={y} r="14" fill="transparent" className="cursor-crosshair" />
+                    <circle cx={x} cy={y} r={isHovered ? 7 : isPeak ? 6 : 4} fill="var(--chart-point-fill, white)" stroke={active.color} strokeWidth={isHovered || isPeak ? 4 : 3} />
                     {isPeak && <text x={x} y={y - 12} fill={active.color} fontSize="11" fontWeight="800" textAnchor="middle">pic {formatMetric(active.key, point[active.key] || 0)}</text>}
                     {showLabel && <text x={x} y={height - 13} fill="var(--chart-label, #6B7C8C)" fontSize="11" fontWeight="700" textAnchor={idx === 0 ? 'start' : idx === sample.length - 1 ? 'end' : 'middle'}>{point.label}</text>}
                   </g>
                 )
               })}
             </svg>
+            {hoveredPoint && active && (
+              <div
+                className="pointer-events-none absolute z-30 min-w-[170px] rounded-2xl border border-line-soft bg-white/95 px-3 py-2 text-xs shadow-xl backdrop-blur-md"
+                style={{
+                  left: `${Math.min(82, Math.max(8, (hoveredPoint.x / width) * 100))}%`,
+                  top: `${Math.min(72, Math.max(10, (hoveredPoint.y / height) * 100))}%`,
+                  transform: hoveredPoint.x > width * 0.72 ? 'translate(-100%, -110%)' : 'translate(10px, -110%)',
+                }}
+              >
+                <div className="font-extrabold text-text">{hoveredPoint.point.label}</div>
+                <div className="mt-1 flex items-center justify-between gap-4">
+                  <span className="font-bold" style={{ color: active.color }}>{active.label}</span>
+                  <span className="text-lg font-extrabold" style={{ color: active.color }}>{formatMetric(active.key, hoveredValue)}</span>
+                </div>
+                <div className="mt-2 space-y-1 border-t border-line-soft pt-2 text-[11px] text-muted">
+                  {series.filter((serie) => serie.key !== active.key).map((serie) => (
+                    <div key={serie.key} className="flex items-center justify-between gap-3">
+                      <span className="flex items-center gap-1.5"><i className="h-1.5 w-1.5 rounded-full" style={{ background: serie.color }} />{serie.label}</span>
+                      <b>{formatMetric(serie.key, hoveredPoint.point[serie.key] || 0)}</b>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-3 gap-3 mt-4 text-sm">
@@ -854,4 +884,5 @@ function CommercialRow({ initials, name, honored, ventes, closing, panier, ca }:
     </tr>
   )
 }
+
 
