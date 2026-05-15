@@ -9,12 +9,13 @@ export function PersistentLeadSidebar() {
   const location = useLocation()
   const role = useAuth((s) => s.user?.role)
   const selectedLeadId = useLeadSidebar((s) => s.selectedLeadId)
-  const clearLead = useLeadSidebar((s) => s.clearLead)
+  const sidebarOpen = useLeadSidebar((s) => s.sidebarOpen)
+  const closeSidebar = useLeadSidebar((s) => s.closeSidebar)
   const { data: lead, refetch } = useLead(selectedLeadId ?? undefined)
   const { data: usersList } = useUsers()
 
   if (!role) return null
-  if (!selectedLeadId) return null
+  if (!selectedLeadId || !sidebarOpen) return null
   if (location.pathname === '/overview') return null
   if (role === 'setter' && location.pathname === '/analytics') return null
   if (location.pathname.startsWith('/team/setters')) return null
@@ -27,7 +28,7 @@ export function PersistentLeadSidebar() {
     <SplitPanel
       lead={lead}
       userMap={userMap}
-      onClose={clearLead}
+      onClose={closeSidebar}
       onSaved={refetch}
       className="fixed top-0 right-0 bottom-0 z-[95] shadow-2xl bg-white/95"
     />
