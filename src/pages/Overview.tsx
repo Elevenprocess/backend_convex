@@ -129,14 +129,13 @@ function OverviewSetter() {
           </div>
         </div>
 
-        <div className="promo-card col-span-4 flex flex-col justify-between">
-          <div className="promo-halo" style={{ background: '#B7410E' }} />
-          <div className="relative z-10">
+        <div className="promo-card col-span-4 flex flex-col justify-between border-l-4 border-rouille">
+          <div>
             <span className="eyebrow block mb-2">BOOSTER MON SCORE</span>
             <h3 className="text-lg font-bold leading-tight">Améliore ton taux de connexion</h3>
             <p className="text-xs text-muted mt-2 leading-relaxed">Découvre les meilleurs créneaux d'appel et les scripts qui convertissent le mieux selon tes données.</p>
           </div>
-          <button onClick={() => navigate('/analytics')} className="btn-primary text-xs px-4 py-2.5 rounded-xl self-start mt-3 relative z-10">Voir les insights</button>
+          <button onClick={() => navigate('/analytics')} className="btn-primary text-xs px-4 py-2.5 rounded-xl self-start mt-3">Voir les insights</button>
         </div>
 
         <div className="glass-card col-span-4 p-5 min-h-0 flex flex-col">
@@ -206,7 +205,7 @@ function OverviewCommercial() {
   }, [rdvs, todayIso])
 
   return (
-    <AppShell blobsKey="commercial">
+    <AppShell blobsKey="commercial" flat>
       <Topbar
         eyebrow="COMMERCIAL"
         title={`Bonjour, ${display.firstName}`}
@@ -223,7 +222,7 @@ function OverviewCommercial() {
           if (id === 'pipeline' || id === 'ventes') navigate('/analytics')
         }}
       />
-      <main className="p-6 grid grid-cols-12 grid-rows-[auto_1fr_1fr] gap-4 flex-grow overflow-auto">
+      <main className="p-8 pt-6 grid grid-cols-12 grid-rows-[auto_1fr_1fr] gap-5 flex-grow overflow-auto">
         <KpiCard title="CA SIGNÉ" value={fmtKEur(stats.ca)} valueSize={28} haloColor="#D4AF37" lineColor="#D4AF37" sparkPoints="0,20 10,18 20,14 30,16 40,8 50,10 64,4" className="col-span-3" />
         <KpiCard title="CLOSING RATE" value={`${stats.closing}%`} valueSize={28} haloColor="#3DA86A" lineColor="#3DA86A" sparkPoints="0,18 10,16 20,12 30,14 40,8 50,6 64,10" className="col-span-3" />
         <KpiCard title="PANIER MOY." value={fmtKEur(stats.panier)} valueSize={28} haloColor="#B87333" lineColor="#B87333" sparkPoints="0,16 10,12 20,14 30,8 40,12 50,6 64,10" className="col-span-3" />
@@ -239,14 +238,13 @@ function OverviewCommercial() {
           </div>
         </div>
 
-        <div className="big-number-card col-span-5 flex flex-col justify-between">
-          <div className="big-halo" style={{ background: '#3DA86A' }} />
-          <div className="relative z-10">
+        <div className="big-number-card col-span-5 flex flex-col justify-between border-l-4 border-success">
+          <div>
             <span className="eyebrow block mb-2">CLOSING RATE</span>
             <div className="text-[56px] font-extrabold leading-none">{stats.closing}%</div>
             <p className="text-xs text-muted mt-2 leading-relaxed">{stats.totalHonored} RDV honorés, {stats.signed} signatures.</p>
           </div>
-          <div className="relative z-10 grid grid-cols-3 gap-2 mt-3 text-xs">
+          <div className="grid grid-cols-3 gap-2 mt-3 text-xs">
             <div><div className="font-bold text-sm">{stats.totalPlanifie + stats.totalHonored}</div><div className="eyebrow">RDV</div></div>
             <div><div className="font-bold text-sm">{stats.totalHonored}</div><div className="eyebrow">HONORÉS</div></div>
             <div><div className="font-bold text-sm text-success">{stats.signed}</div><div className="eyebrow">VENTES</div></div>
@@ -263,13 +261,12 @@ function OverviewCommercial() {
           </div>
         </div>
 
-        <div className="promo-card col-span-3 flex flex-col justify-between">
-          <div className="promo-halo" style={{ background: '#D4AF37' }} />
-          <div className="relative z-10">
+        <div className="promo-card col-span-3 flex flex-col justify-between border-l-4 border-or">
+          <div>
             <span className="eyebrow block mb-2">PRÉPARATION RDV</span>
             <h3 className="text-base font-bold leading-tight">{stats.upcoming.length} RDV à venir</h3>
           </div>
-          <button onClick={() => navigate('/rdv')} className="btn-primary text-xs px-4 py-2.5 rounded-xl self-start mt-3 relative z-10">Préparer</button>
+          <button onClick={() => navigate('/rdv')} className="btn-primary text-xs px-4 py-2.5 rounded-xl self-start mt-3">Préparer</button>
         </div>
 
         <div className="glass-card col-span-4 p-5">
@@ -878,15 +875,17 @@ function KpiCard({
 }) {
   return (
     <div className={`kpi-card ${className}`}>
-      <div className="kpi-halo tr" style={{ background: haloColor, opacity: 0.45 }} />
       <div className="kpi-content">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-4">
           <span className="eyebrow">{title}</span>
-          {delta && <span className={`delta-badge delta-${deltaType}`}>{delta}</span>}
+          <span className="h-2.5 w-2.5 rounded-full" style={{ background: haloColor }} />
         </div>
-        <div className="flex items-end justify-between">
-          <span className="font-bold leading-none" style={{ fontSize: valueSize }}>{value}</span>
-          <svg width="64" height="28" viewBox="0 0 64 28">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <span className="font-black leading-none tracking-tight" style={{ fontSize: valueSize }}>{value}</span>
+            {delta && <span className={`delta-badge delta-${deltaType} ml-2`}>{delta}</span>}
+          </div>
+          <svg width="74" height="32" viewBox="0 0 64 28" className="rounded-lg bg-cream/60 px-1">
             <polyline points={sparkPoints} fill="none" stroke={lineColor} strokeWidth="2" />
           </svg>
         </div>
@@ -908,14 +907,16 @@ function SmallKpi({
 }) {
   return (
     <div className="col-span-12 sm:col-span-6 xl:col-span-2 kpi-card min-h-[132px]">
-      <div className="kpi-halo tr" style={{ background: haloColor, opacity: 0.4 }} />
       <div className="kpi-content">
-        <span className="eyebrow block mb-1">{title}</span>
+        <div className="flex items-center justify-between mb-2">
+          <span className="eyebrow block">{title}</span>
+          <span className="h-2 w-2 rounded-full" style={{ background: haloColor }} />
+        </div>
         <div className="flex items-end justify-between">
-          <span className="text-[24px] font-bold leading-none">{value}</span>
+          <span className="text-[24px] font-black leading-none tracking-tight">{value}</span>
           {delta && <span className={`delta-badge delta-${deltaType}`}>{delta}</span>}
         </div>
-        <svg className="mt-2" width="100%" height="20" viewBox="0 0 100 20" preserveAspectRatio="none">
+        <svg className="mt-3 rounded-lg bg-cream/60" width="100%" height="24" viewBox="0 0 100 20" preserveAspectRatio="none">
           <polyline points={linePoints} fill="none" stroke={lineColor} strokeWidth="2" />
         </svg>
       </div>
@@ -935,16 +936,15 @@ function BigNumberCard({
   className?: string
 }) {
   return (
-    <div className={`big-number-card ${className} flex flex-col justify-between`}>
-      <div className="big-halo" style={{ background: haloColor }} />
-      <div className="relative z-10">
+    <div className={`big-number-card ${className} flex flex-col justify-between`} style={{ borderLeftColor: haloColor }}>
+      <div>
         <span className="eyebrow block mb-2">{eyebrow}</span>
-        <div className="text-[56px] font-extrabold leading-none">{value}</div>
+        <div className="text-[56px] font-black leading-none tracking-tight">{value}</div>
         <p className="text-xs text-muted mt-2 leading-relaxed">{desc}</p>
       </div>
-      <div className="relative z-10 flex items-end gap-1 h-10 mt-2">
+      <div className="flex items-end gap-1 h-10 mt-2 rounded-xl bg-cream/60 p-2">
         {spark.map((h, i) => (
-          <div key={i} className="rounded-t-sm w-3" style={{ height: `${h}%`, background: sparkColor, opacity: i === spark.length - 1 ? 0.95 : 1 }} />
+          <div key={i} className="rounded-t-sm w-3" style={{ height: `${h}%`, background: sparkColor, opacity: i === spark.length - 1 ? 0.95 : 0.55 }} />
         ))}
       </div>
     </div>
