@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState, type WheelEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
@@ -24,6 +24,7 @@ const STATUS_TONE: Record<RdvStatus, string> = {
 export function RdvCalendar() {
   const [view, setView] = useState<CalendarView>('week')
   const [cursorDate, setCursorDate] = useState(() => startOfDay(new Date()))
+  const scrollNavLockRef = useRef(0)
   const navigate = useNavigate()
 
   const period = useMemo(() => buildPeriod(cursorDate, view), [cursorDate, view])
@@ -86,6 +87,16 @@ export function RdvCalendar() {
     return m
   }, [calendarItems])
 
+  const handleHorizontalCalendarScroll = (event: WheelEvent<HTMLDivElement>) => {
+    const horizontal = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.shiftKey ? event.deltaY : 0
+    if (Math.abs(horizontal) < 36) return
+    event.preventDefault()
+    const now = Date.now()
+    if (now - scrollNavLockRef.current < 240) return
+    scrollNavLockRef.current = now
+    setCursorDate((date) => moveDate(date, view, horizontal > 0 ? 1 : -1, view === 'week' ? 'day' : undefined))
+  }
+
   const rdvByDay = useMemo(() => {
     const m = new Map<string, CalendarItem[]>()
     for (const item of calendarItems) {
@@ -123,7 +134,8 @@ export function RdvCalendar() {
             </button>
           ))}
         </div>
-        {ghlLoading && <span className="text-xs text-muted ml-auto">Sync GHL…</span>}
+        <span className="text-xs text-faint ml-auto hidden lg:inline">Scroll horizontal pour changer de date</span>
+        {ghlLoading && <span className="text-xs text-muted">Sync GHL…</span>}
         <button onClick={() => navigate('/rdv/split')} className="btn-primary px-4 py-2 rounded-xl text-sm flex items-center gap-2">
           <Icon name="plus" size={14} />
           Nouveau RDV
@@ -131,7 +143,10 @@ export function RdvCalendar() {
       </div>
 
       <main className="p-8 pt-4 overflow-hidden flex-grow">
-        <div className="glass-card !p-0 overflow-hidden h-full flex flex-col">
+        <div
+          className="glass-card !p-0 overflow-hidden h-full flex flex-col"
+          onWheel={handleHorizontalCalendarScroll}
+        >
           {loading && !rdvs ? (
             <div className="flex-grow flex items-center justify-center text-faint text-sm">Chargement…</div>
           ) : error || ghlError ? (
@@ -364,11 +379,12 @@ function buildPeriod(cursorDate: Date, view: CalendarView): { from: Date; to: Da
   }
 }
 
-function moveDate(date: Date, view: CalendarView, direction: -1 | 1): Date {
+function moveDate(date: Date, view: CalendarView, direction: -1 | 1, unit?: 'day'): Date {
   const next = new Date(date)
-  if (view === 'day') next.setDate(next.getDate() + direction)
-  if (view === 'week') next.setDate(next.getDate() + direction * 7)
-  if (view === 'month') next.setMonth(next.getMonth() + direction)
+  if (unit === 'day') next.setDate(next.getDate() + direction)
+  else if (view === 'day') next.setDate(next.getDate() + direction)
+  else if (view === 'week') next.setDate(next.getDate() + direction * 7)
+  else if (view === 'month') next.setMonth(next.getMonth() + direction)
   return startOfDay(next)
 }
 
@@ -427,3 +443,5 @@ function formatHour(hour: number): string {
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
 }
+
+
