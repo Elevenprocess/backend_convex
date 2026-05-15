@@ -416,6 +416,66 @@ export function useAnalyticsFunnel(filters?: {
   return useFetch<AnalyticsFunnelResponse>('/analytics/funnel', filters)
 }
 
+// ─── Pipeline analytics (admin) ─────────────────────────────
+export type PipelineDistributionEntry = {
+  ghlStageName: string | null
+  saasStatus: string | null
+  count: number
+  totalValue: number
+}
+export type PipelineDistributionResponse = {
+  generatedAt: string
+  totalOpenLeads: number
+  totalOpenValue: number
+  stages: PipelineDistributionEntry[]
+}
+export type PipelineCommercialKpi = {
+  userId: string
+  name: string
+  ghlUserId: string | null
+  openLeads: number
+  rdvPlanned: number
+  devisEnAttente: number
+  signed: number
+  ca: number
+  closingRate: number
+}
+export type PipelineByCommercialResponse = {
+  generatedAt: string
+  commercials: PipelineCommercialKpi[]
+}
+export type PipelineStuckLead = {
+  leadId: string
+  firstName: string | null
+  lastName: string | null
+  email: string | null
+  ghlStageName: string | null
+  saasStatus: string
+  assignedToId: string | null
+  assignedToName: string | null
+  monetaryValue: number | null
+  lastStageChangeAt: string | null
+  daysSinceLastChange: number
+}
+export type PipelineStuckResponse = {
+  generatedAt: string
+  thresholdDays: number
+  total: number
+  leads: PipelineStuckLead[]
+}
+
+export function usePipelineDistribution(): Async<PipelineDistributionResponse> {
+  return useFetch<PipelineDistributionResponse>('/analytics/pipeline/distribution')
+}
+
+export function usePipelineByCommercial(): Async<PipelineByCommercialResponse> {
+  return useFetch<PipelineByCommercialResponse>('/analytics/pipeline/by-commercial')
+}
+
+export function usePipelineStuck(days = 30): Async<PipelineStuckResponse> {
+  return useFetch<PipelineStuckResponse>('/analytics/pipeline/stuck', { days })
+}
+
 // ─── Call logs ─────────────────────────────────────────────
 export function useCallLogs(filters?: {
   leadId?: string
@@ -550,6 +610,8 @@ export type GhlOpportunity = {
   contactEmail?: string | null
   contactPhone?: string | null
   contactCity?: string | null
+  contactPostalCode?: string | null
+  contactAddress?: string | null
   createdAt?: string | null
   updatedAt?: string | null
   lastStageChangeAt?: string | null

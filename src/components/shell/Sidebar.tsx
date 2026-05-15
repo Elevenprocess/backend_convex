@@ -11,6 +11,7 @@ const ITEMS: Item[] = [
   { to: '/rdv', icon: 'calendar', label: 'RDV' },
   { to: '/notifications', icon: 'bell', label: 'Rappels' },
   { to: '/analytics', icon: 'chart', label: 'Analytics' },
+  { to: '/admin/pipeline', icon: 'chart', label: 'Pipeline (admin)', roles: ['admin'] },
   { to: '/deivrabilite', icon: 'shield', label: 'Deivrabilité', roles: ['admin'] },
   { to: '/settings', icon: 'settings', label: 'Settings', roles: ['admin'] },
 ]
