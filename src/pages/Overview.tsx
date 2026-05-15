@@ -23,6 +23,7 @@ function OverviewSetter() {
   const me = useAuth((s) => s.user)
   const [tab, setTab] = useState('overview')
   const [callbackTab, setCallbackTab] = useState<'late' | 'today' | 'tomorrow'>('today')
+  const [activityRange, setActivityRange] = useState<'today' | 'week'>('today')
   const { data: leads = [] } = useLeads({ limit: 1500 })
   const { data: calls = [] } = useCallLogs(me?.id ? { setterId: me.id, limit: 3000 } : { limit: 3000 })
 
@@ -56,7 +57,8 @@ function OverviewSetter() {
       total: ownLeads.length,
       qualifRate: ratePct(appels, qualifies),
       connectionRate: ratePct(appels, connexions),
-      dailyCalls: dailyLogicalCallSeries(loggedCalls, classified),
+      activityToday: todayLogicalCallSeries(loggedCalls, classified),
+      activityWeek: weekLogicalCallSeries(loggedCalls, classified),
     }
   }, [leads, calls, me?.id])
 
@@ -86,14 +88,24 @@ function OverviewSetter() {
         <KpiCard title="LEADS QUALIFIÉS" value={String(stats.qualifies)} haloColor="#3DA86A" lineColor="#3DA86A" sparkPoints="0,22 10,20 20,18 30,14 40,10 50,12 64,4" className="col-span-3" />
         <KpiCard title="RDV PRIS" value={String(stats.rdvPris)} haloColor="#6B7C8C" lineColor="#6B7C8C" sparkPoints="0,12 10,14 20,12 30,16 40,12 50,14 64,12" className="col-span-3" />
 
-        {/* Activité de la journée — graph aggregat call_logs en Phase B */}
         <div className="glass-card col-span-8 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold">Activité de la journée</h3>
-            <PillTabs items={[{ id: 'd', label: "Aujourd'hui" }, { id: 'w', label: 'Semaine' }]} active="d" onChange={() => {}} />
+          <div className="flex items-center justify-between mb-4 gap-3">
+            <div>
+              <h3 className="font-bold">Activité setter</h3>
+              <p className="text-xs text-faint">Appels réels + classifications du portefeuille</p>
+            </div>
+            <PillTabs
+              items={[{ id: 'today', label: "Aujourd'hui" }, { id: 'week', label: 'Semaine' }]}
+              active={activityRange}
+              onChange={(id) => setActivityRange(id as 'today' | 'week')}
+            />
           </div>
           <div className="h-[180px] w-full">
-            <FuturisticLineChart values={stats.dailyCalls} color="#D4AF37" />
+            <FuturisticLineChart
+              points={activityRange === 'today' ? stats.activityToday : stats.activityWeek}
+              color="#D4AF37"
+              caption={activityRange === 'today' ? "Aujourd'hui" : '7 derniers jours'}
+            />
           </div>
         </div>
 
@@ -679,12 +691,29 @@ function belongsToSetter(lead: LeadResponse, setterId: string | undefined): bool
   return lead.setterId === setterId || lead.assignedSetterIds.includes(setterId)
 }
 
-function dailyLogicalCallSeries(calls: CallLogResponse[], classified: LeadResponse[]): number[] {
+type ActivityPoint = { label: string; value: number }
+
+function weekLogicalCallSeries(calls: CallLogResponse[], classified: LeadResponse[]): ActivityPoint[] {
   return lastNDays(7).map((day) => {
     const logged = calls.filter((c) => c.calledAt.slice(0, 10) === day).length
     const classifs = classified.filter((l) => l.updatedAt.slice(0, 10) === day).length
-    return Math.max(logged, classifs)
+    return { label: dayLabel(day), value: Math.max(logged, classifs) }
   })
+}
+
+function todayLogicalCallSeries(calls: CallLogResponse[], classified: LeadResponse[]): ActivityPoint[] {
+  const today = new Date().toISOString().slice(0, 10)
+  const hours = Array.from({ length: 12 }, (_, i) => 8 + i)
+  return hours.map((hour) => {
+    const logged = calls.filter((c) => c.calledAt.slice(0, 10) === today && new Date(c.calledAt).getHours() === hour).length
+    const classifs = classified.filter((l) => l.updatedAt.slice(0, 10) === today && new Date(l.updatedAt).getHours() === hour).length
+    return { label: `${hour}h`, value: Math.max(logged, classifs) }
+  })
+}
+
+function dayLabel(day: string): string {
+  const d = new Date(`${day}T12:00:00`)
+  return d.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '')
 }
 
 function callbackBucket(iso: string | null): 'late' | 'today' | 'tomorrow' | 'later' {
@@ -761,25 +790,40 @@ function lastNMonths(n: number): string[] {
 
 type DeltaType = 'success' | 'warn' | 'danger' | 'info'
 
-function chartPoints(values: number[], width = 300, height = 150): string {
+function chartPoints(values: number[], width = 300, height = 112): string {
   const max = Math.max(1, ...values)
   const step = values.length <= 1 ? width : width / (values.length - 1)
   return values.map((v, i) => `${Math.round(i * step)},${Math.round(height - (v / max) * (height - 18) - 9)}`).join(' ')
 }
 
-function FuturisticLineChart({ values, color }: { values: number[]; color: string }) {
-  const points = chartPoints(values)
-  const last = values.at(-1) ?? 0
+function FuturisticLineChart({ points, color, caption }: { points: ActivityPoint[]; color: string; caption: string }) {
+  const values = points.map((p) => p.value)
+  const linePoints = chartPoints(values)
   const total = values.reduce((a, b) => a + b, 0)
+  const peak = Math.max(0, ...values)
   return (
     <div className="relative h-full rounded-2xl bg-white/35 border border-line-soft overflow-hidden p-4 flat-target">
-      <svg viewBox="0 0 300 150" className="relative z-10 w-full h-full" preserveAspectRatio="none">
-        {[30, 60, 90, 120].map((y) => <line key={y} x1="0" x2="300" y1={y} y2={y} stroke="#E5E1DA" strokeDasharray="4 6" />)}
-        <polyline points={points} fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
       <div className="absolute top-4 right-4 text-right z-20">
-        <div className="text-2xl font-extrabold">{last}</div>
-        <div className="eyebrow">Aujourd'hui · {total} / 7j</div>
+        <div className="text-2xl font-extrabold">{total}</div>
+        <div className="eyebrow">{caption} · pic {peak}</div>
+      </div>
+      <div className="relative z-10 h-full pt-8">
+        <svg viewBox="0 0 300 112" className="w-full h-[112px]" preserveAspectRatio="none">
+          {[28, 56, 84].map((y) => <line key={y} x1="0" x2="300" y1={y} y2={y} stroke="#E5E1DA" strokeDasharray="4 6" />)}
+          <polyline points={linePoints} fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+          {values.map((v, i) => {
+            const [x, y] = linePoints.split(' ')[i].split(',').map(Number)
+            return <circle key={`${i}-${v}`} cx={x} cy={y} r="3.5" fill="#fff" stroke={color} strokeWidth="2" />
+          })}
+        </svg>
+        <div className="mt-1 grid gap-1" style={{ gridTemplateColumns: `repeat(${points.length}, minmax(0, 1fr))` }}>
+          {points.map((p, i) => (
+            <div key={`${p.label}-${i}`} className="min-w-0 text-center">
+              <div className="text-[10px] font-bold text-muted">{p.value}</div>
+              <div className="text-[9px] uppercase tracking-[0.12em] text-faint truncate">{p.label}</div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -944,4 +988,5 @@ function RdvRow({ color, time, sub }: { color: string; time: string; sub: string
     </div>
   )
 }
+
 
