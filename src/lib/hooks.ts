@@ -12,6 +12,7 @@ import type {
   UserResponse,
   AnalyticsSummaryResponse,
   AnalyticsFunnelResponse,
+  AnalyticsCommercialSummary,
 } from './types'
 
 type Async<T> = {
@@ -324,6 +325,9 @@ export type UpdateUserPayload = {
   role?: UserResponse['role']
   team?: UserResponse['team']
   active?: boolean
+  ghlUserId?: string | null
+  ghlCalendarId?: string | null
+  ghlLocationId?: string | null
 }
 
 export async function updateUser(id: string, input: UpdateUserPayload): Promise<UserResponse> {
@@ -468,12 +472,27 @@ export type GhlCalendarEvent = {
   status?: string | null
   contactId?: string | null
   assignedUserId?: string | null
+  commercialId?: string | null
+  commercialName?: string | null
+  isMappedCommercial?: boolean
   address?: string | null
   notes?: string | null
 }
 
+export type GhlUser = {
+  id: string
+  name: string
+  email: string | null
+  phone: string | null
+  role: string | null
+}
+
 export function useGhlCalendarConfig(): Async<GhlCalendarConfig> {
   return useFetch<GhlCalendarConfig>('/ghl-calendar/config')
+}
+
+export function useGhlUsers(): Async<GhlUser[]> {
+  return useFetch<GhlUser[]>('/ghl-calendar/users')
 }
 
 export function useGhlFreeSlots(filters?: {
@@ -493,6 +512,14 @@ export function useGhlCalendarEvents(filters?: {
   to?: string
 }): Async<{ configured: boolean; events: GhlCalendarEvent[] }> {
   return useFetch<{ configured: boolean; events: GhlCalendarEvent[] }>(filters?.from && filters?.to ? '/ghl-calendar/events' : null, filters)
+}
+
+export function syncGhlCalendarEvents(filters: { from: string; to: string; sector?: string; calendarId?: string }): Promise<{ configured: boolean; created: number; updated: number; skipped: number; events: GhlCalendarEvent[] }> {
+  return api<{ configured: boolean; created: number; updated: number; skipped: number; events: GhlCalendarEvent[] }>('/ghl-calendar/sync-events', { method: 'POST', query: filters, timeoutMs: 90_000 })
+}
+
+export function useCommercialAnalytics(id: string | undefined, filters?: { days?: number; from?: string; to?: string }): Async<AnalyticsCommercialSummary> {
+  return useFetch<AnalyticsCommercialSummary>(id ? `/analytics/commercials/${id}` : null, filters)
 }
 
 export type CreateGhlAppointmentInput = CreateRdvInput & {

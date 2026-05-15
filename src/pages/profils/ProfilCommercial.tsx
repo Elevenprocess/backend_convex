@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
-import { useUser, useRdvList, useLeads } from '../../lib/hooks'
+import { useCommercialAnalytics, useUser, useRdvList, useLeads } from '../../lib/hooks'
 import { fullName, type LeadResponse, type RdvResponse } from '../../lib/types'
 
 export function ProfilCommercial() {
@@ -12,7 +12,8 @@ export function ProfilCommercial() {
 
   const { data: member, loading, error } = useUser(id)
   const { data: rdvs } = useRdvList(id ? { commercialId: id, limit: 200 } : undefined)
-  const { data: leads } = useLeads({ limit: 500 })
+  const { data: leads } = useLeads(id ? { assignedToId: id, limit: 500 } : { limit: 500 })
+  const { data: commercialAnalytics } = useCommercialAnalytics(id, { days: 30 })
 
   const leadMap = useMemo(() => {
     const m = new Map<string, LeadResponse>()
@@ -20,7 +21,7 @@ export function ProfilCommercial() {
     return m
   }, [leads])
 
-  const stats = useMemo(() => computeStats(rdvs ?? []), [rdvs])
+  const stats = useMemo(() => computeStats(rdvs ?? [], commercialAnalytics), [rdvs, commercialAnalytics])
   const recentHonored = useMemo(() => {
     const list = (rdvs ?? []).filter((r) => r.status === 'honore')
     list.sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime())
@@ -74,12 +75,15 @@ export function ProfilCommercial() {
               <div>{member.email}</div>
               {member.phone && <div>{member.phone}</div>}
               <div>{member.team ?? 'Sans équipe'} — depuis {monthsSince(member.createdAt)}</div>
+              <div>GHL : {member.ghlUserId ? 'relié' : 'non relié'}</div>
             </div>
           </div>
 
           <div className="glass-card p-6">
             <span className="eyebrow block mb-3">STATS RDV</span>
             <div className="space-y-3 text-sm">
+              <Row label="RDV assignés" value={`${stats.total}`} />
+              <Row label="Leads assignés" value={`${leads?.length ?? 0}`} />
               <Row label="RDV honorés" value={`${stats.honored} / ${stats.total}`} />
               <Row label="No-shows" value={`${stats.noShow} (${pct(stats.noShow, stats.total)})`} />
               <Row label="Reportés" value={String(stats.reported)} />
@@ -121,7 +125,12 @@ export function ProfilCommercial() {
   )
 }
 
-function computeStats(rdvs: RdvResponse[]) {
+function computeStats(rdvs: RdvResponse[], analytics?: { total: number; honored: number; signed: number; ca: number; closing: number } | null) {
+  if (analytics) {
+    const noShow = rdvs.filter((r) => r.status === 'no_show').length
+    const reported = rdvs.filter((r) => r.status === 'reporte').length
+    return { total: analytics.total, honored: analytics.honored, noShow, reported, signed: analytics.signed, ca: analytics.ca }
+  }
   let honored = 0
   let noShow = 0
   let reported = 0

@@ -8,6 +8,9 @@ export type UserResponse = {
   email: string
   name: string
   phone: string | null
+  ghlUserId: string | null
+  ghlCalendarId: string | null
+  ghlLocationId: string | null
   role: Role
   team: Team
   active: boolean
