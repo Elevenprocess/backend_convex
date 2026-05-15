@@ -1,10 +1,10 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
 import { prefetchAnalyticsSummary, useAnalyticsSummary } from '../lib/hooks'
 import { REALTIME_REFRESH_EVENT, type RealtimeRefreshPayload } from '../lib/realtime'
-import type { AnalyticsAdminSummary, AnalyticsCommercialSummary, AnalyticsDailyPoint, AnalyticsSegment, AnalyticsSetterSummary } from '../lib/types'
+import type { AnalyticsAdminSummary, AnalyticsCommercialPerf, AnalyticsCommercialSummary, AnalyticsDailyPoint, AnalyticsSegment, AnalyticsSetterSummary } from '../lib/types'
 
 type Segment = AnalyticsSegment
 
@@ -323,30 +323,158 @@ function AnalyticsAdmin() {
           </div>
         </div>
 
-        <div className="glass-card p-6">
-          <h3 className="font-bold mb-4">Performance par commercial</h3>
-          <table className="w-full text-sm">
-            <thead className="bg-or-tint">
-              <tr className="text-left eyebrow">
-                <Th>COMMERCIAL</Th>
-                <Th>RDV HONORÉS</Th>
-                <Th>VENTES</Th>
-                <Th>CLOSING %</Th>
-                <Th>PANIER MOY.</Th>
-                <Th className="text-right">CA</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {stats.commercials.length === 0 ? (
-                <tr><td className="px-3 py-5 text-faint" colSpan={6}>Aucun RDV honoré.</td></tr>
-              ) : stats.commercials.map((c) => (
-                <CommercialRow key={c.id} initials={c.initials} name={c.name} honored={c.honored} ventes={c.signed} closing={`${c.closing}%`} panier={fmtKEur(c.panier)} ca={fmtKEur(c.ca)} />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <CommercialTrackingDashboard commercials={stats.commercials} totalCa={stats.ca} totalSigned={stats.signed} totalHonored={stats.commercials.reduce((sum, c) => sum + c.honored, 0)} />
       </main>
     </AppShell>
+  )
+}
+
+function CommercialTrackingDashboard({ commercials, totalCa, totalSigned, totalHonored }: { commercials: AnalyticsCommercialPerf[]; totalCa: number; totalSigned: number; totalHonored: number }) {
+  const sorted = useMemo(() => [...commercials].sort((a, b) => b.ca - a.ca || b.signed - a.signed || b.closing - a.closing), [commercials])
+  const leader = sorted[0]
+  const averageClosing = sorted.length ? Math.round(sorted.reduce((sum, c) => sum + c.closing, 0) / sorted.length) : 0
+  const bestClosing = sorted.reduce<AnalyticsCommercialPerf | null>((best, c) => (!best || c.closing > best.closing ? c : best), null)
+  const maxCa = Math.max(1, ...sorted.map((c) => c.ca))
+  const maxClosing = Math.max(1, ...sorted.map((c) => c.closing))
+  const watchList = sorted.filter((c) => c.honored > 0 && c.closing < 20).slice(0, 3)
+
+  return (
+    <section className="glass-card p-6 space-y-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <span className="eyebrow">DASHBOARD COMMERCIAUX</span>
+          <h3 className="text-2xl font-extrabold mt-1">Suivi des commerciaux</h3>
+          <p className="text-sm text-muted mt-1">Vue admin claire : RDV honorés, ventes, closing, panier moyen et CA par commercial.</p>
+        </div>
+        <div className="rounded-2xl border border-or/15 bg-or-tint/50 px-4 py-3 text-sm">
+          <div className="eyebrow mb-1">Leader CA</div>
+          <div className="font-extrabold text-lg">{leader?.name ?? '—'}</div>
+          <div className="text-xs text-faint">{leader ? `${fmtKEur(leader.ca)} · ${leader.signed} ventes` : 'Aucune donnée'}</div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
+        <CommercialMiniKpi label="RDV honorés" value={fmtInt(totalHonored)} detail="présences commerciales" />
+        <CommercialMiniKpi label="Ventes" value={fmtInt(totalSigned)} detail="devis signés" tone="success" />
+        <CommercialMiniKpi label="Closing moyen" value={`${averageClosing}%`} detail="moyenne équipe" tone={averageClosing >= 35 ? 'success' : averageClosing >= 20 ? 'warning' : 'danger'} />
+        <CommercialMiniKpi label="CA signé" value={fmtKEur(totalCa)} detail="période sélectionnée" tone="gold" />
+        <CommercialMiniKpi label="Meilleur closing" value={bestClosing ? `${bestClosing.closing}%` : '0%'} detail={bestClosing?.name ?? '—'} />
+      </div>
+
+      {sorted.length === 0 ? (
+        <div className="rounded-3xl border border-line-soft bg-white/60 p-8 text-center text-muted">Aucun commercial trouvé sur cette période.</div>
+      ) : (
+        <div className="grid grid-cols-12 gap-5 items-start">
+          <div className="col-span-12 xl:col-span-7 space-y-3">
+            {sorted.map((commercial, index) => (
+              <CommercialScoreCard key={commercial.id} commercial={commercial} rank={index + 1} maxCa={maxCa} maxClosing={maxClosing} />
+            ))}
+          </div>
+          <div className="col-span-12 xl:col-span-5 space-y-4">
+            <div className="rounded-[28px] border border-line-soft bg-white/65 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-extrabold">Points de suivi</h4>
+                <span className="eyebrow">alertes douces</span>
+              </div>
+              <div className="space-y-3">
+                {watchList.length === 0 ? (
+                  <CommercialInsight title="Équipe stable" detail="Aucun commercial avec closing faible sur des RDV honorés." tone="success" />
+                ) : watchList.map((c) => (
+                  <CommercialInsight key={c.id} title={c.name} detail={`${c.closing}% closing sur ${c.honored} RDV honorés · à accompagner.`} tone="warning" />
+                ))}
+                {leader && <CommercialInsight title="Meilleur CA" detail={`${leader.name} génère ${fmtKEur(leader.ca)} sur la période.`} tone="gold" />}
+                {bestClosing && bestClosing.id !== leader?.id && <CommercialInsight title="Meilleur taux" detail={`${bestClosing.name} est à ${bestClosing.closing}% de closing.`} />}
+              </div>
+            </div>
+
+            <div className="rounded-[28px] border border-line-soft bg-white/65 p-5">
+              <h4 className="font-extrabold mb-3">Tableau rapide</h4>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[560px]">
+                  <thead className="bg-or-tint/70">
+                    <tr className="text-left eyebrow">
+                      <Th>COMMERCIAL</Th>
+                      <Th>RDV</Th>
+                      <Th>VENTES</Th>
+                      <Th>CLOSING</Th>
+                      <Th className="text-right">CA</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sorted.map((c) => (
+                      <CommercialRow key={c.id} initials={c.initials} name={c.name} honored={c.honored} ventes={c.signed} closing={`${c.closing}%`} panier={fmtKEur(c.panier)} ca={fmtKEur(c.ca)} compact />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function CommercialMiniKpi({ label, value, detail, tone = 'neutral' }: { label: string; value: string; detail: string; tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'gold' }) {
+  const toneClass = tone === 'success' ? 'bg-success/10 text-success border-success/15' : tone === 'warning' ? 'bg-cuivre-tint text-cuivre border-cuivre/15' : tone === 'danger' ? 'bg-rouille/10 text-rouille border-rouille/15' : tone === 'gold' ? 'bg-or-tint text-or-dark border-or/15' : 'bg-white/70 text-text border-line-soft'
+  return (
+    <div className={`rounded-3xl border p-4 ${toneClass}`}>
+      <div className="eyebrow mb-2">{label}</div>
+      <div className="text-2xl font-extrabold leading-none">{value}</div>
+      <div className="text-[11px] text-faint mt-2">{detail}</div>
+    </div>
+  )
+}
+
+function CommercialScoreCard({ commercial, rank, maxCa, maxClosing }: { commercial: AnalyticsCommercialPerf; rank: number; maxCa: number; maxClosing: number }) {
+  const caPct = Math.min(100, Math.round((commercial.ca / maxCa) * 100))
+  const closingPct = Math.min(100, Math.round((commercial.closing / maxClosing) * 100))
+  const tone = commercial.closing >= 35 ? 'border-success/20 bg-success/5' : commercial.closing >= 20 ? 'border-or/20 bg-or-tint/35' : 'border-rouille/15 bg-rouille/5'
+  return (
+    <div className={`rounded-[28px] border p-4 ${tone}`}>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-2xl bg-white/80 border border-line-soft flex items-center justify-center text-xs font-extrabold text-or-dark">#{rank}</div>
+          <div className="w-10 h-10 rounded-full bg-or-tint flex items-center justify-center text-xs font-bold flex-shrink-0">{commercial.initials}</div>
+          <div className="min-w-0">
+            <div className="font-extrabold truncate">{commercial.name}</div>
+            <div className="text-xs text-faint">{commercial.honored} RDV honorés · {commercial.signed} ventes</div>
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-xl font-extrabold text-or-dark">{fmtKEur(commercial.ca)}</div>
+          <div className="text-xs text-faint">panier {fmtKEur(commercial.panier)}</div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3 text-xs font-semibold">
+        <ProgressLine label="Contribution CA" value={`${caPct}%`} pct={caPct} color="bg-or" />
+        <ProgressLine label="Closing" value={`${commercial.closing}%`} pct={closingPct} color={commercial.closing >= 35 ? 'bg-success' : commercial.closing >= 20 ? 'bg-cuivre' : 'bg-rouille'} />
+      </div>
+    </div>
+  )
+}
+
+function ProgressLine({ label, value, pct, color }: { label: string; value: string; pct: number; color: string }) {
+  return (
+    <div>
+      <div className="flex justify-between gap-2 mb-1 text-faint"><span>{label}</span><span className="text-text">{value}</span></div>
+      <div className="h-2 rounded-full bg-white/80 overflow-hidden border border-line-soft">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function CommercialInsight({ title, detail, tone = 'neutral' }: { title: string; detail: string; tone?: 'neutral' | 'success' | 'warning' | 'gold' }) {
+  const dot = tone === 'success' ? 'bg-success' : tone === 'warning' ? 'bg-cuivre' : tone === 'gold' ? 'bg-or' : 'bg-muted'
+  return (
+    <div className="flex gap-3 rounded-2xl bg-white/70 border border-line-soft p-3">
+      <span className={`mt-1 h-2.5 w-2.5 rounded-full flex-shrink-0 ${dot}`} />
+      <div>
+        <div className="font-bold text-sm">{title}</div>
+        <div className="text-xs text-muted leading-relaxed">{detail}</div>
+      </div>
+    </div>
   )
 }
 
@@ -865,8 +993,8 @@ function SetterRow({ initials, name, appels, cnx, qual, rdv, classified, eff, ef
   )
 }
 
-function CommercialRow({ initials, name, honored, ventes, closing, panier, ca }: {
-  initials: string; name: string; honored: number; ventes: number; closing: string; panier: string; ca: string
+function CommercialRow({ initials, name, honored, ventes, closing, panier, ca, compact = false }: {
+  initials: string; name: string; honored: number; ventes: number; closing: string; panier: string; ca: string; compact?: boolean
 }) {
   return (
     <tr className="border-b border-line-soft last:border-0">
@@ -879,7 +1007,7 @@ function CommercialRow({ initials, name, honored, ventes, closing, panier, ca }:
       <td className="px-3 py-2.5">{honored}</td>
       <td className="px-3 py-2.5">{ventes}</td>
       <td className="px-3 py-2.5">{closing}</td>
-      <td className="px-3 py-2.5">{panier}</td>
+      {!compact && <td className="px-3 py-2.5">{panier}</td>}
       <td className="px-3 py-2.5 text-right font-bold text-or">{ca}</td>
     </tr>
   )
