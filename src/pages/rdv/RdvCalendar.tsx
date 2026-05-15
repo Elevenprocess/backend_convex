@@ -1,4 +1,4 @@
-import { useMemo, useState, type WheelEvent } from 'react'
+import { useMemo, useState, type UIEvent, type WheelEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
@@ -24,9 +24,10 @@ const STATUS_TONE: Record<RdvStatus, string> = {
 export function RdvCalendar() {
   const [view, setView] = useState<CalendarView>('week')
   const [cursorDate, setCursorDate] = useState(() => startOfDay(new Date()))
+  const [continuousDays, setContinuousDays] = useState(35)
   const navigate = useNavigate()
 
-  const period = useMemo(() => buildPeriod(cursorDate, view), [cursorDate, view])
+  const period = useMemo(() => buildPeriod(cursorDate, view, continuousDays), [continuousDays, cursorDate, view])
 
   const { data: rdvs, loading, error } = useRdvList({
     fromDate: period.from.toISOString(),
@@ -131,7 +132,7 @@ export function RdvCalendar() {
               onClick={() => setView(v)}
               className={`px-3 py-1 text-xs font-semibold rounded-lg ${view === v ? 'bg-white shadow-sm text-text' : 'text-muted'}`}
             >
-              {v === 'day' ? 'Jour' : v === 'week' ? 'Semaine' : 'Mois'}
+              {v === 'day' ? 'Jour' : v === 'week' ? 'Continu' : 'Mois'}
             </button>
           ))}
         </div>
@@ -170,6 +171,7 @@ export function RdvCalendar() {
               leadMap={leadMap}
               onOpen={(rdvId) => navigate(`/rdv/${rdvId}`)}
               onOpenDay={(date) => { setCursorDate(date); setView('day') }}
+              onNeedMoreDays={() => setContinuousDays((days) => Math.min(days + 21, 365))}
             />
           )}
         </div>
@@ -187,6 +189,7 @@ function TimeGridView({
   leadMap,
   onOpen,
   onOpenDay,
+  onNeedMoreDays,
 }: {
   days: DayCell[]
   visibleHours: number[]
@@ -194,26 +197,31 @@ function TimeGridView({
   leadMap: Map<string, LeadResponse>
   onOpen: (rdvId: string) => void
   onOpenDay: (date: Date) => void
+  onNeedMoreDays?: () => void
 }) {
   const dayWidth = days.length > 1 ? 240 : 520
   const gridColumns = `64px repeat(${days.length}, minmax(${dayWidth}px, 1fr))`
   const minWidth = 64 + days.length * dayWidth
+  const handleNativeScroll = (event: UIEvent<HTMLDivElement>) => {
+    const el = event.currentTarget
+    if (onNeedMoreDays && el.scrollLeft + el.clientWidth > el.scrollWidth - 900) onNeedMoreDays()
+  }
 
   return (
-    <div data-native-horizontal-scroll="true" className="flex-grow overflow-x-auto overflow-y-hidden bg-white/30 overscroll-contain">
+    <div data-native-horizontal-scroll="true" onScroll={handleNativeScroll} className="flex-grow overflow-x-auto overflow-y-hidden bg-white/30 overscroll-contain">
       <div className="h-full flex flex-col" style={{ minWidth }}>
         <div
           className="grid border-b border-line-soft flex-shrink-0 bg-white/70 sticky top-0 z-10"
           style={{ gridTemplateColumns: gridColumns }}
         >
           <div className="border-r border-line-soft" />
-          {days.map((d, i) => (
+          {days.map((d) => (
             <button
               key={d.key}
               onClick={() => onOpenDay(d.date)}
               className={`p-3 text-center border-l border-line-soft hover:bg-or-tint ${d.today ? 'bg-cuivre-tint' : ''}`}
             >
-              <div className="eyebrow">{days.length === 1 ? d.date.toLocaleDateString('fr-FR', { weekday: 'long' }) : DAY_LABELS[i]}</div>
+              <div className="eyebrow">{days.length === 1 ? d.date.toLocaleDateString('fr-FR', { weekday: 'long' }) : d.date.toLocaleDateString('fr-FR', { weekday: 'short' }).toUpperCase()}</div>
               <div className={`text-2xl font-bold ${d.today ? 'text-cuivre' : ''}`}>{d.dayNum}</div>
             </button>
           ))}
@@ -367,7 +375,7 @@ function extractNotesValue(notes: string | null, labels: string[]): string | nul
   return null
 }
 
-function buildPeriod(cursorDate: Date, view: CalendarView): { from: Date; to: Date; days: DayCell[]; label: string } {
+function buildPeriod(cursorDate: Date, view: CalendarView, continuousDays = 35): { from: Date; to: Date; days: DayCell[]; label: string } {
   if (view === 'day') {
     const from = startOfDay(cursorDate)
     const to = endOfDay(cursorDate)
@@ -404,10 +412,11 @@ function buildPeriod(cursorDate: Date, view: CalendarView): { from: Date; to: Da
 
   const from = startOfWeek(cursorDate)
   const to = new Date(from)
-  to.setDate(from.getDate() + 6)
+  const safeDays = Math.max(14, Math.min(continuousDays, 365))
+  to.setDate(from.getDate() + safeDays - 1)
   to.setHours(23, 59, 59, 999)
   const days: DayCell[] = []
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < safeDays; i++) {
     const d = new Date(from)
     d.setDate(from.getDate() + i)
     days.push(toDayCell(d))
@@ -418,7 +427,7 @@ function buildPeriod(cursorDate: Date, view: CalendarView): { from: Date; to: Da
     from,
     to,
     days,
-    label: `Semaine du ${from.toLocaleDateString('fr-FR', opt)} — ${to.toLocaleDateString('fr-FR', opt)}`,
+    label: `Agenda continu · ${from.toLocaleDateString('fr-FR', opt)} → ${to.toLocaleDateString('fr-FR', opt)}`,
   }
 }
 
