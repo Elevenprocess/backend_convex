@@ -96,6 +96,14 @@ export type LeadResponse = {
   callsToday: number
   nextCallbackAt: string | null
   firstCallUnderFiveMin: boolean | null
+  // Phase 1-6 — pont GHL
+  monetaryValue: string | null // numeric Postgres → string en JSON
+  ghlStageName: string | null
+  ghlPipelineId: string | null
+  lostReason: string | null
+  lastStageChangeAt: string | null
+  daysSinceLastStageChange: number | null
+  customFields?: { fieldKey: string; fieldName: string; value: string | null; updatedAt: string }[]
 }
 
 export type CallResult =

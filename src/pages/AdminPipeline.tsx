@@ -4,13 +4,16 @@ import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
 import {
+  useLeads,
   usePipelineByCommercial,
   usePipelineDistribution,
   usePipelineStuck,
+  useUsers,
   type PipelineCommercialKpi,
   type PipelineDistributionEntry,
   type PipelineStuckLead,
 } from '../lib/hooks'
+import type { LeadResponse, UserResponse } from '../lib/types'
 
 type Tab = 'kanban' | 'commercials' | 'stuck'
 
@@ -94,6 +97,35 @@ function TabSwitcher({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
 
 function KanbanView() {
   const { data, loading, error } = usePipelineDistribution()
+  // On charge tous les leads ouverts et on les groupe client-side par ghlStageName.
+  // Volume actuel ECOI : ~5000 leads avec ghl_stage_name → ~3MB JSON, OK pour admin.
+  const { data: leads } = useLeads({ limit: 5000 })
+  const { data: users } = useUsers()
+
+  const userMap = useMemo(() => {
+    const m = new Map<string, UserResponse>()
+    for (const u of users ?? []) m.set(u.id, u)
+    return m
+  }, [users])
+
+  const leadsByStage = useMemo(() => {
+    const m = new Map<string, LeadResponse[]>()
+    for (const lead of leads ?? []) {
+      const key = lead.ghlStageName ?? '__null__'
+      if (!m.has(key)) m.set(key, [])
+      m.get(key)!.push(lead)
+    }
+    // Tri intra-colonne : plus récent d'abord
+    for (const list of m.values()) {
+      list.sort(
+        (a, b) =>
+          new Date(b.lastStageChangeAt ?? b.updatedAt).getTime() -
+          new Date(a.lastStageChangeAt ?? a.updatedAt).getTime(),
+      )
+    }
+    return m
+  }, [leads])
+
   const sorted = useMemo(() => {
     if (!data) return []
     const byName = new Map(data.stages.map((s) => [s.ghlStageName ?? '__null__', s]))
@@ -129,7 +161,12 @@ function KanbanView() {
       <div className="overflow-x-auto flex-1 min-h-0 pb-2">
         <div className="flex gap-3 min-w-max h-full pb-1">
           {sorted.map((stage) => (
-            <StageColumn key={stage.ghlStageName ?? 'null'} stage={stage} />
+            <StageColumn
+              key={stage.ghlStageName ?? 'null'}
+              stage={stage}
+              leads={leadsByStage.get(stage.ghlStageName ?? '__null__') ?? []}
+              userMap={userMap}
+            />
           ))}
         </div>
       </div>
@@ -137,10 +174,23 @@ function KanbanView() {
   )
 }
 
-function StageColumn({ stage }: { stage: PipelineDistributionEntry }) {
+const CARDS_PER_COLUMN = 50
+
+function StageColumn({
+  stage,
+  leads,
+  userMap,
+}: {
+  stage: PipelineDistributionEntry
+  leads: LeadResponse[]
+  userMap: Map<string, UserResponse>
+}) {
+  const navigate = useNavigate()
+  const visible = leads.slice(0, CARDS_PER_COLUMN)
+  const remaining = leads.length - visible.length
   return (
-    <div className="w-[240px] rounded-[18px] border border-line-soft bg-cream/45 p-3 flex flex-col">
-      <div className="bg-white rounded-[14px] border border-line-soft p-3">
+    <div className="w-[260px] rounded-[18px] border border-line-soft bg-cream/45 p-3 flex flex-col min-h-0">
+      <div className="bg-white rounded-[14px] border border-line-soft p-3 flex-shrink-0">
         <div className="flex items-start justify-between gap-2">
           <h4 className="font-black text-sm leading-tight">
             {stage.ghlStageName ?? 'Sans stage GHL'}
@@ -160,7 +210,75 @@ function StageColumn({ stage }: { stage: PipelineDistributionEntry }) {
           </div>
         </div>
       </div>
+      <div className="space-y-1.5 overflow-y-auto pr-1 mt-2 flex-grow min-h-0">
+        {visible.length === 0 ? (
+          <div className="rounded-[14px] border border-dashed border-line-soft bg-white/70 p-4 text-center text-[11px] text-faint">
+            Aucun lead
+          </div>
+        ) : (
+          visible.map((lead) => (
+            <LeadCard
+              key={lead.id}
+              lead={lead}
+              commercial={lead.assignedToId ? userMap.get(lead.assignedToId) : undefined}
+              onOpen={() => navigate(`/leads/${lead.id}`)}
+            />
+          ))
+        )}
+        {remaining > 0 && (
+          <div className="rounded-[14px] border border-dashed border-line-soft bg-white/60 p-2 text-center text-[10px] text-faint">
+            + {remaining} autre{remaining > 1 ? 's' : ''}
+          </div>
+        )}
+      </div>
     </div>
+  )
+}
+
+function LeadCard({
+  lead,
+  commercial,
+  onOpen,
+}: {
+  lead: LeadResponse
+  commercial?: UserResponse
+  onOpen: () => void
+}) {
+  const name =
+    [lead.firstName, lead.lastName].filter(Boolean).join(' ') ||
+    lead.email ||
+    lead.phone ||
+    'Lead'
+  const value = lead.monetaryValue ? Number(lead.monetaryValue) : null
+  const days = lead.daysSinceLastStageChange ?? null
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="w-full text-left rounded-[14px] border border-line-soft bg-white p-2.5 hover:-translate-y-0.5 hover:shadow-sm transition cursor-pointer"
+      title={lead.email ?? lead.id}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <p className="font-bold text-xs truncate">{name}</p>
+        {value != null && value > 0 && (
+          <span className="text-[10px] font-black text-text whitespace-nowrap">
+            {formatCurrency(value)}
+          </span>
+        )}
+      </div>
+      <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-muted">
+        <span className="truncate">{commercial?.name ?? <span className="text-rouille">Non attribué</span>}</span>
+        {days != null && (
+          <span
+            className={`px-1.5 py-0.5 rounded-full whitespace-nowrap ${
+              days >= 30 ? 'bg-rouille/10 text-rouille' : days >= 14 ? 'bg-cuivre/10 text-cuivre' : 'text-faint'
+            }`}
+          >
+            {days}j
+          </span>
+        )}
+      </div>
+    </button>
   )
 }
 
