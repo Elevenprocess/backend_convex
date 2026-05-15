@@ -32,6 +32,7 @@ function currentMainTab(pathname: string, activeTab?: string): string {
 
 export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) {
   const user = useDisplayUser()
+  const authUser = useAuth((s) => s.user)
   const isAdmin = user.role === 'admin'
   const signOut = useAuth((s) => s.signOut)
   const isDark = useTheme((s) => s.isDark)
@@ -43,12 +44,15 @@ export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) 
   const topbarRef = useRef<HTMLElement | null>(null)
   const [openMenu, setOpenMenu] = useState<'search' | 'settings' | 'profile' | null>(null)
   const [search, setSearch] = useState('')
-  const { data: leadsData } = useLeads({ limit: 3000 })
-  const { data: rdvsData } = useRdvList({ limit: 1000 })
+  const isCommercial = authUser?.role === 'commercial'
+  const leadNotificationFilters = isCommercial && authUser?.id ? { assignedToId: authUser.id, limit: 2000 } : { limit: 2000 }
+  const rdvNotificationFilters = isCommercial && authUser?.id ? { commercialId: authUser.id, limit: 200 } : { limit: 200 }
+  const { data: leadsData } = useLeads(leadNotificationFilters)
+  const { data: rdvsData } = useRdvList(rdvNotificationFilters)
   const [seenNotificationVersion, setSeenNotificationVersion] = useState(0)
   const notificationCount = useMemo(
-    () => isNotificationsPage ? 0 : countUnreadNotifications(leadsData ?? [], rdvsData ?? []),
-    [isNotificationsPage, leadsData, rdvsData, seenNotificationVersion],
+    () => isNotificationsPage ? 0 : countUnreadNotifications(leadsData ?? [], rdvsData ?? [], isCommercial),
+    [isNotificationsPage, isCommercial, leadsData, rdvsData, seenNotificationVersion],
   )
 
   useEffect(() => {
@@ -223,11 +227,13 @@ export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) 
 }
 
 function countUnreadNotifications(
-  leads: { id: string; status: string; createdAt: string; nextCallbackAt: string | null }[],
-  rdvs: { id: string; status: string; scheduledAt: string }[],
+  leads: { id: string; status: string; createdAt: string; updatedAt?: string; nextCallbackAt: string | null }[],
+  rdvs: { id: string; status: string; result?: string | null; scheduledAt: string; createdAt?: string; updatedAt?: string }[],
+  commercial = false,
 ): number {
   const seen = readSeenNotificationIds()
-  return activeNotificationIds(leads, rdvs).filter((id) => !seen.has(id)).length
+  const ids = commercial ? activeCommercialNotificationIds(rdvs) : activeNotificationIds(leads, rdvs)
+  return ids.filter((id) => !seen.has(id)).length
 }
 
 function activeNotificationIds(
@@ -258,6 +264,35 @@ function activeNotificationIds(
     const scheduled = new Date(rdv.scheduledAt).getTime()
     if (rdv.status === 'planifie' && scheduled > now && scheduled <= in10Min) {
       ids.push(`rdv-soon-${rdv.id}`)
+    }
+  }
+
+  return ids
+}
+
+function activeCommercialNotificationIds(
+  rdvs: { id: string; status: string; result?: string | null; scheduledAt: string; createdAt?: string; updatedAt?: string }[],
+): string[] {
+  const now = Date.now()
+  const in10Min = now + 10 * 60 * 1000
+  const in24h = now + 24 * 60 * 60 * 1000
+  const since24h = now - 24 * 60 * 60 * 1000
+  const ids: string[] = []
+
+  for (const rdv of rdvs) {
+    const scheduled = new Date(rdv.scheduledAt).getTime()
+    const created = rdv.createdAt ? new Date(rdv.createdAt).getTime() : 0
+    const updated = rdv.updatedAt ? new Date(rdv.updatedAt).getTime() : 0
+    if (rdv.status === 'planifie' && scheduled > now && scheduled <= in10Min) {
+      ids.push(`commercial-rdv-soon-${rdv.id}`)
+    } else if (rdv.status === 'planifie' && scheduled > now && scheduled <= in24h) {
+      ids.push(`commercial-rdv-upcoming-${rdv.id}`)
+    }
+
+    if (created >= since24h) {
+      ids.push(`commercial-rdv-new-${rdv.id}`)
+    } else if (updated >= since24h && !(rdv.status === 'planifie' && !rdv.result)) {
+      ids.push(`commercial-pipeline-${rdv.id}`)
     }
   }
 

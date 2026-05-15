@@ -4,6 +4,7 @@ import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Icon, type IconName } from '../components/Icon'
 import { useLeads, useRdvList } from '../lib/hooks'
+import { useAuth } from '../lib/auth'
 import { fullName, type LeadResponse, type RdvResponse } from '../lib/types'
 
 type Notif = {
@@ -21,11 +22,17 @@ type Notif = {
 }
 
 export function Notifications() {
-  const { data: leadsData, loading: leadsLoading } = useLeads({ limit: 3000 })
-  const { data: rdvsData, loading: rdvLoading } = useRdvList({ limit: 1000 })
+  const user = useAuth((s) => s.user)
+  const isCommercial = user?.role === 'commercial'
+  const leadFilters = isCommercial && user?.id ? { assignedToId: user.id, limit: 2000 } : { limit: 2000 }
+  const rdvFilters = isCommercial && user?.id ? { commercialId: user.id, limit: 200 } : { limit: 200 }
+  const { data: leadsData, loading: leadsLoading } = useLeads(leadFilters)
+  const { data: rdvsData, loading: rdvLoading } = useRdvList(rdvFilters)
   const leads = leadsData ?? []
   const rdvs = rdvsData ?? []
-  const notifs = useMemo(() => buildNotifications(leads, rdvs), [leads, rdvs])
+  const notifs = useMemo(() => (
+    isCommercial ? buildCommercialNotifications(leads, rdvs) : buildNotifications(leads, rdvs)
+  ), [isCommercial, leads, rdvs])
   const groups = Array.from(new Set(notifs.map((n) => n.group)))
   const loading = leadsLoading || rdvLoading
   const [permission, setPermission] = useState(notificationPermission())
@@ -35,7 +42,7 @@ export function Notifications() {
 
   return (
     <AppShell>
-      <Topbar eyebrow="NOTIFICATIONS" title="Notifications et rappels" />
+      <Topbar eyebrow="NOTIFICATIONS" title={isCommercial ? 'Notifications commerciales' : 'Notifications et rappels'} />
       <div className="px-8 pt-4 flex items-center justify-between flex-shrink-0 gap-4">
         <div className="text-sm text-muted">
           {loading && notifs.length === 0 ? 'Chargement des notifications…' : `${notifs.length} notification${notifs.length > 1 ? 's' : ''} active${notifs.length > 1 ? 's' : ''}`}
@@ -51,7 +58,11 @@ export function Notifications() {
 
       <main className="p-8 pt-4 max-w-3xl mx-auto w-full overflow-y-auto space-y-3 flex-grow">
         {notifs.length === 0 ? (
-          <div className="glass-card p-6 text-sm text-muted">Aucune notification urgente : pas de nouveau lead récent, pas de rappel à traiter, pas de RDV imminent.</div>
+          <div className="glass-card p-6 text-sm text-muted">
+            {isCommercial
+              ? 'Aucune notification commerciale : pas de nouveau RDV, pas de RDV imminent et pas de mouvement pipeline récent.'
+              : 'Aucune notification urgente : pas de nouveau lead récent, pas de rappel à traiter, pas de RDV imminent.'}
+          </div>
         ) : groups.map((g) => (
           <div key={g} className="space-y-3">
             <div className="text-xs eyebrow text-muted mt-4 first:mt-0">{g}</div>
@@ -179,6 +190,135 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
   return notifications.sort((a, b) => urgencyRank(a) - urgencyRank(b))
 }
 
+export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): Notif[] {
+  const now = Date.now()
+  const in10Min = now + 10 * 60 * 1000
+  const in24h = now + 24 * 60 * 60 * 1000
+  const since24h = now - 24 * 60 * 60 * 1000
+  const leadMap = new Map(leads.map((lead) => [lead.id, lead]))
+  const notifications: Notif[] = []
+
+  for (const rdv of rdvs) {
+    const lead = leadMap.get(rdv.leadId)
+    const name = lead ? fullName(lead) : 'Prospect'
+    const scheduled = new Date(rdv.scheduledAt).getTime()
+    const created = new Date(rdv.createdAt).getTime()
+    const updated = new Date(rdv.updatedAt).getTime()
+    const stage = commercialStageLabel(rdv, lead)
+    const details = commercialRdvDetails(rdv, lead)
+
+    if (rdv.status === 'planifie' && scheduled > now && scheduled <= in10Min) {
+      notifications.push({
+        id: `commercial-rdv-soon-${rdv.id}`,
+        group: 'DANS 10 MIN',
+        icon: 'calendar',
+        iconBg: 'bg-or-tint',
+        iconColor: 'text-or-dark',
+        borderColor: 'border-l-or',
+        title: 'RDV Planifié imminent',
+        body: <><strong>{name}</strong>{details}</>,
+        time: formatDateTime(rdv.scheduledAt),
+        urgency: 'soon',
+        to: '/leads',
+      })
+    } else if (rdv.status === 'planifie' && scheduled > now && scheduled <= in24h) {
+      notifications.push({
+        id: `commercial-rdv-upcoming-${rdv.id}`,
+        group: 'RDV À VENIR',
+        icon: 'calendar',
+        iconBg: 'bg-or-tint',
+        iconColor: 'text-or-dark',
+        borderColor: 'border-l-or',
+        title: 'RDV Planifié',
+        body: <><strong>{name}</strong>{details}</>,
+        time: formatDateTime(rdv.scheduledAt),
+        urgency: 'info',
+        to: '/leads',
+      })
+    }
+
+    if (created >= since24h) {
+      notifications.push({
+        id: `commercial-rdv-new-${rdv.id}`,
+        group: 'NOUVEAUX RDV COMMERCIAL',
+        icon: 'calendar',
+        iconBg: 'bg-success-tint',
+        iconColor: 'text-success',
+        borderColor: 'border-l-success',
+        title: 'Nouveau RDV attribué',
+        body: <><strong>{name}</strong>{details}</>,
+        time: relativeTime(rdv.createdAt),
+        urgency: 'info',
+        to: '/leads',
+      })
+    } else if (updated >= since24h && stage !== 'RDV Planifié') {
+      notifications.push({
+        id: `commercial-pipeline-${rdv.id}`,
+        group: 'PIPELINE COMMERCIAL',
+        icon: 'chart',
+        iconBg: pipelineIconBg(stage),
+        iconColor: pipelineIconColor(stage),
+        borderColor: pipelineBorder(stage),
+        title: stage,
+        body: <><strong>{name}</strong>{details}</>,
+        time: relativeTime(rdv.updatedAt),
+        urgency: 'info',
+        to: '/leads',
+      })
+    }
+  }
+
+  return dedupeNotifications(notifications).sort((a, b) => urgencyRank(a) - urgencyRank(b))
+}
+
+function commercialRdvDetails(rdv: RdvResponse, lead?: LeadResponse): React.ReactNode {
+  const parts = [formatDateTime(rdv.scheduledAt)]
+  if (lead?.phone) parts.push(lead.phone)
+  if (lead?.city) parts.push(lead.city)
+  if (rdv.montantTotal) parts.push(formatMoney(rdv.montantTotal))
+  if (rdv.externalId) parts.push('GHL')
+  return <> · {parts.join(' · ')}</>
+}
+
+function commercialStageLabel(rdv: RdvResponse, lead?: LeadResponse): string {
+  if (rdv.result === 'signe' || lead?.status === 'signe') return '11. Devis Signé'
+  if (rdv.result === 'perdu' || lead?.status === 'perdu') return '12. Devis Perdu'
+  if (lead?.status === 'pas_qualifie') return '7. RDV Pas Qualifié'
+  if (rdv.status === 'annule') return '6. RDV Annulé'
+  if (rdv.status === 'no_show' || rdv.result === 'no_show') return '(BIS) No-Show'
+  if (rdv.status === 'reporte' || rdv.result === 'reporte') return '8. RDV Reprogrammé'
+  if (lead?.status === 'relance') return '9. Relance Long Terme'
+  if (rdv.status === 'honore' || rdv.result === 'reflexion' || lead?.status === 'rdv_honore') return '10. Devis En Attente'
+  return 'RDV Planifié'
+}
+
+function pipelineIconBg(stage: string): string {
+  if (stage.includes('Signé')) return 'bg-success-tint'
+  if (stage.includes('Perdu') || stage.includes('Annulé') || stage.includes('No-Show')) return 'bg-cuivre-tint'
+  return 'bg-or-tint'
+}
+
+function pipelineIconColor(stage: string): string {
+  if (stage.includes('Signé')) return 'text-success'
+  if (stage.includes('Perdu') || stage.includes('Annulé') || stage.includes('No-Show')) return 'text-cuivre'
+  return 'text-or-dark'
+}
+
+function pipelineBorder(stage: string): string {
+  if (stage.includes('Signé')) return 'border-l-success'
+  if (stage.includes('Perdu') || stage.includes('Annulé') || stage.includes('No-Show')) return 'border-l-cuivre'
+  return 'border-l-or'
+}
+
+function dedupeNotifications(notifs: Notif[]): Notif[] {
+  const seen = new Set<string>()
+  return notifs.filter((notif) => {
+    if (seen.has(notif.id)) return false
+    seen.add(notif.id)
+    return true
+  })
+}
+
 function useMarkNotificationsSeen(notifs: Notif[]) {
   useEffect(() => {
     if (notifs.length === 0) return
@@ -231,7 +371,7 @@ function writeNotifiedIds(ids: Set<string>) {
 }
 
 function urgencyRank(notif: Notif): number {
-  const groupRank = notif.group === 'RAPPELS EN RETARD' ? 0 : notif.group === 'DANS 10 MIN' ? 1 : notif.group === 'NOUVEAUX LEADS' ? 2 : 3
+  const groupRank = notif.group === 'RAPPELS EN RETARD' ? 0 : notif.group === 'DANS 10 MIN' ? 1 : notif.group === 'RDV À VENIR' ? 2 : notif.group === 'NOUVEAUX RDV COMMERCIAL' ? 3 : notif.group === 'NOUVEAUX LEADS' ? 4 : 5
   return groupRank * 10 + (notif.urgency === 'now' ? 0 : notif.urgency === 'soon' ? 1 : 2)
 }
 
@@ -256,6 +396,12 @@ function formatDateTime(iso: string): string {
   const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
   if (sameDay) return `aujourd'hui ${time}`
   return `${d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })} ${time}`
+}
+
+function formatMoney(value: string | number): string {
+  const amount = Number(value)
+  if (!Number.isFinite(amount)) return String(value)
+  return amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })
 }
 
 function relativeTime(iso: string): string {
