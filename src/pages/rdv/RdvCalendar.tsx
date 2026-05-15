@@ -87,12 +87,15 @@ export function RdvCalendar() {
   }, [calendarItems])
 
   const handleHorizontalCalendarScroll = (event: WheelEvent<HTMLDivElement>) => {
-    if (!event.shiftKey || Math.abs(event.deltaY) < 8 || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return
     const target = event.target instanceof HTMLElement ? event.target : null
     const nativeScroller = target?.closest('[data-native-horizontal-scroll="true"]') as HTMLElement | null
     if (!nativeScroller || nativeScroller.scrollWidth <= nativeScroller.clientWidth) return
+
+    const horizontalIntent = Math.abs(event.deltaX) >= Math.abs(event.deltaY) ? event.deltaX : event.shiftKey ? event.deltaY : 0
+    if (Math.abs(horizontalIntent) < 4) return
+
     event.preventDefault()
-    nativeScroller.scrollBy({ left: event.deltaY, behavior: 'smooth' })
+    nativeScroller.scrollLeft += horizontalIntent
   }
 
   const rdvByDay = useMemo(() => {
@@ -144,7 +147,7 @@ export function RdvCalendar() {
         <div
           className="glass-card !p-0 overflow-hidden h-full flex flex-col select-none"
           onWheel={handleHorizontalCalendarScroll}
-          style={{ touchAction: 'pan-x pan-y' }}
+          style={{ touchAction: 'pan-x pan-y', overscrollBehavior: 'contain' }}
         >
           {loading && !rdvs ? (
             <div className="flex-grow flex items-center justify-center text-faint text-sm">Chargement…</div>
@@ -192,11 +195,12 @@ function TimeGridView({
   onOpen: (rdvId: string) => void
   onOpenDay: (date: Date) => void
 }) {
-  const gridColumns = `64px repeat(${days.length}, minmax(150px, 1fr))`
-  const minWidth = days.length > 1 ? Math.max(980, 64 + days.length * 150) : 520
+  const dayWidth = days.length > 1 ? 240 : 520
+  const gridColumns = `64px repeat(${days.length}, minmax(${dayWidth}px, 1fr))`
+  const minWidth = 64 + days.length * dayWidth
 
   return (
-    <div data-native-horizontal-scroll="true" className="flex-grow overflow-x-auto overflow-y-hidden bg-white/30 scroll-smooth">
+    <div data-native-horizontal-scroll="true" className="flex-grow overflow-x-auto overflow-y-hidden bg-white/30 overscroll-contain">
       <div className="h-full flex flex-col" style={{ minWidth }}>
         <div
           className="grid border-b border-line-soft flex-shrink-0 bg-white/70 sticky top-0 z-10"
