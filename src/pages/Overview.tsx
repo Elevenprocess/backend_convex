@@ -721,6 +721,11 @@ function isoHour(iso: string | null | undefined): number | null {
   return Number.isNaN(hour) ? null : hour
 }
 
+function isoMonthKey(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  return iso.slice(0, 7)
+}
+
 function weekLogicalCallSeries(calls: CallLogResponse[], classified: LeadResponse[]): ActivityPoint[] {
   return lastNDays(7).map((day) => {
     const logged = calls.filter((c) => isoDayKey(c.calledAt) === day).length
@@ -788,13 +793,13 @@ function shortDateTime(iso: string): string {
 
 function monthlyLeadSeries(leads: LeadResponse[]): number[] {
   const months = lastNMonths(8)
-  return months.map((m) => leads.filter((l) => l.createdAt.slice(0, 7) === m).length)
+  return months.map((m) => leads.filter((l) => isoMonthKey(l.createdAt) === m).length)
 }
 
 function rdvRevenueSeries(rdvs: RdvResponse[]): number[] {
   const months = lastNMonths(8)
   return months.map((m) => rdvs
-    .filter((r) => r.result === 'signe' && (r.signatureAt ?? r.scheduledAt).slice(0, 7) === m)
+    .filter((r) => r.result === 'signe' && isoMonthKey(r.signatureAt ?? r.scheduledAt) === m)
     .reduce((sum, r) => sum + (parseFloat(r.montantTotal ?? '0') || 0), 0))
 }
 
