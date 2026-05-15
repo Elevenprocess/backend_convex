@@ -632,6 +632,8 @@ function AdminLeadFunnel({
 }
 
 function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }) {
+  const contactedLeads = funnelContactedLeads(totals)
+  const responseRate = pct(totals.answered, contactedLeads)
   return (
     <div className="flow-map col-span-12 mt-4 rounded-2xl border border-line-soft bg-white/65 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -655,7 +657,7 @@ function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }
             <div className="flow-response-yes rounded-lg bg-emerald-50 px-2 py-1.5 text-emerald-800">
               <div className="text-[10px] font-bold">Oui</div>
               <div className="text-lg font-black">{totals.answered}</div>
-              <div className="text-[10px]">{totals.responseRate}% appels</div>
+              <div className="text-[10px]">{responseRate}% leads appelés</div>
             </div>
             <div className="flow-response-no rounded-lg bg-amber-50 px-2 py-1.5 text-amber-800">
               <div className="text-[10px] font-bold">Non</div>
@@ -704,6 +706,9 @@ function FunnelTopCard({ label, value, sub, color }: { label: string; value: num
 }
 
 function FunnelLogicTree({ totals }: { totals: AnalyticsFunnelResponse['totals'] }) {
+  const contactedLeads = funnelContactedLeads(totals)
+  const responseRate = pct(totals.answered, contactedLeads)
+  const noAnswerRate = pct(totals.noAnswer, contactedLeads)
   return (
     <div className="funnel-tree rounded-3xl border border-line-soft bg-white/45 p-5">
       <div className="text-center">
@@ -715,7 +720,7 @@ function FunnelLogicTree({ totals }: { totals: AnalyticsFunnelResponse['totals']
         <div className="funnel-branch funnel-branch-success rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
           <div className="text-xs font-bold uppercase text-emerald-700">Oui, a répondu</div>
           <div className="mt-1 text-4xl font-extrabold text-emerald-700">{fmtCompact(totals.answered)}</div>
-          <div className="text-sm font-bold text-emerald-800">{totals.responseRate}% des appels</div>
+          <div className="text-sm font-bold text-emerald-800">{responseRate}% des leads appelés</div>
 
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div className="funnel-subcard rounded-xl bg-white/70 p-3">
@@ -736,7 +741,7 @@ function FunnelLogicTree({ totals }: { totals: AnalyticsFunnelResponse['totals']
         <div className="funnel-branch funnel-branch-warning rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
           <div className="text-xs font-bold uppercase text-amber-700">Non, pas de réponse</div>
           <div className="mt-1 text-4xl font-extrabold text-amber-700">{fmtCompact(totals.noAnswer)}</div>
-          <div className="text-sm font-bold text-amber-800">leads appelés sans réponse</div>
+          <div className="text-sm font-bold text-amber-800">{noAnswerRate}% des leads appelés</div>
           <div className="funnel-subcard mt-4 rounded-xl bg-white/70 p-3">
             <div className="text-[10px] font-bold uppercase text-faint">Relances effectuées</div>
             <div className="text-2xl font-extrabold text-amber-700">{fmtCompact(totals.relances)}</div>
@@ -760,14 +765,17 @@ function FunnelLogicTree({ totals }: { totals: AnalyticsFunnelResponse['totals']
 }
 
 function FunnelBranchChart({ totals }: { totals: AnalyticsFunnelResponse['totals'] }) {
+  const contactedLeads = funnelContactedLeads(totals)
+  const responseRate = pct(totals.answered, contactedLeads)
+  const noAnswerRate = pct(totals.noAnswer, contactedLeads)
   return (
     <div className="rounded-2xl border border-line-soft bg-white/45 p-4">
       <h4 className="font-bold mb-3">Répartition après appel</h4>
       <div className="space-y-3 text-xs font-semibold">
-        <Goal label="A répondu" value={`${totals.answered} · ${totals.responseRate}%`} pct={totals.responseRate} color="#3DA86A" />
-        <Goal label="Qualifiés" value={`${totals.qualified} · ${totals.qualificationRate}%`} pct={totals.qualificationRate} color="#D4AF37" />
-        <Goal label="Pas qualifiés" value={`${totals.notQualified} · ${totals.notQualifiedRate}%`} pct={totals.notQualifiedRate} color="#B7410E" />
-        <Goal label="Sans réponse / relances" value={`${totals.noAnswer} · ${totals.relances} relances`} pct={pct(totals.noAnswer, totals.calls)} color="#B87333" />
+        <Goal label="A répondu" value={`${totals.answered} · ${responseRate}% des leads appelés`} pct={responseRate} color="#3DA86A" />
+        <Goal label="Qualifiés" value={`${totals.qualified} · ${totals.qualificationRate}% des réponses`} pct={totals.qualificationRate} color="#D4AF37" />
+        <Goal label="Pas qualifiés" value={`${totals.notQualified} · ${totals.notQualifiedRate}% des réponses`} pct={totals.notQualifiedRate} color="#B7410E" />
+        <Goal label="Sans réponse" value={`${totals.noAnswer} · ${noAnswerRate}% des leads appelés · ${totals.relances} relances`} pct={noAnswerRate} color="#B87333" />
       </div>
     </div>
   )
@@ -822,6 +830,10 @@ function ratePct(denom: number, num: number): number {
 function pct(num: number, denom: number): number {
   if (denom === 0) return 0
   return Math.min(100, Math.round((num / denom) * 100))
+}
+
+function funnelContactedLeads(totals: AnalyticsFunnelResponse['totals']): number {
+  return Math.max(0, totals.answered + totals.noAnswer)
 }
 
 function callsPerLead(calls: number, leads: number): string {
