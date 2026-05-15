@@ -89,10 +89,10 @@ function OverviewSetter() {
         <KpiCard title="RDV PRIS" value={String(stats.rdvPris)} haloColor="#6B7C8C" lineColor="#6B7C8C" sparkPoints="0,12 10,14 20,12 30,16 40,12 50,14 64,12" className="col-span-3" />
 
         <div className="glass-card col-span-8 p-5">
-          <div className="flex items-center justify-between mb-4 gap-3">
+          <div className="flex items-start justify-between mb-3 gap-3">
             <div>
-              <h3 className="font-bold">Activité setter</h3>
-              <p className="text-xs text-faint">Appels réels + classifications du portefeuille</p>
+              <span className="eyebrow block mb-1">ACTIVITÉ</span>
+              <h3 className="text-lg font-extrabold leading-none">Appels setter</h3>
             </div>
             <PillTabs
               items={[{ id: 'today', label: "Aujourd'hui" }, { id: 'week', label: 'Semaine' }]}
@@ -100,7 +100,7 @@ function OverviewSetter() {
               onChange={(id) => setActivityRange(id as 'today' | 'week')}
             />
           </div>
-          <div className="h-[180px] w-full">
+          <div className="h-[184px] w-full">
             <FuturisticLineChart
               points={activityRange === 'today' ? stats.activityToday : stats.activityWeek}
               color="#D4AF37"
@@ -790,7 +790,7 @@ function lastNMonths(n: number): string[] {
 
 type DeltaType = 'success' | 'warn' | 'danger' | 'info'
 
-function chartPoints(values: number[], width = 300, height = 112): string {
+function chartPoints(values: number[], width = 300, height = 150): string {
   const max = Math.max(1, ...values)
   const step = values.length <= 1 ? width : width / (values.length - 1)
   return values.map((v, i) => `${Math.round(i * step)},${Math.round(height - (v / max) * (height - 18) - 9)}`).join(' ')
@@ -798,29 +798,36 @@ function chartPoints(values: number[], width = 300, height = 112): string {
 
 function FuturisticLineChart({ points, color, caption }: { points: ActivityPoint[]; color: string; caption: string }) {
   const values = points.map((p) => p.value)
-  const linePoints = chartPoints(values)
+  const linePoints = chartPoints(values, 300, 92)
   const total = values.reduce((a, b) => a + b, 0)
   const peak = Math.max(0, ...values)
   return (
-    <div className="relative h-full rounded-2xl bg-white/35 border border-line-soft overflow-hidden p-4 flat-target">
-      <div className="absolute top-4 right-4 text-right z-20">
-        <div className="text-2xl font-extrabold">{total}</div>
-        <div className="eyebrow">{caption} · pic {peak}</div>
+    <div className="h-full flat-target">
+      <div className="flex items-end justify-between border-b border-line-soft pb-3">
+        <div>
+          <div className="text-3xl font-extrabold leading-none">{total}</div>
+          <div className="text-[11px] font-semibold text-faint mt-1">{caption}</div>
+        </div>
+        <div className="text-right">
+          <div className="text-sm font-extrabold text-muted">{peak}</div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-faint">pic</div>
+        </div>
       </div>
-      <div className="relative z-10 h-full pt-8">
-        <svg viewBox="0 0 300 112" className="w-full h-[112px]" preserveAspectRatio="none">
-          {[28, 56, 84].map((y) => <line key={y} x1="0" x2="300" y1={y} y2={y} stroke="#E5E1DA" strokeDasharray="4 6" />)}
-          <polyline points={linePoints} fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-          {values.map((v, i) => {
-            const [x, y] = linePoints.split(' ')[i].split(',').map(Number)
-            return <circle key={`${i}-${v}`} cx={x} cy={y} r="3.5" fill="#fff" stroke={color} strokeWidth="2" />
-          })}
+      <div className="pt-4">
+        <svg viewBox="0 0 300 92" className="w-full h-[92px]" preserveAspectRatio="none">
+          <line x1="0" x2="300" y1="82" y2="82" stroke="#E5E1DA" strokeWidth="1" />
+          <polyline points={linePoints} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        <div className="mt-1 grid gap-1" style={{ gridTemplateColumns: `repeat(${points.length}, minmax(0, 1fr))` }}>
+        <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${points.length}, minmax(0, 1fr))` }}>
           {points.map((p, i) => (
-            <div key={`${p.label}-${i}`} className="min-w-0 text-center">
-              <div className="text-[10px] font-bold text-muted">{p.value}</div>
-              <div className="text-[9px] uppercase tracking-[0.12em] text-faint truncate">{p.label}</div>
+            <div key={`${p.label}-${i}`} className="min-w-0">
+              <div className="h-1 rounded-full bg-line-soft overflow-hidden">
+                <div className="h-full rounded-full bg-or" style={{ width: `${peak ? Math.max(8, (p.value / peak) * 100) : 0}%` }} />
+              </div>
+              <div className="mt-1 flex items-center justify-between gap-1 text-[9px] text-faint">
+                <span className="truncate uppercase tracking-[0.08em]">{p.label}</span>
+                <span className="font-bold text-muted">{p.value}</span>
+              </div>
             </div>
           ))}
         </div>
@@ -988,5 +995,6 @@ function RdvRow({ color, time, sub }: { color: string; time: string; sub: string
     </div>
   )
 }
+
 
 
