@@ -198,7 +198,12 @@ export type AnalyticsCommercialPerf = {
   id: string
   name: string
   initials: string
+  total?: number
+  planned?: number
   honored: number
+  noShow?: number
+  cancelled?: number
+  postponed?: number
   signed: number
   closing: number
   panier: number

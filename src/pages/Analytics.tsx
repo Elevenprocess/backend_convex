@@ -30,6 +30,8 @@ const PRELOADED_PERIOD_MODES: PeriodMode[] = PERIOD_OPTIONS
 
 const todayInput = toDateInputValue(new Date())
 const DEFAULT_PERIOD: PeriodState = { mode: 'today', customFrom: todayInput, customTo: todayInput }
+const ALL_TIME_FROM_ISO = '2020-01-01T00:00:00.000Z'
+
 
 const EMPTY_SETTER_STATS: AnalyticsSetterSummary = {
   newLeads: 0,
@@ -250,7 +252,10 @@ function AnalyticsAdmin() {
   const [period, setPeriod] = useState<PeriodState>(DEFAULT_PERIOD)
   const range = buildPeriodRange(period)
   const { data, loading, error } = useAnalyticsSummary({ from: range.from, to: range.to })
+  const allTimeTo = range.to
+  const { data: allTimeData, loading: allTimeLoading } = useAnalyticsSummary({ from: ALL_TIME_FROM_ISO, to: allTimeTo })
   const stats = data?.admin ?? EMPTY_ADMIN_STATS
+  const commercialStats = allTimeData?.admin ?? EMPTY_ADMIN_STATS
 
   return (
     <AppShell blobsKey="admin" flat>
@@ -323,15 +328,17 @@ function AnalyticsAdmin() {
           </div>
         </div>
 
-        <CommercialTrackingDashboard commercials={stats.commercials} totalCa={stats.ca} totalSigned={stats.signed} totalHonored={stats.commercials.reduce((sum, c) => sum + c.honored, 0)} />
+        <CommercialTrackingDashboard commercials={commercialStats.commercials} totalCa={commercialStats.ca} totalSigned={commercialStats.signed} totalHonored={commercialStats.commercials.reduce((sum, c) => sum + c.honored, 0)} loading={allTimeLoading} />
       </main>
     </AppShell>
   )
 }
 
-function CommercialTrackingDashboard({ commercials, totalCa, totalSigned, totalHonored }: { commercials: AnalyticsCommercialPerf[]; totalCa: number; totalSigned: number; totalHonored: number }) {
+function CommercialTrackingDashboard({ commercials, totalCa, totalSigned, totalHonored, loading = false }: { commercials: AnalyticsCommercialPerf[]; totalCa: number; totalSigned: number; totalHonored: number; loading?: boolean }) {
   const sorted = useMemo(() => [...commercials].sort((a, b) => b.ca - a.ca || b.signed - a.signed || b.closing - a.closing), [commercials])
   const leader = sorted[0]
+  const totalActivities = sorted.reduce((sum, c) => sum + (c.total ?? c.honored), 0)
+  const totalPlanned = sorted.reduce((sum, c) => sum + (c.planned ?? 0), 0)
   const averageClosing = sorted.length ? Math.round(sorted.reduce((sum, c) => sum + c.closing, 0) / sorted.length) : 0
   const bestClosing = sorted.reduce<AnalyticsCommercialPerf | null>((best, c) => (!best || c.closing > best.closing ? c : best), null)
   const maxCa = Math.max(1, ...sorted.map((c) => c.ca))
@@ -344,7 +351,7 @@ function CommercialTrackingDashboard({ commercials, totalCa, totalSigned, totalH
         <div>
           <span className="eyebrow">DASHBOARD COMMERCIAUX</span>
           <h3 className="text-2xl font-extrabold mt-1">Suivi des commerciaux</h3>
-          <p className="text-sm text-muted mt-1">Vue admin claire : RDV honorés, ventes, closing, panier moyen et CA par commercial.</p>
+          <p className="text-sm text-muted mt-1">Vue admin depuis toujours : activité GHL/RDV, ventes, closing, panier moyen et CA par commercial.{loading && <AnalyticsInlineLoading />}</p>
         </div>
         <div className="rounded-2xl border border-or/15 bg-or-tint/50 px-4 py-3 text-sm">
           <div className="eyebrow mb-1">Leader CA</div>
@@ -353,11 +360,12 @@ function CommercialTrackingDashboard({ commercials, totalCa, totalSigned, totalH
         </div>
       </div>
 
-      <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
-        <CommercialMiniKpi label="RDV honorés" value={fmtInt(totalHonored)} detail="présences commerciales" />
+      <div className="grid grid-cols-2 xl:grid-cols-6 gap-3">
+        <CommercialMiniKpi label="Activités GHL/RDV" value={fmtInt(totalActivities)} detail="depuis toujours" />
+        <CommercialMiniKpi label="RDV honorés" value={fmtInt(totalHonored)} detail={`${fmtInt(totalPlanned)} planifiés`} />
         <CommercialMiniKpi label="Ventes" value={fmtInt(totalSigned)} detail="devis signés" tone="success" />
         <CommercialMiniKpi label="Closing moyen" value={`${averageClosing}%`} detail="moyenne équipe" tone={averageClosing >= 35 ? 'success' : averageClosing >= 20 ? 'warning' : 'danger'} />
-        <CommercialMiniKpi label="CA signé" value={fmtKEur(totalCa)} detail="période sélectionnée" tone="gold" />
+        <CommercialMiniKpi label="CA signé" value={fmtKEur(totalCa)} detail="historique complet" tone="gold" />
         <CommercialMiniKpi label="Meilleur closing" value={bestClosing ? `${bestClosing.closing}%` : '0%'} detail={bestClosing?.name ?? '—'} />
       </div>
 
@@ -394,6 +402,7 @@ function CommercialTrackingDashboard({ commercials, totalCa, totalSigned, totalH
                   <thead className="bg-or-tint/70">
                     <tr className="text-left eyebrow">
                       <Th>COMMERCIAL</Th>
+                      <Th>ACT.</Th>
                       <Th>RDV</Th>
                       <Th>VENTES</Th>
                       <Th>CLOSING</Th>
@@ -402,7 +411,7 @@ function CommercialTrackingDashboard({ commercials, totalCa, totalSigned, totalH
                   </thead>
                   <tbody>
                     {sorted.map((c) => (
-                      <CommercialRow key={c.id} initials={c.initials} name={c.name} honored={c.honored} ventes={c.signed} closing={`${c.closing}%`} panier={fmtKEur(c.panier)} ca={fmtKEur(c.ca)} compact />
+                      <CommercialRow key={c.id} initials={c.initials} name={c.name} total={c.total} honored={c.honored} ventes={c.signed} closing={`${c.closing}%`} panier={fmtKEur(c.panier)} ca={fmtKEur(c.ca)} compact />
                     ))}
                   </tbody>
                 </table>
@@ -438,7 +447,7 @@ function CommercialScoreCard({ commercial, rank, maxCa, maxClosing }: { commerci
           <div className="w-10 h-10 rounded-full bg-or-tint flex items-center justify-center text-xs font-bold flex-shrink-0">{commercial.initials}</div>
           <div className="min-w-0">
             <div className="font-extrabold truncate">{commercial.name}</div>
-            <div className="text-xs text-faint">{commercial.honored} RDV honorés · {commercial.signed} ventes</div>
+            <div className="text-xs text-faint">{commercial.total ?? commercial.honored} activités · {commercial.honored} honorés · {commercial.signed} ventes</div>
           </div>
         </div>
         <div className="text-right">
@@ -993,8 +1002,8 @@ function SetterRow({ initials, name, appels, cnx, qual, rdv, classified, eff, ef
   )
 }
 
-function CommercialRow({ initials, name, honored, ventes, closing, panier, ca, compact = false }: {
-  initials: string; name: string; honored: number; ventes: number; closing: string; panier: string; ca: string; compact?: boolean
+function CommercialRow({ initials, name, total, honored, ventes, closing, panier, ca, compact = false }: {
+  initials: string; name: string; total?: number; honored: number; ventes: number; closing: string; panier: string; ca: string; compact?: boolean
 }) {
   return (
     <tr className="border-b border-line-soft last:border-0">
@@ -1004,6 +1013,7 @@ function CommercialRow({ initials, name, honored, ventes, closing, panier, ca, c
           <span className="font-semibold">{name}</span>
         </div>
       </td>
+      {compact && <td className="px-3 py-2.5">{total ?? honored}</td>}
       <td className="px-3 py-2.5">{honored}</td>
       <td className="px-3 py-2.5">{ventes}</td>
       <td className="px-3 py-2.5">{closing}</td>
