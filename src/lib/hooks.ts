@@ -294,6 +294,25 @@ export function useRdv(id: string | undefined): Async<RdvResponse> {
   return useFetch<RdvResponse>(id ? `/rdv/${id}` : null)
 }
 
+export type UpdateRdvPayload = {
+  commercialId?: string | null
+  scheduledAt?: string
+  locationType?: RdvLocation
+  status?: RdvResponse['status']
+  result?: RdvResponse['result'] | null
+  signatureAt?: string | null
+  montantTotal?: number | string | null
+  financingType?: RdvResponse['financingType'] | null
+  objections?: string | null
+  nonSaleReason?: string | null
+  notes?: string | null
+  debriefFilledAt?: string | null
+}
+
+export async function updateRdv(id: string, input: UpdateRdvPayload): Promise<RdvResponse> {
+  return api<RdvResponse>(`/rdv/${id}`, { method: 'PATCH', body: input })
+}
+
 // ─── Users ─────────────────────────────────────────────────
 export function useUsers(): Async<UserResponse[]> {
   return useFetch<UserResponse[]>('/users')
