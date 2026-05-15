@@ -624,7 +624,7 @@ function renderSetterCell(
     case 'dernierAppel': return <Td key={key} className="text-faint">{lastCallDateTime(lead.latestCallAt ?? lead.lastContactAt)}</Td>
     case 'statut': return <Td key={key}><span className={`status-badge ${statusBadgeForLead(lead)}`}>{statusLabelForLead(lead)}</span></Td>
     case 'appelDate': return <Td key={key} className="text-faint">{lastCallDateTime(lead.latestCallAt ?? lead.lastContactAt)}</Td>
-    case 'jauge': return <Td key={key}><ElevenDayGauge jours={lead.joursRelance ?? lead.joursSansContact} airtableGauge={lead.jauge11Jours} /></Td>
+    case 'jauge': return <Td key={key}><ElevenDayGauge jours={lead.joursRelance} /></Td>
     case 'logAppel': return <Td key={key}><LeadCommentButton comment={lead.latestCallComment} leadName={fullName(lead)} onOpen={setOpenComment} /></Td>
     case 'appelsCommercial': return <Td key={key} className="text-muted truncate" title={commercialLabel(lead, userMap)}>{commercialLabel(lead, userMap)}</Td>
     default: return null
@@ -720,7 +720,7 @@ function renderAdminCell(
     case 'jaugeAppels': return <Td key={key}><DailyCallGauge count={lead.callsToday ?? 0} /></Td>
     case 'prochainRappel': return <Td key={key} className="text-faint">{lastCallDateTime(lead.nextCallbackAt ?? null)}</Td>
     case 'relanceMax': return <Td key={key} className="text-faint">{formatDays(lead.joursRelance)}</Td>
-    case 'jauge': return <Td key={key}><ElevenDayGauge jours={lead.joursRelance ?? lead.joursSansContact} airtableGauge={lead.jauge11Jours} /></Td>
+    case 'jauge': return <Td key={key}><ElevenDayGauge jours={lead.joursRelance} /></Td>
     case 'projets': return <Td key={key} className="text-muted truncate" title={lead.typeLogement ?? undefined}>{lead.typeLogement ?? '—'}</Td>
     case 'localisationMap': return <Td key={key} className="text-muted truncate" title={lead.localisationMap ?? undefined}>{lead.localisationMap ?? '—'}</Td>
     case 'contactId': return <Td key={key} className="text-muted truncate" title={lead.externalId ?? undefined}>{lead.externalId ?? '—'}</Td>
@@ -997,17 +997,16 @@ function StatCard({ label, value }: { label: string; value: string }) {
   )
 }
 
-function ElevenDayGauge({ jours, airtableGauge }: { jours: number | null; airtableGauge?: string | null }) {
-  const rawGauge = airtableGauge?.trim()
-  const rawValue = rawGauge?.match(/(\d+)\s*\/\s*11/)?.[1]
-  const displayDays = rawValue ? Number(rawValue) : jours
+function ElevenDayGauge({ jours }: { jours: number | null }) {
+  const displayDays = jours
   const safeDays = Math.max(0, displayDays ?? 0)
   const progress = Math.min(100, Math.round((safeDays / 11) * 100))
   const barColor = safeDays >= 11 ? 'bg-rouille' : safeDays >= 8 ? 'bg-or' : 'bg-success'
   const label = displayDays === null ? '0/11j' : `${Math.min(safeDays, 11)}/11j`
+  const title = `${label} — compte les jours distincts où au moins un appel a été fait`
 
   return (
-    <div className="min-w-[86px]" title={rawGauge || label}>
+    <div className="min-w-[86px]" title={title}>
       <div className="flex items-center justify-between gap-2 text-[11px] font-semibold text-muted">
         <span>{label}</span>
         {safeDays >= 11 && <span className="text-rouille">Urgent</span>}
