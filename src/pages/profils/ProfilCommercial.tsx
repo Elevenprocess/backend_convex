@@ -65,7 +65,7 @@ export function ProfilCommercial() {
   const me = useAuth((s) => s.user)
   const profileId = me?.role === 'commercial' ? me.id : id
 
-  const [periodMode, setPeriodMode] = useState<PeriodMode>('month')
+  const [periodMode, setPeriodMode] = useState<PeriodMode>('all')
   const periodRange = useMemo(() => buildPeriodRange(periodMode), [periodMode])
   const { data: member, loading, error } = useUser(profileId)
   const { data: rdvs, refetch: refetchRdvs } = useRdvList(profileId ? { commercialId: profileId, fromDate: periodRange.from, toDate: periodRange.to, limit: 200 } : undefined)
