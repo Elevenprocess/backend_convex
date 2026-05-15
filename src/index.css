@@ -822,3 +822,82 @@ body {
   --chart-label: #8D9AA1;
   --chart-point-fill: #10181E;
 }
+
+/* Commercial prospect board dark mode */
+[data-theme="dark"] .commercial-prospect-page .commercial-summary-card,
+[data-theme="dark"] .commercial-prospect-page .commercial-pipeline-board {
+  background: rgba(8, 13, 17, 0.74) !important;
+  border-color: rgba(222, 233, 238, 0.16) !important;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.055) !important;
+}
+
+[data-theme="dark"] .commercial-prospect-page .commercial-period-tabs,
+[data-theme="dark"] .commercial-pipeline-column,
+[data-theme="dark"] .commercial-pipeline-column-head,
+[data-theme="dark"] .commercial-pipeline-empty {
+  background: rgba(10, 17, 22, 0.72) !important;
+  border-color: rgba(222, 233, 238, 0.14) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045) !important;
+}
+
+[data-theme="dark"] .commercial-prospect-card {
+  color: var(--color-text);
+  border-color: rgba(222, 233, 238, 0.16) !important;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.045) !important;
+}
+
+[data-theme="dark"] .commercial-prospect-card:hover {
+  border-color: rgba(222, 233, 238, 0.26) !important;
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
+}
+
+[data-theme="dark"] .commercial-prospect-card-rdv_planifie { background: rgba(18, 35, 47, 0.76) !important; border-color: rgba(125, 185, 220, 0.28) !important; }
+[data-theme="dark"] .commercial-prospect-card-no_show_bis { background: rgba(25, 31, 38, 0.78) !important; border-color: rgba(148, 163, 184, 0.24) !important; }
+[data-theme="dark"] .commercial-prospect-card-rdv_annule { background: rgba(49, 24, 31, 0.76) !important; border-color: rgba(251, 113, 133, 0.24) !important; }
+[data-theme="dark"] .commercial-prospect-card-rdv_pas_qualifie { background: rgba(52, 24, 24, 0.74) !important; border-color: rgba(248, 113, 113, 0.22) !important; }
+[data-theme="dark"] .commercial-prospect-card-rdv_reprogramme { background: rgba(48, 36, 18, 0.76) !important; border-color: rgba(245, 158, 11, 0.24) !important; }
+[data-theme="dark"] .commercial-prospect-card-relance_long_terme { background: rgba(49, 31, 18, 0.76) !important; border-color: rgba(251, 146, 60, 0.22) !important; }
+[data-theme="dark"] .commercial-prospect-card-devis_en_attente { background: rgba(36, 28, 54, 0.76) !important; border-color: rgba(167, 139, 250, 0.24) !important; }
+[data-theme="dark"] .commercial-prospect-card-devis_signe { background: rgba(18, 43, 32, 0.78) !important; border-color: rgba(74, 222, 128, 0.24) !important; }
+[data-theme="dark"] .commercial-prospect-card-devis_perdu { background: rgba(33, 31, 29, 0.80) !important; border-color: rgba(168, 162, 158, 0.22) !important; }
+
+[data-theme="dark"] .commercial-prospect-modal-backdrop {
+  background: rgba(3, 7, 10, 0.62) !important;
+  backdrop-filter: blur(18px) saturate(120%);
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
+}
+
+[data-theme="dark"] .commercial-prospect-modal {
+  background: rgba(8, 13, 17, 0.96) !important;
+  border-color: rgba(222, 233, 238, 0.18) !important;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.58), inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+[data-theme="dark"] .commercial-prospect-modal-head {
+  background: linear-gradient(135deg, rgba(12, 20, 26, 0.96), rgba(8, 13, 17, 0.94)) !important;
+  border-color: rgba(222, 233, 238, 0.15) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055) !important;
+}
+
+[data-theme="dark"] .commercial-prospect-modal-head-rdv_planifie { background: linear-gradient(135deg, rgba(18, 35, 47, 0.98), rgba(8, 13, 17, 0.94)) !important; }
+[data-theme="dark"] .commercial-prospect-modal-head-no_show_bis { background: linear-gradient(135deg, rgba(25, 31, 38, 0.98), rgba(8, 13, 17, 0.94)) !important; }
+[data-theme="dark"] .commercial-prospect-modal-head-rdv_annule,
+[data-theme="dark"] .commercial-prospect-modal-head-rdv_pas_qualifie { background: linear-gradient(135deg, rgba(49, 24, 31, 0.98), rgba(8, 13, 17, 0.94)) !important; }
+[data-theme="dark"] .commercial-prospect-modal-head-rdv_reprogramme,
+[data-theme="dark"] .commercial-prospect-modal-head-relance_long_terme { background: linear-gradient(135deg, rgba(49, 34, 18, 0.98), rgba(8, 13, 17, 0.94)) !important; }
+[data-theme="dark"] .commercial-prospect-modal-head-devis_en_attente { background: linear-gradient(135deg, rgba(36, 28, 54, 0.98), rgba(8, 13, 17, 0.94)) !important; }
+[data-theme="dark"] .commercial-prospect-modal-head-devis_signe { background: linear-gradient(135deg, rgba(18, 43, 32, 0.98), rgba(8, 13, 17, 0.94)) !important; }
+[data-theme="dark"] .commercial-prospect-modal-head-devis_perdu { background: linear-gradient(135deg, rgba(33, 31, 29, 0.98), rgba(8, 13, 17, 0.94)) !important; }
+
+[data-theme="dark"] .commercial-prospect-modal-close,
+[data-theme="dark"] .commercial-info-tile,
+[data-theme="dark"] .commercial-prospect-section,
+[data-theme="dark"] .commercial-comment-block {
+  background: rgba(12, 20, 25, 0.72) !important;
+  border-color: rgba(222, 233, 238, 0.14) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+[data-theme="dark"] .commercial-prospect-modal-close:hover {
+  background: rgba(226, 235, 239, 0.10) !important;
+}

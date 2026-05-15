@@ -167,9 +167,9 @@ export function ProfilCommercial() {
         </div>
       </div>
 
-      <main className="px-8 pt-2 pb-6 flex flex-col gap-3 overflow-hidden flex-grow">
+      <main className="commercial-prospect-page px-8 pt-2 pb-6 flex flex-col gap-3 overflow-hidden flex-grow">
         <section className="grid grid-cols-4 gap-3 flex-shrink-0">
-          <div className="glass-card px-4 py-3 border border-line-soft bg-white">
+          <div className="commercial-summary-card glass-card px-4 py-3 border border-line-soft bg-white">
             <div className="flex items-center gap-2.5">
               <div className="w-9 h-9 rounded-xl bg-cream-darker flex items-center justify-center text-sm font-black">{userInitials(member.name)}</div>
               <div className="min-w-0">
@@ -183,14 +183,14 @@ export function ProfilCommercial() {
           <Metric label="CA période" value={formatCurrency(stats.ca)} hint={`${formatPercent(stats.closing)} closing`} />
         </section>
 
-        <section className="glass-card px-4 py-3 flex flex-col min-h-0 flex-grow bg-white border border-line-soft">
+        <section className="commercial-pipeline-board glass-card px-4 py-3 flex flex-col min-h-0 flex-grow bg-white border border-line-soft">
           <div className="flex items-center justify-between gap-3 mb-2 flex-shrink-0">
             <div className="min-w-0">
               <span className="eyebrow text-[10px]">PIPELINE PROSPECTS</span>
               <h3 className="text-base font-black leading-tight">Tableaux commerciaux</h3>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted">
-              <div className="hidden md:flex rounded-full border border-line-soft bg-white p-1">
+              <div className="commercial-period-tabs hidden md:flex rounded-full border border-line-soft bg-white p-1">
                 {(['today', 'week', 'month', 'all'] as const).map((mode) => (
                   <button key={mode} onClick={() => setPeriodMode(mode)} className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${periodMode === mode ? 'bg-noir text-white' : 'text-muted hover:text-text'}`}>{PERIOD_LABEL[mode]}</button>
                 ))}
@@ -210,9 +210,9 @@ export function ProfilCommercial() {
                     key={stage.id}
                     onDragOver={(event) => event.preventDefault()}
                     onDrop={(event) => handleDropOnStage(event, stage)}
-                    className="w-[236px] rounded-[18px] border border-line-soft bg-cream/45 p-2.5 flex flex-col min-h-0"
+                    className="commercial-pipeline-column w-[236px] rounded-[18px] border border-line-soft bg-cream/45 p-2.5 flex flex-col min-h-0"
                   >
-                    <div className="bg-white rounded-[14px] border border-line-soft p-2.5 mb-2 flex-shrink-0">
+                    <div className="commercial-pipeline-column-head bg-white rounded-[14px] border border-line-soft p-2.5 mb-2 flex-shrink-0">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <h4 className="font-black text-xs leading-snug">{stage.title}</h4>
@@ -234,7 +234,7 @@ export function ProfilCommercial() {
 
                     <div className="space-y-1.5 overflow-y-auto pr-1 flex-grow min-h-0">
                       {rows.length === 0 ? (
-                        <div className="rounded-[18px] border border-dashed border-line-soft bg-white/70 p-5 text-center text-[11px] text-faint">Dépose un prospect ici</div>
+                        <div className="commercial-pipeline-empty rounded-[18px] border border-dashed border-line-soft bg-white/70 p-5 text-center text-[11px] text-faint">Dépose un prospect ici</div>
                       ) : rows.map((card) => (
                         <ProspectKanbanCard
                           key={card.id}
@@ -381,7 +381,7 @@ function ProspectKanbanCard({ card, moving, onOpen, onDragStart }: { card: Prosp
       onClick={onOpen}
       onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') onOpen() }}
       onDragStart={onDragStart}
-      className={`rounded-[18px] border p-3 shadow-sm cursor-pointer active:cursor-grabbing transition ${stageCardTone(card.stageId)} ${moving ? 'opacity-50 scale-[0.98]' : 'hover:-translate-y-0.5 hover:shadow-md'}`}
+      className={`commercial-prospect-card commercial-prospect-card-${card.stageId} rounded-[18px] border p-3 shadow-sm cursor-pointer active:cursor-grabbing transition ${stageCardTone(card.stageId)} ${moving ? 'opacity-50 scale-[0.98]' : 'hover:-translate-y-0.5 hover:shadow-md'}`}
       title="Cliquer pour voir la fiche complète. Glisser pour déplacer."
     >
       <div className="flex items-start justify-between gap-2">
@@ -425,22 +425,22 @@ function ProspectDetailModal({ card, callLogs, userMap, onClose }: { card: Prosp
   ].filter(Boolean) as Array<{ label: string; value: string }>
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-noir/35 backdrop-blur-sm px-4" onClick={onClose}>
-      <div className="w-full max-w-4xl max-h-[88vh] overflow-hidden rounded-[28px] border border-white/70 bg-white/95 shadow-2xl" onClick={(event) => event.stopPropagation()}>
-        <div className={`px-6 py-5 border-b border-line-soft ${stageModalTone(stageId)}`}>
+    <div className="commercial-prospect-modal-backdrop fixed inset-0 z-[300] flex items-center justify-center bg-noir/35 backdrop-blur-sm px-4" onClick={onClose}>
+      <div className="commercial-prospect-modal w-full max-w-4xl max-h-[88vh] overflow-hidden rounded-[28px] border border-white/70 bg-white/95 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className={`commercial-prospect-modal-head commercial-prospect-modal-head-${stageId} px-6 py-5 border-b border-line-soft ${stageModalTone(stageId)}`}>
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="eyebrow text-[10px]">FICHE PROSPECT</p>
               <h3 className="text-2xl font-black truncate">{lead ? fullName(lead) : 'Prospect lié'}</h3>
               <p className="text-sm text-muted mt-1">{STATUS_LABEL[lead?.status ?? 'nouveau']} · {formatDateTime(rdv.scheduledAt)}</p>
             </div>
-            <button onClick={onClose} className="w-10 h-10 rounded-full bg-white/80 border border-line-soft flex items-center justify-center text-muted hover:text-text" title="Fermer">
+            <button onClick={onClose} className="commercial-prospect-modal-close w-10 h-10 rounded-full bg-white/80 border border-line-soft flex items-center justify-center text-muted hover:text-text" title="Fermer">
               <Icon name="x" size={18} />
             </button>
           </div>
         </div>
 
-        <div className="p-6 overflow-y-auto max-h-[calc(88vh-116px)] space-y-5">
+        <div className="commercial-prospect-modal-body p-6 overflow-y-auto max-h-[calc(88vh-116px)] space-y-5">
           <div className="grid md:grid-cols-3 gap-3">
             <InfoTile label="Téléphone" value={lead?.phone} />
             <InfoTile label="Email" value={lead?.email} />
@@ -454,7 +454,7 @@ function ProspectDetailModal({ card, callLogs, userMap, onClose }: { card: Prosp
           </div>
 
           <div className="grid md:grid-cols-2 gap-4">
-            <section className="rounded-[22px] border border-line-soft bg-cream/45 p-4">
+            <section className="commercial-prospect-section rounded-[22px] border border-line-soft bg-cream/45 p-4">
               <h4 className="font-black text-sm mb-3">Attribution & RDV</h4>
               <DetailRow label="Setter envoyé par" value={setters.length ? setters.join(', ') : '—'} />
               <DetailRow label="Commercial" value={commercial} />
@@ -466,7 +466,7 @@ function ProspectDetailModal({ card, callLogs, userMap, onClose }: { card: Prosp
               <DetailRow label="Financement" value={rdv.financingType ?? '—'} />
             </section>
 
-            <section className="rounded-[22px] border border-line-soft bg-cream/45 p-4">
+            <section className="commercial-prospect-section rounded-[22px] border border-line-soft bg-cream/45 p-4">
               <h4 className="font-black text-sm mb-3">Historique rapide</h4>
               <DetailRow label="Créé le" value={formatDateTime(lead?.createdAt ?? rdv.createdAt)} />
               <DetailRow label="Dernier contact" value={lead?.lastContactAt ? formatDateTime(lead.lastContactAt) : '—'} />
@@ -477,7 +477,7 @@ function ProspectDetailModal({ card, callLogs, userMap, onClose }: { card: Prosp
             </section>
           </div>
 
-          <section className="rounded-[22px] border border-line-soft bg-white p-4">
+          <section className="commercial-prospect-section rounded-[22px] border border-line-soft bg-white p-4">
             <h4 className="font-black text-sm mb-3">Commentaires</h4>
             {latestComments.length === 0 && callLogs.every((log) => !log.notes) ? (
               <p className="text-sm text-faint">Aucun commentaire enregistré.</p>
@@ -502,7 +502,7 @@ function ProspectDetailModal({ card, callLogs, userMap, onClose }: { card: Prosp
 
 function InfoTile({ label, value }: { label: string; value: string | number | null | undefined }) {
   return (
-    <div className="rounded-2xl border border-line-soft bg-cream/50 px-4 py-3 min-w-0">
+    <div className="commercial-info-tile rounded-2xl border border-line-soft bg-cream/50 px-4 py-3 min-w-0">
       <p className="text-[10px] font-black uppercase tracking-widest text-faint">{label}</p>
       <p className="mt-1 text-sm font-bold truncate" title={value == null ? '—' : String(value)}>{value == null || value === '' ? '—' : value}</p>
     </div>
@@ -514,7 +514,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 function CommentBlock({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-2xl bg-cream/55 border border-line-soft p-3"><p className="text-[10px] font-black uppercase tracking-widest text-faint mb-1">{label}</p><p className="text-sm whitespace-pre-wrap">{value}</p></div>
+  return <div className="commercial-comment-block rounded-2xl bg-cream/55 border border-line-soft p-3"><p className="text-[10px] font-black uppercase tracking-widest text-faint mb-1">{label}</p><p className="text-sm whitespace-pre-wrap">{value}</p></div>
 }
 
 function stageCardTone(stageId: PipelineStageId): string {
