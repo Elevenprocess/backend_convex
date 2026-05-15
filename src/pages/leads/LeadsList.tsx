@@ -5,6 +5,7 @@ import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
 import { EmptyState } from '../../components/EmptyState'
 import { LeadFiltersBar } from '../../components/LeadFiltersBar'
+import { ProfilCommercial } from '../profils/ProfilCommercial'
 import { useAuth } from '../../lib/auth'
 import { deleteLead, useLeads, useUsers, useStartCall } from '../../lib/hooks'
 import { useLeadSidebar } from '../../lib/leadSidebar'
@@ -89,6 +90,7 @@ const ADMIN_COLUMNS: ColumnChoice[] = [
 export function LeadsList() {
   const role = useAuth((s) => s.user?.role)
   if (role === 'admin') return <LeadsAdmin />
+  if (role === 'commercial') return <ProfilCommercial />
   return <LeadsSetter />
 }
 

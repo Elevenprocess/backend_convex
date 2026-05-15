@@ -21,7 +21,6 @@ type PipelineStageId =
 type PipelineStage = {
   id: PipelineStageId
   title: string
-  emoji: string
   opportunities: number
   amount: number
   hint: string
@@ -38,15 +37,15 @@ type ProspectCard = {
 }
 
 const PIPELINE_STAGES: PipelineStage[] = [
-  { id: 'rdv_planifie', title: 'RDV Planifié', emoji: '📅', opportunities: 164, amount: 72053, hint: 'RDV à venir avec heure précise', rdvStatus: 'planifie', leadStatus: 'rdv_pris' },
-  { id: 'no_show_bis', title: '(BIS) No-Show', emoji: '🙅‍♂️', opportunities: 55, amount: 11700, hint: 'Prospect absent au rendez-vous', rdvStatus: 'no_show', rdvResult: 'no_show', leadStatus: 'pas_de_reponse' },
-  { id: 'rdv_annule', title: '6. RDV Annulé', emoji: '🛑', opportunities: 59, amount: 33499, hint: 'Rendez-vous annulé', rdvStatus: 'annule', leadStatus: 'perdu' },
-  { id: 'rdv_pas_qualifie', title: '7. RDV Pas Qualifié', emoji: '⚠️', opportunities: 12, amount: 0, hint: 'Prospect hors critères', leadStatus: 'pas_qualifie' },
-  { id: 'rdv_reprogramme', title: '8. RDV Reprogrammé', emoji: '🔁', opportunities: 52, amount: 40200, hint: 'À replacer sur un créneau', rdvStatus: 'reporte', rdvResult: 'reporte', leadStatus: 'a_rappeler' },
-  { id: 'relance_long_terme', title: '9. Relance Long Terme', emoji: '⏳', opportunities: 118, amount: 388181.28, hint: 'Prospect à suivre plus tard', leadStatus: 'relance' },
-  { id: 'devis_en_attente', title: '10. Devis En Attente', emoji: '📝', opportunities: 186, amount: 2025730.04, hint: 'Devis remis, décision en cours', rdvStatus: 'honore', rdvResult: 'reflexion', leadStatus: 'rdv_honore' },
-  { id: 'devis_signe', title: '11. Devis Signé', emoji: '✍️', opportunities: 8, amount: 119590.09, hint: 'Vente signée', rdvStatus: 'honore', rdvResult: 'signe', leadStatus: 'signe' },
-  { id: 'devis_perdu', title: '12. Devis Perdu', emoji: '💔', opportunities: 48, amount: 230549, hint: 'Devis refusé / perdu', rdvStatus: 'honore', rdvResult: 'perdu', leadStatus: 'perdu' },
+  { id: 'rdv_planifie', title: 'RDV Planifié', opportunities: 164, amount: 72053, hint: 'RDV à venir avec heure précise', rdvStatus: 'planifie', leadStatus: 'rdv_pris' },
+  { id: 'no_show_bis', title: '(BIS) No-Show', opportunities: 55, amount: 11700, hint: 'Prospect absent au rendez-vous', rdvStatus: 'no_show', rdvResult: 'no_show', leadStatus: 'pas_de_reponse' },
+  { id: 'rdv_annule', title: '6. RDV Annulé', opportunities: 59, amount: 33499, hint: 'Rendez-vous annulé', rdvStatus: 'annule', leadStatus: 'perdu' },
+  { id: 'rdv_pas_qualifie', title: '7. RDV Pas Qualifié', opportunities: 12, amount: 0, hint: 'Prospect hors critères', leadStatus: 'pas_qualifie' },
+  { id: 'rdv_reprogramme', title: '8. RDV Reprogrammé', opportunities: 52, amount: 40200, hint: 'À replacer sur un créneau', rdvStatus: 'reporte', rdvResult: 'reporte', leadStatus: 'a_rappeler' },
+  { id: 'relance_long_terme', title: '9. Relance Long Terme', opportunities: 118, amount: 388181.28, hint: 'Prospect à suivre plus tard', leadStatus: 'relance' },
+  { id: 'devis_en_attente', title: '10. Devis En Attente', opportunities: 186, amount: 2025730.04, hint: 'Devis remis, décision en cours', rdvStatus: 'honore', rdvResult: 'reflexion', leadStatus: 'rdv_honore' },
+  { id: 'devis_signe', title: '11. Devis Signé', opportunities: 8, amount: 119590.09, hint: 'Vente signée', rdvStatus: 'honore', rdvResult: 'signe', leadStatus: 'signe' },
+  { id: 'devis_perdu', title: '12. Devis Perdu', opportunities: 48, amount: 230549, hint: 'Devis refusé / perdu', rdvStatus: 'honore', rdvResult: 'perdu', leadStatus: 'perdu' },
 ]
 
 export function ProfilCommercial() {
@@ -180,7 +179,7 @@ export function ProfilCommercial() {
                     <div className="bg-white rounded-[18px] border border-line-soft p-3 mb-3 flex-shrink-0">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <h4 className="font-black text-sm leading-snug">{stage.title} <span>{stage.emoji}</span></h4>
+                          <h4 className="font-black text-sm leading-snug">{stage.title}</h4>
                           <p className="text-[11px] text-muted mt-1">{stage.hint}</p>
                         </div>
                         <span className="rounded-full border border-line-soft px-2 py-0.5 text-[11px] font-bold text-muted">{rows.length}</span>
