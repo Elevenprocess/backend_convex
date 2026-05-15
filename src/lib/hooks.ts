@@ -688,6 +688,16 @@ export function syncGhlCalendarEvents(filters: { from: string; to: string; secto
   return api<{ configured: boolean; created: number; updated: number; skipped: number; events: GhlCalendarEvent[] }>('/ghl-calendar/sync-events', { method: 'POST', query: filters, timeoutMs: 90_000 })
 }
 
+export function moveGhlOpportunity(
+  opportunityId: string,
+  payload: { pipelineStageId: string; stageName?: string },
+): Promise<{ opportunity: unknown; synced: boolean }> {
+  return api<{ opportunity: unknown; synced: boolean }>(
+    `/ghl-calendar/opportunities/${encodeURIComponent(opportunityId)}/stage`,
+    { method: 'PATCH', body: payload, timeoutMs: 20_000 },
+  )
+}
+
 export function useCommercialAnalytics(id: string | undefined, filters?: { days?: number; from?: string; to?: string }): Async<AnalyticsCommercialSummary> {
   return useFetch<AnalyticsCommercialSummary>(id ? `/analytics/commercials/${id}` : null, filters)
 }

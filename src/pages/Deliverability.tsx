@@ -1,10 +1,10 @@
-import { useMemo } from 'react'
+import { useMemo, useState, type DragEvent } from 'react'
 import { Navigate } from 'react-router-dom'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Icon } from '../components/Icon'
 import { useAuth } from '../lib/auth'
-import { useGhlOpportunities, useLeads, useRdvList, useUsers, type GhlOpportunity, type GhlOpportunityStage } from '../lib/hooks'
+import { moveGhlOpportunity, useGhlOpportunities, useLeads, useRdvList, useUsers, type GhlOpportunity, type GhlOpportunityStage } from '../lib/hooks'
 import { type LeadResponse, type RdvResponse, type UserResponse } from '../lib/types'
 
 type PipelineStageId =
@@ -32,7 +32,14 @@ export function Deliverability() {
   const { data: rdvs, refetch: refetchRdvs } = useRdvList({ limit: 200 })
   const { data: leads, refetch: refetchLeads } = useLeads({ limit: 2000 })
   const { data: users } = useUsers()
-  const { data: ghlOpps, loading: ghlLoading, error: ghlError } = useGhlOpportunities({ limit: 5000 })
+  const { data: ghlOpps, loading: ghlLoading, error: ghlError, refetch: refetchGhl } = useGhlOpportunities({ limit: 5000 })
+
+  // Drag-and-drop : `optimisticMoves[oppId] = targetStageId` permet à l'UI de
+  // bouger la carte avant la réponse GHL. Cleared après refetch ou rollback.
+  const [optimisticMoves, setOptimisticMoves] = useState<Record<string, string>>({})
+  const [movingOppId, setMovingOppId] = useState<string | null>(null)
+  const [draggedOppId, setDraggedOppId] = useState<string | null>(null)
+  const [moveError, setMoveError] = useState<string | null>(null)
 
   const leadMap = useMemo(() => {
     const m = new Map<string, LeadResponse>()
@@ -64,12 +71,61 @@ export function Deliverability() {
     const grouped = new Map<string, GhlOpportunity[]>()
     for (const stage of ghlOpps?.stages ?? []) grouped.set(stage.id, [])
     for (const opportunity of ghlOpps?.opportunities ?? []) {
-      if (!grouped.has(opportunity.pipelineStageId)) grouped.set(opportunity.pipelineStageId, [])
-      grouped.get(opportunity.pipelineStageId)?.push(opportunity)
+      const effectiveStage = optimisticMoves[opportunity.id] ?? opportunity.pipelineStageId
+      if (!grouped.has(effectiveStage)) grouped.set(effectiveStage, [])
+      grouped.get(effectiveStage)?.push(opportunity)
     }
     for (const rows of grouped.values()) rows.sort((a, b) => new Date(b.updatedAt ?? b.createdAt ?? 0).getTime() - new Date(a.updatedAt ?? a.createdAt ?? 0).getTime())
     return grouped
+  }, [ghlOpps, optimisticMoves])
+
+  const stageNameById = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const stage of ghlOpps?.stages ?? []) m.set(stage.id, stage.name)
+    return m
   }, [ghlOpps])
+
+  const handleDropOnGhlStage = async (
+    event: DragEvent<HTMLDivElement>,
+    targetStageId: string,
+  ) => {
+    event.preventDefault()
+    const oppId = event.dataTransfer.getData('text/ghl-opp-id') || draggedOppId
+    setDraggedOppId(null)
+    if (!oppId || movingOppId) return
+    const opp = ghlOpps?.opportunities.find((o) => o.id === oppId)
+    if (!opp) return
+    const currentStage = optimisticMoves[oppId] ?? opp.pipelineStageId
+    if (currentStage === targetStageId) return
+
+    setMoveError(null)
+    setMovingOppId(oppId)
+    setOptimisticMoves((prev) => ({ ...prev, [oppId]: targetStageId }))
+    try {
+      await moveGhlOpportunity(oppId, {
+        pipelineStageId: targetStageId,
+        stageName: stageNameById.get(targetStageId),
+      })
+      // Refetch pour reprendre la source de vérité GHL (counts/amount par stage)
+      refetchGhl()
+      // Clear l'override une fois que les nouvelles données arrivent
+      setOptimisticMoves((prev) => {
+        const next = { ...prev }
+        delete next[oppId]
+        return next
+      })
+    } catch (err) {
+      // Rollback de l'optimistic move
+      setOptimisticMoves((prev) => {
+        const next = { ...prev }
+        delete next[oppId]
+        return next
+      })
+      setMoveError(err instanceof Error ? err.message : 'Échec du déplacement GHL')
+    } finally {
+      setMovingOppId(null)
+    }
+  }
 
   const ghlTotals = useMemo(() => ({
     total: ghlOpps?.total ?? 0,
@@ -140,11 +196,13 @@ export function Deliverability() {
             <div className="min-w-0">
               <span className="eyebrow text-[10px]">PIPELINE GHL CRM VENTE</span>
               <h3 className="text-base font-black leading-tight">Tous les processus RDV commerciaux</h3>
-              <p className="text-[11px] text-muted mt-0.5">Scan direct des opportunités GHL — toutes les colonnes, toutes les cartes.</p>
+              <p className="text-[11px] text-muted mt-0.5">Scan direct des opportunités GHL — glisse une carte vers une colonne pour mettre à jour GHL en direct.</p>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted">
               {ghlLoading && <span>Scan GHL…</span>}
               {ghlError && <span className="text-rouille">{ghlError}</span>}
+              {moveError && <span className="text-rouille">{moveError}</span>}
+              {movingOppId && <span className="text-amber-600">Sync GHL…</span>}
               {ghlOpps?.truncated && <span className="text-amber-600">Limité à {ghlOpps.total} cartes</span>}
               <span className="rounded-full border border-line-soft bg-success-tint px-2.5 py-1 text-[11px] font-bold text-success whitespace-nowrap">{ghlTotals.total} opp. · {formatCurrency(ghlTotals.amount)}</span>
             </div>
@@ -153,7 +211,14 @@ export function Deliverability() {
           <div className="overflow-x-auto overflow-y-hidden flex-grow min-h-0 pb-1">
             <div className="flex gap-3 min-w-max h-full items-stretch">
               {(ghlOpps?.stages ?? []).map((stage) => (
-                <GhlStageColumn key={stage.id} stage={stage} rows={ghlCardsByStage.get(stage.id) ?? []} />
+                <GhlStageColumn
+                  key={stage.id}
+                  stage={stage}
+                  rows={ghlCardsByStage.get(stage.id) ?? []}
+                  movingOppId={movingOppId}
+                  onDragStart={(oppId) => setDraggedOppId(oppId)}
+                  onDrop={(event) => handleDropOnGhlStage(event, stage.id)}
+                />
               ))}
               {!ghlLoading && !ghlError && (ghlOpps?.stages ?? []).length === 0 && (
                 <div className="rounded-[18px] border border-dashed border-line-soft bg-white/70 p-8 text-center text-sm text-faint">Aucun contenu GHL scanné.</div>
@@ -166,42 +231,89 @@ export function Deliverability() {
   )
 }
 
-function GhlStageColumn({ stage, rows }: { stage: GhlOpportunityStage; rows: GhlOpportunity[] }) {
+function GhlStageColumn({
+  stage,
+  rows,
+  movingOppId,
+  onDragStart,
+  onDrop,
+}: {
+  stage: GhlOpportunityStage
+  rows: GhlOpportunity[]
+  movingOppId: string | null
+  onDragStart: (oppId: string) => void
+  onDrop: (event: DragEvent<HTMLDivElement>) => void
+}) {
+  // Compteur + valeur en temps réel (basés sur rows pour refléter l'optimistic
+  // update). On retombe sur stage.opportunities / stage.amount si vide pour
+  // les éventuels stages dont la liste ne serait pas hydratée.
+  const liveCount = rows.length
+  const liveAmount = rows.reduce(
+    (sum, o) => sum + (Number.isFinite(o.monetaryValue) ? o.monetaryValue : 0),
+    0,
+  )
   return (
-    <div className="commercial-pipeline-column w-[252px] rounded-[18px] border border-line-soft bg-cream/45 p-2.5 flex flex-col min-h-0">
+    <div
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={onDrop}
+      className="commercial-pipeline-column w-[252px] rounded-[18px] border border-line-soft bg-cream/45 p-2.5 flex flex-col min-h-0"
+    >
       <div className="commercial-pipeline-column-head bg-white rounded-[14px] border border-line-soft p-2.5 mb-2 flex-shrink-0">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <h4 className="font-black text-xs leading-snug">{cleanGhlStageName(stage.name)}</h4>
             <p className="text-[10px] text-muted mt-0.5 truncate">Position GHL {stage.position + 1}</p>
           </div>
-          <span className="rounded-full border border-line-soft px-1.5 py-0.5 text-[10px] font-bold text-muted">{rows.length}</span>
+          <span className="rounded-full border border-line-soft px-1.5 py-0.5 text-[10px] font-bold text-muted">{liveCount}</span>
         </div>
         <div className="grid grid-cols-2 gap-1.5 mt-2 text-[11px]">
           <div>
             <p className="text-faint uppercase tracking-wide text-[9px]">Opp.</p>
-            <p className="font-black">{stage.opportunities}</p>
+            <p className="font-black">{liveCount}</p>
           </div>
           <div>
             <p className="text-faint uppercase tracking-wide text-[9px]">Valeur</p>
-            <p className="font-black truncate">{formatCurrency(stage.amount)}</p>
+            <p className="font-black truncate">{formatCurrency(liveAmount || stage.amount)}</p>
           </div>
         </div>
       </div>
       <div className="space-y-1.5 overflow-y-auto pr-1 flex-grow min-h-0">
         {rows.length === 0 ? (
           <div className="commercial-pipeline-empty rounded-[18px] border border-dashed border-line-soft bg-white/70 p-5 text-center text-[11px] text-faint">Aucune opportunité</div>
-        ) : rows.map((opportunity) => <GhlOpportunityCard key={opportunity.id} opportunity={opportunity} />)}
+        ) : rows.map((opportunity) => (
+          <GhlOpportunityCard
+            key={opportunity.id}
+            opportunity={opportunity}
+            moving={movingOppId === opportunity.id}
+            onDragStart={(event) => {
+              event.dataTransfer.effectAllowed = 'move'
+              event.dataTransfer.setData('text/ghl-opp-id', opportunity.id)
+              onDragStart(opportunity.id)
+            }}
+          />
+        ))}
       </div>
     </div>
   )
 }
 
-function GhlOpportunityCard({ opportunity }: { opportunity: GhlOpportunity }) {
+function GhlOpportunityCard({
+  opportunity,
+  moving,
+  onDragStart,
+}: {
+  opportunity: GhlOpportunity
+  moving: boolean
+  onDragStart: (event: DragEvent<HTMLDivElement>) => void
+}) {
   const name = opportunity.contactName || cleanGhlOpportunityName(opportunity.name) || opportunity.contactEmail || opportunity.contactPhone || 'Prospect GHL'
   const place = [opportunity.contactPostalCode, opportunity.contactCity].filter(Boolean).join(' ')
   return (
-    <div className="commercial-prospect-card rounded-[18px] border border-emerald-100 bg-emerald-50/60 p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md" title={opportunity.id}>
+    <div
+      draggable={!moving}
+      onDragStart={onDragStart}
+      className={`commercial-prospect-card rounded-[18px] border border-emerald-100 bg-emerald-50/60 p-3 shadow-sm transition cursor-grab active:cursor-grabbing ${moving ? 'opacity-50 scale-[0.98]' : 'hover:-translate-y-0.5 hover:shadow-md'}`}
+      title={moving ? 'Sync GHL en cours…' : 'Glisser pour déplacer'}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="font-black text-sm truncate">{name}</p>
