@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type WheelEvent } from 'react'
+import { useMemo, useRef, useState, type PointerEvent, type WheelEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
@@ -25,6 +25,7 @@ export function RdvCalendar() {
   const [view, setView] = useState<CalendarView>('week')
   const [cursorDate, setCursorDate] = useState(() => startOfDay(new Date()))
   const scrollNavLockRef = useRef(0)
+  const swipeStartRef = useRef<{ x: number; y: number; at: number } | null>(null)
   const navigate = useNavigate()
 
   const period = useMemo(() => buildPeriod(cursorDate, view), [cursorDate, view])
@@ -97,6 +98,21 @@ export function RdvCalendar() {
     setCursorDate((date) => moveDate(date, view, horizontal > 0 ? 1 : -1, view === 'week' ? 'day' : undefined))
   }
 
+  const handleCalendarPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    swipeStartRef.current = { x: event.clientX, y: event.clientY, at: Date.now() }
+  }
+
+  const handleCalendarPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    const start = swipeStartRef.current
+    swipeStartRef.current = null
+    if (!start) return
+    const dx = event.clientX - start.x
+    const dy = event.clientY - start.y
+    if (Date.now() - start.at > 900 || Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.4) return
+    setCursorDate((date) => moveDate(date, view, dx < 0 ? 1 : -1, view === 'week' ? 'day' : undefined))
+  }
+
   const rdvByDay = useMemo(() => {
     const m = new Map<string, CalendarItem[]>()
     for (const item of calendarItems) {
@@ -134,7 +150,7 @@ export function RdvCalendar() {
             </button>
           ))}
         </div>
-        <span className="text-xs text-faint ml-auto hidden lg:inline">Scroll horizontal pour changer de date</span>
+        <span className="text-xs text-faint ml-auto hidden lg:inline">Scroll horizontal ou glisse le calendrier pour changer de date</span>
         {ghlLoading && <span className="text-xs text-muted">Sync GHL…</span>}
         <button onClick={() => navigate('/rdv/split')} className="btn-primary px-4 py-2 rounded-xl text-sm flex items-center gap-2">
           <Icon name="plus" size={14} />
@@ -144,8 +160,12 @@ export function RdvCalendar() {
 
       <main className="p-8 pt-4 overflow-hidden flex-grow">
         <div
-          className="glass-card !p-0 overflow-hidden h-full flex flex-col"
+          className="glass-card !p-0 overflow-hidden h-full flex flex-col select-none"
           onWheel={handleHorizontalCalendarScroll}
+          onPointerDown={handleCalendarPointerDown}
+          onPointerUp={handleCalendarPointerUp}
+          onPointerCancel={() => { swipeStartRef.current = null }}
+          style={{ touchAction: 'pan-y' }}
         >
           {loading && !rdvs ? (
             <div className="flex-grow flex items-center justify-center text-faint text-sm">Chargement…</div>
