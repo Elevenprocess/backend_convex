@@ -341,6 +341,7 @@ export async function acceptInvitation(input: { token: string; password: string 
 export type UpdateUserPayload = {
   name?: string
   phone?: string | null
+  image?: string | null
   role?: UserResponse['role']
   team?: UserResponse['team']
   active?: boolean
@@ -351,6 +352,12 @@ export type UpdateUserPayload = {
 
 export async function updateUser(id: string, input: UpdateUserPayload): Promise<UserResponse> {
   return api<UserResponse>(`/users/${id}`, { method: 'PATCH', body: input })
+}
+
+export type UpdateMyProfilePayload = Pick<UpdateUserPayload, 'name' | 'phone' | 'image'>
+
+export async function updateMyProfile(input: UpdateMyProfilePayload): Promise<UserResponse> {
+  return api<UserResponse>('/users/me', { method: 'PATCH', body: input })
 }
 
 export type RenewUserPayload = {

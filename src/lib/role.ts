@@ -24,6 +24,23 @@ export const ROLE_LABELS: Record<Role, string> = {
   delivrabilite: 'Délivrabilité',
 }
 
+export type Team = 'setting' | 'closing' | 'admin' | 'delivrabilite' | null
+
+export const TEAM_LABELS: Record<Exclude<Team, null>, string> = {
+  setting: 'Setting',
+  closing: 'Closing',
+  admin: 'Admin',
+  delivrabilite: 'Délivrabilité',
+}
+
+export function roleLabel(role: Role): string {
+  return ROLE_LABELS[role] ?? role
+}
+
+export function teamLabel(team: Team): string {
+  return team ? TEAM_LABELS[team] ?? team : '—'
+}
+
 // Conserve les tints/initiales fixes par défaut. firstName/name viennent de la vraie
 // session lorsque la page est authentifiée — voir useDisplayUser ci-dessous.
 export const ROLE_USERS: Record<Role, { name: string; firstName: string; initials: string; tint: string }> = {
@@ -47,6 +64,7 @@ export function useDisplayUser() {
     name,
     firstName,
     initials: initials.toUpperCase() || ROLE_USERS[role].initials,
+    image: user?.image ?? null,
     tint,
     role,
   }

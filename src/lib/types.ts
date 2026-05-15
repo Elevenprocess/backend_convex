@@ -8,6 +8,7 @@ export type UserResponse = {
   email: string
   name: string
   phone: string | null
+  image: string | null
   ghlUserId: string | null
   ghlCalendarId: string | null
   ghlLocationId: string | null

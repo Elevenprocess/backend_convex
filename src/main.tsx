@@ -17,6 +17,7 @@ import { Analytics } from './pages/Analytics'
 import { ProfilSetter } from './pages/profils/ProfilSetter'
 import { ProfilCommercial } from './pages/profils/ProfilCommercial'
 import { Settings } from './pages/Settings'
+import { MyProfile } from './pages/MyProfile'
 import { AcceptInvitation } from './pages/AcceptInvitation'
 import { Notifications } from './pages/Notifications'
 import { CallFullScreen } from './pages/call/CallFullScreen'
@@ -43,6 +44,7 @@ const router = createHashRouter([
           { path: '/team/setters/:id', element: <ProfilSetter /> },
           { path: '/team/commerciaux/:id', element: <ProfilCommercial /> },
           { path: '/settings', element: <Settings /> },
+          { path: '/profile', element: <MyProfile /> },
           { path: '/notifications', element: <Notifications /> },
           { path: '/call/:id', element: <CallFullScreen /> },
           { path: '/call/split', element: <CallSplit /> },

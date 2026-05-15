@@ -194,19 +194,24 @@ export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) 
             title={`${user.name} — ${user.role}`}
             className={`topbar-profile ${openMenu === 'profile' ? 'active' : ''}`}
           >
-            <span className={`w-8 h-8 ${user.tint} flex items-center justify-center rounded-full text-sm font-bold border border-white/80 shadow-sm`}>{user.initials}</span>
+            <span className={`w-8 h-8 ${user.tint} flex items-center justify-center rounded-full text-sm font-bold border border-white/80 shadow-sm overflow-hidden`}>
+              {user.image ? <img src={user.image} alt="Profil" className="w-full h-full object-cover" /> : user.initials}
+            </span>
             <Icon name="chevron-down" size={13} className="text-faint" />
           </button>
           {openMenu === 'profile' && (
             <DropdownFrame className="w-72 p-3">
               <div className="profile-menu-head">
-                <div className={`w-11 h-11 ${user.tint} flex items-center justify-center rounded-2xl font-bold shadow-sm border border-white/80`}>{user.initials}</div>
+                <div className={`w-11 h-11 ${user.tint} flex items-center justify-center rounded-2xl font-bold shadow-sm border border-white/80 overflow-hidden`}>
+                  {user.image ? <img src={user.image} alt="Profil" className="w-full h-full object-cover" /> : user.initials}
+                </div>
                 <div className="min-w-0">
                   <div className="font-bold text-sm truncate">{user.name}</div>
                   <div className="text-xs text-faint capitalize">{user.role}</div>
                 </div>
               </div>
               <MenuButton icon="home" label="Dashboard" hint="Vue d’ensemble" onClick={() => { setOpenMenu(null); navigate('/overview') }} />
+              <MenuButton icon="users" label="Voir mon profil" hint="Infos & photo" onClick={() => { setOpenMenu(null); navigate('/profile') }} />
               <MenuButton icon="users" label="Tous les leads" hint="Liste complète" onClick={() => { setOpenMenu(null); navigate('/leads') }} />
               {isAdmin && <MenuButton icon="settings" label="Compte & paramètres" hint="Profil utilisateur" onClick={() => { setOpenMenu(null); navigate('/settings') }} />}
             </DropdownFrame>
