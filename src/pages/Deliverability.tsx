@@ -116,6 +116,7 @@ export function Deliverability() {
   const stageMetrics = useMemo(() => buildStageMetrics(cardsByStage), [cardsByStage])
   const totals = useMemo(() => buildTotals(cards, commercialUsers.length), [cards, commercialUsers.length])
   const commercialRows = useMemo(() => buildCommercialRows(cards, commercialUsers), [cards, commercialUsers])
+  const hasGhlStages = (ghlOpps?.stages.length ?? 0) > 0
 
   const handleDropOnStage = async (event: DragEvent<HTMLDivElement>, stage: PipelineStage) => {
     event.preventDefault()
@@ -154,7 +155,7 @@ export function Deliverability() {
           <Metric label="GHL" value={`${ghlDisplayTotal(ghlTotals.total, totals.ghl)}`} hint={`${ghlTotals.total ? 'opportunités live GHL' : `${formatPercent(totals.ghlRate)} des RDV chargés`}`} />
         </section>
 
-        <section className="commercial-pipeline-board glass-card px-4 py-3 flex flex-col h-[760px] flex-shrink-0 bg-white border border-line-soft">
+        <section className={`commercial-pipeline-board glass-card px-4 py-3 flex flex-col flex-shrink-0 bg-white border border-line-soft ${hasGhlStages ? 'h-[640px]' : 'min-h-[260px]'}`}>
           <div className="flex items-center justify-between gap-3 mb-2 flex-shrink-0">
             <div className="min-w-0">
               <span className="eyebrow text-[10px]">GHL LIVE / ADMIN</span>
@@ -175,7 +176,7 @@ export function Deliverability() {
             <MiniStat label="Valeur GHL" value={formatCurrency(ghlTotals.amount)} />
           </div>
           <div className="overflow-x-auto overflow-y-hidden flex-grow min-h-0 pb-1">
-            <div className="flex gap-3 min-w-max h-full">
+            <div className="flex gap-3 min-w-max h-full items-stretch">
               {(ghlOpps?.stages ?? []).map((stage) => (
                 <GhlStageColumn key={stage.id} stage={stage} rows={ghlCardsByStage.get(stage.id) ?? []} />
               ))}

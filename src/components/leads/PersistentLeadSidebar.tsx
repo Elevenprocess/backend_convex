@@ -16,7 +16,13 @@ export function PersistentLeadSidebar() {
 
   if (!role) return null
   if (!selectedLeadId || !sidebarOpen) return null
+  if (location.pathname === '/leads') return null
   if (location.pathname === '/overview') return null
+  if (location.pathname === '/deliverability') return null
+  if (location.pathname === '/analytics') return null
+  if (location.pathname === '/notifications') return null
+  if (location.pathname === '/settings') return null
+  if (location.pathname.startsWith('/rdv')) return null
   if (role === 'setter' && location.pathname === '/analytics') return null
   if (location.pathname.startsWith('/team/setters')) return null
   if (!lead) return null

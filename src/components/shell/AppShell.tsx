@@ -39,5 +39,15 @@ export function AppShell({ children, blobsKey, flat = false }: AppShellProps) {
 }
 
 function isLeadSidebarExcluded(pathname: string, role?: string): boolean {
-  return pathname === '/leads' || pathname === '/overview' || (role === 'setter' && pathname === '/analytics') || pathname.startsWith('/team/setters')
+  return (
+    pathname === '/leads' ||
+    pathname === '/overview' ||
+    pathname === '/deliverability' ||
+    pathname === '/analytics' ||
+    pathname === '/notifications' ||
+    pathname === '/settings' ||
+    pathname.startsWith('/rdv') ||
+    pathname.startsWith('/team/setters') ||
+    (role === 'setter' && pathname === '/analytics')
+  )
 }
