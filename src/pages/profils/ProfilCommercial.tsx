@@ -4,7 +4,7 @@ import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
 import { useAuth } from '../../lib/auth'
-import { updateLead, updateRdv, useCommercialAnalytics, useUser, useRdvList, useLeads } from '../../lib/hooks'
+import { updateLead, updateRdv, useCommercialAnalytics, useGhlCalendarConfig, useGhlCalendarEvents, useUser, useRdvList, useLeads } from '../../lib/hooks'
 import { fullName, type LeadResponse, type LeadStatus, type RdvResponse, type RdvStatus } from '../../lib/types'
 
 type PipelineStageId =
@@ -36,6 +36,17 @@ type ProspectCard = {
   stageId: PipelineStageId
 }
 
+type PeriodMode = 'today' | 'week' | 'month' | 'all'
+
+type StageMetrics = { opportunities: number; amount: number }
+
+const PERIOD_LABEL: Record<PeriodMode, string> = {
+  today: "Aujourd'hui",
+  week: 'Semaine',
+  month: 'Mois',
+  all: 'Tout',
+}
+
 const PIPELINE_STAGES: PipelineStage[] = [
   { id: 'rdv_planifie', title: 'RDV Planifié', opportunities: 164, amount: 72053, hint: 'RDV à venir avec heure précise', rdvStatus: 'planifie', leadStatus: 'rdv_pris' },
   { id: 'no_show_bis', title: '(BIS) No-Show', opportunities: 55, amount: 11700, hint: 'Prospect absent au rendez-vous', rdvStatus: 'no_show', rdvResult: 'no_show', leadStatus: 'pas_de_reponse' },
@@ -54,10 +65,14 @@ export function ProfilCommercial() {
   const me = useAuth((s) => s.user)
   const profileId = me?.role === 'commercial' ? me.id : id
 
+  const [periodMode, setPeriodMode] = useState<PeriodMode>('month')
+  const periodRange = useMemo(() => buildPeriodRange(periodMode), [periodMode])
   const { data: member, loading, error } = useUser(profileId)
-  const { data: rdvs, refetch: refetchRdvs } = useRdvList(profileId ? { commercialId: profileId, limit: 200 } : undefined)
+  const { data: rdvs, refetch: refetchRdvs } = useRdvList(profileId ? { commercialId: profileId, fromDate: periodRange.from, toDate: periodRange.to, limit: 200 } : undefined)
   const { data: leads, refetch: refetchLeads } = useLeads(profileId ? { assignedToId: profileId, limit: 2000 } : { limit: 2000 })
-  const { data: commercialAnalytics } = useCommercialAnalytics(profileId, { days: 30 })
+  const { data: commercialAnalytics } = useCommercialAnalytics(profileId, { from: periodRange.from, to: periodRange.to })
+  const { data: ghlConfig } = useGhlCalendarConfig()
+  const { data: ghlEventsData } = useGhlCalendarEvents(member?.ghlUserId ? { from: periodRange.from, to: periodRange.to } : undefined)
   const [draggedCardId, setDraggedCardId] = useState<string | null>(null)
   const [movingId, setMovingId] = useState<string | null>(null)
 
@@ -68,6 +83,8 @@ export function ProfilCommercial() {
   }, [leads])
 
   const rdvList = rdvs ?? []
+  const liveGhlEvents = useMemo(() => (ghlEventsData?.events ?? []).filter((event) => event.commercialId === profileId || event.assignedUserId === member?.ghlUserId), [ghlEventsData?.events, member?.ghlUserId, profileId])
+  const sectorInfo = useMemo(() => deriveSectorInfo(member, ghlConfig?.sectors ?? [], liveGhlEvents), [ghlConfig?.sectors, liveGhlEvents, member])
   const stats = useMemo(() => computeStats(rdvList, commercialAnalytics), [rdvList, commercialAnalytics])
   const cards = useMemo<ProspectCard[]>(() => rdvList.map((rdv) => ({ id: rdv.id, rdv, lead: leadMap.get(rdv.leadId), stageId: resolveStageId(rdv, leadMap.get(rdv.leadId)) })), [rdvList, leadMap])
   const cardsByStage = useMemo(() => {
@@ -77,6 +94,7 @@ export function ProfilCommercial() {
     for (const rows of grouped.values()) rows.sort((a, b) => new Date(a.rdv.scheduledAt).getTime() - new Date(b.rdv.scheduledAt).getTime())
     return grouped
   }, [cards])
+  const stageMetrics = useMemo(() => buildStageMetrics(cardsByStage), [cardsByStage])
 
   const handleDropOnStage = async (event: DragEvent<HTMLDivElement>, stage: PipelineStage) => {
     event.preventDefault()
@@ -135,6 +153,7 @@ export function ProfilCommercial() {
         </button>
         <div className="ml-auto flex items-center gap-2 text-xs text-muted">
           <span className={`status-badge ${member.ghlUserId ? 'bg-success-tint text-success' : 'bg-rouille-tint text-rouille'}`}>GHL : {member.ghlUserId ? 'relié' : 'non relié'}</span>
+          <span className="status-badge bg-info-tint text-info">Secteur : {sectorInfo.label}</span>
           <button onClick={() => navigate('/rdv')} className="btn-secondary px-3 py-1.5 rounded-xl text-xs">Voir RDV</button>
         </div>
       </div>
@@ -150,9 +169,9 @@ export function ProfilCommercial() {
               </div>
             </div>
           </div>
-          <Metric label="RDV assignés" value={`${stats.total}`} />
-          <Metric label="Prospects assignés" value={`${leads?.length ?? 0}`} />
-          <Metric label="CA généré" value={formatCurrency(stats.ca)} />
+          <Metric label={`RDV ${PERIOD_LABEL[periodMode].toLowerCase()}`} value={`${stats.total}`} hint={`${stats.honored} honorés · ${stats.signed} signés`} />
+          <Metric label="Secteur GHL" value={sectorInfo.label} hint={`${sectorInfo.count} RDV GHL live`} />
+          <Metric label="CA période" value={formatCurrency(stats.ca)} hint={`${formatPercent(stats.closing)} closing`} />
         </section>
 
         <section className="glass-card px-4 py-3 flex flex-col min-h-0 flex-grow bg-white border border-line-soft">
@@ -162,6 +181,11 @@ export function ProfilCommercial() {
               <h3 className="text-base font-black leading-tight">Tableaux commerciaux</h3>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted">
+              <div className="hidden md:flex rounded-full border border-line-soft bg-white p-1">
+                {(['today', 'week', 'month', 'all'] as const).map((mode) => (
+                  <button key={mode} onClick={() => setPeriodMode(mode)} className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${periodMode === mode ? 'bg-noir text-white' : 'text-muted hover:text-text'}`}>{PERIOD_LABEL[mode]}</button>
+                ))}
+              </div>
               <span className="hidden xl:inline">Glisse une carte vers une colonne.</span>
               <span className="rounded-full border border-line-soft bg-info-tint px-2.5 py-1 text-[11px] font-bold text-info whitespace-nowrap">{cards.length} cartes</span>
             </div>
@@ -171,6 +195,7 @@ export function ProfilCommercial() {
             <div className="flex gap-3 min-w-max h-full">
               {PIPELINE_STAGES.map((stage) => {
                 const rows = cardsByStage.get(stage.id) ?? []
+                const metrics = stageMetrics.get(stage.id) ?? { opportunities: 0, amount: 0 }
                 return (
                   <div
                     key={stage.id}
@@ -189,11 +214,11 @@ export function ProfilCommercial() {
                       <div className="grid grid-cols-2 gap-1.5 mt-2 text-[11px]">
                         <div>
                           <p className="text-faint uppercase tracking-wide text-[9px]">Opp.</p>
-                          <p className="font-black">{stage.opportunities}</p>
+                          <p className="font-black">{metrics.opportunities}</p>
                         </div>
                         <div>
                           <p className="text-faint uppercase tracking-wide text-[9px]">Valeur</p>
-                          <p className="font-black truncate">{formatCurrency(stage.amount)}</p>
+                          <p className="font-black truncate">{formatCurrency(metrics.amount)}</p>
                         </div>
                       </div>
                     </div>
@@ -239,7 +264,7 @@ function resolveStageId(rdv: RdvResponse, lead?: LeadResponse): PipelineStageId 
 }
 
 function computeStats(rdvs: RdvResponse[], analytics?: { total: number; honored: number; signed: number; ca: number; closing: number } | null) {
-  if (analytics) return { total: analytics.total, honored: analytics.honored, signed: analytics.signed, ca: analytics.ca }
+  if (analytics) return { total: analytics.total, honored: analytics.honored, signed: analytics.signed, ca: analytics.ca, closing: analytics.closing }
   let honored = 0
   let signed = 0
   let ca = 0
@@ -248,8 +273,59 @@ function computeStats(rdvs: RdvResponse[], analytics?: { total: number; honored:
     if (r.result === 'signe') signed++
     if (r.montantTotal) ca += Number(r.montantTotal)
   }
-  return { total: rdvs.length, honored, signed, ca }
+  return { total: rdvs.length, honored, signed, ca, closing: honored ? Math.round((signed / honored) * 100) : 0 }
 }
+
+function buildStageMetrics(cardsByStage: Map<PipelineStageId, ProspectCard[]>): Map<PipelineStageId, StageMetrics> {
+  const metrics = new Map<PipelineStageId, StageMetrics>()
+  for (const stage of PIPELINE_STAGES) {
+    const rows = cardsByStage.get(stage.id) ?? []
+    metrics.set(stage.id, {
+      opportunities: rows.length,
+      amount: rows.reduce((sum, card) => sum + (card.rdv.montantTotal ? Number(card.rdv.montantTotal) : 0), 0),
+    })
+  }
+  return metrics
+}
+
+function buildPeriodRange(mode: PeriodMode): { from: string; to: string } {
+  const now = new Date()
+  const from = new Date(now)
+  if (mode === 'today') {
+    from.setHours(0, 0, 0, 0)
+  } else if (mode === 'week') {
+    const day = (from.getDay() + 6) % 7
+    from.setDate(from.getDate() - day)
+    from.setHours(0, 0, 0, 0)
+  } else if (mode === 'month') {
+    from.setDate(1)
+    from.setHours(0, 0, 0, 0)
+  } else {
+    from.setFullYear(from.getFullYear() - 2)
+    from.setHours(0, 0, 0, 0)
+  }
+  const to = new Date(now)
+  to.setHours(23, 59, 59, 999)
+  return { from: from.toISOString(), to: to.toISOString() }
+}
+
+function deriveSectorInfo(member: { ghlUserId: string | null; ghlCalendarId: string | null } | null | undefined, sectors: Array<{ sector: string; calendarId: string; label: string }>, events: Array<{ sector?: string | null; calendarId: string }>): { label: string; count: number } {
+  const counts = new Map<string, number>()
+  for (const event of events) {
+    const label = event.sector || sectors.find((sector) => sector.calendarId === event.calendarId)?.label || event.calendarId
+    if (label) counts.set(label, (counts.get(label) ?? 0) + 1)
+  }
+  const [bestLabel, count] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0] ?? []
+  if (bestLabel) return { label: bestLabel, count: count ?? 0 }
+  const mapped = member?.ghlCalendarId ? sectors.find((sector) => sector.calendarId === member.ghlCalendarId) : undefined
+  if (mapped) return { label: mapped.label || mapped.sector, count: 0 }
+  return { label: member?.ghlUserId ? 'À détecter' : 'Non relié', count: 0 }
+}
+
+function formatPercent(value: number): string {
+  return `${Math.round(value)}%`
+}
+
 
 function userInitials(name: string): string {
   const parts = name.split(' ').filter(Boolean)
@@ -265,11 +341,12 @@ function formatDateTime(iso: string): string {
   return date.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit' }) + ' · ' + date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="glass-card px-4 py-3 border border-line-soft bg-white">
       <p className="eyebrow mb-1 text-[10px]">{label}</p>
-      <p className="text-lg font-black leading-tight">{value}</p>
+      <p className="text-lg font-black leading-tight truncate">{value}</p>
+      {hint && <p className="text-[11px] text-muted mt-0.5 truncate">{hint}</p>}
     </div>
   )
 }
