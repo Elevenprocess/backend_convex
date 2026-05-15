@@ -74,18 +74,18 @@ export function MyProfile() {
     }
   }
 
-  const infoRows = [
+  const accountRows = [
     ['Email', user.email],
-    ['Rôle', roleLabel(user.role)],
-    ['Équipe', teamLabel(user.team)],
     ['Téléphone', user.phone || '—'],
-    ['Compte actif', user.active ? 'Oui' : 'Non'],
     ['Dernière connexion', formatDate(user.lastLoginAt)],
     ['Dernière activité', user.lastActionAt ? `${formatDate(user.lastActionAt)}${user.lastActionType ? ` · ${user.lastActionType}` : ''}` : '—'],
     ['Créé le', formatDate(user.createdAt)],
     ['Mis à jour le', formatDate(user.updatedAt)],
-    ['Secteur GHL principal', sectorInfo.label],
-    ['Tous secteurs GHL', sectorInfo.allLabels],
+  ]
+
+  const integrationRows = [
+    ['Secteur principal', sectorInfo.label],
+    ['Tous secteurs', sectorInfo.allLabels],
     ['GHL user ID', user.ghlUserId || '—'],
     ['GHL calendar ID', user.ghlCalendarId || sectorInfo.calendarId || '—'],
     ['GHL location ID', user.ghlLocationId || '—'],
@@ -95,114 +95,129 @@ export function MyProfile() {
     ['Rôle', roleLabel(user.role)],
     ['Équipe', teamLabel(user.team)],
     ['Statut', user.active ? 'Actif' : 'Inactif'],
-    ['Secteur', sectorInfo.label],
   ]
 
   return (
     <AppShell flat>
       <Topbar eyebrow="MON COMPTE" title="Voir mon profil" />
-      <main className="flex-grow overflow-auto px-8 pt-4 pb-8">
-        <div className="max-w-6xl mx-auto space-y-5">
-          <section className="glass-card border border-line-soft bg-white px-6 py-6 md:px-8 md:py-7">
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-center">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-5 min-w-0">
-                <div className="relative shrink-0">
-                  <div className="absolute -inset-2 rounded-[34px] bg-or-tint border border-or/10" />
-                  <div className="relative w-28 h-28 rounded-[30px] overflow-hidden bg-cream-darker flex items-center justify-center border border-line-soft shadow-sm">
+      <main className="profile-page flex-grow overflow-auto px-6 pt-4 pb-8 md:px-8">
+        <div className="mx-auto max-w-6xl space-y-5">
+          <section className="profile-hero-card glass-card border border-line-soft bg-white p-5 md:p-8">
+            <div className="flex flex-col gap-6 md:flex-row md:items-center">
+              <div className="profile-avatar-shell shrink-0 self-center md:self-auto">
+                <div className="profile-avatar-ring">
+                  <div className="profile-avatar-photo">
                     {image ? (
-                      <img src={image} alt="Photo de profil" className="w-full h-full object-cover" />
+                      <img src={image} alt="Photo de profil" className="h-full w-full object-cover" />
                     ) : (
-                      <span className="text-4xl font-black text-or-dark uppercase">{initials}</span>
+                      <span className="text-5xl font-black text-or-dark uppercase">{initials}</span>
                     )}
                   </div>
-                  <span className="absolute -right-2 -bottom-2 rounded-full bg-text text-white border-4 border-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wide">
-                    ECOI
-                  </span>
                 </div>
-
-                <div className="min-w-0 flex-1">
-                  <p className="eyebrow text-or-dark">Profil professionnel</p>
-                  <h1 className="mt-2 text-3xl md:text-4xl font-black tracking-tight truncate">{user.name}</h1>
-                  <p className="mt-2 text-sm text-muted max-w-2xl">Une fiche propre et privée pour ton identité, ton rôle et tes informations ECOI.</p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <span className="status-badge bg-text text-white">{roleLabel(user.role)}</span>
-                    <span className="status-badge bg-or-tint text-or-dark">{teamLabel(user.team)}</span>
-                    <span className="status-badge bg-success-tint text-success">{user.active ? 'Compte actif' : 'Compte inactif'}</span>
-                    {user.role === 'commercial' && <span className="status-badge bg-info-tint text-info">Secteur GHL : {sectorInfo.label}</span>}
-                  </div>
-                </div>
+                <span className="profile-avatar-badge">ECOI</span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 rounded-[24px] bg-cream border border-line-soft p-3">
-                {profileStats.map(([label, value]) => (
-                  <div key={label} className="rounded-[18px] bg-white border border-line-soft px-3 py-3 min-w-0 text-center">
-                    <div className="eyebrow text-[9px]">{label}</div>
-                    <div className="mt-1 text-xs font-black truncate">{value}</div>
+              <div className="min-w-0 flex-1 text-center md:text-left">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div className="min-w-0">
+                    <p className="eyebrow text-or-dark">Profil professionnel</p>
+                    <h1 className="mt-1 truncate text-3xl font-black tracking-tight md:text-4xl">{user.name}</h1>
+                    <p className="mt-1 truncate text-sm font-semibold text-muted">{user.email}</p>
                   </div>
-                ))}
+                  <label className="profile-photo-button mx-auto md:mx-0">
+                    <Icon name="plus" size={15} />
+                    Changer la photo
+                    <input type="file" accept="image/*" onChange={handlePhoto} className="hidden" />
+                  </label>
+                </div>
+
+                <div className="profile-stat-strip mt-5">
+                  {profileStats.map(([label, value]) => (
+                    <div key={label} className="profile-stat-pill">
+                      <div className="text-sm font-black truncate">{value}</div>
+                      <div className="eyebrow text-[9px]">{label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-5 flex flex-wrap justify-center gap-2 md:justify-start">
+                  <span className="profile-chip profile-chip-dark">{roleLabel(user.role)}</span>
+                  <span className="profile-chip profile-chip-soft">{teamLabel(user.team)}</span>
+                  <span className="profile-chip profile-chip-success">{user.active ? 'Compte actif' : 'Compte inactif'}</span>
+                  {user.role === 'commercial' && <span className="profile-chip profile-chip-info">Secteur GHL : {sectorInfo.label}</span>}
+                </div>
               </div>
             </div>
           </section>
 
-          <div className="grid lg:grid-cols-[390px_1fr] gap-5">
-            <form onSubmit={handleSubmit} className="glass-card border border-line-soft bg-white p-5 md:p-6 space-y-5">
-              <div className="flex items-start justify-between gap-3">
+          <div className="grid gap-5 lg:grid-cols-[380px_1fr]">
+            <form onSubmit={handleSubmit} className="profile-edit-card glass-card border border-line-soft bg-white p-5 md:p-6">
+              <div className="mb-5 flex items-start justify-between gap-3">
                 <div>
-                  <p className="eyebrow text-or-dark">Édition</p>
-                  <h2 className="text-lg font-black mt-1">Modifier mon profil</h2>
+                  <p className="eyebrow text-or-dark">Édition rapide</p>
+                  <h2 className="mt-1 text-lg font-black">Modifier mon profil</h2>
                   <p className="text-sm text-muted">Nom, téléphone et photo de profil.</p>
                 </div>
-                <div className="w-10 h-10 rounded-2xl bg-or-tint text-or-dark flex items-center justify-center">
+                <div className="profile-card-icon">
                   <Icon name="users" size={17} />
                 </div>
               </div>
 
-              <label className="block space-y-2">
-                <span className="eyebrow">Nom complet</span>
-                <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-2xl border border-line bg-cream px-4 py-3 outline-none focus:ring-2 focus:ring-or/30" />
-              </label>
-
-              <label className="block space-y-2">
-                <span className="eyebrow">Téléphone</span>
-                <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Ajouter un numéro" className="w-full rounded-2xl border border-line bg-cream px-4 py-3 outline-none focus:ring-2 focus:ring-or/30" />
-              </label>
-
-              <div className="space-y-2">
-                <span className="eyebrow">Photo de profil</span>
-                <label className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-or/40 bg-or-tint px-4 py-4 text-sm font-bold text-or-dark cursor-pointer hover:bg-cream-darker">
-                  <Icon name="plus" size={16} />
-                  Ajouter / changer la photo
-                  <input type="file" accept="image/*" onChange={handlePhoto} className="hidden" />
+              <div className="space-y-4">
+                <label className="block space-y-2">
+                  <span className="eyebrow">Nom complet</span>
+                  <input value={name} onChange={(e) => setName(e.target.value)} className="profile-input w-full rounded-2xl border border-line bg-cream px-4 py-3 outline-none focus:ring-2 focus:ring-or/30" />
                 </label>
+
+                <label className="block space-y-2">
+                  <span className="eyebrow">Téléphone</span>
+                  <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Ajouter un numéro" className="profile-input w-full rounded-2xl border border-line bg-cream px-4 py-3 outline-none focus:ring-2 focus:ring-or/30" />
+                </label>
+
                 {image && (
                   <button type="button" onClick={() => setImage(null)} className="text-xs font-bold text-muted hover:text-or-dark">Retirer la photo</button>
                 )}
+
+                {message && <div className="profile-alert profile-alert-success">{message}</div>}
+                {error && <div className="profile-alert profile-alert-error">{error}</div>}
+
+                <button disabled={saving || !name.trim()} className="profile-save-button disabled:cursor-not-allowed disabled:opacity-50">
+                  {saving ? 'Enregistrement…' : 'Enregistrer mon profil'}
+                </button>
               </div>
-
-              {message && <div className="rounded-2xl bg-success-tint text-success px-4 py-3 text-sm font-semibold">{message}</div>}
-              {error && <div className="rounded-2xl bg-cuivre-tint text-cuivre px-4 py-3 text-sm font-semibold">{error}</div>}
-
-              <button disabled={saving || !name.trim()} className="w-full rounded-2xl bg-text text-white py-3 font-black disabled:opacity-50 disabled:cursor-not-allowed hover:bg-or-dark transition-colors">
-                {saving ? 'Enregistrement…' : 'Enregistrer mon profil'}
-              </button>
             </form>
 
-            <section className="glass-card border border-line-soft bg-white p-5 md:p-6">
-              <div className="flex items-center justify-between gap-3 mb-5">
+            <section className="profile-info-card glass-card border border-line-soft bg-white p-5 md:p-6">
+              <div className="mb-5 flex items-center justify-between gap-3">
                 <div>
                   <p className="eyebrow text-or-dark">Fiche compte</p>
-                  <h2 className="text-lg font-black">Informations du compte</h2>
-                  <p className="text-sm text-muted">Détails complets de ton profil ECOI.</p>
+                  <h2 className="text-lg font-black">Informations essentielles</h2>
+                  <p className="text-sm text-muted">Présentation simple, lisible et privée.</p>
                 </div>
               </div>
-              <div className="grid md:grid-cols-2 gap-3">
-                {infoRows.map(([label, value]) => (
-                  <div key={label} className="rounded-2xl bg-cream border border-line-soft p-4 min-w-0">
-                    <div className="eyebrow text-[10px]">{label}</div>
-                    <div className="mt-1 text-sm font-bold break-words">{value}</div>
-                  </div>
+
+              <div className="profile-info-grid">
+                {accountRows.map(([label, value]) => (
+                  <InfoTile key={label} label={label} value={value} />
                 ))}
               </div>
+
+              {user.role === 'commercial' && (
+                <div className="profile-integration-panel mt-5">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="eyebrow text-or-dark">Intégration GHL</p>
+                      <h3 className="text-sm font-black">Secteurs et synchronisation</h3>
+                    </div>
+                    <span className="profile-chip profile-chip-info">{sectorInfo.count || 0} secteur{sectorInfo.count > 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="profile-info-grid">
+                    {integrationRows.map(([label, value]) => (
+                      <InfoTile key={label} label={label} value={value} compact />
+                    ))}
+                  </div>
+                </div>
+              )}
             </section>
           </div>
         </div>
@@ -211,7 +226,14 @@ export function MyProfile() {
   )
 }
 
-
+function InfoTile({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
+  return (
+    <div className={`profile-info-tile ${compact ? 'profile-info-tile-compact' : ''}`}>
+      <div className="eyebrow text-[10px]">{label}</div>
+      <div className="mt-1 break-words text-sm font-bold">{value}</div>
+    </div>
+  )
+}
 
 type GhlSectorInfo = { label: string; calendarId: string | null; count: number; allLabels: string }
 
