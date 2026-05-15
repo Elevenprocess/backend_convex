@@ -47,79 +47,105 @@ export function ProfilSetter() {
   const leadsQualif = (leads ?? []).filter((l) => l.status === 'qualifie' || l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe').length
 
   return (
-    <AppShell>
-      <Topbar
-        eyebrow="PROFIL SETTER"
-        title={member.name}
-      />
-      <div className="px-8 pt-4 flex items-center gap-3 flex-shrink-0">
-        <button onClick={() => navigate(-1)} className="text-muted hover:text-text flex items-center gap-1 text-sm">
+    <AppShell flat>
+      <Topbar eyebrow="PROFIL SETTER" title={member.name} />
+      <div className="px-6 pt-4 md:px-8 flex items-center gap-3 flex-shrink-0">
+        <button onClick={() => navigate(-1)} className="text-muted hover:text-text flex items-center gap-1 text-sm font-bold">
           <Icon name="arrow-left" size={16} />
           Retour
         </button>
         <button onClick={() => navigate('/leads')} className="btn-secondary px-4 py-2 rounded-xl text-sm ml-auto">Voir leads</button>
       </div>
 
-      <main className="p-8 pt-4 grid grid-cols-3 gap-6 overflow-y-auto flex-grow">
-        <div className="col-span-1 space-y-6">
-          <div className="glass-card p-6 text-center">
-            <div className="w-24 h-24 rounded-full bg-cuivre-tint flex items-center justify-center text-3xl font-bold mx-auto mb-3">{userInitials(member.name)}</div>
-            <h3 className="text-xl font-bold">{member.name}</h3>
-            <span className="status-badge bg-cuivre-tint text-cuivre mt-2 inline-block">{member.role}</span>
-            <div className="mt-4 text-xs text-muted space-y-1">
-              <div>{member.email}</div>
-              {member.phone && <div>{member.phone}</div>}
-              <div>{member.team ?? 'Sans équipe'} — depuis {monthsSince(member.createdAt)}</div>
+      <main className="profile-page flex-grow overflow-auto px-6 pt-4 pb-8 md:px-8">
+        <div className="mx-auto max-w-6xl space-y-5">
+          <section className="profile-hero-card glass-card border border-line-soft bg-white p-5 md:p-8">
+            <div className="flex flex-col gap-6 md:flex-row md:items-center">
+              <div className="profile-avatar-shell shrink-0 self-center md:self-auto">
+                <div className="profile-avatar-ring">
+                  <div className="profile-avatar-photo">
+                    {member.image ? (
+                      <img src={member.image} alt="Photo de profil" className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="text-5xl font-black text-or-dark uppercase">{userInitials(member.name)}</span>
+                    )}
+                  </div>
+                </div>
+                <span className="profile-avatar-badge">SETTER</span>
+              </div>
+
+              <div className="min-w-0 flex-1 text-center md:text-left">
+                <p className="eyebrow text-or-dark">Profil setter</p>
+                <h1 className="mt-1 truncate text-3xl font-black tracking-tight md:text-4xl">{member.name}</h1>
+                <p className="mt-1 truncate text-sm font-semibold text-muted">{member.email}</p>
+                <div className="profile-stat-strip mt-5">
+                  <div className="profile-stat-pill"><div className="text-sm font-black">{callStats.total}</div><div className="eyebrow text-[9px]">Appels</div></div>
+                  <div className="profile-stat-pill"><div className="text-sm font-black">{leadsCount}</div><div className="eyebrow text-[9px]">Leads</div></div>
+                  <div className="profile-stat-pill"><div className="text-sm font-black">{rdvPris}</div><div className="eyebrow text-[9px]">RDV pris</div></div>
+                </div>
+                <div className="mt-5 flex flex-wrap justify-center gap-2 md:justify-start">
+                  <span className="profile-chip profile-chip-dark">Setter</span>
+                  <span className="profile-chip profile-chip-soft">{member.team ?? 'Sans équipe'}</span>
+                  <span className="profile-chip profile-chip-success">Depuis {monthsSince(member.createdAt)}</span>
+                  {member.phone && <span className="profile-chip profile-chip-info">{member.phone}</span>}
+                </div>
+              </div>
             </div>
+          </section>
+
+          <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
+            <section className="profile-info-card glass-card border border-line-soft bg-white p-5 md:p-6">
+              <p className="eyebrow text-or-dark">Performance</p>
+              <h2 className="mt-1 text-lg font-black">Résumé setter</h2>
+              <div className="mt-5 space-y-3 text-sm">
+                <Row label="Appels passés" value={String(callStats.total)} />
+                <Row label="Connexions" value={`${callStats.joints} (${pct(callStats.joints, callStats.total)})`} />
+                <Row label="Leads assignés" value={String(leadsCount)} />
+                <Row label="Leads qualifiés" value={String(leadsQualif)} />
+                <Row label="RDV pris" value={String(rdvPris)} />
+                <Row label="RDV honorés" value={`${rdvHonore} (${pct(rdvHonore, rdvPris)})`} highlight />
+              </div>
+            </section>
+
+            <section className="profile-info-card glass-card border border-line-soft bg-white p-5 md:p-6">
+              <div className="mb-5">
+                <p className="eyebrow text-or-dark">Issue des appels</p>
+                <h2 className="text-lg font-black">Qualité des conversations</h2>
+              </div>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <BigStat color="#3DA86A" bg="bg-success-tint" value={String(callStats.joints)} label="JOINTS" />
+                <BigStat color="#6B7C8C" bg="bg-info-tint" value={String(callStats.injoignable + callStats.nonJoint)} label="INJOIGNABLES" />
+                <BigStat color="#B87333" bg="bg-cuivre-tint" value={String(callStats.rdvPris)} label="RDV PRIS" />
+                <BigStat color="#B7410E" bg="bg-rouille-tint" value={String(callStats.refus)} label="REFUS" />
+              </div>
+            </section>
           </div>
 
-          <div className="glass-card p-6">
-            <span className="eyebrow block mb-3">STATS</span>
-            <div className="space-y-3 text-sm">
-              <Row label="Appels passés" value={String(callStats.total)} />
-              <Row label="Connexions" value={`${callStats.joints} (${pct(callStats.joints, callStats.total)})`} />
-              <Row label="Leads assignés" value={String(leadsCount)} />
-              <Row label="Leads qualifiés" value={String(leadsQualif)} />
-              <Row label="RDV pris" value={String(rdvPris)} />
-              <Row label="RDV honorés" value={`${rdvHonore} (${pct(rdvHonore, rdvPris)})`} highlight />
-            </div>
-          </div>
-        </div>
-
-        <div className="col-span-2 space-y-6">
-          <div className="glass-card p-6">
-            <h3 className="font-bold mb-4">Issue des appels</h3>
-            <div className="grid grid-cols-4 gap-4 text-center">
-              <BigStat color="#3DA86A" bg="bg-success-tint" value={String(callStats.joints)} label="JOINTS" />
-              <BigStat color="#6B7C8C" bg="bg-info-tint" value={String(callStats.injoignable + callStats.nonJoint)} label="INJOIGNABLES" />
-              <BigStat color="#B87333" bg="bg-cuivre-tint" value={String(callStats.rdvPris)} label="RDV PRIS" />
-              <BigStat color="#B7410E" bg="bg-rouille-tint" value={String(callStats.refus)} label="REFUS" />
-            </div>
-          </div>
-
-          <div className="glass-card p-6">
-            <h3 className="font-bold mb-4">Activité (7 derniers jours)</h3>
+          <section className="profile-info-card glass-card border border-line-soft bg-white p-5 md:p-6">
+            <h3 className="font-black mb-4">Activité (7 derniers jours)</h3>
             {days.length === 0 ? (
               <p className="text-sm text-faint">Aucun appel sur les 7 derniers jours.</p>
             ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-or-tint">
-                  <tr className="text-left eyebrow">
-                    <Th>JOUR</Th>
-                    <Th>APPELS</Th>
-                    <Th>JOINTS</Th>
-                    <Th>RDV PRIS</Th>
-                    <Th className="text-right">EFFICACITÉ</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {days.map((d) => (
-                    <DayRow key={d.label} {...d} />
-                  ))}
-                </tbody>
-              </table>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[620px] text-sm">
+                  <thead className="bg-or-tint">
+                    <tr className="text-left eyebrow">
+                      <Th>JOUR</Th>
+                      <Th>APPELS</Th>
+                      <Th>JOINTS</Th>
+                      <Th>RDV PRIS</Th>
+                      <Th className="text-right">EFFICACITÉ</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {days.map((d) => (
+                      <DayRow key={d.label} {...d} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-          </div>
+          </section>
         </div>
       </main>
     </AppShell>
@@ -228,7 +254,7 @@ function Row({ label, value, highlight = false }: { label: string; value: string
 
 function BigStat({ color, bg, value, label }: { color: string; bg: string; value: string; label: string }) {
   return (
-    <div className={`p-4 rounded-[14px] ${bg}`}>
+    <div className={`profile-call-stat p-4 rounded-[18px] ${bg}`}>
       <div className="text-[28px] font-bold" style={{ color }}>{value}</div>
       <div className="text-xs eyebrow mt-1">{label}</div>
     </div>

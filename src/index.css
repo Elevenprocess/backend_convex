@@ -985,7 +985,8 @@ body {
 }
 [data-theme="dark"] .profile-stat-pill,
 [data-theme="dark"] .profile-info-tile,
-[data-theme="dark"] .profile-integration-panel {
+[data-theme="dark"] .profile-integration-panel,
+[data-theme="dark"] .profile-call-stat {
   background: rgba(12, 20, 25, 0.74) !important;
   border-color: rgba(220, 232, 238, 0.14) !important;
   color: var(--color-text);

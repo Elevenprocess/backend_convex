@@ -169,12 +169,15 @@ export function ProfilCommercial() {
 
       <main className="commercial-prospect-page px-8 pt-2 pb-6 flex flex-col gap-3 overflow-hidden flex-grow">
         <section className="grid grid-cols-4 gap-3 flex-shrink-0">
-          <div className="commercial-summary-card glass-card px-4 py-3 border border-line-soft bg-white">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-cream-darker flex items-center justify-center text-sm font-black">{userInitials(member.name)}</div>
+          <div className="commercial-summary-card profile-info-card glass-card px-4 py-3 border border-line-soft bg-white">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-full overflow-hidden bg-cream-darker border border-line-soft flex items-center justify-center text-sm font-black shrink-0">
+                {member.image ? <img src={member.image} alt="Photo de profil" className="w-full h-full object-cover" /> : userInitials(member.name)}
+              </div>
               <div className="min-w-0">
                 <h3 className="font-black text-sm truncate">{member.name}</h3>
                 <p className="text-[11px] text-muted truncate">{member.email}</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-or-dark">Commercial</p>
               </div>
             </div>
           </div>
