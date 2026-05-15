@@ -215,9 +215,9 @@ function AnalyticsCommercial({ name }: { name: string }) {
       <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
         <div className="grid grid-cols-4 gap-6">
           <BigStatCard label="CA SIGNÉ" value={fmtKEur(stats.ca)} delta={`${stats.signed} ventes`} />
-          <BigStatCard label="CLOSING RATE" value={`${stats.closing}%`} sub={`${stats.honored} RDV honorés`} />
+          <BigStatCard label="CLOSING RATE" value={`${stats.closing}%`} sub={`${commercialOutcomeCount(stats)} résultats RDV`} />
           <BigStatCard label="PANIER MOYEN" value={fmtKEur(stats.panier)} />
-          <BigStatCard label="RDV HONORÉS" value={`${stats.honored}/${stats.total}`} />
+          <BigStatCard label="ACTIVITÉ RDV" value={fmtInt(stats.total)} sub={`${stats.honored} honorés confirmés`} />
         </div>
 
         <div className="grid grid-cols-12 gap-6 items-stretch">
@@ -593,11 +593,18 @@ function setterTableRows(stats: AnalyticsSetterSummary) {
   ]
 }
 
+function commercialOutcomeCount(stats: AnalyticsCommercialSummary): number {
+  return stats.resultSegments
+    .filter((segment) => segment.label === 'Signé' || segment.label === 'Perdu' || segment.label === 'Réflexion')
+    .reduce((sum, segment) => sum + segment.value, 0)
+}
+
 function commercialTableRows(stats: AnalyticsCommercialSummary) {
   return [
-    ['RDV total', fmtInt(stats.total), 'Planifiés sur la période'],
-    ['RDV honorés', fmtInt(stats.honored), 'Présents'],
-    ['Ventes', fmtInt(stats.signed), `${stats.closing}% closing`],
+    ['Activité RDV', fmtInt(stats.total), 'Tous les RDV GHL/CRM de la période'],
+    ['Honorés confirmés', fmtInt(stats.honored), 'Seulement les RDV marqués présents dans le CRM'],
+    ['Résultats RDV', fmtInt(commercialOutcomeCount(stats)), 'Signé + perdu + réflexion récupérés depuis GHL'],
+    ['Ventes', fmtInt(stats.signed), `${stats.closing}% closing sur résultats`],
     ['CA signé', fmtKEur(stats.ca), 'Montant total signé'],
     ['Panier moyen', fmtKEur(stats.panier), 'CA / ventes'],
   ]
@@ -764,9 +771,9 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
   const sample = points.length > 36 ? points.filter((_, i) => i % Math.ceil(points.length / 36) === 0 || i === points.length - 1) : points
   const active = series.find((serie) => serie.key === activeKey) ?? series[0]
   const max = Math.max(1, ...sample.map((point) => active ? point[active.key] || 0 : 0))
-  const total = sample.reduce((sum, point) => sum + (active ? point[active.key] || 0 : 0), 0)
-  const peak = sample.reduce((best, point) => ((active ? point[active.key] || 0 : 0) > (active ? best[active.key] || 0 : 0) ? point : best), sample[0] ?? null)
-  const last = sample[sample.length - 1]
+  const total = points.reduce((sum, point) => sum + (active ? point[active.key] || 0 : 0), 0)
+  const peak = points.reduce((best, point) => ((active ? point[active.key] || 0 : 0) > (active ? best[active.key] || 0 : 0) ? point : best), points[0] ?? null)
+  const last = points[points.length - 1]
   const chartHeight = height - padTop - padBottom
   const xFor = (idx: number) => sample.length <= 1 ? width / 2 : padX + (idx / (sample.length - 1)) * (width - padX * 2)
   const yFor = (value: number) => padTop + chartHeight - (value / max) * chartHeight
@@ -781,7 +788,7 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
     return `${x},${y}`
   }).join(' ')
   const formatMetric = (key: EvolutionSeries['key'], value: number) => key === 'ca' ? fmtKEur(value) : fmtInt(value)
-  const delta = active && sample.length >= 2 ? (last?.[active.key] || 0) - (sample[0]?.[active.key] || 0) : 0
+  const delta = active && points.length >= 2 ? (last?.[active.key] || 0) - (points[0]?.[active.key] || 0) : 0
   const hoveredValue = hoveredPoint && active ? hoveredPoint.point[active.key] || 0 : 0
 
   return (
@@ -800,7 +807,7 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
           <div className="grid grid-cols-3 gap-2 mb-4">
             {series.map((serie) => {
               const isActive = serie.key === active.key
-              const serieTotal = sample.reduce((sum, point) => sum + (point[serie.key] || 0), 0)
+              const serieTotal = points.reduce((sum, point) => sum + (point[serie.key] || 0), 0)
               return (
                 <button
                   key={serie.key}
