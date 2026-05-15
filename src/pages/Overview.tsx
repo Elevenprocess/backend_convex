@@ -9,6 +9,24 @@ import { fullName, initials, type AnalyticsFunnelResponse, type CallLogResponse,
 
 const ALL_TIME_FROM_ISO = '2020-01-01T00:00:00.000Z'
 
+type FunnelPeriodMode = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'custom'
+type FunnelPeriodState = { mode: FunnelPeriodMode; customFrom: string; customTo: string }
+type FunnelPeriodRange = { from: string; to: string; label: string; days: number }
+
+const funnelTodayInput = toDateInputValue(new Date())
+const DEFAULT_FUNNEL_PERIOD: FunnelPeriodState = { mode: 'this_month', customFrom: funnelTodayInput, customTo: funnelTodayInput }
+const FUNNEL_PERIOD_OPTIONS: { id: FunnelPeriodMode; label: string }[] = [
+  { id: 'today', label: "Aujourd'hui" },
+  { id: 'yesterday', label: 'Hier' },
+  { id: 'this_week', label: 'Cette semaine' },
+  { id: 'last_week', label: 'Semaine dernière' },
+  { id: 'this_month', label: 'Ce mois-ci' },
+  { id: 'last_month', label: 'Mois dernier' },
+  { id: 'this_year', label: 'Cette année' },
+  { id: 'last_year', label: "L'année dernière" },
+  { id: 'custom', label: 'Plage de dates' },
+]
+
 export function Overview() {
   const role = useAuth((s) => s.user?.role)
 
@@ -312,11 +330,13 @@ function OverviewCommercial() {
 function OverviewAdmin() {
   const navigate = useNavigate()
   const [tab, setTab] = useState('overview')
-  const [funnelDays, setFunnelDays] = useState(30)
+  const [funnelPeriod, setFunnelPeriod] = useState<FunnelPeriodState>(DEFAULT_FUNNEL_PERIOD)
+  const funnelRange = buildFunnelPeriodRange(funnelPeriod)
   const [funnelSetterId, setFunnelSetterId] = useState('')
   const [funnelSector, setFunnelSector] = useState('')
   const { data: funnel, loading: funnelLoading } = useAnalyticsFunnel({
-    days: funnelDays,
+    from: funnelRange.from,
+    to: funnelRange.to,
     setterId: funnelSetterId || undefined,
     sector: funnelSector || undefined,
   })
@@ -383,10 +403,11 @@ function OverviewAdmin() {
           funnel={funnel}
           loading={funnelLoading}
           users={usersList ?? []}
-          days={funnelDays}
+          period={funnelPeriod}
+          range={funnelRange}
           setterId={funnelSetterId}
           sector={funnelSector}
-          onDaysChange={setFunnelDays}
+          onPeriodChange={setFunnelPeriod}
           onSetterChange={setFunnelSetterId}
           onSectorChange={setFunnelSector}
         />
@@ -425,16 +446,129 @@ function OverviewAdmin() {
 
 // ===== Helpers =====
 
+function FunnelPeriodSelector({ value, onChange }: { value: FunnelPeriodState; onChange: (v: FunnelPeriodState) => void }) {
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <select
+        value={value.mode}
+        onChange={(e) => onChange({ ...value, mode: e.target.value as FunnelPeriodMode })}
+        className="rounded-xl border border-line bg-white/70 px-3 py-2 font-semibold text-text shadow-sm"
+      >
+        {FUNNEL_PERIOD_OPTIONS.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
+      </select>
+      {value.mode === 'custom' && (
+        <>
+          <input
+            type="date"
+            max={funnelTodayInput}
+            value={value.customFrom}
+            onChange={(e) => onChange({ ...value, customFrom: e.target.value > funnelTodayInput ? funnelTodayInput : e.target.value })}
+            className="rounded-xl border border-line bg-white/70 px-3 py-2 font-semibold"
+          />
+          <span className="font-bold text-faint">à</span>
+          <input
+            type="date"
+            max={funnelTodayInput}
+            value={value.customTo}
+            onChange={(e) => onChange({ ...value, customTo: e.target.value > funnelTodayInput ? funnelTodayInput : e.target.value })}
+            className="rounded-xl border border-line bg-white/70 px-3 py-2 font-semibold"
+          />
+        </>
+      )}
+    </div>
+  )
+}
+
+function buildFunnelPeriodRange(period: FunnelPeriodState): FunnelPeriodRange {
+  const now = new Date()
+  const today = startOfDay(now)
+  let from = today
+  let to = endOfDay(today)
+
+  if (period.mode === 'yesterday') {
+    from = addDays(today, -1)
+    to = endOfDay(from)
+  } else if (period.mode === 'this_week') {
+    from = startOfWeek(today)
+    to = endOfDay(today)
+  } else if (period.mode === 'last_week') {
+    const thisWeek = startOfWeek(today)
+    from = addDays(thisWeek, -7)
+    to = endOfDay(addDays(thisWeek, -1))
+  } else if (period.mode === 'this_month') {
+    from = new Date(today.getFullYear(), today.getMonth(), 1)
+    to = endOfDay(today)
+  } else if (period.mode === 'last_month') {
+    from = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+    to = endOfDay(new Date(today.getFullYear(), today.getMonth(), 0))
+  } else if (period.mode === 'this_year') {
+    from = new Date(today.getFullYear(), 0, 1)
+    to = endOfDay(today)
+  } else if (period.mode === 'last_year') {
+    from = new Date(today.getFullYear() - 1, 0, 1)
+    to = endOfDay(new Date(today.getFullYear() - 1, 11, 31))
+  } else if (period.mode === 'custom') {
+    from = parseDateInput(period.customFrom)
+    to = endOfDay(parseDateInput(period.customTo))
+    if (from > to) [from, to] = [startOfDay(to), endOfDay(from)]
+  }
+
+  const days = Math.max(1, Math.round((endOfDay(to).getTime() - startOfDay(from).getTime()) / 86_400_000) + 1)
+  const option = FUNNEL_PERIOD_OPTIONS.find((p) => p.id === period.mode)?.label ?? 'Période'
+  return { from: startOfDay(from).toISOString(), to: endOfDay(to).toISOString(), label: `${option} · ${formatShortDate(from)} → ${formatShortDate(to)}`, days }
+}
+
+function toDateInputValue(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+
+function parseDateInput(value: string): Date {
+  const today = startOfDay(new Date())
+  if (!value) return today
+  const [year, month, day] = value.split('-').map(Number)
+  const parsed = new Date(year, (month || 1) - 1, day || 1)
+  return parsed > today ? today : startOfDay(parsed)
+}
+
+function startOfDay(date: Date): Date {
+  const next = new Date(date)
+  next.setHours(0, 0, 0, 0)
+  return next
+}
+
+function endOfDay(date: Date): Date {
+  const next = new Date(date)
+  next.setHours(23, 59, 59, 999)
+  return next
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date)
+  next.setDate(next.getDate() + days)
+  return next
+}
+
+function startOfWeek(date: Date): Date {
+  const d = startOfDay(date)
+  const day = d.getDay() || 7
+  return addDays(d, 1 - day)
+}
+
+function formatShortDate(date: Date): string {
+  return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
 function AdminLeadFunnel({
-  funnel, loading, users, days, setterId, sector, onDaysChange, onSetterChange, onSectorChange,
+  funnel, loading, users, period, range, setterId, sector, onPeriodChange, onSetterChange, onSectorChange,
 }: {
   funnel: AnalyticsFunnelResponse | null
   loading: boolean
   users: { id: string; name: string; role: string }[]
-  days: number
+  period: FunnelPeriodState
+  range: FunnelPeriodRange
   setterId: string
   sector: string
-  onDaysChange: (days: number) => void
+  onPeriodChange: (period: FunnelPeriodState) => void
   onSetterChange: (id: string) => void
   onSectorChange: (sector: string) => void
 }) {
@@ -448,14 +582,11 @@ function AdminLeadFunnel({
           <h3 className="text-xl font-extrabold mt-1">Parcours des leads jusqu’au rendez-vous</h3>
           <p className="text-xs text-faint mt-1">Mesure les pertes, la qualité lead, les réponses setter et la conversion globale.</p>
         </div>
-        <div className="flex flex-wrap gap-2 text-xs">
-          <select className="rounded-xl border border-line bg-white/70 px-3 py-2 font-semibold" value={days} onChange={(e) => onDaysChange(Number(e.target.value))}>
-            <option value={1}>Aujourd’hui</option>
-            <option value={7}>7 jours</option>
-            <option value={30}>30 jours</option>
-            <option value={90}>90 jours</option>
-            <option value={365}>Cette année</option>
-          </select>
+        <div className="flex flex-wrap gap-2 text-xs items-center justify-end">
+          <div className="min-w-full text-right text-[11px] font-bold text-faint sm:min-w-0 sm:mr-1">
+            {range.label}
+          </div>
+          <FunnelPeriodSelector value={period} onChange={onPeriodChange} />
           <select className="rounded-xl border border-line bg-white/70 px-3 py-2 font-semibold" value={setterId} onChange={(e) => onSetterChange(e.target.value)}>
             <option value="">Tous les setters</option>
             {setters.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
