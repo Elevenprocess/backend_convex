@@ -1,23 +1,52 @@
-import { useMemo, useState, type DragEvent, type ReactNode } from 'react'
+import { useMemo, useState, type DragEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
 import { useAuth } from '../../lib/auth'
-import { updateRdv, useCommercialAnalytics, useUser, useRdvList, useLeads } from '../../lib/hooks'
-import { fullName, type LeadResponse, type RdvResponse, type RdvStatus } from '../../lib/types'
+import { updateLead, updateRdv, useCommercialAnalytics, useUser, useRdvList, useLeads } from '../../lib/hooks'
+import { fullName, type LeadResponse, type LeadStatus, type RdvResponse, type RdvStatus } from '../../lib/types'
 
-const PIPELINE_STAGES: Array<{
-  status: RdvStatus
+type PipelineStageId =
+  | 'rdv_planifie'
+  | 'no_show_bis'
+  | 'rdv_annule'
+  | 'rdv_pas_qualifie'
+  | 'rdv_reprogramme'
+  | 'relance_long_terme'
+  | 'devis_en_attente'
+  | 'devis_signe'
+  | 'devis_perdu'
+
+type PipelineStage = {
+  id: PipelineStageId
   title: string
+  emoji: string
+  opportunities: number
+  amount: number
   hint: string
-  accent: string
-}> = [
-  { status: 'planifie', title: 'À préparer', hint: 'RDV à venir / en attente', accent: 'border-or/40 bg-or-tint/40' },
-  { status: 'reporte', title: 'À replanifier', hint: 'Prospect à replacer', accent: 'border-cuivre/40 bg-cuivre-tint/40' },
-  { status: 'honore', title: 'Honoré', hint: 'Débrief / vente à saisir', accent: 'border-success/40 bg-success-tint/40' },
-  { status: 'no_show', title: 'No-show', hint: 'Absent au RDV', accent: 'border-rouille/40 bg-rouille-tint/40' },
-  { status: 'annule', title: 'Annulé', hint: 'RDV annulé', accent: 'border-line-soft bg-white/50' },
+  rdvStatus?: RdvStatus
+  rdvResult?: RdvResponse['result']
+  leadStatus?: LeadStatus
+}
+
+type ProspectCard = {
+  id: string
+  rdv: RdvResponse
+  lead?: LeadResponse
+  stageId: PipelineStageId
+}
+
+const PIPELINE_STAGES: PipelineStage[] = [
+  { id: 'rdv_planifie', title: 'RDV Planifié', emoji: '📅', opportunities: 164, amount: 72053, hint: 'RDV à venir avec heure précise', rdvStatus: 'planifie', leadStatus: 'rdv_pris' },
+  { id: 'no_show_bis', title: '(BIS) No-Show', emoji: '🙅‍♂️', opportunities: 55, amount: 11700, hint: 'Prospect absent au rendez-vous', rdvStatus: 'no_show', rdvResult: 'no_show', leadStatus: 'pas_de_reponse' },
+  { id: 'rdv_annule', title: '6. RDV Annulé', emoji: '🛑', opportunities: 59, amount: 33499, hint: 'Rendez-vous annulé', rdvStatus: 'annule', leadStatus: 'perdu' },
+  { id: 'rdv_pas_qualifie', title: '7. RDV Pas Qualifié', emoji: '⚠️', opportunities: 12, amount: 0, hint: 'Prospect hors critères', leadStatus: 'pas_qualifie' },
+  { id: 'rdv_reprogramme', title: '8. RDV Reprogrammé', emoji: '🔁', opportunities: 52, amount: 40200, hint: 'À replacer sur un créneau', rdvStatus: 'reporte', rdvResult: 'reporte', leadStatus: 'a_rappeler' },
+  { id: 'relance_long_terme', title: '9. Relance Long Terme', emoji: '⏳', opportunities: 118, amount: 388181.28, hint: 'Prospect à suivre plus tard', leadStatus: 'relance' },
+  { id: 'devis_en_attente', title: '10. Devis En Attente', emoji: '📝', opportunities: 186, amount: 2025730.04, hint: 'Devis remis, décision en cours', rdvStatus: 'honore', rdvResult: 'reflexion', leadStatus: 'rdv_honore' },
+  { id: 'devis_signe', title: '11. Devis Signé', emoji: '✍️', opportunities: 8, amount: 119590.09, hint: 'Vente signée', rdvStatus: 'honore', rdvResult: 'signe', leadStatus: 'signe' },
+  { id: 'devis_perdu', title: '12. Devis Perdu', emoji: '💔', opportunities: 48, amount: 230549, hint: 'Devis refusé / perdu', rdvStatus: 'honore', rdvResult: 'perdu', leadStatus: 'perdu' },
 ]
 
 export function ProfilCommercial() {
@@ -28,9 +57,9 @@ export function ProfilCommercial() {
 
   const { data: member, loading, error } = useUser(profileId)
   const { data: rdvs, refetch: refetchRdvs } = useRdvList(profileId ? { commercialId: profileId, limit: 200 } : undefined)
-  const { data: leads } = useLeads(profileId ? { assignedToId: profileId, limit: 500 } : { limit: 500 })
+  const { data: leads, refetch: refetchLeads } = useLeads(profileId ? { assignedToId: profileId, limit: 2000 } : { limit: 2000 })
   const { data: commercialAnalytics } = useCommercialAnalytics(profileId, { days: 30 })
-  const [draggedRdvId, setDraggedRdvId] = useState<string | null>(null)
+  const [draggedCardId, setDraggedCardId] = useState<string | null>(null)
   const [movingId, setMovingId] = useState<string | null>(null)
 
   const leadMap = useMemo(() => {
@@ -41,33 +70,33 @@ export function ProfilCommercial() {
 
   const rdvList = rdvs ?? []
   const stats = useMemo(() => computeStats(rdvList, commercialAnalytics), [rdvList, commercialAnalytics])
-  const recentHonored = useMemo(() => {
-    const list = rdvList.filter((r) => r.status === 'honore')
-    list.sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime())
-    return list.slice(0, 8)
-  }, [rdvList])
-
-  const rdvsByStage = useMemo(() => {
-    const grouped = new Map<RdvStatus, RdvResponse[]>()
-    for (const stage of PIPELINE_STAGES) grouped.set(stage.status, [])
-    for (const rdv of rdvList) grouped.get(rdv.status)?.push(rdv)
-    for (const rows of grouped.values()) rows.sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
+  const cards = useMemo<ProspectCard[]>(() => rdvList.map((rdv) => ({ id: rdv.id, rdv, lead: leadMap.get(rdv.leadId), stageId: resolveStageId(rdv, leadMap.get(rdv.leadId)) })), [rdvList, leadMap])
+  const cardsByStage = useMemo(() => {
+    const grouped = new Map<PipelineStageId, ProspectCard[]>()
+    for (const stage of PIPELINE_STAGES) grouped.set(stage.id, [])
+    for (const card of cards) grouped.get(card.stageId)?.push(card)
+    for (const rows of grouped.values()) rows.sort((a, b) => new Date(a.rdv.scheduledAt).getTime() - new Date(b.rdv.scheduledAt).getTime())
     return grouped
-  }, [rdvList])
+  }, [cards])
 
-  const handleDropOnStage = async (event: DragEvent<HTMLDivElement>, status: RdvStatus) => {
+  const handleDropOnStage = async (event: DragEvent<HTMLDivElement>, stage: PipelineStage) => {
     event.preventDefault()
-    const rdvId = event.dataTransfer.getData('text/rdv-id') || draggedRdvId
-    const current = rdvList.find((r) => r.id === rdvId)
-    setDraggedRdvId(null)
-    if (!current || current.status === status || movingId) return
+    const cardId = event.dataTransfer.getData('text/rdv-id') || draggedCardId
+    const card = cards.find((c) => c.id === cardId)
+    setDraggedCardId(null)
+    if (!card || card.stageId === stage.id || movingId) return
 
-    setMovingId(current.id)
+    setMovingId(card.id)
     try {
-      await updateRdv(current.id, { status })
+      const rdvPatch: Parameters<typeof updateRdv>[1] = {}
+      if (stage.rdvStatus) rdvPatch.status = stage.rdvStatus
+      if (stage.rdvResult !== undefined) rdvPatch.result = stage.rdvResult
+      if (Object.keys(rdvPatch).length > 0) await updateRdv(card.rdv.id, rdvPatch)
+      if (stage.leadStatus && card.lead) await updateLead(card.lead.id, { status: stage.leadStatus })
       refetchRdvs()
+      refetchLeads()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Impossible de déplacer ce RDV')
+      alert(err instanceof Error ? err.message : 'Impossible de déplacer ce prospect')
     } finally {
       setMovingId(null)
     }
@@ -75,7 +104,7 @@ export function ProfilCommercial() {
 
   if (loading) {
     return (
-      <AppShell>
+      <AppShell flat>
         <Topbar eyebrow="PROFIL COMMERCIAL" title="Chargement…" />
         <main className="flex-grow flex items-center justify-center text-faint text-sm">Chargement…</main>
       </AppShell>
@@ -84,7 +113,7 @@ export function ProfilCommercial() {
 
   if (error || !member) {
     return (
-      <AppShell>
+      <AppShell flat>
         <Topbar eyebrow="PROFIL COMMERCIAL" title="Introuvable" />
         <main className="flex-grow flex items-center justify-center">
           <div className="glass-card p-12 text-center">
@@ -97,11 +126,9 @@ export function ProfilCommercial() {
   }
 
   return (
-    <AppShell>
-      <Topbar
-        eyebrow="PROFIL COMMERCIAL"
-        title={member.name}
-      />
+    <AppShell flat>
+      <Topbar eyebrow="COMPTE COMMERCIAL" title={member.name} />
+
       <div className="px-8 pt-4 flex items-center gap-3 flex-shrink-0">
         <button onClick={() => navigate(-1)} className="text-muted hover:text-text flex items-center gap-1 text-sm">
           <Icon name="arrow-left" size={16} />
@@ -113,76 +140,75 @@ export function ProfilCommercial() {
         </div>
       </div>
 
-      <main className="p-8 pt-4 grid grid-cols-3 gap-6 overflow-y-auto flex-grow">
-        <div className="col-span-1 space-y-6">
-          <div className="glass-card p-6 text-center">
-            <div className="w-24 h-24 rounded-full bg-or-tint flex items-center justify-center text-3xl font-bold mx-auto mb-3">{userInitials(member.name)}</div>
-            <h3 className="text-xl font-bold">{member.name}</h3>
-            <span className="status-badge bg-success-tint text-success mt-2 inline-block">{member.role}</span>
-            <div className="mt-4 text-xs text-muted space-y-1">
-              <div>{member.email}</div>
-              {member.phone && <div>{member.phone}</div>}
-              <div>{member.team ?? 'Sans équipe'} — depuis {monthsSince(member.createdAt)}</div>
-              <div>{rdvList.filter((r) => r.externalId).length} RDV liés GHL dans ce tableau</div>
-            </div>
-          </div>
-
-          <div className="glass-card p-6">
-            <span className="eyebrow block mb-3">STATS RDV</span>
-            <div className="space-y-3 text-sm">
-              <Row label="RDV assignés" value={`${stats.total}`} />
-              <Row label="Leads assignés" value={`${leads?.length ?? 0}`} />
-              <Row label="RDV honorés" value={`${stats.honored} / ${stats.total}`} />
-              <Row label="No-shows" value={`${stats.noShow} (${pct(stats.noShow, stats.total)})`} />
-              <Row label="Reportés" value={String(stats.reported)} />
-              <Row label="Ventes signées" value={String(stats.signed)} />
-              <Row label="Closing rate" value={pct(stats.signed, stats.honored)} className="text-success font-bold" />
-              <Row label="CA généré" value={formatCA(stats.ca)} highlight />
-            </div>
-          </div>
-        </div>
-
-        <div className="col-span-2 space-y-6">
-          <section className="glass-card p-5">
-            <div className="flex items-start justify-between gap-4 mb-4">
-              <div>
-                <span className="eyebrow">PIPELINE PROSPECTS</span>
-                <h3 className="text-xl font-black mt-1">Kanban RDV commercial</h3>
-                <p className="text-sm text-muted">Glisse une carte prospect vers la prochaine étape. Chaque carte garde l’heure du RDV et le lien GHL quand il existe.</p>
+      <main className="p-8 pt-4 flex flex-col gap-5 overflow-hidden flex-grow">
+        <section className="grid grid-cols-4 gap-4 flex-shrink-0">
+          <div className="glass-card p-5 border border-line-soft bg-white">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-cream-darker flex items-center justify-center text-lg font-black">{userInitials(member.name)}</div>
+              <div className="min-w-0">
+                <h3 className="font-black truncate">{member.name}</h3>
+                <p className="text-xs text-muted truncate">{member.email}</p>
               </div>
-              <span className="status-badge bg-info-tint text-info">{rdvList.length} RDV</span>
             </div>
+          </div>
+          <Metric label="RDV assignés" value={`${stats.total}`} />
+          <Metric label="Prospects assignés" value={`${leads?.length ?? 0}`} />
+          <Metric label="CA généré" value={formatCurrency(stats.ca)} />
+        </section>
 
-            <div className="grid grid-cols-5 gap-3 min-h-[440px] overflow-x-auto pb-1">
+        <section className="glass-card p-5 flex flex-col min-h-0 flex-grow bg-white border border-line-soft">
+          <div className="flex items-start justify-between gap-4 mb-4 flex-shrink-0">
+            <div>
+              <span className="eyebrow">PIPELINE PROSPECTS</span>
+              <h3 className="text-xl font-black mt-1">Tableaux commerciaux</h3>
+              <p className="text-sm text-muted">Les prospects s’affichent en cartes. Glisse une carte dans la colonne qui correspond à son évolution.</p>
+            </div>
+            <span className="status-badge bg-info-tint text-info">{cards.length} cartes chargées</span>
+          </div>
+
+          <div className="overflow-x-auto overflow-y-hidden flex-grow min-h-0 pb-2">
+            <div className="flex gap-4 min-w-max h-full">
               {PIPELINE_STAGES.map((stage) => {
-                const rows = rdvsByStage.get(stage.status) ?? []
+                const rows = cardsByStage.get(stage.id) ?? []
                 return (
                   <div
-                    key={stage.status}
+                    key={stage.id}
                     onDragOver={(event) => event.preventDefault()}
-                    onDrop={(event) => handleDropOnStage(event, stage.status)}
-                    className={`min-w-[190px] rounded-[22px] border ${stage.accent} p-3 flex flex-col`}
+                    onDrop={(event) => handleDropOnStage(event, stage)}
+                    className="w-[280px] rounded-[22px] border border-line-soft bg-cream/45 p-3 flex flex-col min-h-0"
                   >
-                    <div className="mb-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <h4 className="font-black text-sm">{stage.title}</h4>
-                        <span className="rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-bold text-muted">{rows.length}</span>
+                    <div className="bg-white rounded-[18px] border border-line-soft p-3 mb-3 flex-shrink-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <h4 className="font-black text-sm leading-snug">{stage.title} <span>{stage.emoji}</span></h4>
+                          <p className="text-[11px] text-muted mt-1">{stage.hint}</p>
+                        </div>
+                        <span className="rounded-full border border-line-soft px-2 py-0.5 text-[11px] font-bold text-muted">{rows.length}</span>
                       </div>
-                      <p className="text-[11px] text-muted mt-1 leading-snug">{stage.hint}</p>
+                      <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
+                        <div>
+                          <p className="text-faint uppercase tracking-wide text-[10px]">Opportunités</p>
+                          <p className="font-black">{stage.opportunities}</p>
+                        </div>
+                        <div>
+                          <p className="text-faint uppercase tracking-wide text-[10px]">Valeur</p>
+                          <p className="font-black truncate">{formatCurrency(stage.amount)}</p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-2 flex-1">
+
+                    <div className="space-y-2 overflow-y-auto pr-1 flex-grow min-h-0">
                       {rows.length === 0 ? (
-                        <div className="rounded-[18px] border border-dashed border-line-soft bg-white/35 p-4 text-center text-[11px] text-faint">Dépose ici</div>
-                      ) : rows.map((rdv) => (
-                        <RdvKanbanCard
-                          key={rdv.id}
-                          rdv={rdv}
-                          lead={leadMap.get(rdv.leadId)}
-                          moving={movingId === rdv.id}
+                        <div className="rounded-[18px] border border-dashed border-line-soft bg-white/70 p-5 text-center text-[11px] text-faint">Dépose un prospect ici</div>
+                      ) : rows.map((card) => (
+                        <ProspectKanbanCard
+                          key={card.id}
+                          card={card}
+                          moving={movingId === card.id}
                           onDragStart={(event) => {
-                            setDraggedRdvId(rdv.id)
+                            setDraggedCardId(card.id)
                             event.dataTransfer.effectAllowed = 'move'
-                            event.dataTransfer.setData('text/rdv-id', rdv.id)
+                            event.dataTransfer.setData('text/rdv-id', card.id)
                           }}
                         />
                       ))}
@@ -191,68 +217,37 @@ export function ProfilCommercial() {
                 )
               })}
             </div>
-          </section>
-
-          <div className="glass-card p-6">
-            <h3 className="font-bold mb-4">Derniers RDV honorés</h3>
-            {recentHonored.length === 0 ? (
-              <p className="text-sm text-faint">Aucun RDV honoré pour ce commercial.</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-or-tint">
-                  <tr className="text-left eyebrow">
-                    <Th>DATE</Th>
-                    <Th>CLIENT</Th>
-                    <Th>RÉSULTAT</Th>
-                    <Th>PAIEMENT</Th>
-                    <Th className="text-right">CA</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentHonored.map((r) => {
-                    const lead = leadMap.get(r.leadId)
-                    return <RdvRow key={r.id} rdv={r} lead={lead} />
-                  })}
-                </tbody>
-              </table>
-            )}
           </div>
-        </div>
+        </section>
       </main>
     </AppShell>
   )
 }
 
+function resolveStageId(rdv: RdvResponse, lead?: LeadResponse): PipelineStageId {
+  if (rdv.result === 'signe' || lead?.status === 'signe') return 'devis_signe'
+  if (rdv.result === 'perdu' || lead?.status === 'perdu') return 'devis_perdu'
+  if (lead?.status === 'pas_qualifie') return 'rdv_pas_qualifie'
+  if (rdv.status === 'annule') return 'rdv_annule'
+  if (rdv.status === 'no_show' || rdv.result === 'no_show') return 'no_show_bis'
+  if (rdv.status === 'reporte' || rdv.result === 'reporte') return 'rdv_reprogramme'
+  if (lead?.status === 'relance') return 'relance_long_terme'
+  if (rdv.result === 'reflexion') return 'devis_en_attente'
+  if (rdv.status === 'honore' || lead?.status === 'rdv_honore') return 'devis_en_attente'
+  return 'rdv_planifie'
+}
+
 function computeStats(rdvs: RdvResponse[], analytics?: { total: number; honored: number; signed: number; ca: number; closing: number } | null) {
-  if (analytics) {
-    const noShow = rdvs.filter((r) => r.status === 'no_show').length
-    const reported = rdvs.filter((r) => r.status === 'reporte').length
-    return { total: analytics.total, honored: analytics.honored, noShow, reported, signed: analytics.signed, ca: analytics.ca }
-  }
+  if (analytics) return { total: analytics.total, honored: analytics.honored, signed: analytics.signed, ca: analytics.ca }
   let honored = 0
-  let noShow = 0
-  let reported = 0
   let signed = 0
   let ca = 0
   for (const r of rdvs) {
     if (r.status === 'honore') honored++
-    if (r.status === 'no_show') noShow++
-    if (r.status === 'reporte') reported++
     if (r.result === 'signe') signed++
     if (r.montantTotal) ca += Number(r.montantTotal)
   }
-  return { total: rdvs.length, honored, noShow, reported, signed, ca }
-}
-
-function pct(part: number, total: number): string {
-  if (!total) return '0%'
-  return `${Math.round((part / total) * 100)}%`
-}
-
-function formatCA(ca: number): string {
-  if (ca === 0) return '—'
-  if (ca >= 1000) return `${(ca / 1000).toFixed(1)}k€`
-  return `${ca.toFixed(0)}€`
+  return { total: rdvs.length, honored, signed, ca }
 }
 
 function userInitials(name: string): string {
@@ -260,36 +255,34 @@ function userInitials(name: string): string {
   return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '··'
 }
 
-function monthsSince(iso: string): string {
-  const d = new Date(iso)
-  const now = new Date()
-  const months = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth())
-  if (months <= 0) return 'ce mois'
-  if (months === 1) return '1 mois'
-  return `${months} mois`
+function formatCurrency(value: number): string {
+  return value.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })
 }
 
-function Row({ label, value, highlight = false, className = '' }: { label: string; value: string; highlight?: boolean; className?: string }) {
+function formatDateTime(iso: string): string {
+  const date = new Date(iso)
+  return date.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit' }) + ' · ' + date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className={`flex justify-between ${highlight ? 'pt-2 border-t border-line-soft' : ''} ${className}`}>
-      <span className={highlight ? 'font-semibold' : ''}>{label}</span>
-      <span className={`font-bold ${highlight ? 'text-or' : ''}`}>{value}</span>
+    <div className="glass-card p-5 border border-line-soft bg-white">
+      <p className="eyebrow mb-2">{label}</p>
+      <p className="text-2xl font-black">{value}</p>
     </div>
   )
 }
 
-function Th({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <th className={`px-3 py-2.5 ${className}`}>{children}</th>
-}
-
-function RdvKanbanCard({ rdv, lead, moving, onDragStart }: { rdv: RdvResponse; lead?: LeadResponse; moving: boolean; onDragStart: (event: DragEvent<HTMLDivElement>) => void }) {
+function ProspectKanbanCard({ card, moving, onDragStart }: { card: ProspectCard; moving: boolean; onDragStart: (event: DragEvent<HTMLDivElement>) => void }) {
+  const { rdv, lead } = card
   const name = lead ? fullName(lead) || lead.email || lead.phone || 'Prospect' : 'Prospect lié'
+  const value = rdv.montantTotal ? Number(rdv.montantTotal) : null
   return (
     <div
       draggable={!moving}
       onDragStart={onDragStart}
-      className={`rounded-[18px] bg-white/85 border border-white/70 p-3 shadow-sm cursor-grab active:cursor-grabbing transition ${moving ? 'opacity-50 scale-[0.98]' : 'hover:-translate-y-0.5 hover:shadow-md'}`}
-      title="Glisser vers une autre étape"
+      className={`rounded-[18px] bg-white border border-line-soft p-3 shadow-sm cursor-grab active:cursor-grabbing transition ${moving ? 'opacity-50 scale-[0.98]' : 'hover:-translate-y-0.5 hover:shadow-md'}`}
+      title="Glisser vers une autre colonne"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -303,9 +296,12 @@ function RdvKanbanCard({ rdv, lead, moving, onDragStart }: { rdv: RdvResponse; l
         {lead?.phone && <MiniLine icon="phone" text={lead.phone} />}
         {lead?.city && <MiniLine icon="map-pin" text={lead.city} />}
       </div>
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {rdv.externalId && <span className="rounded-full bg-success-tint px-2 py-0.5 text-[10px] font-bold text-success">GHL</span>}
-        {rdv.result && <span className="rounded-full bg-info-tint px-2 py-0.5 text-[10px] font-bold text-info">{resultLabel(rdv.result)}</span>}
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-1.5">
+          {rdv.externalId && <span className="rounded-full bg-success-tint px-2 py-0.5 text-[10px] font-bold text-success">GHL</span>}
+          {lead?.status && <span className="rounded-full bg-cream-darker px-2 py-0.5 text-[10px] font-bold text-muted">{lead.status}</span>}
+        </div>
+        <span className={`text-xs font-black ${value ? 'text-text' : 'text-faint'}`}>{value ? formatCurrency(value) : '—'}</span>
       </div>
     </div>
   )
@@ -313,43 +309,4 @@ function RdvKanbanCard({ rdv, lead, moving, onDragStart }: { rdv: RdvResponse; l
 
 function MiniLine({ icon, text }: { icon: 'calendar' | 'phone' | 'map-pin'; text: string }) {
   return <div className="flex items-center gap-1.5 min-w-0"><Icon name={icon} size={12} className="text-faint flex-shrink-0" /><span className="truncate">{text}</span></div>
-}
-
-function formatDateTime(iso: string): string {
-  const date = new Date(iso)
-  return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) + ' · ' + date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-}
-
-function resultLabel(result: NonNullable<RdvResponse['result']>): string {
-  if (result === 'signe') return 'Vente'
-  if (result === 'reflexion') return 'Réflexion'
-  if (result === 'perdu') return 'Perdu'
-  if (result === 'no_show') return 'No-show'
-  return 'Reporté'
-}
-
-function RdvRow({ rdv, lead }: { rdv: RdvResponse; lead?: LeadResponse }) {
-  const date = new Date(rdv.scheduledAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
-  const outcomeLabel = rdv.result === 'signe' ? 'Vente'
-    : rdv.result === 'reflexion' ? 'À relancer'
-    : rdv.result === 'perdu' ? 'Perdu'
-    : rdv.result === 'no_show' ? 'No-show'
-    : rdv.result === 'reporte' ? 'Reporté'
-    : '—'
-  const outcomeClass = rdv.result === 'signe' ? 'bg-success-tint text-success'
-    : rdv.result === 'reflexion' ? 'bg-cuivre-tint text-cuivre'
-    : rdv.result === 'perdu' || rdv.result === 'no_show' ? 'bg-rouille-tint text-rouille'
-    : 'bg-info-tint text-info'
-  const ca = rdv.montantTotal ? `${(Number(rdv.montantTotal) / 1000).toFixed(1)}k€` : '—'
-  return (
-    <tr className="border-b border-line-soft last:border-0">
-      <td className="px-3 py-2.5">{date}</td>
-      <td className="px-3 py-2.5">
-        <span className="font-semibold">{lead ? fullName(lead) : '—'}</span>
-      </td>
-      <td className="px-3 py-2.5"><span className={`status-badge ${outcomeClass}`}>{outcomeLabel}</span></td>
-      <td className="px-3 py-2.5">{rdv.financingType ?? '—'}</td>
-      <td className={`px-3 py-2.5 text-right font-bold ${ca === '—' ? 'text-faint' : 'text-or'}`}>{ca}</td>
-    </tr>
-  )
 }
