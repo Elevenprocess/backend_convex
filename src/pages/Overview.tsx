@@ -4,8 +4,10 @@ import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
 import { useDisplayUser } from '../lib/role'
-import { useCallLogs, useLeads, useRdvList, useUsers, useStartCall, useAnalyticsFunnel } from '../lib/hooks'
+import { useCallLogs, useLeads, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary } from '../lib/hooks'
 import { fullName, initials, type AnalyticsFunnelResponse, type CallLogResponse, type LeadResponse, type RdvResponse } from '../lib/types'
+
+const ALL_TIME_FROM_ISO = '2020-01-01T00:00:00.000Z'
 
 export function Overview() {
   const role = useAuth((s) => s.user?.role)
@@ -187,22 +189,39 @@ function OverviewCommercial() {
   const display = useDisplayUser()
   const [tab, setTab] = useState('overview')
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const allTimeTo = useMemo(() => new Date().toISOString(), [])
   const { data: rdvs = [] } = useRdvList({ commercialId: me?.id, limit: 200 })
+  const { data: commercialSummary } = useAnalyticsSummary({ from: ALL_TIME_FROM_ISO, to: allTimeTo })
 
   const stats = useMemo(() => {
     const list = rdvs ?? []
+    const analytics = commercialSummary?.commercial
     const honored = list.filter((r) => r.status === 'honore')
-    const signed = honored.filter((r) => r.result === 'signe')
-    const ca = signed.reduce((sum, r) => sum + (parseFloat(r.montantTotal ?? '0') || 0), 0)
-    const closing = honored.length ? Math.round((signed.length / honored.length) * 100) : 0
-    const panier = signed.length ? ca / signed.length : 0
+    const signed = list.filter((r) => r.result === 'signe')
+    const lost = list.filter((r) => r.result === 'perdu')
+    const reflexion = list.filter((r) => r.result === 'reflexion')
+    const fallbackCa = signed.reduce((sum, r) => sum + (parseFloat(r.montantTotal ?? '0') || 0), 0)
+    const outcomeBase = Math.max(honored.length, signed.length + lost.length + reflexion.length)
+    const fallbackClosing = outcomeBase ? Math.round((signed.length / outcomeBase) * 100) : 0
+    const fallbackPanier = signed.length ? fallbackCa / signed.length : 0
     const upcoming = list
       .filter((r) => r.status === 'planifie' && r.scheduledAt >= todayIso)
       .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))
     const totalPlanifie = list.filter((r) => r.status === 'planifie').length
-    const totalHonored = honored.length
-    return { ca, closing, panier, signed: signed.length, upcoming, totalPlanifie, totalHonored }
-  }, [rdvs, todayIso])
+    const totalHonored = analytics?.honored ?? honored.length
+    const totalRdv = analytics?.total ?? list.length
+    return {
+      ca: analytics?.ca ?? fallbackCa,
+      closing: analytics?.closing ?? fallbackClosing,
+      panier: analytics?.panier ?? fallbackPanier,
+      signed: analytics?.signed ?? signed.length,
+      upcoming,
+      totalPlanifie,
+      totalHonored,
+      totalRdv,
+      lost: analytics?.resultSegments.find((segment) => segment.label === 'Perdu')?.value ?? lost.length,
+    }
+  }, [rdvs, todayIso, commercialSummary])
 
   return (
     <AppShell blobsKey="commercial" flat>
@@ -226,7 +245,7 @@ function OverviewCommercial() {
         <KpiCard title="CA SIGNÉ" value={fmtKEur(stats.ca)} valueSize={28} haloColor="#D4AF37" lineColor="#D4AF37" sparkPoints="0,20 10,18 20,14 30,16 40,8 50,10 64,4" className="col-span-3" />
         <KpiCard title="CLOSING RATE" value={`${stats.closing}%`} valueSize={28} haloColor="#3DA86A" lineColor="#3DA86A" sparkPoints="0,18 10,16 20,12 30,14 40,8 50,6 64,10" className="col-span-3" />
         <KpiCard title="PANIER MOY." value={fmtKEur(stats.panier)} valueSize={28} haloColor="#B87333" lineColor="#B87333" sparkPoints="0,16 10,12 20,14 30,8 40,12 50,6 64,10" className="col-span-3" />
-        <KpiCard title="RDV HONORÉS" value={`${stats.totalHonored}/${stats.totalHonored + stats.totalPlanifie}`} valueSize={28} haloColor="#B7410E" lineColor="#B7410E" sparkPoints="0,8 10,10 20,12 30,8 40,14 50,10 64,12" className="col-span-3" />
+        <KpiCard title="ACTIVITÉ RDV" value={String(stats.totalRdv)} valueSize={28} haloColor="#B7410E" lineColor="#B7410E" sparkPoints="0,8 10,10 20,12 30,8 40,14 50,10 64,12" className="col-span-3" />
 
         <div className="glass-card col-span-7 p-5">
           <div className="flex items-center justify-between mb-4">
@@ -242,10 +261,10 @@ function OverviewCommercial() {
           <div>
             <span className="eyebrow block mb-2">CLOSING RATE</span>
             <div className="text-[56px] font-extrabold leading-none">{stats.closing}%</div>
-            <p className="text-xs text-muted mt-2 leading-relaxed">{stats.totalHonored} RDV honorés, {stats.signed} signatures.</p>
+            <p className="text-xs text-muted mt-2 leading-relaxed">{stats.signed} ventes, {stats.lost} perdus, {stats.totalRdv} RDV suivis.</p>
           </div>
           <div className="grid grid-cols-3 gap-2 mt-3 text-xs">
-            <div><div className="font-bold text-sm">{stats.totalPlanifie + stats.totalHonored}</div><div className="eyebrow">RDV</div></div>
+            <div><div className="font-bold text-sm">{stats.totalRdv}</div><div className="eyebrow">RDV</div></div>
             <div><div className="font-bold text-sm">{stats.totalHonored}</div><div className="eyebrow">HONORÉS</div></div>
             <div><div className="font-bold text-sm text-success">{stats.signed}</div><div className="eyebrow">VENTES</div></div>
           </div>
@@ -257,7 +276,7 @@ function OverviewCommercial() {
             {/* TODO Phase B: pipeline complet leads → rdv → signatures, requiert agrégation cross-resources */}
             <PipelineRow label="RDV planifiés" count={stats.totalPlanifie} pct={100} color="#D4AF37" />
             <PipelineRow label="Honorés" count={stats.totalHonored} pct={pct(stats.totalHonored, stats.totalPlanifie)} color="#B87333" />
-            <PipelineRow label="Ventes" count={stats.signed} pct={pct(stats.signed, stats.totalHonored)} color="#3DA86A" />
+            <PipelineRow label="Ventes" count={stats.signed} pct={pct(stats.signed, Math.max(stats.signed + stats.lost, stats.totalHonored))} color="#3DA86A" />
           </div>
         </div>
 
@@ -310,7 +329,7 @@ function OverviewAdmin() {
     const lList = leads ?? []
     const rList = rdvs ?? []
     const honored = rList.filter((r) => r.status === 'honore')
-    const signed = honored.filter((r) => r.result === 'signe')
+    const signed = rList.filter((r) => r.result === 'signe')
     const classified = lList.filter(isClassifiedLead)
     const logicalCalls = Math.max((calls ?? []).length, classified.length)
     const qualified = classified.filter((l) => l.status === 'qualifie' || l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe').length
@@ -763,7 +782,7 @@ function monthlyLeadSeries(leads: LeadResponse[]): number[] {
 function rdvRevenueSeries(rdvs: RdvResponse[]): number[] {
   const months = lastNMonths(8)
   return months.map((m) => rdvs
-    .filter((r) => r.status === 'honore' && r.result === 'signe' && (r.signatureAt ?? r.scheduledAt).slice(0, 7) === m)
+    .filter((r) => r.result === 'signe' && (r.signatureAt ?? r.scheduledAt).slice(0, 7) === m)
     .reduce((sum, r) => sum + (parseFloat(r.montantTotal ?? '0') || 0), 0))
 }
 
