@@ -128,25 +128,25 @@ export function ProfilCommercial() {
     <AppShell flat>
       <Topbar eyebrow="COMPTE COMMERCIAL" title={member.name} />
 
-      <div className="px-8 pt-4 flex items-center gap-3 flex-shrink-0">
+      <div className="px-8 pt-2 flex items-center gap-3 flex-shrink-0">
         <button onClick={() => navigate(-1)} className="text-muted hover:text-text flex items-center gap-1 text-sm">
           <Icon name="arrow-left" size={16} />
           Retour
         </button>
         <div className="ml-auto flex items-center gap-2 text-xs text-muted">
           <span className={`status-badge ${member.ghlUserId ? 'bg-success-tint text-success' : 'bg-rouille-tint text-rouille'}`}>GHL : {member.ghlUserId ? 'relié' : 'non relié'}</span>
-          <button onClick={() => navigate('/rdv')} className="btn-secondary px-4 py-2 rounded-xl text-sm">Voir RDV</button>
+          <button onClick={() => navigate('/rdv')} className="btn-secondary px-3 py-1.5 rounded-xl text-xs">Voir RDV</button>
         </div>
       </div>
 
-      <main className="p-8 pt-4 flex flex-col gap-5 overflow-hidden flex-grow">
-        <section className="grid grid-cols-4 gap-4 flex-shrink-0">
-          <div className="glass-card p-5 border border-line-soft bg-white">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-cream-darker flex items-center justify-center text-lg font-black">{userInitials(member.name)}</div>
+      <main className="px-8 pt-2 pb-6 flex flex-col gap-3 overflow-hidden flex-grow">
+        <section className="grid grid-cols-4 gap-3 flex-shrink-0">
+          <div className="glass-card px-4 py-3 border border-line-soft bg-white">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-cream-darker flex items-center justify-center text-sm font-black">{userInitials(member.name)}</div>
               <div className="min-w-0">
-                <h3 className="font-black truncate">{member.name}</h3>
-                <p className="text-xs text-muted truncate">{member.email}</p>
+                <h3 className="font-black text-sm truncate">{member.name}</h3>
+                <p className="text-[11px] text-muted truncate">{member.email}</p>
               </div>
             </div>
           </div>
@@ -155,18 +155,20 @@ export function ProfilCommercial() {
           <Metric label="CA généré" value={formatCurrency(stats.ca)} />
         </section>
 
-        <section className="glass-card p-5 flex flex-col min-h-0 flex-grow bg-white border border-line-soft">
-          <div className="flex items-start justify-between gap-4 mb-4 flex-shrink-0">
-            <div>
-              <span className="eyebrow">PIPELINE PROSPECTS</span>
-              <h3 className="text-xl font-black mt-1">Tableaux commerciaux</h3>
-              <p className="text-sm text-muted">Les prospects s’affichent en cartes. Glisse une carte dans la colonne qui correspond à son évolution.</p>
+        <section className="glass-card px-4 py-3 flex flex-col min-h-0 flex-grow bg-white border border-line-soft">
+          <div className="flex items-center justify-between gap-3 mb-2 flex-shrink-0">
+            <div className="min-w-0">
+              <span className="eyebrow text-[10px]">PIPELINE PROSPECTS</span>
+              <h3 className="text-base font-black leading-tight">Tableaux commerciaux</h3>
             </div>
-            <span className="status-badge bg-info-tint text-info">{cards.length} cartes chargées</span>
+            <div className="flex items-center gap-2 text-xs text-muted">
+              <span className="hidden xl:inline">Glisse une carte vers une colonne.</span>
+              <span className="rounded-full border border-line-soft bg-info-tint px-2.5 py-1 text-[11px] font-bold text-info whitespace-nowrap">{cards.length} cartes</span>
+            </div>
           </div>
 
-          <div className="overflow-x-auto overflow-y-hidden flex-grow min-h-0 pb-2">
-            <div className="flex gap-4 min-w-max h-full">
+          <div className="overflow-x-auto overflow-y-hidden flex-grow min-h-0 pb-1">
+            <div className="flex gap-3 min-w-max h-full">
               {PIPELINE_STAGES.map((stage) => {
                 const rows = cardsByStage.get(stage.id) ?? []
                 return (
@@ -174,29 +176,29 @@ export function ProfilCommercial() {
                     key={stage.id}
                     onDragOver={(event) => event.preventDefault()}
                     onDrop={(event) => handleDropOnStage(event, stage)}
-                    className="w-[280px] rounded-[22px] border border-line-soft bg-cream/45 p-3 flex flex-col min-h-0"
+                    className="w-[236px] rounded-[18px] border border-line-soft bg-cream/45 p-2.5 flex flex-col min-h-0"
                   >
-                    <div className="bg-white rounded-[18px] border border-line-soft p-3 mb-3 flex-shrink-0">
+                    <div className="bg-white rounded-[14px] border border-line-soft p-2.5 mb-2 flex-shrink-0">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <h4 className="font-black text-sm leading-snug">{stage.title}</h4>
-                          <p className="text-[11px] text-muted mt-1">{stage.hint}</p>
+                          <h4 className="font-black text-xs leading-snug">{stage.title}</h4>
+                          <p className="text-[10px] text-muted mt-0.5 truncate">{stage.hint}</p>
                         </div>
-                        <span className="rounded-full border border-line-soft px-2 py-0.5 text-[11px] font-bold text-muted">{rows.length}</span>
+                        <span className="rounded-full border border-line-soft px-1.5 py-0.5 text-[10px] font-bold text-muted">{rows.length}</span>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
+                      <div className="grid grid-cols-2 gap-1.5 mt-2 text-[11px]">
                         <div>
-                          <p className="text-faint uppercase tracking-wide text-[10px]">Opportunités</p>
+                          <p className="text-faint uppercase tracking-wide text-[9px]">Opp.</p>
                           <p className="font-black">{stage.opportunities}</p>
                         </div>
                         <div>
-                          <p className="text-faint uppercase tracking-wide text-[10px]">Valeur</p>
+                          <p className="text-faint uppercase tracking-wide text-[9px]">Valeur</p>
                           <p className="font-black truncate">{formatCurrency(stage.amount)}</p>
                         </div>
                       </div>
                     </div>
 
-                    <div className="space-y-2 overflow-y-auto pr-1 flex-grow min-h-0">
+                    <div className="space-y-1.5 overflow-y-auto pr-1 flex-grow min-h-0">
                       {rows.length === 0 ? (
                         <div className="rounded-[18px] border border-dashed border-line-soft bg-white/70 p-5 text-center text-[11px] text-faint">Dépose un prospect ici</div>
                       ) : rows.map((card) => (
@@ -265,9 +267,9 @@ function formatDateTime(iso: string): string {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="glass-card p-5 border border-line-soft bg-white">
-      <p className="eyebrow mb-2">{label}</p>
-      <p className="text-2xl font-black">{value}</p>
+    <div className="glass-card px-4 py-3 border border-line-soft bg-white">
+      <p className="eyebrow mb-1 text-[10px]">{label}</p>
+      <p className="text-lg font-black leading-tight">{value}</p>
     </div>
   )
 }
