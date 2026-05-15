@@ -91,6 +91,16 @@ export function RdvCalendar() {
   const handleHorizontalCalendarScroll = (event: WheelEvent<HTMLDivElement>) => {
     const horizontal = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.shiftKey ? event.deltaY : 0
     if (Math.abs(horizontal) < 36) return
+
+    const target = event.target instanceof HTMLElement ? event.target : null
+    const nativeScroller = target?.closest('[data-native-horizontal-scroll="true"]') as HTMLElement | null
+    if (nativeScroller && nativeScroller.scrollWidth > nativeScroller.clientWidth) {
+      const maxScroll = nativeScroller.scrollWidth - nativeScroller.clientWidth
+      const canScrollRight = horizontal > 0 && nativeScroller.scrollLeft < maxScroll - 2
+      const canScrollLeft = horizontal < 0 && nativeScroller.scrollLeft > 2
+      if (canScrollRight || canScrollLeft) return
+    }
+
     event.preventDefault()
     const now = Date.now()
     if (now - scrollNavLockRef.current < 240) return
@@ -213,40 +223,45 @@ function TimeGridView({
   onOpen: (rdvId: string) => void
   onOpenDay: (date: Date) => void
 }) {
+  const gridColumns = `64px repeat(${days.length}, minmax(150px, 1fr))`
+  const minWidth = days.length > 1 ? Math.max(980, 64 + days.length * 150) : 520
+
   return (
-    <>
-      <div
-        className="grid border-b border-line-soft flex-shrink-0 bg-white/70"
-        style={{ gridTemplateColumns: `64px repeat(${days.length}, minmax(0, 1fr))` }}
-      >
-        <div className="border-r border-line-soft" />
-        {days.map((d, i) => (
-          <button
-            key={d.key}
-            onClick={() => onOpenDay(d.date)}
-            className={`p-3 text-center border-l border-line-soft hover:bg-or-tint ${d.today ? 'bg-cuivre-tint' : ''}`}
-          >
-            <div className="eyebrow">{days.length === 1 ? d.date.toLocaleDateString('fr-FR', { weekday: 'long' }) : DAY_LABELS[i]}</div>
-            <div className={`text-2xl font-bold ${d.today ? 'text-cuivre' : ''}`}>{d.dayNum}</div>
-          </button>
-        ))}
+    <div data-native-horizontal-scroll="true" className="flex-grow overflow-x-auto overflow-y-hidden bg-white/30">
+      <div className="h-full flex flex-col" style={{ minWidth }}>
+        <div
+          className="grid border-b border-line-soft flex-shrink-0 bg-white/70 sticky top-0 z-10"
+          style={{ gridTemplateColumns: gridColumns }}
+        >
+          <div className="border-r border-line-soft" />
+          {days.map((d, i) => (
+            <button
+              key={d.key}
+              onClick={() => onOpenDay(d.date)}
+              className={`p-3 text-center border-l border-line-soft hover:bg-or-tint ${d.today ? 'bg-cuivre-tint' : ''}`}
+            >
+              <div className="eyebrow">{days.length === 1 ? d.date.toLocaleDateString('fr-FR', { weekday: 'long' }) : DAY_LABELS[i]}</div>
+              <div className={`text-2xl font-bold ${d.today ? 'text-cuivre' : ''}`}>{d.dayNum}</div>
+            </button>
+          ))}
+        </div>
+        <div
+          className="grid flex-grow overflow-y-auto"
+          style={{ gridTemplateColumns: gridColumns, gridAutoRows: 'minmax(76px, auto)' }}
+        >
+          {visibleHours.map((hour) => (
+            <RowHour
+              key={hour}
+              hour={hour}
+              days={days}
+              rdvByCell={rdvByCell}
+              leadMap={leadMap}
+              onOpen={onOpen}
+            />
+          ))}
+        </div>
       </div>
-      <div
-        className="grid flex-grow overflow-y-auto bg-white/30"
-        style={{ gridTemplateColumns: `64px repeat(${days.length}, minmax(0, 1fr))`, gridAutoRows: 'minmax(76px, auto)' }}
-      >
-        {visibleHours.map((hour) => (
-          <RowHour
-            key={hour}
-            hour={hour}
-            days={days}
-            rdvByCell={rdvByCell}
-            leadMap={leadMap}
-            onOpen={onOpen}
-          />
-        ))}
-      </div>
-    </>
+    </div>
   )
 }
 
