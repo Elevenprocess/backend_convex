@@ -431,6 +431,13 @@ export type CreateCallLogInput = {
   result: CallLogResponse['result']
   nextCallbackAt?: string | null
   notes?: string | null
+  contactName?: string | null
+  contactFirstName?: string | null
+  contactLastName?: string | null
+  contactEmail?: string | null
+  contactPhone?: string | null
+  contactCity?: string | null
+  contactPostalCode?: string | null
 }
 
 export async function createCallLog(input: CreateCallLogInput): Promise<CallLogResponse> {
@@ -466,6 +473,13 @@ export type CreateRdvInput = {
   scheduledAt: string
   locationType?: RdvLocation
   notes?: string | null
+  contactName?: string | null
+  contactFirstName?: string | null
+  contactLastName?: string | null
+  contactEmail?: string | null
+  contactPhone?: string | null
+  contactCity?: string | null
+  contactPostalCode?: string | null
 }
 
 export type GhlSectorConfig = {
@@ -503,6 +517,13 @@ export type GhlCalendarEvent = {
   isMappedCommercial?: boolean
   address?: string | null
   notes?: string | null
+  contactName?: string | null
+  contactFirstName?: string | null
+  contactLastName?: string | null
+  contactEmail?: string | null
+  contactPhone?: string | null
+  contactCity?: string | null
+  contactPostalCode?: string | null
 }
 
 export type GhlUser = {

@@ -38,7 +38,7 @@ export function RdvCalendar() {
     from: period.from.toISOString(),
     to: period.to.toISOString(),
   })
-  const { data: leads } = useLeads({ limit: 1500 })
+  const { data: leads } = useLeads({ limit: 2000 })
 
   const leadMap = useMemo(() => {
     const m = new Map<string, LeadResponse>()
@@ -309,9 +309,10 @@ function MonthView({
 
 function RdvButton({ item, lead, compact = false, onClick }: { item: CalendarItem; lead?: LeadResponse; compact?: boolean; onClick: () => void }) {
   const isGhl = item.source === 'ghl'
-  const label = isGhl ? item.event.title || `RDV GHL ${item.event.sector ?? ''}`.trim() : (lead ? fullName(lead) : 'Lead inconnu')
+  const label = isGhl ? ghlEventLabel(item.event) : (lead ? fullName(lead) : localRdvFallbackLabel(item.rdv))
+  const detail = isGhl ? ghlEventDetail(item.event) : localRdvFallbackDetail(item.rdv)
   const tone = isGhl ? 'bg-info-tint text-info' : STATUS_TONE[item.rdv.status]
-  const title = `${formatTime(item.scheduledAt)} — ${label}${isGhl ? ' — GHL temps réel' : ''}`
+  const title = `${formatTime(item.scheduledAt)} — ${label}${detail ? ` — ${detail}` : ''}${isGhl ? ' — GHL temps réel' : ''}`
   return (
     <button
       onClick={onClick}
@@ -319,9 +320,43 @@ function RdvButton({ item, lead, compact = false, onClick }: { item: CalendarIte
       title={title}
     >
       <span className="block truncate">{formatTime(item.scheduledAt)} — {label}</span>
-      {!compact && isGhl && <span className="text-[10px] opacity-75">GHL live{item.event.sector ? ` · ${item.event.sector}` : ''}</span>}
+      {!compact && detail && <span className="block text-[10px] opacity-75 truncate">{detail}</span>}
+      {!compact && isGhl && <span className="block text-[10px] opacity-75">GHL live{item.event.sector ? ` · ${item.event.sector}` : ''}</span>}
     </button>
   )
+}
+
+function ghlEventLabel(event: GhlCalendarEvent): string {
+  return event.contactName || event.title || `RDV GHL ${event.sector ?? ''}`.trim() || 'RDV GHL'
+}
+
+function ghlEventDetail(event: GhlCalendarEvent): string {
+  return [event.contactPhone, event.contactCity, event.contactEmail].filter(Boolean).join(' · ')
+}
+
+function localRdvFallbackLabel(rdv: RdvResponse): string {
+  const fromNotes = extractNotesValue(rdv.notes, ['Prospect', 'Nom', 'Client'])
+  return fromNotes || 'Lead inconnu'
+}
+
+function localRdvFallbackDetail(rdv: RdvResponse): string {
+  return [
+    extractNotesValue(rdv.notes, ['Téléphone', 'Telephone', 'Phone']),
+    extractNotesValue(rdv.notes, ['Ville', 'City']),
+    extractNotesValue(rdv.notes, ['Email']),
+  ].filter(Boolean).join(' · ')
+}
+
+function extractNotesValue(notes: string | null, labels: string[]): string | null {
+  if (!notes) return null
+  const lines = notes.split(/\r?\n/)
+  for (const label of labels) {
+    const prefix = `${label} :`
+    const line = lines.find((l) => l.toLowerCase().startsWith(prefix.toLowerCase()))
+    const value = line?.slice(prefix.length).trim()
+    if (value) return value
+  }
+  return null
 }
 
 function buildPeriod(cursorDate: Date, view: CalendarView): { from: Date; to: Date; days: DayCell[]; label: string } {
