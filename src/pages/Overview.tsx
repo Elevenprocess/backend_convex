@@ -613,9 +613,8 @@ function AdminLeadFunnel({
           <div className="col-span-12 xl:col-span-7">
             <FunnelLogicTree totals={totals} />
           </div>
-          <div className="col-span-12 xl:col-span-5 space-y-6">
+          <div className="col-span-12 xl:col-span-5">
             <FunnelBranchChart totals={totals} />
-            <FunnelDailyChart data={funnel.daily} />
           </div>
           <div className="col-span-12 lg:col-span-6 glass-card !p-5 bg-white/35">
             <h4 className="font-bold mb-3">Comparaison setters</h4>
@@ -776,27 +775,6 @@ function FunnelBranchChart({ totals }: { totals: AnalyticsFunnelResponse['totals
         <Goal label="Qualifiés" value={`${totals.qualified} · ${totals.qualificationRate}% des réponses`} pct={totals.qualificationRate} color="#D4AF37" />
         <Goal label="Pas qualifiés" value={`${totals.notQualified} · ${totals.notQualifiedRate}% des réponses`} pct={totals.notQualifiedRate} color="#B7410E" />
         <Goal label="Sans réponse" value={`${totals.noAnswer} · ${noAnswerRate}% des leads appelés · ${totals.relances} relances`} pct={noAnswerRate} color="#B87333" />
-      </div>
-    </div>
-  )
-}
-
-function FunnelDailyChart({ data }: { data: AnalyticsFunnelResponse['daily'] }) {
-  const values = data.map((d) => d.rdv)
-  const max = Math.max(1, ...values)
-  return (
-    <div className="daily-chart-panel rounded-2xl border border-line-soft bg-white/45 p-4 h-[190px]">
-      <div className="flex items-center justify-between mb-3">
-        <h4 className="font-bold">Vue chronologique</h4>
-        <span className="eyebrow">RDV / jour</span>
-      </div>
-      <div className="h-[120px] flex items-end gap-1.5">
-        {data.slice(-14).map((d) => (
-          <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
-            <div className="w-full rounded-t-lg bg-or/75" style={{ height: `${Math.max(6, (d.rdv / max) * 100)}px` }} title={`${d.label}: ${d.rdv} RDV`} />
-            <span className="text-[9px] text-faint">{d.label}</span>
-          </div>
-        ))}
       </div>
     </div>
   )
