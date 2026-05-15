@@ -127,7 +127,7 @@ export function Deliverability() {
     <AppShell flat>
       <Topbar eyebrow="ADMIN — DEIVRABILITÉ" title="Processus commerciaux" />
 
-      <main className="commercial-prospect-page px-8 pt-4 pb-6 flex flex-col gap-3 overflow-hidden flex-grow">
+      <main className="commercial-prospect-page px-8 pt-4 pb-8 flex flex-col gap-3 overflow-y-auto flex-grow">
         <section className="grid grid-cols-4 gap-3 flex-shrink-0">
           <Metric label="Total RDV" value={`${totals.total}`} hint={`${totals.planned} planifiés · ${totals.honored} honorés`} />
           <Metric label="Commerciaux" value={`${totals.commercials}`} hint={`${totals.withCommercial} RDV assignés`} />
@@ -169,7 +169,7 @@ export function Deliverability() {
           </div>
         </section>
 
-        <section className="commercial-pipeline-board glass-card px-4 py-3 flex flex-col min-h-0 flex-grow bg-white border border-line-soft">
+        <section className="commercial-pipeline-board glass-card px-4 py-3 flex flex-col min-h-[900px] xl:min-h-[1100px] flex-shrink-0 bg-white border border-line-soft">
           <div className="flex items-center justify-between gap-3 mb-2 flex-shrink-0">
             <div className="min-w-0">
               <span className="eyebrow text-[10px]">PIPELINE DEIVRABILITÉ</span>
