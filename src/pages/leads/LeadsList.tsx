@@ -257,6 +257,7 @@ function LeadsAdmin() {
   const clearLead = useLeadSidebar((s) => s.clearLead)
   const orderedColumns = useOrderedColumns(ADMIN_COLUMNS, visibleColumns)
   const [deletingLeadId, setDeletingLeadId] = useState<string | null>(null)
+  const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([])
 
   const { data: leadsData, loading, error, refetch } = useLeads({ limit: 1500 })
   const { data: users = [] } = useUsers()
@@ -286,7 +287,35 @@ function LeadsAdmin() {
     waiting: (leads ?? []).filter((l) => l.status === 'nouveau' || (l.joursSansContact ?? 0) >= 2).length,
     perdus: (leads ?? []).filter((l) => l.status === 'perdu').length,
   }), [leads])
+  const selectedFilteredIds = useMemo(() => {
+    const visibleIds = new Set(filtered.map((lead) => lead.id))
+    return selectedLeadIds.filter((id) => visibleIds.has(id))
+  }, [filtered, selectedLeadIds])
+  const allFilteredSelected = filtered.length > 0 && selectedFilteredIds.length === filtered.length
+  const someFilteredSelected = selectedFilteredIds.length > 0 && !allFilteredSelected
   const tableScrollRef = useRememberedLeadTableScroll('ecoi.leads.admin.tableScroll.v1', filtered, selectedId)
+
+  useEffect(() => {
+    const existingIds = new Set(leads.map((lead) => lead.id))
+    setSelectedLeadIds((current) => current.filter((id) => existingIds.has(id)))
+  }, [leads])
+
+  const toggleLeadSelection = (leadId: string, checked: boolean) => {
+    setSelectedLeadIds((current) => {
+      if (checked) return current.includes(leadId) ? current : [...current, leadId]
+      return current.filter((id) => id !== leadId)
+    })
+  }
+
+  const toggleAllFiltered = (checked: boolean) => {
+    const filteredIds = filtered.map((lead) => lead.id)
+    if (checked) {
+      setSelectedLeadIds((current) => Array.from(new Set([...current, ...filteredIds])))
+      return
+    }
+    const filteredSet = new Set(filteredIds)
+    setSelectedLeadIds((current) => current.filter((id) => !filteredSet.has(id)))
+  }
 
   const handleDeleteLead = async (lead: LeadResponse) => {
     if (deletingLeadId) return
@@ -297,10 +326,30 @@ function LeadsAdmin() {
     setDeletingLeadId(lead.id)
     try {
       await deleteLead(lead.id)
+      setSelectedLeadIds((current) => current.filter((id) => id !== lead.id))
       if (selectedId === lead.id) clearLead()
       refetch()
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Impossible de supprimer le lead')
+    } finally {
+      setDeletingLeadId(null)
+    }
+  }
+
+  const handleDeleteSelectedLeads = async () => {
+    if (deletingLeadId || selectedFilteredIds.length === 0) return
+    const count = selectedFilteredIds.length
+    const confirmed = window.confirm(`Supprimer ${count} lead${count > 1 ? 's' : ''} sélectionné${count > 1 ? 's' : ''} ? Cette action les retirera du tableau.`)
+    if (!confirmed) return
+
+    setDeletingLeadId('bulk')
+    try {
+      await Promise.all(selectedFilteredIds.map((id) => deleteLead(id)))
+      if (selectedId && selectedFilteredIds.includes(selectedId)) clearLead()
+      setSelectedLeadIds((current) => current.filter((id) => !selectedFilteredIds.includes(id)))
+      refetch()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Impossible de supprimer les leads sélectionnés')
     } finally {
       setDeletingLeadId(null)
     }
@@ -336,7 +385,20 @@ function LeadsAdmin() {
         <LeadFiltersBar filters={leadFilters} onChange={setLeadFilters} total={(leads ?? []).length} filtered={filtered.length} />
         <ColumnVisibilityMenu columns={ADMIN_COLUMNS} visible={visibleColumns} onChange={setVisibleColumns} />
         {loading && leads.length > 0 && <span className="text-xs text-faint">Actualisation…</span>}
-        <button onClick={() => exportCsv(filtered)} className="btn-primary px-4 py-2 rounded-[14px] text-sm ml-auto">Exporter CSV</button>
+        <div className="ml-auto flex items-center gap-2">
+          {selectedFilteredIds.length > 0 && (
+            <button
+              type="button"
+              onClick={handleDeleteSelectedLeads}
+              disabled={Boolean(deletingLeadId)}
+              className="inline-flex items-center gap-2 rounded-[14px] border border-rouille/30 bg-rouille-tint px-4 py-2 text-sm font-bold text-rouille hover:bg-rouille hover:text-white disabled:opacity-60"
+            >
+              <Icon name="trash" size={14} />
+              {deletingLeadId === 'bulk' ? 'Suppression…' : `Supprimer (${selectedFilteredIds.length})`}
+            </button>
+          )}
+          <button onClick={() => exportCsv(filtered)} className="btn-primary px-4 py-2 rounded-[14px] text-sm">Exporter CSV</button>
+        </div>
       </div>
 
       <main className="p-8 pt-4 flex-grow flex flex-col min-h-0 overflow-hidden">
@@ -356,9 +418,21 @@ function LeadsAdmin() {
         ) : (
           <div className="glass-card !p-0 overflow-hidden flex-grow min-h-0">
             <div ref={tableScrollRef} data-preserve-scroll="true" className="overflow-auto h-full">
-            <table className="min-w-[5480px] w-full text-sm table-fixed lead-table">
+            <table className="min-w-[5540px] w-full text-sm table-fixed lead-table">
               <thead className="text-left eyebrow sticky top-0 z-10 border-b border-white/60 bg-white/65 shadow-sm shadow-text/5 backdrop-blur-2xl">
                 <tr>
+                  <Th className="w-[60px] text-center">
+                    <input
+                      type="checkbox"
+                      checked={allFilteredSelected}
+                      ref={(input) => {
+                        if (input) input.indeterminate = someFilteredSelected
+                      }}
+                      onChange={(event) => toggleAllFiltered(event.target.checked)}
+                      className="h-4 w-4 cursor-pointer accent-or"
+                      aria-label="Sélectionner tous les leads visibles"
+                    />
+                  </Th>
                   {orderedColumns.map((column) => renderAdminHeader(column.key))}
                 </tr>
               </thead>
@@ -368,10 +442,20 @@ function LeadsAdmin() {
                     key={l.id}
                     data-lead-id={l.id}
                     className={`border-b border-line-soft last:border-0 cursor-pointer transition-colors ${
-                      selectedId === l.id ? 'bg-or/20 shadow-[inset_4px_0_0_var(--color-or-dark)] !text-text' : 'hover:bg-white/40'
+                      selectedId === l.id ? 'bg-or/20 shadow-[inset_4px_0_0_var(--color-or-dark)] !text-text' : selectedLeadIds.includes(l.id) ? 'bg-or/10' : 'hover:bg-white/40'
                     }`}
-                    onClick={() => selectLead(l.id)}
+                    onDoubleClick={() => selectLead(l.id)}
+                    title="Double-cliquer pour ouvrir le détail du lead"
                   >
+                    <Td className="text-center" onClick={(event) => event.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedLeadIds.includes(l.id)}
+                        onChange={(event) => toggleLeadSelection(l.id, event.target.checked)}
+                        className="h-4 w-4 cursor-pointer accent-or"
+                        aria-label={`Sélectionner ${fullName(l) || 'ce lead'}`}
+                      />
+                    </Td>
                     {orderedColumns.map((column) => renderAdminCell(column.key, l, userMap, setOpenComment, { onDelete: handleDeleteLead, deletingLeadId }))}
                   </tr>
                 ))}
@@ -695,7 +779,10 @@ function useRememberedLeadTableScroll(
         const selectedRow = Array.from(el.querySelectorAll<HTMLElement>('tr[data-lead-id]'))
           .find((row) => row.dataset.leadId === selectedLeadId)
         if (selectedRow) {
-          selectedRow.scrollIntoView({ block: 'center', inline: 'nearest' })
+          const rowRect = selectedRow.getBoundingClientRect()
+          const containerRect = el.getBoundingClientRect()
+          const rowIsVisible = rowRect.top >= containerRect.top && rowRect.bottom <= containerRect.bottom
+          if (!rowIsVisible) selectedRow.scrollIntoView({ block: 'center', inline: 'nearest' })
           return
         }
       }
@@ -885,8 +972,18 @@ function Th({ children, className = '' }: { children: React.ReactNode; className
   return <th className={`px-4 py-3 whitespace-nowrap bg-white/25 backdrop-blur-xl ${className}`}>{children}</th>
 }
 
-function Td({ children, className = '', title }: { children: React.ReactNode; className?: string; title?: string }) {
-  return <td className={`px-4 py-3 align-middle whitespace-nowrap ${className}`} title={title}>{children}</td>
+function Td({
+  children,
+  className = '',
+  title,
+  onClick,
+}: {
+  children: React.ReactNode
+  className?: string
+  title?: string
+  onClick?: React.MouseEventHandler<HTMLTableCellElement>
+}) {
+  return <td className={`px-4 py-3 align-middle whitespace-nowrap ${className}`} title={title} onClick={onClick}>{children}</td>
 }
 
 function StatCard({ label, value }: { label: string; value: string }) {
