@@ -476,6 +476,29 @@ export function usePipelineStuck(days = 30): Async<PipelineStuckResponse> {
   return useFetch<PipelineStuckResponse>('/analytics/pipeline/stuck', { days })
 }
 
+export type PipelineBackfillSummary = {
+  pipelineName: string
+  pipelineId: string
+  stagesInPipeline: number
+  processed: number
+  created: number
+  updated: number
+  skipped: number
+  failed: number
+  unknownStages: string[]
+  samples: { contactId: string; stageName: string; assignedTo: string | null; value: number }[]
+  durationMs: number
+}
+
+export async function runPipelineBackfill(opts: { dryRun: boolean; limit?: number }): Promise<PipelineBackfillSummary> {
+  return api<PipelineBackfillSummary>('/analytics/pipeline/backfill', {
+    method: 'POST',
+    query: { dryRun: opts.dryRun ? 'true' : 'false', limit: opts.limit },
+    // Le backfill peut tenir 2-3 min sur 1k+ opportunités GHL : on rallonge le timeout.
+    timeoutMs: 180_000,
+  })
+}
+
 // ─── Call logs ─────────────────────────────────────────────
 export function useCallLogs(filters?: {
   leadId?: string

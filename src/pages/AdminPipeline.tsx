@@ -4,11 +4,13 @@ import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
 import {
+  runPipelineBackfill,
   useLeads,
   usePipelineByCommercial,
   usePipelineDistribution,
   usePipelineStuck,
   useUsers,
+  type PipelineBackfillSummary,
   type PipelineCommercialKpi,
   type PipelineDistributionEntry,
   type PipelineStuckLead,
@@ -96,7 +98,7 @@ function TabSwitcher({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
 // ─── Kanban view ──────────────────────────────────────────
 
 function KanbanView() {
-  const { data, loading, error } = usePipelineDistribution()
+  const { data, loading, error, refetch } = usePipelineDistribution()
   // On charge tous les leads ouverts et on les groupe client-side par ghlStageName.
   // Volume actuel ECOI : ~5000 leads avec ghl_stage_name → ~3MB JSON, OK pour admin.
   const { data: leads } = useLeads({ limit: 5000 })
@@ -158,6 +160,7 @@ function KanbanView() {
           value={`${data.stages.filter((s) => s.count > 0).length} / ${STAGE_ORDER.length}`}
         />
       </div>
+      <BackfillPanel onSuccess={refetch} />
       <div className="overflow-x-auto flex-1 min-h-0 pb-2">
         <div className="flex gap-3 min-w-max h-full pb-1">
           {sorted.map((stage) => (
@@ -422,6 +425,108 @@ function StuckRow({ lead }: { lead: PipelineStuckLead }) {
         </span>
       </td>
     </tr>
+  )
+}
+
+// ─── Backfill GHL ─────────────────────────────────────────
+// Render free n'expose pas le Shell, donc on déclenche le backfill via
+// l'endpoint admin. Idempotent : peut être relancé sans risque.
+
+function BackfillPanel({ onSuccess }: { onSuccess: () => void }) {
+  const [busy, setBusy] = useState<'dry' | 'run' | null>(null)
+  const [summary, setSummary] = useState<PipelineBackfillSummary | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const trigger = async (dryRun: boolean) => {
+    if (busy) return
+    setBusy(dryRun ? 'dry' : 'run')
+    setError(null)
+    try {
+      const result = await runPipelineBackfill({ dryRun })
+      setSummary(result)
+      if (!dryRun) onSuccess()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div className="rounded-[18px] border border-line-soft bg-white px-4 py-3 mb-4">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <p className="text-[10px] uppercase tracking-wide text-faint">Sync GHL → SaaS</p>
+          <p className="text-sm font-bold mt-0.5">Backfill des opportunités</p>
+          <p className="text-xs text-muted mt-1">
+            Récupère les opportunités du pipeline <span className="font-bold">1. CRM Vente</span> côté GHL et remplit <code>ghl_stage_name</code> sur les leads SaaS. Idempotent.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => trigger(true)}
+            className="px-3 py-1.5 rounded-full text-xs font-bold border border-line-soft hover:bg-cream/60 disabled:opacity-50 disabled:cursor-not-allowed transition"
+          >
+            {busy === 'dry' ? 'Dry-run en cours…' : 'Dry-run'}
+          </button>
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => trigger(false)}
+            className="px-3 py-1.5 rounded-full text-xs font-bold bg-or-fonce text-white hover:bg-or-fonce/90 disabled:opacity-50 disabled:cursor-not-allowed transition"
+          >
+            {busy === 'run' ? 'Sync en cours… (≤ 3 min)' : 'Lancer le backfill'}
+          </button>
+        </div>
+      </div>
+      {error && (
+        <p className="mt-3 text-xs text-rouille">⚠ {error}</p>
+      )}
+      {summary && (
+        <div className="mt-3 grid grid-cols-2 sm:grid-cols-6 gap-2 text-xs">
+          <SummaryStat label="Pipeline" value={summary.pipelineName} />
+          <SummaryStat label="Processed" value={summary.processed} />
+          <SummaryStat label="Created" value={summary.created} highlight={summary.created > 0} />
+          <SummaryStat label="Updated" value={summary.updated} highlight={summary.updated > 0} />
+          <SummaryStat label="Skipped" value={summary.skipped} />
+          <SummaryStat label="Failed" value={summary.failed} highlight={summary.failed > 0} negative />
+          {summary.unknownStages.length > 0 && (
+            <div className="col-span-full text-[11px] text-rouille">
+              ⚠ Stages GHL inconnus : {summary.unknownStages.join(', ')}
+            </div>
+          )}
+          <div className="col-span-full text-[10px] text-faint">
+            Durée : {(summary.durationMs / 1000).toFixed(1)}s — {summary.stagesInPipeline} stages dans le pipeline
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SummaryStat({
+  label,
+  value,
+  highlight,
+  negative,
+}: {
+  label: string
+  value: string | number
+  highlight?: boolean
+  negative?: boolean
+}) {
+  const color = negative
+    ? 'text-rouille'
+    : highlight
+    ? 'text-or-fonce'
+    : 'text-foreground'
+  return (
+    <div className="rounded-[12px] border border-line-soft bg-cream/40 px-2 py-1.5">
+      <p className="text-[9px] uppercase tracking-wide text-faint">{label}</p>
+      <p className={`font-black text-sm ${color} truncate`}>{value}</p>
+    </div>
   )
 }
 
