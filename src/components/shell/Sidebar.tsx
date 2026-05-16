@@ -11,8 +11,8 @@ const ITEMS: Item[] = [
   { to: '/rdv', icon: 'calendar', label: 'RDV' },
   { to: '/notifications', icon: 'bell', label: 'Rappels' },
   { to: '/analytics', icon: 'chart', label: 'Analytics' },
-  { to: '/admin/pipeline', icon: 'chart', label: 'Pipeline', roles: ['admin'] },
-  { to: '/settings', icon: 'settings', label: 'Settings', roles: ['admin'] },
+  { to: '/admin/pipeline', icon: 'target', label: 'Pipeline', roles: ['admin'] },
+  { to: '/settings', icon: 'shield', label: 'Admin', roles: ['admin'] },
 ]
 
 const SIDEBAR_STORAGE_KEY = 'ecoi.sidebar.expanded'
