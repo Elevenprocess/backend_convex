@@ -274,7 +274,14 @@ body {
 .app-sidebar.collapsed .sidebar-item,
 .app-sidebar.collapsed .sidebar-toggle {
   justify-content: center;
+  align-items: center;
   padding: 0;
+  text-align: center;
+}
+.app-sidebar.collapsed .sidebar-item svg,
+.app-sidebar.collapsed .sidebar-toggle svg {
+  margin: 0 auto;
+  transform: translateX(0);
 }
 .sidebar-item svg,
 .sidebar-toggle svg { flex: 0 0 auto; }

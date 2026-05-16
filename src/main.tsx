@@ -43,6 +43,7 @@ const router = createHashRouter([
           { path: '/rdv/split', element: <RdvSplit /> },
           { path: '/rdv/:id', element: <RdvDetail /> },
           { path: '/analytics', element: <Analytics /> },
+          { path: '/commercial/pipeline', element: <ProfilCommercial /> },
           { path: '/admin/pipeline', element: <AdminPipeline /> },
           { path: '/deivrabilite', element: <Deliverability /> },
           { path: '/team/setters/:id', element: <ProfilSetter /> },
