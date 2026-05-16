@@ -540,13 +540,14 @@ function LeadsAdmin() {
               </tbody>
             </table>
             {hasMoreRows && (
-              <div className="flex justify-center border-t border-line-soft bg-white/85 p-4 backdrop-blur-xl">
+              <div className="lead-load-more">
                 <button
                   type="button"
-                  className="rounded-full bg-noir px-5 py-2 text-sm font-bold text-white shadow-soft hover:bg-text"
+                  className="lead-load-more-button"
                   onClick={() => setVisibleCount((count) => Math.min(count + ADMIN_VISIBLE_BATCH, filtered.length))}
                 >
-                  Charger 80 leads de plus ({visibleRows.length}/{filtered.length})
+                  <span className="lead-load-more-title">Charger 80 leads de plus</span>
+                  <span className="lead-load-more-count">{visibleRows.length}/{filtered.length}</span>
                 </button>
               </div>
             )}
