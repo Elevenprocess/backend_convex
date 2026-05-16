@@ -46,6 +46,7 @@ function isLeadSidebarExcluded(pathname: string, role?: string): boolean {
     pathname === '/analytics' ||
     pathname === '/notifications' ||
     pathname === '/settings' ||
+    pathname === '/admin/pipeline' ||
     pathname.startsWith('/rdv') ||
     pathname.startsWith('/team/setters') ||
     (role === 'setter' && pathname === '/analytics')
