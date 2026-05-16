@@ -1,6 +1,6 @@
 import { useLocation } from 'react-router-dom'
 import { SplitPanel } from '../SplitPanel'
-import { useLead, useUsers } from '../../lib/hooks'
+import { useLead, useLeads, useUsers } from '../../lib/hooks'
 import { useAuth } from '../../lib/auth'
 import { useLeadSidebar } from '../../lib/leadSidebar'
 import type { UserResponse } from '../../lib/types'
@@ -23,10 +23,12 @@ export function PersistentLeadSidebar() {
     sidebarAllowed,
   )
   const { data: lead, loading, refetch } = useLead(shouldRenderSidebar ? selectedLeadId ?? undefined : undefined)
+  const { data: cachedLeads } = useLeads(shouldRenderSidebar ? { limit: 500 } : null)
   const { data: usersList } = useUsers()
+  const displayLead = lead ?? cachedLeads?.find((item) => item.id === selectedLeadId) ?? null
 
   if (!shouldRenderSidebar) return null
-  if (!lead) {
+  if (!displayLead) {
     if (!loading) return null
     return (
       <aside className="fixed top-0 right-0 bottom-0 z-[140] w-[460px] max-w-[92vw] border-l border-line bg-white/95 p-6 shadow-2xl">
@@ -47,7 +49,7 @@ export function PersistentLeadSidebar() {
 
   return (
     <SplitPanel
-      lead={lead}
+      lead={displayLead}
       userMap={userMap}
       onClose={closeSidebar}
       onSaved={refetch}

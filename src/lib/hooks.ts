@@ -228,8 +228,8 @@ export function useLeads(filters?: {
   city?: string
   limit?: number
   offset?: number
-}): Async<LeadResponse[]> {
-  return useFetch<LeadResponse[]>('/leads', { ...filters, limit: clampLimit(filters?.limit, 250, LEADS_LIMIT_MAX) })
+} | null): Async<LeadResponse[]> {
+  return useFetch<LeadResponse[]>(filters === null ? null : '/leads', filters === null ? undefined : { ...filters, limit: clampLimit(filters?.limit, 250, LEADS_LIMIT_MAX) })
 }
 
 // Two-phase fetch (Facebook News-Feed style):
