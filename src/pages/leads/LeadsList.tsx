@@ -5,7 +5,6 @@ import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
 import { EmptyState } from '../../components/EmptyState'
 import { LeadFiltersBar } from '../../components/LeadFiltersBar'
-import { ProfilCommercial } from '../profils/ProfilCommercial'
 import { useAuth } from '../../lib/auth'
 import { deleteLead, useLeads, useUsers, useStartCall } from '../../lib/hooks'
 import { useLeadSidebar } from '../../lib/leadSidebar'
@@ -85,13 +84,79 @@ const ADMIN_COLUMNS: ColumnChoice[] = [
   { key: 'commercialRdv', label: 'Commercial (from Rendez-vous)' },
   { key: 'actions', label: 'Actions' },
 ]
+const ADMIN_DEFAULT_COLUMNS: ColumnKey[] = [
+  'nom',
+  'telephone',
+  'statut',
+  'setter',
+  'dernierAppel',
+  'jaugeAppels',
+  'prochainRappel',
+  'rdv',
+  'commercialRdv',
+  'actions',
+]
 
 
 export function LeadsList() {
   const role = useAuth((s) => s.user?.role)
   if (role === 'admin') return <LeadsAdmin />
-  if (role === 'commercial') return <ProfilCommercial />
+  if (role === 'commercial') return <LeadsCommercial />
   return <LeadsSetter />
+}
+
+// ----- F3 Commercial -----
+function LeadsCommercial() {
+  const me = useAuth((s) => s.user)
+  const selectedId = useLeadSidebar((s) => s.selectedLeadId)
+  const selectLead = useLeadSidebar((s) => s.selectLead)
+  const { data, loading, error } = useLeads(me?.id ? { assignedToId: me.id, limit: 250 } : { limit: 250 })
+  const leads = data ?? []
+
+  return (
+    <AppShell>
+      <Topbar eyebrow="LEADS / COMMERCIAL" title="Mes leads" />
+      <main className="p-8 flex-grow overflow-auto">
+        {loading && leads.length === 0 ? (
+          <div className="py-16 text-center text-faint text-sm">Chargement des leads…</div>
+        ) : error ? (
+          <div className="py-16 text-center text-rouille text-sm">Erreur : {error}</div>
+        ) : leads.length === 0 ? (
+          <EmptyState icon="users" title="Aucun lead assigné" description="Aucun lead n'est rattaché à ton compte commercial pour le moment." />
+        ) : (
+          <div className="glass-card !p-0 overflow-hidden">
+            <table className="w-full min-w-[980px] text-sm table-fixed lead-table">
+              <thead className="text-left eyebrow sticky top-0 z-10 border-b border-white/60 bg-white/65 shadow-sm shadow-text/5 backdrop-blur-2xl">
+                <tr>
+                  <Th className="w-[260px]">NOM</Th>
+                  <Th className="w-[170px]">STATUT</Th>
+                  <Th className="w-[210px]">TÉLÉPHONE</Th>
+                  <Th className="w-[260px]">ADRESSE</Th>
+                  <Th className="w-[180px]">RENDEZ-VOUS</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {leads.map((lead) => (
+                  <tr
+                    key={lead.id}
+                    className={`border-b border-line-soft last:border-0 cursor-pointer transition-colors ${selectedId === lead.id ? 'bg-or/20 shadow-[inset_4px_0_0_var(--color-or-dark)]' : 'hover:bg-white/40'}`}
+                    onClick={() => selectLead(lead.id)}
+                    title="Cliquer pour ouvrir le détail du lead"
+                  >
+                    <Td><span className="font-semibold truncate" title={fullName(lead)}>{fullName(lead)}</span></Td>
+                    <Td><span className={`status-badge ${statusBadgeForLead(lead)}`}>{statusLabelForLead(lead)}</span></Td>
+                    <Td className="text-muted truncate" title={lead.phone ?? undefined}>{lead.phone ?? '—'}</Td>
+                    <Td className="text-muted truncate" title={addressFull(lead)}>{addressFull(lead)}</Td>
+                    <Td className="text-muted truncate" title={rdvLabel(lead)}>{rdvLabel(lead)}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </main>
+    </AppShell>
+  )
 }
 
 // ----- F5 Setter -----
@@ -114,7 +179,7 @@ function LeadsSetter() {
 
   // Côté setter, l'écran s'ouvre directement sur les nouveaux leads.
   // Le filtre global "Tous" n'est pas affiché aux setters.
-  const { data, loading, error } = useLeads({ limit: 1500 })
+  const { data, loading, error } = useLeads({ limit: 250 })
   const { data: usersList } = useUsers()
   const mine = data ?? []
   const userMap = useMemo(() => {
@@ -253,7 +318,7 @@ function LeadsAdmin() {
   const [commercialFilter, setCommercialFilter] = useState('all')
   const [leadFilters, setLeadFilters] = useState<LeadListFilters>(DEFAULT_LEAD_FILTERS)
   const [openComment, setOpenComment] = useState<{ leadName: string; comment: string } | null>(null)
-  const [visibleColumns, setVisibleColumns] = useColumnVisibility('ecoi.leads.admin.columns.v3', ADMIN_COLUMNS)
+  const [visibleColumns, setVisibleColumns] = useColumnVisibility('ecoi.leads.admin.columns.v4', ADMIN_COLUMNS, ADMIN_DEFAULT_COLUMNS)
   const selectedId = useLeadSidebar((s) => s.selectedLeadId)
   const selectLead = useLeadSidebar((s) => s.selectLead)
   const clearLead = useLeadSidebar((s) => s.clearLead)
@@ -261,7 +326,7 @@ function LeadsAdmin() {
   const [deletingLeadId, setDeletingLeadId] = useState<string | null>(null)
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([])
 
-  const { data: leadsData, loading, error, refetch } = useLeads({ limit: 1500 })
+  const { data: leadsData, loading, error, refetch } = useLeads({ limit: 500 })
   const { data: users = [] } = useUsers()
   const leads = leadsData ?? []
 
@@ -296,6 +361,14 @@ function LeadsAdmin() {
   const allFilteredSelected = filtered.length > 0 && selectedFilteredIds.length === filtered.length
   const someFilteredSelected = selectedFilteredIds.length > 0 && !allFilteredSelected
   const tableScrollRef = useRememberedLeadTableScroll('ecoi.leads.admin.tableScroll.v1', filtered, selectedId)
+  const ADMIN_VISIBLE_BATCH = 80
+  const [visibleCount, setVisibleCount] = useState(ADMIN_VISIBLE_BATCH)
+  const visibleRows = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount])
+  const hasMoreRows = visibleRows.length < filtered.length
+
+  useEffect(() => {
+    setVisibleCount(ADMIN_VISIBLE_BATCH)
+  }, [setterFilter, commercialFilter, leadFilters, leads.length])
 
   useEffect(() => {
     const existingIds = new Set(leads.map((lead) => lead.id))
@@ -385,6 +458,9 @@ function LeadsAdmin() {
           ))}
         </select>
         <LeadFiltersBar filters={leadFilters} onChange={setLeadFilters} total={(leads ?? []).length} filtered={filtered.length} />
+        <span className="rounded-full border border-line-soft bg-white/70 px-3 py-2 text-xs font-bold text-muted">
+          Affichés {visibleRows.length}/{filtered.length}
+        </span>
         <ColumnVisibilityMenu columns={ADMIN_COLUMNS} visible={visibleColumns} onChange={setVisibleColumns} />
         {loading && leads.length > 0 && <span className="text-xs text-faint">Actualisation…</span>}
         <div className="ml-auto flex items-center gap-2">
@@ -439,15 +515,15 @@ function LeadsAdmin() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((l) => (
+                {visibleRows.map((l) => (
                   <tr
                     key={l.id}
                     data-lead-id={l.id}
                     className={`border-b border-line-soft last:border-0 cursor-pointer transition-colors ${
                       selectedId === l.id ? 'bg-or/20 shadow-[inset_4px_0_0_var(--color-or-dark)] !text-text' : selectedLeadIds.includes(l.id) ? 'bg-or/10' : 'hover:bg-white/40'
                     }`}
-                    onDoubleClick={() => selectLead(l.id)}
-                    title="Double-cliquer pour ouvrir le détail du lead"
+                    onClick={() => selectLead(l.id)}
+                    title="Cliquer pour ouvrir le détail du lead"
                   >
                     <Td className="text-center" onClick={(event) => event.stopPropagation()}>
                       <input
@@ -463,6 +539,17 @@ function LeadsAdmin() {
                 ))}
               </tbody>
             </table>
+            {hasMoreRows && (
+              <div className="sticky bottom-0 flex justify-center border-t border-line-soft bg-white/85 p-3 backdrop-blur-xl">
+                <button
+                  type="button"
+                  className="rounded-full bg-noir px-5 py-2 text-sm font-bold text-white shadow-soft hover:bg-text"
+                  onClick={() => setVisibleCount((count) => Math.min(count + ADMIN_VISIBLE_BATCH, filtered.length))}
+                >
+                  Charger 80 leads de plus ({visibleRows.length}/{filtered.length})
+                </button>
+              </div>
+            )}
             </div>
           </div>
         )}
@@ -821,8 +908,9 @@ function useRememberedLeadTableScroll(
   return scrollRef
 }
 
-function useColumnVisibility(storageKey: string, columns: ColumnChoice[]) {
-  const defaultKeys = columns.map((c) => c.key)
+function useColumnVisibility(storageKey: string, columns: ColumnChoice[], defaultVisibleKeys?: ColumnKey[]) {
+  const allKeys = columns.map((c) => c.key)
+  const defaultKeys = (defaultVisibleKeys?.filter((key) => allKeys.includes(key)) ?? allKeys)
   const [visible, setVisible] = useState<ColumnKey[]>(() => {
     if (typeof window === 'undefined') return defaultKeys
     const raw = window.localStorage.getItem(storageKey)
@@ -830,10 +918,8 @@ function useColumnVisibility(storageKey: string, columns: ColumnChoice[]) {
     try {
       const parsed = JSON.parse(raw)
       if (!Array.isArray(parsed)) return defaultKeys
-      const valid = parsed.filter((key): key is string => defaultKeys.includes(String(key)))
-      const missing = defaultKeys.filter((key) => !valid.includes(key))
-      const merged = [...valid, ...missing]
-      return merged.length ? merged : defaultKeys
+      const valid = parsed.filter((key): key is string => allKeys.includes(String(key)))
+      return valid.length ? valid : defaultKeys
     } catch {
       return defaultKeys
     }

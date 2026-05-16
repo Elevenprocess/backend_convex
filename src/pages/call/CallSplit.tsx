@@ -4,7 +4,8 @@ import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { SplitPanel } from '../../components/SplitPanel'
 import { Icon } from '../../components/Icon'
-import { useLead, useLeads, useUsers, createCallLog } from '../../lib/hooks'
+import { useLead, useLeads, useUsers, createCallLog, copyText } from '../../lib/hooks'
+import { notifyClipboardCopied } from '../../lib/clipboardToast'
 import { useCall } from '../../lib/call'
 import {
   fullName,
@@ -25,7 +26,7 @@ export function CallSplit() {
   const [searchParams] = useSearchParams()
   const manualNumber = searchParams.get('number')?.trim() ?? ''
   const { active, startedAt, leadId, result, notes, startCall, endCall, minimize } = useCall()
-  const { data: leads } = useLeads({ limit: 1500 })
+  const { data: leads } = useLeads({ limit: 250 })
   const { data: users } = useUsers()
   const { data: leadFromHook } = useLead(leadId && leadId !== 'manual' ? leadId : undefined)
   const [now, setNow] = useState(Date.now())
@@ -38,7 +39,7 @@ export function CallSplit() {
     if (active) return
     if (manualNumber) {
       startCall('manual', manualNumber)
-      navigator.clipboard?.writeText(manualNumber).catch(() => undefined)
+      copyText(manualNumber).then(() => notifyClipboardCopied({ message: 'Numéro copié pour Ringover' })).catch(() => undefined)
       return
     }
     if (leads && leads.length > 0) {
@@ -48,7 +49,7 @@ export function CallSplit() {
         return
       }
       startCall(demo.id, fullName(demo))
-      navigator.clipboard?.writeText(demo.phone).catch(() => undefined)
+      copyText(demo.phone).then(() => notifyClipboardCopied({ message: 'Numéro copié pour Ringover' })).catch(() => undefined)
     }
   }, [manualNumber, active, leads, startCall])
 

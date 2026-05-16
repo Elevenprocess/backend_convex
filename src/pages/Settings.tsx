@@ -6,7 +6,7 @@ import { Topbar } from '../components/shell/Topbar'
 import { Icon } from '../components/Icon'
 import { UserEditModal } from '../components/UserEditModal'
 import { useAuth } from '../lib/auth'
-import { inviteUser, updateUser, useGhlUsers, useInvitations, useUsers } from '../lib/hooks'
+import { inviteUser, useInvitations, useUsers } from '../lib/hooks'
 import { useTheme } from '../lib/theme'
 import type { InvitationResponse, Role, Team, UserResponse } from '../lib/types'
 
@@ -48,12 +48,12 @@ export function Settings() {
 
 function SettingsAdmin() {
   const { data: users, loading, error, refetch: refetchUsers } = useUsers()
-  const { data: invitations, refetch: refetchInvitations } = useInvitations()
-  const { data: ghlUsers, error: ghlUsersError } = useGhlUsers()
-  const isDark = useTheme((s) => s.isDark)
-  const toggleTheme = useTheme((s) => s.toggleTheme)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<UserResponse | null>(null)
+  const shouldLoadInvitations = inviteOpen || Boolean(editingUser)
+  const { data: invitations, refetch: refetchInvitations } = useInvitations(shouldLoadInvitations)
+  const isDark = useTheme((s) => s.isDark)
+  const toggleTheme = useTheme((s) => s.toggleTheme)
   const team = users ?? []
   const pendingInvitations = (invitations ?? []).filter((i) => i.status === 'pending')
   const pendingInvitationByUserId = useMemo(() => {
@@ -105,11 +105,10 @@ function SettingsAdmin() {
                   <Th>EMAIL</Th>
                   <Th>RÔLE</Th>
                   <Th>STATUT</Th>
-                  <Th>GHL</Th>
                   <Th className="text-right">ACTIONS</Th>
                 </tr>
               </thead>
-              <tbody>{team.map((m) => <UserRow key={m.id} user={m} ghlUsers={ghlUsers ?? []} onMapped={refetchUsers} onEdit={setEditingUser} />)}</tbody>
+              <tbody>{team.map((m) => <UserRow key={m.id} user={m} onEdit={setEditingUser} />)}</tbody>
             </table>
           )}
         </div>
@@ -128,8 +127,7 @@ function SettingsAdmin() {
             <MockSubBanner />
             <h3 className="font-bold mb-4">Intégrations</h3>
             <div className="space-y-3">
-              {ghlUsersError && <div className="rounded-xl bg-rouille-tint px-3 py-2 text-xs text-rouille">Users GHL indisponibles : {ghlUsersError}</div>}
-              <IntegrationRow name="GoHighLevel" desc="Webhooks leads, agendas et mapping commerciaux" status="active" />
+              <IntegrationRow name="GoHighLevel" desc="Webhooks leads entrants" status="active" />
               <IntegrationRow name="Airtable" desc="Migration one-shot" status="done" />
               <IntegrationRow name="Twilio" desc="SMS de rappel" status="todo" />
             </div>
@@ -256,40 +254,14 @@ function Field({ label, value, onChange, type = 'text', required = false }: { la
   )
 }
 
-function UserRow({ user, ghlUsers, onMapped, onEdit }: { user: UserResponse; ghlUsers: Array<{ id: string; name: string; email: string | null }>; onMapped: () => void; onEdit: (user: UserResponse) => void }) {
+function UserRow({ user, onEdit }: { user: UserResponse; onEdit: (user: UserResponse) => void }) {
   const inits = userInitials(user.name)
-  const [savingGhl, setSavingGhl] = useState(false)
-  async function saveGhlUser(ghlUserId: string) {
-    setSavingGhl(true)
-    try {
-      await updateUser(user.id, { ghlUserId: ghlUserId || null })
-      onMapped()
-    } finally {
-      setSavingGhl(false)
-    }
-  }
   return (
     <tr className="border-b border-line-soft last:border-0 hover:bg-white/40">
       <td className="px-3 py-3"><div className="flex items-center gap-3"><div className={`w-7 h-7 rounded-full ${ROLE_TINT[user.role]} flex items-center justify-center text-[10px] font-bold`}>{inits}</div><span className="font-semibold">{user.name}</span></div></td>
       <td className="px-3 py-3 text-muted">{user.email}</td>
       <td className="px-3 py-3"><span className={`status-badge ${ROLE_BADGE[user.role]}`}>{ROLE_LABEL[user.role]}</span></td>
       <td className="px-3 py-3"><span className={`status-badge ${user.active ? 'bg-success-tint text-success' : 'bg-rouille-tint text-rouille'}`}>{user.active ? 'Actif' : 'Inactif'}</span></td>
-      <td className="px-3 py-3">
-        {user.role === 'commercial' ? (
-          <div className="flex items-center gap-2">
-            <select
-              value={user.ghlUserId ?? ''}
-              disabled={savingGhl}
-              onChange={(e) => void saveGhlUser(e.target.value)}
-              className="max-w-[220px] rounded-xl border border-line bg-white/70 px-3 py-2 text-xs outline-none focus:border-or"
-            >
-              <option value="">Non relié</option>
-              {ghlUsers.map((g) => <option key={g.id} value={g.id}>{g.name}{g.email ? ` · ${g.email}` : ''}</option>)}
-            </select>
-            <span className={`status-badge ${user.ghlUserId ? 'bg-success-tint text-success' : 'bg-muted/10 text-muted'}`}>{user.ghlUserId ? 'Relié' : 'À relier'}</span>
-          </div>
-        ) : <span className="text-xs text-faint">—</span>}
-      </td>
       <td className="px-3 py-3 text-right"><button onClick={() => onEdit(user)} className="text-xs text-muted hover:text-text font-semibold">Modifier</button></td>
     </tr>
   )

@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
-import { prefetchAnalyticsSummary, useAnalyticsSummary } from '../lib/hooks'
-import { REALTIME_REFRESH_EVENT, type RealtimeRefreshPayload } from '../lib/realtime'
+import { useAnalyticsSummary } from '../lib/hooks'
 import type { AnalyticsAdminSummary, AnalyticsCommercialPerf, AnalyticsCommercialSummary, AnalyticsDailyPoint, AnalyticsSegment, AnalyticsSetterSummary } from '../lib/types'
 
 type Segment = AnalyticsSegment
@@ -24,13 +23,8 @@ const PERIOD_OPTIONS: { id: PeriodMode; label: string }[] = [
   { id: 'custom', label: 'Plage de dates' },
 ]
 
-const PRELOADED_PERIOD_MODES: PeriodMode[] = PERIOD_OPTIONS
-  .map((option) => option.id)
-  .filter((id): id is Exclude<PeriodMode, 'custom'> => id !== 'custom')
-
 const todayInput = toDateInputValue(new Date())
 const DEFAULT_PERIOD: PeriodState = { mode: 'today', customFrom: todayInput, customTo: todayInput }
-const ALL_TIME_FROM_ISO = '2020-01-01T00:00:00.000Z'
 
 
 const EMPTY_SETTER_STATS: AnalyticsSetterSummary = {
@@ -96,31 +90,10 @@ export function Analytics() {
 }
 
 function useWarmAnalyticsPresetRanges() {
-  useEffect(() => {
-    const ranges = PRELOADED_PERIOD_MODES.map((mode) => buildPeriodRange({
-      mode,
-      customFrom: todayInput,
-      customTo: todayInput,
-    }))
-    const warmPresetRanges = (force = false) => {
-      void Promise.allSettled(
-        ranges.map((range) => prefetchAnalyticsSummary({ from: range.from, to: range.to }, { force })),
-      )
-    }
-
-    const timer = window.setTimeout(() => warmPresetRanges(), 0)
-    const onRealtimeRefresh = (event: Event) => {
-      const detail = (event as CustomEvent<RealtimeRefreshPayload>).detail
-      if (!detail?.paths?.some((prefix) => prefix === '/analytics/summary' || prefix === '/analytics/funnel')) return
-      window.setTimeout(() => warmPresetRanges(true), 0)
-    }
-    window.addEventListener(REALTIME_REFRESH_EVENT, onRealtimeRefresh)
-
-    return () => {
-      window.clearTimeout(timer)
-      window.removeEventListener(REALTIME_REFRESH_EVENT, onRealtimeRefresh)
-    }
-  }, [])
+  // Ancien comportement: préchargeait toutes les périodes en parallèle.
+  // En admin cela lançait 5-8 appels /analytics/summary dont une période longue,
+  // ce qui saturait le backend et donnait des chargements à 8-20s.
+  useEffect(() => undefined, [])
 }
 
 // ----- F11 Setter -----
@@ -252,10 +225,8 @@ function AnalyticsAdmin() {
   const [period, setPeriod] = useState<PeriodState>(DEFAULT_PERIOD)
   const range = buildPeriodRange(period)
   const { data, loading, error } = useAnalyticsSummary({ from: range.from, to: range.to })
-  const allTimeTo = range.to
-  const { data: allTimeData, loading: allTimeLoading } = useAnalyticsSummary({ from: ALL_TIME_FROM_ISO, to: allTimeTo })
   const stats = data?.admin ?? EMPTY_ADMIN_STATS
-  const commercialStats = allTimeData?.admin ?? EMPTY_ADMIN_STATS
+  const commercialStats = stats
 
   return (
     <AppShell blobsKey="admin" flat>
@@ -328,7 +299,7 @@ function AnalyticsAdmin() {
           </div>
         </div>
 
-        <CommercialTrackingDashboard commercials={commercialStats.commercials} totalCa={commercialStats.ca} totalSigned={commercialStats.signed} totalHonored={commercialStats.commercials.reduce((sum, c) => sum + c.honored, 0)} loading={allTimeLoading} />
+        <CommercialTrackingDashboard commercials={commercialStats.commercials} totalCa={commercialStats.ca} totalSigned={commercialStats.signed} totalHonored={commercialStats.commercials.reduce((sum, c) => sum + c.honored, 0)} loading={loading} />
       </main>
     </AppShell>
   )

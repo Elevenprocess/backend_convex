@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Blobs, BLOB_PRESETS } from '../../components/shell/Blobs'
 import { Icon } from '../../components/Icon'
-import { useLead, createCallLog } from '../../lib/hooks'
+import { useLead, createCallLog, copyText } from '../../lib/hooks'
+import { notifyClipboardCopied } from '../../lib/clipboardToast'
 import { useCall } from '../../lib/call'
 import {
   fullName,
@@ -51,7 +52,7 @@ export function CallFullScreen() {
       return
     }
     startCall(lead.id, fullName(lead))
-    navigator.clipboard?.writeText(lead.phone).catch(() => undefined)
+    copyText(lead.phone).then(() => notifyClipboardCopied({ message: 'Numéro copié pour Ringover' })).catch(() => undefined)
   }, [lead, active, startCall])
 
   useEffect(() => {
