@@ -496,7 +496,7 @@ function LeadsAdmin() {
         ) : (
           <div className="glass-card !p-0 overflow-hidden flex-grow min-h-0">
             <div ref={tableScrollRef} data-preserve-scroll="true" className="overflow-auto h-full">
-            <table className="min-w-[1760px] w-full text-sm table-fixed lead-table">
+            <table className="min-w-[1800px] w-full text-sm table-fixed lead-table">
               <thead className="text-left eyebrow sticky top-0 z-10 border-b border-white/60 bg-white/65 shadow-sm shadow-text/5 backdrop-blur-2xl">
                 <tr>
                   <Th className="w-[60px] text-center">
@@ -540,7 +540,7 @@ function LeadsAdmin() {
               </tbody>
             </table>
             {hasMoreRows && (
-              <div className="sticky bottom-0 flex justify-center border-t border-line-soft bg-white/85 p-3 backdrop-blur-xl">
+              <div className="flex justify-center border-t border-line-soft bg-white/85 p-4 backdrop-blur-xl">
                 <button
                   type="button"
                   className="rounded-full bg-noir px-5 py-2 text-sm font-bold text-white shadow-soft hover:bg-text"
@@ -720,7 +720,7 @@ function renderSetterCell(
 
 function renderAdminHeader(key: ColumnKey) {
   switch (key) {
-    case 'nom': return <Th key={key} className="w-[170px] lead-sticky-head">NOM</Th>
+    case 'nom': return <Th key={key} className="w-[190px] lead-sticky-head">NOM</Th>
     case 'statut': return <Th key={key} className="w-[160px]">STATUT OPPORTUNITÉ</Th>
     case 'email': return <Th key={key} className="w-[220px]">EMAIL</Th>
     case 'telephone': return <Th key={key} className="w-[180px]">TÉLÉPHONE DU PROSPECT</Th>
@@ -775,7 +775,7 @@ function renderAdminCell(
   actions: { onDelete: (lead: LeadResponse) => void; deletingLeadId: string | null },
 ) {
   switch (key) {
-    case 'nom': return <Td key={key} className="lead-sticky-cell"><span className="block max-w-[135px] font-semibold truncate" title={fullName(lead)}>{fullName(lead)}</span></Td>
+    case 'nom': return <Td key={key} className="lead-sticky-cell"><span className="block max-w-[155px] font-semibold truncate" title={fullName(lead)}>{fullName(lead)}</span></Td>
     case 'statut': return <Td key={key}><span className={`status-badge ${statusBadgeForLead(lead)}`}>{statusLabelForLead(lead)}</span></Td>
     case 'email': return <Td key={key} className="text-muted truncate" title={lead.email ?? undefined}>{lead.email ?? '—'}</Td>
     case 'telephone': return <Td key={key} className="text-muted truncate" title={lead.phone ?? undefined}>{lead.phone ?? '—'}</Td>
