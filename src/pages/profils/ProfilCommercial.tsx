@@ -303,7 +303,10 @@ function buildStageMetrics(cardsByStage: Map<PipelineStageId, ProspectCard[]>): 
     const rows = cardsByStage.get(stage.id) ?? []
     metrics.set(stage.id, {
       opportunities: rows.length,
-      amount: rows.reduce((sum, card) => sum + (card.rdv.montantTotal ? Number(card.rdv.montantTotal) : 0), 0),
+      amount: rows.reduce((sum, card) => {
+        const raw = card.rdv.montantTotal ?? card.lead?.monetaryValue ?? null
+        return sum + (raw ? Number(raw) : 0)
+      }, 0),
     })
   }
   return metrics
