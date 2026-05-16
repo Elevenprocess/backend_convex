@@ -32,7 +32,7 @@ type FetchCacheEntry = {
   timestamp: number
 }
 
-const FETCH_CACHE_TTL_MS = 5 * 60 * 1000
+const FETCH_CACHE_TTL_MS = 10 * 60 * 1000
 const PERSISTED_CACHE_PREFIX = 'ecoi.fetchCache.v1:'
 const PERSISTED_CACHE_PATHS = ['/leads', '/users', '/analytics/summary', '/ghl-calendar/events']
 const fetchCache = new Map<string, FetchCacheEntry>()
@@ -64,7 +64,8 @@ function shouldPersistCache(cacheKey: string): boolean {
 function readPersistedCache(cacheKey: string): FetchCacheEntry | null {
   if (typeof window === 'undefined' || !shouldPersistCache(cacheKey)) return null
   try {
-    const raw = window.sessionStorage.getItem(`${PERSISTED_CACHE_PREFIX}${cacheKey}`)
+    const storageKey = `${PERSISTED_CACHE_PREFIX}${cacheKey}`
+    const raw = window.sessionStorage.getItem(storageKey) ?? window.localStorage.getItem(storageKey)
     if (!raw) return null
     return JSON.parse(raw) as FetchCacheEntry
   } catch {
@@ -77,9 +78,12 @@ function writeCache(cacheKey: string | null, entry: FetchCacheEntry) {
   fetchCache.set(cacheKey, entry)
   if (typeof window === 'undefined' || !shouldPersistCache(cacheKey)) return
   try {
-    window.sessionStorage.setItem(`${PERSISTED_CACHE_PREFIX}${cacheKey}`, JSON.stringify(entry))
+    const storageKey = `${PERSISTED_CACHE_PREFIX}${cacheKey}`
+    const serialized = JSON.stringify(entry)
+    window.sessionStorage.setItem(storageKey, serialized)
+    window.localStorage.setItem(storageKey, serialized)
   } catch {
-    // Cache best-effort : si le navigateur refuse/limite sessionStorage, l'app continue.
+    // Cache best-effort : si le navigateur refuse/limite le stockage, l'app continue.
   }
 }
 
@@ -103,7 +107,9 @@ function deleteCache(cacheKey: string) {
   fetchCache.delete(cacheKey)
   if (typeof window === 'undefined') return
   try {
-    window.sessionStorage.removeItem(`${PERSISTED_CACHE_PREFIX}${cacheKey}`)
+    const storageKey = `${PERSISTED_CACHE_PREFIX}${cacheKey}`
+    window.sessionStorage.removeItem(storageKey)
+    window.localStorage.removeItem(storageKey)
   } catch {
     // best-effort
   }
@@ -115,12 +121,14 @@ function deleteCachesForPrefixes(prefixes: string[]) {
   }
   if (typeof window === 'undefined') return
   try {
-    for (let i = window.sessionStorage.length - 1; i >= 0; i--) {
-      const storageKey = window.sessionStorage.key(i)
-      if (!storageKey?.startsWith(PERSISTED_CACHE_PREFIX)) continue
-      const cacheKey = storageKey.slice(PERSISTED_CACHE_PREFIX.length)
-      if (prefixes.some((prefix) => cacheKey.startsWith(`${prefix}?`))) {
-        window.sessionStorage.removeItem(storageKey)
+    for (const storage of [window.sessionStorage, window.localStorage]) {
+      for (let i = storage.length - 1; i >= 0; i--) {
+        const storageKey = storage.key(i)
+        if (!storageKey?.startsWith(PERSISTED_CACHE_PREFIX)) continue
+        const cacheKey = storageKey.slice(PERSISTED_CACHE_PREFIX.length)
+        if (prefixes.some((prefix) => cacheKey.startsWith(`${prefix}?`))) {
+          storage.removeItem(storageKey)
+        }
       }
     }
   } catch {
