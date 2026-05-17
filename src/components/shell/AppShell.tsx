@@ -20,7 +20,7 @@ export function AppShell({ children, blobsKey, flat = false }: AppShellProps) {
   const { pathname } = useLocation()
   const key = blobsKey ?? role
   const blobs = BLOB_PRESETS[key] ?? BLOB_PRESETS.default
-  const reserveLeadSidebar = Boolean(selectedLeadId && sidebarOpen && !isLeadSidebarExcluded(pathname, authRole))
+  const reserveLeadSidebar = Boolean(selectedLeadId && sidebarOpen && shouldReserveLeadSidebar(pathname, authRole))
 
   return (
     <div className={`relative w-full h-screen overflow-hidden ${flat ? 'bg-white appshell-flat' : 'bg-cream'}`}>
@@ -38,19 +38,11 @@ export function AppShell({ children, blobsKey, flat = false }: AppShellProps) {
   )
 }
 
-function isLeadSidebarExcluded(pathname: string, role?: string): boolean {
-  return (
-    pathname === '/leads' ||
-    pathname === '/overview' ||
-    pathname === '/deliverability' ||
-    pathname === '/analytics' ||
-    pathname === '/notifications' ||
-    pathname === '/settings' ||
-    pathname === '/admin/pipeline' ||
-    pathname === '/commercial/pipeline' ||
-    pathname.startsWith('/rdv') ||
-    pathname.startsWith('/team/setters') ||
-    pathname.startsWith('/team/commerciaux') ||
-    (role === 'setter' && pathname === '/analytics')
-  )
+function shouldReserveLeadSidebar(pathname: string, role?: string): boolean {
+  // Le panneau lead persistant ne s'affiche que sur /leads et /call.
+  // Sur /leads il est en overlay, donc il ne doit pas pousser le layout.
+  // Avant, toute page non exclue (ex: /profile) gardait 420px invisibles
+  // quand un lead restait sélectionné depuis la page Leads.
+  if (role === 'setter' && pathname === '/analytics') return false
+  return pathname.startsWith('/call')
 }
