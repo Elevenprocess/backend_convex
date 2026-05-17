@@ -275,16 +275,28 @@ body {
 .overview-air-kpi strong { display: block; margin-top: 7px; font-size: 28px; line-height: .92; font-weight: 520; letter-spacing: -.052em; color: var(--color-text); }
 .overview-air-kpi p { margin: 7px 0 0; font-size: 11px; line-height: 1.2; font-weight: 650; color: var(--color-muted); }
 .overview-air-card { padding: 20px; }
-.overview-air-chart { grid-column: span 6; min-height: 240px; }
+.overview-air-chart { grid-column: span 4; min-height: 240px; }
+.overview-air-pie { grid-column: span 2; min-height: 240px; }
 .overview-air-pipeline { grid-column: span 6; min-height: 240px; display: flex; flex-direction: column; gap: 13px; }
 .overview-air-funnel { grid-column: span 12; min-height: 0; }
 .shot-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .shot-card-head h3 { margin: 0; font-size: 18px; line-height: 1.08; font-weight: 750; letter-spacing: -.03em; color: var(--color-text); }
-.shot-bars { height: 150px; display: flex; align-items: end; justify-content: space-around; gap: 18px; padding: 6px 8px 0; }
-.shot-bar-col { flex: 0 1 54px; min-width: 38px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 10px; }
-.shot-bar-col span { width: 12px; border-radius: 999px; background: var(--color-cuivre); opacity: .62; }
-.shot-bar-col span.active { width: 18px; background: var(--color-or); opacity: 1; }
-.shot-bar-col small { font-size: 10px; color: var(--color-faint); font-weight: 800; text-transform: capitalize; white-space: nowrap; }
+.shot-bars { height: 150px; display: flex; align-items: end; justify-content: space-around; gap: 12px; padding: 6px 2px 0; }
+.shot-bar-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 10px; }
+.shot-bar-col span { width: 11px; border-radius: 999px; background: var(--color-cuivre); opacity: .62; }
+.shot-bar-col span.active { width: 17px; background: var(--color-or); opacity: 1; }
+.shot-bar-col small { font-size: 9px; line-height: 1.05; color: var(--color-faint); font-weight: 800; text-transform: capitalize; white-space: nowrap; text-align: center; }
+.shot-bar-col small b,
+.shot-bar-col small em { display: block; font-style: normal; font-weight: 800; }
+.overview-pie-body { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.overview-pie { width: 118px; height: 118px; border-radius: 999px; display: grid; place-items: center; box-shadow: inset 0 0 0 1px rgba(255,255,255,.4); }
+.overview-pie > div { width: 72px; height: 72px; border-radius: 999px; display: grid; place-items: center; align-content: center; background: var(--color-cream); text-align: center; }
+.overview-pie strong { display: block; font-size: 22px; line-height: 1; font-weight: 850; color: var(--color-text); }
+.overview-pie span { display: block; margin-top: 3px; font-size: 9px; font-weight: 850; text-transform: uppercase; color: var(--color-faint); }
+.overview-pie-legend { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+.overview-pie-legend div { display: grid; grid-template-columns: 8px 1fr auto; align-items: center; gap: 7px; font-size: 10px; font-weight: 750; color: var(--color-muted); }
+.overview-pie-legend i { width: 8px; height: 8px; border-radius: 999px; }
+.overview-pie-legend strong { color: var(--color-text); }
 .shot-onboarding-top { display: flex; justify-content: space-between; align-items: start; gap: 14px; }
 .shot-onboarding-top h3 { margin: 4px 0 0; font-size: 19px; font-weight: 750; letter-spacing: -.032em; color: var(--color-text); }
 .shot-onboarding-top strong { font-size: 32px; font-weight: 520; line-height: .95; letter-spacing: -.055em; color: var(--color-text); }
@@ -326,10 +338,10 @@ body {
 [data-theme="dark"] .shot-calendar-head button { background: rgba(18,18,18,.56); color: var(--color-muted); border-color: var(--color-line); }
 @media (max-width: 1280px) {
   .overview-profile-panel, .overview-air-kpi { grid-column: span 4; }
-  .overview-air-chart, .overview-air-pipeline { grid-column: span 6; }
+  .overview-air-chart, .overview-air-pie, .overview-air-pipeline { grid-column: span 6; }
 }
 @media (max-width: 980px) {
-  .overview-profile-panel, .overview-air-kpi, .overview-air-chart, .overview-air-pipeline, .overview-air-funnel { grid-column: span 12; }
+  .overview-profile-panel, .overview-air-kpi, .overview-air-chart, .overview-air-pie, .overview-air-pipeline, .overview-air-funnel { grid-column: span 12; }
 }
 @media (max-width: 860px) {
   .overview-shot-page { padding: 18px; }

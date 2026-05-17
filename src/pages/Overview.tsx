@@ -6,7 +6,7 @@ import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
 import { useDisplayUser } from '../lib/role'
 import { useCallLogs, useLeads, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary } from '../lib/hooks'
-import { fullName, initials, type AnalyticsFunnelResponse, type CallLogResponse, type LeadResponse, type RdvResponse } from '../lib/types'
+import { STATUS_LABEL, fullName, initials, type AnalyticsFunnelResponse, type CallLogResponse, type LeadResponse, type LeadStatus, type RdvResponse } from '../lib/types'
 
 const ALL_TIME_FROM_ISO = '2020-01-01T00:00:00.000Z'
 
@@ -423,8 +423,10 @@ function OverviewAdmin() {
 
           <div className="overview-air-card overview-air-chart">
             <CardHead title="Évolution des leads" icon="chart" />
-            <MiniBarChart values={monthlyLeadSeries(leads ?? [])} />
+            <MiniBarChart points={dailyLeadSeries(leads ?? [])} />
           </div>
+
+          <LeadPieAnalysis leads={leads ?? []} />
 
           <div className="overview-air-card overview-air-pipeline">
             <div className="shot-onboarding-top">
@@ -491,21 +493,65 @@ function CardHead({ title, icon }: { title: string; icon: ShotIcon }) {
   )
 }
 
-function MiniBarChart({ values }: { values: number[] }) {
-  const visible = values.slice(-6)
-  const max = Math.max(1, ...visible)
-  const labels = lastNMonths(values.length).slice(-6).map((month) => {
-    const d = new Date(`${month}-01T12:00:00`)
-    return d.toLocaleDateString('fr-FR', { month: 'short' }).replace('.', '')
-  })
+type DailyLeadPoint = { date: string; value: number }
+
+function MiniBarChart({ points }: { points: DailyLeadPoint[] }) {
+  const max = Math.max(1, ...points.map((p) => p.value))
   return (
     <div className="shot-bars">
-      {visible.map((value, index) => (
-        <div key={`${value}-${index}`} className="shot-bar-col">
-          <span className={index === visible.length - 1 ? 'active' : ''} style={{ height: `${Math.max(14, (value / max) * 118)}px` }} />
-          <small>{labels[index] ?? `${index + 1}`}</small>
+      {points.map((point, index) => {
+        const label = formatFullDayLabel(point.date)
+        return (
+          <div key={point.date} className="shot-bar-col">
+            <span className={index === points.length - 1 ? 'active' : ''} style={{ height: `${Math.max(14, (point.value / max) * 118)}px` }} />
+            <small>
+              <b>{label.dayMonth}</b>
+              <em>{label.year}</em>
+            </small>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+const PIE_COLORS = ['#D4AF37', '#3DA86A', '#B87333', '#6B7C8C', '#B7410E', '#7C6A46']
+
+function LeadPieAnalysis({ leads }: { leads: LeadResponse[] }) {
+  const segments = leadStatusSegments(leads)
+  const total = segments.reduce((sum, segment) => sum + segment.value, 0)
+  const gradient = total
+    ? segments.reduce<{ parts: string[]; cursor: number }>((acc, segment, index) => {
+        const start = acc.cursor
+        const end = start + (segment.value / total) * 360
+        acc.parts.push(`${PIE_COLORS[index % PIE_COLORS.length]} ${start}deg ${end}deg`)
+        acc.cursor = end
+        return acc
+      }, { parts: [], cursor: 0 }).parts.join(', ')
+    : 'var(--color-line-soft) 0deg 360deg'
+
+  return (
+    <div className="overview-air-card overview-air-pie">
+      <CardHead title="Analyse camembert" icon="target" />
+      <div className="overview-pie-body">
+        <div className="overview-pie" style={{ background: `conic-gradient(${gradient})` }}>
+          <div>
+            <strong>{fmtCompact(total)}</strong>
+            <span>leads</span>
+          </div>
         </div>
-      ))}
+        <div className="overview-pie-legend">
+          {segments.length === 0 ? (
+            <span className="text-xs text-faint">Aucune donnée lead.</span>
+          ) : segments.slice(0, 5).map((segment, index) => (
+            <div key={segment.status}>
+              <i style={{ background: PIE_COLORS[index % PIE_COLORS.length] }} />
+              <span>{segment.label}</span>
+              <strong>{fmtCompact(segment.value)}</strong>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
@@ -780,9 +826,31 @@ function shortDateTime(iso: string): string {
 
 // ===== Futuristic data helpers =====
 
-function monthlyLeadSeries(leads: LeadResponse[]): number[] {
-  const months = lastNMonths(8)
-  return months.map((m) => leads.filter((l) => isoMonthKey(l.createdAt) === m).length)
+function dailyLeadSeries(leads: LeadResponse[]): DailyLeadPoint[] {
+  const days = lastNDays(6)
+  return days.map((date) => ({
+    date,
+    value: leads.filter((lead) => lead.createdAt?.slice(0, 10) === date).length,
+  }))
+}
+
+function formatFullDayLabel(isoDay: string): { dayMonth: string; year: string } {
+  const date = new Date(`${isoDay}T12:00:00`)
+  return {
+    dayMonth: date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }).replace('.', ''),
+    year: date.toLocaleDateString('fr-FR', { year: 'numeric' }),
+  }
+}
+
+function leadStatusSegments(leads: LeadResponse[]): { status: LeadStatus; label: string; value: number }[] {
+  const counts = leads.reduce<Record<string, number>>((acc, lead) => {
+    acc[lead.status] = (acc[lead.status] ?? 0) + 1
+    return acc
+  }, {})
+  return Object.entries(counts)
+    .map(([status, value]) => ({ status: status as LeadStatus, label: STATUS_LABEL[status as LeadStatus] ?? status, value }))
+    .filter((segment) => segment.value > 0)
+    .sort((a, b) => b.value - a.value)
 }
 
 function rdvRevenueSeries(rdvs: RdvResponse[]): number[] {
