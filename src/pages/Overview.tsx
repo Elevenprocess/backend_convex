@@ -327,11 +327,14 @@ function OverviewCommercial() {
   )
 }
 
+type LeadChartRange = 'day' | 'week' | 'month' | 'year'
+
 // ----- F4 Admin -----
 function OverviewAdmin() {
   const navigate = useNavigate()
   const me = useAuth((s) => s.user)
   const [tab, setTab] = useState('overview')
+  const [leadChartRange, setLeadChartRange] = useState<LeadChartRange>('day')
   const [funnelPeriod] = useState<FunnelPeriodState>(DEFAULT_FUNNEL_PERIOD)
   const funnelRange = buildFunnelPeriodRange(funnelPeriod)
   const { data: funnel } = useAnalyticsFunnel({
@@ -422,8 +425,22 @@ function OverviewAdmin() {
           <AirKpi icon="users" label="Leads" value={fmtCompact(stats.leads)} sub={`${fmtCompact(stats.qualified)} qualifiés`} />
 
           <div className="overview-air-card overview-air-chart">
-            <CardHead title="Évolution des leads" icon="chart" />
-            <MiniBarChart points={dailyLeadSeries(leads ?? [])} />
+            <div className="shot-card-head">
+              <h3>Évolution des leads</h3>
+              <div className="overview-range-switch" aria-label="Période évolution des leads">
+                {LEAD_CHART_RANGES.map((range) => (
+                  <button
+                    key={range.id}
+                    type="button"
+                    className={leadChartRange === range.id ? 'active' : ''}
+                    onClick={() => setLeadChartRange(range.id)}
+                  >
+                    {range.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <MiniBarChart points={leadEvolutionSeries(leads ?? [], leadChartRange)} />
           </div>
 
           <LeadPieAnalysis leads={leads ?? []} />
@@ -493,24 +510,28 @@ function CardHead({ title, icon }: { title: string; icon: ShotIcon }) {
   )
 }
 
-type DailyLeadPoint = { date: string; value: number }
+const LEAD_CHART_RANGES: { id: LeadChartRange; label: string }[] = [
+  { id: 'day', label: 'Jour' },
+  { id: 'week', label: 'Semaine' },
+  { id: 'month', label: 'Mois' },
+  { id: 'year', label: 'Année' },
+]
 
-function MiniBarChart({ points }: { points: DailyLeadPoint[] }) {
+type LeadChartPoint = { key: string; value: number; labelTop: string; labelBottom: string }
+
+function MiniBarChart({ points }: { points: LeadChartPoint[] }) {
   const max = Math.max(1, ...points.map((p) => p.value))
   return (
     <div className="shot-bars">
-      {points.map((point, index) => {
-        const label = formatFullDayLabel(point.date)
-        return (
-          <div key={point.date} className="shot-bar-col">
-            <span className={index === points.length - 1 ? 'active' : ''} style={{ height: `${Math.max(14, (point.value / max) * 118)}px` }} />
-            <small>
-              <b>{label.dayMonth}</b>
-              <em>{label.year}</em>
-            </small>
-          </div>
-        )
-      })}
+      {points.map((point, index) => (
+        <div key={point.key} className="shot-bar-col">
+          <span className={index === points.length - 1 ? 'active' : ''} style={{ height: `${Math.max(14, (point.value / max) * 118)}px` }} />
+          <small>
+            <b>{point.labelTop}</b>
+            <em>{point.labelBottom}</em>
+          </small>
+        </div>
+      ))}
     </div>
   )
 }
@@ -826,20 +847,50 @@ function shortDateTime(iso: string): string {
 
 // ===== Futuristic data helpers =====
 
-function dailyLeadSeries(leads: LeadResponse[]): DailyLeadPoint[] {
-  const days = lastNDays(6)
-  return days.map((date) => ({
-    date,
-    value: leads.filter((lead) => lead.createdAt?.slice(0, 10) === date).length,
-  }))
-}
-
-function formatFullDayLabel(isoDay: string): { dayMonth: string; year: string } {
-  const date = new Date(`${isoDay}T12:00:00`)
-  return {
-    dayMonth: date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }).replace('.', ''),
-    year: date.toLocaleDateString('fr-FR', { year: 'numeric' }),
+function leadEvolutionSeries(leads: LeadResponse[], range: LeadChartRange): LeadChartPoint[] {
+  if (range === 'day') {
+    return lastNDays(6).map((key) => {
+      const date = new Date(`${key}T12:00:00`)
+      return {
+        key,
+        value: leads.filter((lead) => lead.createdAt?.slice(0, 10) === key).length,
+        labelTop: date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }).replace('.', ''),
+        labelBottom: date.toLocaleDateString('fr-FR', { year: 'numeric' }),
+      }
+    })
   }
+
+  if (range === 'week') {
+    const weeks = lastNWeeks(6)
+    return weeks.map((weekStart) => {
+      const key = toDateInputValue(weekStart)
+      return {
+        key,
+        value: leads.filter((lead) => toDateInputValue(startOfWeek(new Date(lead.createdAt))) === key).length,
+        labelTop: `S${weekNumber(weekStart)}`,
+        labelBottom: String(weekStart.getFullYear()),
+      }
+    })
+  }
+
+  if (range === 'month') {
+    return lastNMonths(6).map((key) => {
+      const date = new Date(`${key}-01T12:00:00`)
+      return {
+        key,
+        value: leads.filter((lead) => isoMonthKey(lead.createdAt) === key).length,
+        labelTop: date.toLocaleDateString('fr-FR', { month: 'short' }).replace('.', ''),
+        labelBottom: String(date.getFullYear()),
+      }
+    })
+  }
+
+  return lastNYears(6).map((year) => ({
+    key: String(year),
+    value: leads.filter((lead) => new Date(lead.createdAt).getFullYear() === year).length,
+    labelTop: String(year),
+    labelBottom: 'année',
+  }))
 }
 
 function leadStatusSegments(leads: LeadResponse[]): { status: LeadStatus; label: string; value: number }[] {
@@ -874,6 +925,24 @@ function lastNMonths(n: number): string[] {
     d.setMonth(d.getMonth() - (n - 1 - i), 1)
     return d.toISOString().slice(0, 7)
   })
+}
+
+function lastNWeeks(n: number): Date[] {
+  const current = startOfWeek(new Date())
+  return Array.from({ length: n }, (_, i) => addDays(current, -7 * (n - 1 - i)))
+}
+
+function lastNYears(n: number): number[] {
+  const year = new Date().getFullYear()
+  return Array.from({ length: n }, (_, i) => year - (n - 1 - i))
+}
+
+function weekNumber(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+  const day = d.getUTCDay() || 7
+  d.setUTCDate(d.getUTCDate() + 4 - day)
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
 }
 
 // ===== Atoms =====
