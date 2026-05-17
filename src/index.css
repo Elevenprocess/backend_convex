@@ -279,6 +279,21 @@ body {
 .overview-air-pie { grid-column: span 4; min-height: 240px; }
 .overview-air-pipeline { grid-column: span 4; min-height: 240px; display: flex; flex-direction: column; gap: 13px; }
 .overview-air-funnel { grid-column: span 12; min-height: 0; }
+.overview-role-wide { grid-column: span 8; min-height: 248px; }
+.overview-role-side { grid-column: span 4; min-height: 248px; }
+.overview-role-chart { height: 182px; }
+.overview-role-list { display: flex; flex-direction: column; gap: 10px; max-height: 220px; overflow: auto; padding-right: 2px; }
+.overview-role-list-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: none; }
+.overview-role-row { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 10px; padding: 8px; border-radius: 16px; border: 1px solid var(--color-line-soft); background: rgba(255,255,255,.48); }
+.overview-role-row strong { display: block; font-size: 12px; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.overview-role-row small { display: block; margin-top: 2px; font-size: 10px; color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.overview-role-row button,
+.overview-role-action { border: 0; border-radius: 999px; padding: 8px 11px; background: var(--color-text); color: var(--color-cream); font-size: 10px; font-weight: 850; cursor: pointer; }
+.overview-role-row button:disabled { opacity: .42; cursor: not-allowed; }
+.overview-role-avatar { width: 34px; height: 34px; border-radius: 13px; display: grid; place-items: center; background: var(--color-or-tint); color: var(--color-or-dark); font-size: 10px; font-weight: 850; }
+.overview-role-closing { font-size: 64px; line-height: .9; font-weight: 520; letter-spacing: -.06em; color: var(--color-text); }
+.overview-role-muted { margin: 10px 0 0; font-size: 12px; line-height: 1.45; font-weight: 650; color: var(--color-muted); }
+.overview-role-action { display: inline-flex; margin-top: 14px; align-items: center; justify-content: center; }
 .shot-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .shot-card-head h3 { margin: 0; font-size: 18px; line-height: 1.08; font-weight: 750; letter-spacing: -.03em; color: var(--color-text); }
 .overview-range-switch { display: inline-flex; align-items: center; gap: 3px; padding: 3px; border-radius: 999px; border: 1px solid var(--color-line-soft); background: rgba(255,255,255,.58); }
@@ -342,11 +357,13 @@ body {
 [data-theme="dark"] .overview-shot-page .flow-map { background: rgba(18,18,18,.58) !important; }
 [data-theme="dark"] .shot-calendar-head button { background: rgba(18,18,18,.56); color: var(--color-muted); border-color: var(--color-line); }
 @media (max-width: 1280px) {
+  .overview-role-wide, .overview-role-side { grid-column: span 6; }
   .overview-profile-panel, .overview-air-kpi { grid-column: span 4; }
   .overview-air-chart, .overview-air-pie, .overview-air-pipeline { grid-column: span 6; }
 }
 @media (max-width: 980px) {
-  .overview-profile-panel, .overview-air-kpi, .overview-air-chart, .overview-air-pie, .overview-air-pipeline, .overview-air-funnel { grid-column: span 12; }
+  .overview-profile-panel, .overview-air-kpi, .overview-air-chart, .overview-air-pie, .overview-air-pipeline, .overview-air-funnel, .overview-role-wide, .overview-role-side { grid-column: span 12; }
+  .overview-role-list-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 860px) {
   .overview-shot-page { padding: 18px; }

@@ -76,6 +76,7 @@ function OverviewSetter() {
       qualifies,
       rdvPris,
       total: ownLeads.length,
+      ownLeads,
       qualifRate: ratePct(appels, qualifies),
       connectionRate: ratePct(appels, connexions),
       activityToday: todayLogicalCallSeries(loggedCalls, classified),
@@ -102,100 +103,99 @@ function OverviewSetter() {
           if (id === 'performance') navigate('/analytics')
         }}
       />
-      <main className="p-6 grid grid-cols-12 grid-rows-[auto_1fr_1fr] gap-4 flex-grow overflow-auto">
-        {/* KPI row — appels/connexions réels + classifications converties en appels logiques */}
-        <KpiCard title="APPELS PASSÉS" value={String(stats.appels)} haloColor="#D4AF37" lineColor="#D4AF37" sparkPoints="0,20 10,16 20,18 30,10 40,12 50,6 64,8" className="col-span-3" />
-        <KpiCard title="CONNEXIONS" value={String(stats.connexions)} delta={`${stats.connectionRate}%`} deltaType="success" haloColor="#B87333" lineColor="#B87333" sparkPoints="0,16 10,18 20,12 30,14 40,10 50,8 64,6" className="col-span-3" />
-        <KpiCard title="LEADS QUALIFIÉS" value={String(stats.qualifies)} haloColor="#3DA86A" lineColor="#3DA86A" sparkPoints="0,22 10,20 20,18 30,14 40,10 50,12 64,4" className="col-span-3" />
-        <KpiCard title="RDV PRIS" value={String(stats.rdvPris)} haloColor="#6B7C8C" lineColor="#6B7C8C" sparkPoints="0,12 10,14 20,12 30,16 40,12 50,14 64,12" className="col-span-3" />
-
-        <div className="glass-card col-span-8 p-5">
-          <div className="flex items-start justify-between mb-3 gap-3">
-            <div>
-              <span className="eyebrow block mb-1">ACTIVITÉ</span>
-              <h3 className="text-lg font-extrabold leading-none">Appels setter</h3>
-            </div>
-            <PillTabs
-              items={[{ id: 'today', label: "Aujourd'hui" }, { id: 'week', label: 'Semaine' }]}
-              active={activityRange}
-              onChange={(id) => setActivityRange(id as 'today' | 'week')}
-            />
-          </div>
-          <div className="h-[184px] w-full">
-            <FuturisticLineChart
-              points={activityRange === 'today' ? stats.activityToday : stats.activityWeek}
-              color="#D4AF37"
-              caption={activityRange === 'today' ? "Aujourd'hui" : '7 derniers jours'}
-            />
-          </div>
-        </div>
-
-        <BigNumberCard
-          eyebrow="TAUX QUALIFICATION"
-          value={`${stats.qualifRate}%`}
-          desc={`${stats.qualifies} leads qualifiés sur ${stats.total} dans ton portefeuille.`}
-          haloColor="#D4AF37"
-          spark={[30, 55, 42, 68, 50, 80, 95]}
-          sparkColor="#D4AF37"
-          className="col-span-4"
-        />
-
-        <div className="glass-card col-span-4 p-5">
-          <h3 className="font-bold mb-4">Mes objectifs</h3>
-          <div className="space-y-4">
-            {/* TODO Phase B: brancher sur weekly_goals */}
-            <Goal label="RDV hebdo" value={`${stats.rdvPris} / 40`} pct={Math.min(100, (stats.rdvPris / 40) * 100)} color="#D4AF37" />
-            <Goal label="Qualifiés" value={`${stats.qualifies} / 30`} pct={Math.min(100, (stats.qualifies / 30) * 100)} color="#B87333" />
-            <Goal label="Total leads" value={`${stats.total} / 200`} pct={Math.min(100, (stats.total / 200) * 100)} color="#B7410E" />
-          </div>
-        </div>
-
-        <div className="promo-card col-span-4 flex flex-col justify-between border-l-4 border-rouille">
+      <main className="overview-shot-page flex-grow overflow-auto">
+        <div className="overview-air-header">
           <div>
-            <span className="eyebrow block mb-2">BOOSTER MON SCORE</span>
-            <h3 className="text-lg font-bold leading-tight">Améliore ton taux de connexion</h3>
-            <p className="text-xs text-muted mt-2 leading-relaxed">Découvre les meilleurs créneaux d'appel et les scripts qui convertissent le mieux selon tes données.</p>
+            <span className="shot-eyebrow">ECOI SaaS · setter</span>
+            <h1>Mon activité appels</h1>
           </div>
-          <button onClick={() => navigate('/analytics')} className="btn-primary text-xs px-4 py-2.5 rounded-xl self-start mt-3">Voir les insights</button>
+          <div className="overview-profile-chip">
+            <div className="overview-profile-photo">
+              {me?.image ? <img src={me.image} alt={me.name ?? 'Profil'} /> : <span>{userInitials(me?.name ?? display.firstName)}</span>}
+            </div>
+            <div>
+              <strong>{me?.name ?? display.firstName}</strong>
+              <small>{me?.email ?? 'Setter ECOI'}</small>
+            </div>
+          </div>
         </div>
 
-        <div className="glass-card col-span-4 p-5 min-h-0 flex flex-col">
-          <div className="flex items-center justify-between mb-3 gap-3">
-            <h3 className="font-bold">À rappeler</h3>
-            <span className="text-xs text-faint font-semibold">{callbacks.length}</span>
+        <section className="overview-air-grid">
+          <div className="overview-profile-panel">
+            <div className="overview-profile-large">
+              {me?.image ? <img src={me.image} alt={me.name ?? 'Profil'} /> : <span>{userInitials(me?.name ?? display.firstName)}</span>}
+            </div>
+            <div>
+              <span className="shot-eyebrow">Portefeuille</span>
+              <h2>{fmtCompact(stats.total)} leads</h2>
+              <p>{fmtCompact(callbacks.length)} rappels sur le créneau sélectionné</p>
+            </div>
           </div>
-          <PillTabs
-            items={[{ id: 'late', label: 'Oubliés' }, { id: 'today', label: "Aujourd'hui" }, { id: 'tomorrow', label: 'Demain' }]}
-            active={callbackTab}
-            onChange={(id) => setCallbackTab(id as 'late' | 'today' | 'tomorrow')}
-          />
-          <div className="space-y-2.5 mt-3 overflow-y-auto pr-1 max-h-[210px]">
-            {callbacks.length === 0 ? (
-              <div className="text-xs text-faint">Aucun appel à faire sur ce créneau.</div>
-            ) : callbacks.map((l) => (
-              <div key={l.id} className="flex items-center gap-3">
-                <div className="w-7 h-7 rounded-full bg-cuivre-tint flex items-center justify-center text-[10px] font-bold">{initials(l)}</div>
-                <div className="flex-grow min-w-0">
-                  <div className="text-xs font-semibold truncate">{fullName(l)}</div>
-                  <div className="text-[10px] text-faint">
-                    {formatCallbackTime(l.nextCallbackAt)} · {l.phone ?? 'sans téléphone'}
+          <AirKpi icon="phone" label="Appels passés" value={fmtCompact(stats.appels)} sub={`${stats.connectionRate}% connexion`} />
+          <AirKpi icon="users" label="Connexions" value={fmtCompact(stats.connexions)} sub="contacts joints" />
+          <AirKpi icon="target" label="Qualifiés" value={fmtCompact(stats.qualifies)} sub={`${stats.qualifRate}% qualification`} />
+          <AirKpi icon="trophy" label="RDV pris" value={fmtCompact(stats.rdvPris)} sub="issus de tes leads" />
+
+          <div className="overview-air-card overview-role-wide">
+            <div className="shot-card-head">
+              <h3>Appels setter</h3>
+              <PillTabs
+                items={[{ id: 'today', label: "Aujourd'hui" }, { id: 'week', label: 'Semaine' }]}
+                active={activityRange}
+                onChange={(id) => setActivityRange(id as 'today' | 'week')}
+              />
+            </div>
+            <div className="overview-role-chart">
+              <FuturisticLineChart
+                points={activityRange === 'today' ? stats.activityToday : stats.activityWeek}
+                color="#D4AF37"
+                caption={activityRange === 'today' ? "Aujourd'hui" : '7 derniers jours'}
+              />
+            </div>
+          </div>
+
+          <LeadPieAnalysis leads={stats.ownLeads} />
+
+          <div className="overview-air-card overview-role-side">
+            <CardHead title="À rappeler" icon="phone" />
+            <PillTabs
+              items={[{ id: 'late', label: 'Oubliés' }, { id: 'today', label: "Aujourd'hui" }, { id: 'tomorrow', label: 'Demain' }]}
+              active={callbackTab}
+              onChange={(id) => setCallbackTab(id as 'late' | 'today' | 'tomorrow')}
+            />
+            <div className="overview-role-list">
+              {callbacks.length === 0 ? (
+                <div className="text-xs text-faint">Aucun appel à faire sur ce créneau.</div>
+              ) : callbacks.slice(0, 5).map((l) => (
+                <div key={l.id} className="overview-role-row">
+                  <div className="overview-role-avatar">{initials(l)}</div>
+                  <div>
+                    <strong>{fullName(l)}</strong>
+                    <small>{formatCallbackTime(l.nextCallbackAt)} · {l.phone ?? 'sans téléphone'}</small>
                   </div>
+                  <button
+                    onClick={() => {
+                      if (!l.phone) return
+                      startCall({ leadId: l.id, leadName: fullName(l), toNumber: l.phone }).catch((err) => {
+                        console.error('Phone copy failed', err)
+                        alert(err instanceof Error ? err.message : 'Impossible de copier le numéro')
+                      })
+                    }}
+                    disabled={!l.phone}
+                  >Appeler</button>
                 </div>
-                <button
-                  onClick={() => {
-                    if (!l.phone) return
-                    startCall({ leadId: l.id, leadName: fullName(l), toNumber: l.phone }).catch((err) => {
-                      console.error('Phone copy failed', err)
-                      alert(err instanceof Error ? err.message : 'Impossible de copier le numéro')
-                    })
-                  }}
-                  disabled={!l.phone}
-                  className="text-[10px] font-bold text-or border border-or px-2.5 py-1 rounded-lg disabled:opacity-40"
-                >Appeler</button>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+
+          <div className="overview-air-card overview-role-side">
+            <CardHead title="Progression réelle" icon="check" />
+            <TaskLine icon="phone" title="Appels" sub={`${fmtCompact(stats.appels)} appels enregistrés`} done={stats.appels > 0} />
+            <TaskLine icon="users" title="Connexions" sub={`${fmtCompact(stats.connexions)} contacts joints`} done={stats.connexions > 0} />
+            <TaskLine icon="target" title="Qualifiés" sub={`${fmtCompact(stats.qualifies)} leads qualifiés`} done={stats.qualifies > 0} />
+            <TaskLine icon="trophy" title="RDV" sub={`${fmtCompact(stats.rdvPris)} rendez-vous pris`} done={stats.rdvPris > 0} />
+          </div>
+        </section>
       </main>
     </AppShell>
   )
@@ -239,6 +239,7 @@ function OverviewCommercial() {
       totalHonored,
       totalRdv,
       lost: analytics?.resultSegments.find((segment) => segment.label === 'Perdu')?.value ?? lost.length,
+      reflexion: analytics?.resultSegments.find((segment) => segment.label === 'Réflexion')?.value ?? reflexion.length,
     }
   }, [rdvs, todayIso, commercialSummary])
 
@@ -260,68 +261,91 @@ function OverviewCommercial() {
           if (id === 'pipeline' || id === 'ventes') navigate('/analytics')
         }}
       />
-      <main className="p-8 pt-6 grid grid-cols-12 grid-rows-[auto_1fr_1fr] gap-5 flex-grow overflow-auto">
-        <KpiCard title="CA SIGNÉ" value={fmtKEur(stats.ca)} valueSize={28} haloColor="#D4AF37" lineColor="#D4AF37" sparkPoints="0,20 10,18 20,14 30,16 40,8 50,10 64,4" className="col-span-3" />
-        <KpiCard title="CLOSING RATE" value={`${stats.closing}%`} valueSize={28} haloColor="#3DA86A" lineColor="#3DA86A" sparkPoints="0,18 10,16 20,12 30,14 40,8 50,6 64,10" className="col-span-3" />
-        <KpiCard title="PANIER MOY." value={fmtKEur(stats.panier)} valueSize={28} haloColor="#B87333" lineColor="#B87333" sparkPoints="0,16 10,12 20,14 30,8 40,12 50,6 64,10" className="col-span-3" />
-        <KpiCard title="ACTIVITÉ RDV" value={String(stats.totalRdv)} valueSize={28} haloColor="#B7410E" lineColor="#B7410E" sparkPoints="0,8 10,10 20,12 30,8 40,14 50,10 64,12" className="col-span-3" />
-
-        <div className="glass-card col-span-7 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold">Évolution CA (12 mois)</h3>
-            <div className="text-xl font-extrabold">{fmtKEur(stats.ca)}</div>
-          </div>
-          <div className="h-[180px]">
-            <FuturisticAreaChart values={rdvRevenueSeries(rdvs ?? [])} color="#3DA86A" />
-          </div>
-        </div>
-
-        <div className="big-number-card col-span-5 flex flex-col justify-between border-l-4 border-success">
+      <main className="overview-shot-page flex-grow overflow-auto">
+        <div className="overview-air-header">
           <div>
-            <span className="eyebrow block mb-2">CLOSING RATE</span>
-            <div className="text-[56px] font-extrabold leading-none">{stats.closing}%</div>
-            <p className="text-xs text-muted mt-2 leading-relaxed">{stats.signed} ventes, {stats.lost} perdus, {stats.totalRdv} RDV suivis.</p>
+            <span className="shot-eyebrow">ECOI SaaS · commercial</span>
+            <h1>Mon closing commercial</h1>
           </div>
-          <div className="grid grid-cols-3 gap-2 mt-3 text-xs">
-            <div><div className="font-bold text-sm">{stats.totalRdv}</div><div className="eyebrow">RDV</div></div>
-            <div><div className="font-bold text-sm">{stats.totalHonored}</div><div className="eyebrow">HONORÉS</div></div>
-            <div><div className="font-bold text-sm text-success">{stats.signed}</div><div className="eyebrow">VENTES</div></div>
-          </div>
-        </div>
-
-        <div className="glass-card col-span-5 p-5">
-          <h3 className="font-bold mb-3">Pipeline</h3>
-          <div className="space-y-2.5">
-            {/* TODO Phase B: pipeline complet leads → rdv → signatures, requiert agrégation cross-resources */}
-            <PipelineRow label="RDV planifiés" count={stats.totalPlanifie} pct={100} color="#D4AF37" />
-            <PipelineRow label="Honorés" count={stats.totalHonored} pct={pct(stats.totalHonored, stats.totalPlanifie)} color="#B87333" />
-            <PipelineRow label="Ventes" count={stats.signed} pct={pct(stats.signed, Math.max(stats.signed + stats.lost, stats.totalHonored))} color="#3DA86A" />
+          <div className="overview-profile-chip">
+            <div className="overview-profile-photo">
+              {me?.image ? <img src={me.image} alt={me.name ?? 'Profil'} /> : <span>{userInitials(me?.name ?? display.firstName)}</span>}
+            </div>
+            <div>
+              <strong>{me?.name ?? display.firstName}</strong>
+              <small>{me?.email ?? 'Commercial ECOI'}</small>
+            </div>
           </div>
         </div>
 
-        <div className="promo-card col-span-3 flex flex-col justify-between border-l-4 border-or">
-          <div>
-            <span className="eyebrow block mb-2">PRÉPARATION RDV</span>
-            <h3 className="text-base font-bold leading-tight">{stats.upcoming.length} RDV à venir</h3>
+        <section className="overview-air-grid">
+          <div className="overview-profile-panel">
+            <div className="overview-profile-large">
+              {me?.image ? <img src={me.image} alt={me.name ?? 'Profil'} /> : <span>{userInitials(me?.name ?? display.firstName)}</span>}
+            </div>
+            <div>
+              <span className="shot-eyebrow">Performance</span>
+              <h2>{fmtKEur(stats.ca)}</h2>
+              <p>{fmtCompact(stats.totalRdv)} RDV suivis · {fmtCompact(stats.signed)} ventes</p>
+            </div>
           </div>
-          <button onClick={() => navigate('/rdv')} className="btn-primary text-xs px-4 py-2.5 rounded-xl self-start mt-3">Préparer</button>
-        </div>
+          <AirKpi icon="trophy" label="CA signé" value={fmtKEur(stats.ca)} sub={`${fmtCompact(stats.signed)} ventes`} />
+          <AirKpi icon="target" label="Closing" value={`${stats.closing}%`} sub={`${fmtCompact(stats.lost)} perdus`} />
+          <AirKpi icon="chart" label="Panier moyen" value={fmtKEur(stats.panier)} sub="sur ventes signées" />
+          <AirKpi icon="users" label="RDV suivis" value={fmtCompact(stats.totalRdv)} sub={`${fmtCompact(stats.totalHonored)} honorés`} />
 
-        <div className="glass-card col-span-4 p-5">
-          <h3 className="font-bold mb-3">Mes RDV à venir</h3>
-          <div className="space-y-2.5">
-            {stats.upcoming.length === 0 ? (
-              <div className="text-xs text-faint">Aucun RDV à venir.</div>
-            ) : stats.upcoming.slice(0, 4).map((r, i) => (
-              <RdvRow
-                key={r.id}
-                color={['#D4AF37', '#B87333', '#B7410E', '#3DA86A'][i % 4]}
-                time={`${shortDateTime(r.scheduledAt)}`}
-                sub={r.locationType === 'visio' ? 'Visio' : r.locationType === 'agence' ? 'Agence' : 'Domicile'}
-              />
-            ))}
+          <div className="overview-air-card overview-role-wide">
+            <div className="shot-card-head">
+              <h3>Évolution CA</h3>
+              <strong>{fmtKEur(stats.ca)}</strong>
+            </div>
+            <div className="overview-role-chart">
+              <FuturisticAreaChart values={rdvRevenueSeries(rdvs ?? [])} color="#3DA86A" />
+            </div>
           </div>
-        </div>
+
+          <div className="overview-air-card overview-role-side">
+            <CardHead title="Closing" icon="target" />
+            <div className="overview-role-closing">{stats.closing}%</div>
+            <p className="overview-role-muted">{fmtCompact(stats.signed)} ventes, {fmtCompact(stats.lost)} perdus, {fmtCompact(stats.reflexion)} en réflexion.</p>
+            <div className="overview-real-segments mt-4" style={{ ['--seg-a' as string]: Math.max(stats.signed, 1), ['--seg-b' as string]: Math.max(stats.reflexion, 1), ['--seg-c' as string]: Math.max(stats.lost, 1) }}>
+              <span /><span /><span />
+            </div>
+          </div>
+
+          <div className="overview-air-card overview-role-side">
+            <CardHead title="Pipeline" icon="arrow-right" />
+            <div className="space-y-3">
+              <PipelineRow label="RDV planifiés" count={stats.totalPlanifie} pct={100} color="#D4AF37" />
+              <PipelineRow label="Honorés" count={stats.totalHonored} pct={pct(stats.totalHonored, stats.totalPlanifie)} color="#B87333" />
+              <PipelineRow label="Ventes" count={stats.signed} pct={pct(stats.signed, Math.max(stats.signed + stats.lost, stats.totalHonored))} color="#3DA86A" />
+            </div>
+          </div>
+
+          <div className="overview-air-card overview-role-wide">
+            <CardHead title="Mes RDV à venir" icon="phone" />
+            <div className="overview-role-list overview-role-list-grid">
+              {stats.upcoming.length === 0 ? (
+                <div className="text-xs text-faint">Aucun RDV à venir.</div>
+              ) : stats.upcoming.slice(0, 6).map((r, i) => (
+                <RdvRow
+                  key={r.id}
+                  color={['#D4AF37', '#B87333', '#B7410E', '#3DA86A'][i % 4]}
+                  time={`${shortDateTime(r.scheduledAt)}`}
+                  sub={r.locationType === 'visio' ? 'Visio' : r.locationType === 'agence' ? 'Agence' : 'Domicile'}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="overview-air-card overview-role-side">
+            <CardHead title="Actions" icon="check" />
+            <TaskLine icon="phone" title="Préparer RDV" sub={`${fmtCompact(stats.upcoming.length)} rendez-vous à venir`} done={stats.upcoming.length > 0} />
+            <TaskLine icon="target" title="Honorés" sub={`${fmtCompact(stats.totalHonored)} RDV honorés`} done={stats.totalHonored > 0} />
+            <TaskLine icon="trophy" title="Signatures" sub={`${fmtCompact(stats.signed)} ventes signées`} done={stats.signed > 0} />
+            <button onClick={() => navigate('/rdv')} className="overview-role-action">Voir mes RDV</button>
+          </div>
+        </section>
       </main>
     </AppShell>
   )
@@ -947,8 +971,6 @@ function weekNumber(date: Date): number {
 
 // ===== Atoms =====
 
-type DeltaType = 'success' | 'warn' | 'danger' | 'info'
-
 function chartPoints(values: number[], width = 300, height = 150): string {
   const max = Math.max(1, ...values)
   const step = values.length <= 1 ? width : width / (values.length - 1)
@@ -1003,68 +1025,7 @@ function FuturisticAreaChart({ values, color }: { values: number[]; color: strin
         <polygon points={`0,150 ${points} 300,150`} fill={color} opacity="0.18" />
         <polyline points={points} fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-      <div className="absolute top-4 right-4 z-20 text-right"><span className="eyebrow">Projection CA</span></div>
-    </div>
-  )
-}
-
-function KpiCard({
-  title, value, valueSize = 32, delta, deltaType, haloColor, lineColor, sparkPoints, className = '',
-}: {
-  title: string
-  value: string
-  valueSize?: number
-  delta?: string
-  deltaType?: DeltaType
-  haloColor: string
-  lineColor: string
-  sparkPoints: string
-  className?: string
-}) {
-  return (
-    <div className={`kpi-card ${className}`}>
-      <div className="kpi-content">
-        <div className="flex items-center justify-between mb-4">
-          <span className="eyebrow">{title}</span>
-          <span className="h-2.5 w-2.5 rounded-full" style={{ background: haloColor }} />
-        </div>
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <span className="font-black leading-none tracking-tight" style={{ fontSize: valueSize }}>{value}</span>
-            {delta && <span className={`delta-badge delta-${deltaType} ml-2`}>{delta}</span>}
-          </div>
-          <svg width="74" height="32" viewBox="0 0 64 28" className="rounded-lg bg-cream/60 px-1">
-            <polyline points={sparkPoints} fill="none" stroke={lineColor} strokeWidth="2" />
-          </svg>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function BigNumberCard({
-  eyebrow, value, desc, haloColor, spark, sparkColor, className = '',
-}: {
-  eyebrow: string
-  value: string
-  desc: string
-  haloColor: string
-  spark: number[]
-  sparkColor: string
-  className?: string
-}) {
-  return (
-    <div className={`big-number-card ${className} flex flex-col justify-between`} style={{ borderLeftColor: haloColor }}>
-      <div>
-        <span className="eyebrow block mb-2">{eyebrow}</span>
-        <div className="text-[56px] font-black leading-none tracking-tight">{value}</div>
-        <p className="text-xs text-muted mt-2 leading-relaxed">{desc}</p>
-      </div>
-      <div className="flex items-end gap-1 h-10 mt-2 rounded-xl bg-cream/60 p-2">
-        {spark.map((h, i) => (
-          <div key={i} className="rounded-t-sm w-3" style={{ height: `${h}%`, background: sparkColor, opacity: i === spark.length - 1 ? 0.95 : 0.55 }} />
-        ))}
-      </div>
+      <div className="absolute top-4 right-4 z-20 text-right"><span className="eyebrow">CA 12 mois</span></div>
     </div>
   )
 }
@@ -1075,20 +1036,6 @@ function PillTabs({ items, active, onChange }: { items: { id: string; label: str
       {items.map((it) => (
         <button key={it.id} className={`pill-tab ${active === it.id ? 'active' : ''}`} onClick={() => onChange(it.id)}>{it.label}</button>
       ))}
-    </div>
-  )
-}
-
-function Goal({ label, value, pct, color }: { label: string; value: string; pct: number; color: string }) {
-  return (
-    <div>
-      <div className="flex justify-between text-xs font-semibold mb-1.5">
-        <span>{label}</span>
-        <span>{value}</span>
-      </div>
-      <div className="progress-track">
-        <div className="progress-fill" style={{ width: `${pct}%`, background: color }}></div>
-      </div>
     </div>
   )
 }
