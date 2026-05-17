@@ -416,7 +416,7 @@ function OverviewAdmin() {
             <div>
               <span className="shot-eyebrow">Profil connecté</span>
               <h2>{me?.name}</h2>
-              <p>{me?.role ?? 'admin'} · {stats.teamActive} membres actifs sur {stats.teamTotal}</p>
+              <p>{me?.role ?? 'admin'} · {stats.teamActive}/{stats.teamTotal} actifs</p>
             </div>
           </div>
 
@@ -428,12 +428,6 @@ function OverviewAdmin() {
           <div className="overview-air-card overview-air-chart">
             <CardHead title="Évolution des leads" icon="chart" />
             <MiniBarChart values={monthlyLeadSeries(leads ?? [])} />
-          </div>
-
-          <div className="overview-air-card overview-air-conversion">
-            <CardHead title="Conversion commerciale" icon="target" />
-            <DonutProgress value={stats.closing} label={`${stats.closing}%`} sub="closing" />
-            <button type="button" className="overview-air-link" onClick={() => navigate('/analytics')}>Voir Analytics</button>
           </div>
 
           <div className="overview-air-card overview-air-pipeline">
@@ -514,9 +508,9 @@ function CardHead({ title, icon }: { title: string; icon: ShotIcon }) {
 }
 
 function MiniBarChart({ values }: { values: number[] }) {
-  const visible = values.slice(-7)
+  const visible = values.slice(-6)
   const max = Math.max(1, ...visible)
-  const labels = lastNMonths(values.length).slice(-7).map((month) => {
+  const labels = lastNMonths(values.length).slice(-6).map((month) => {
     const d = new Date(`${month}-01T12:00:00`)
     return d.toLocaleDateString('fr-FR', { month: 'short' }).replace('.', '')
   })
@@ -528,24 +522,6 @@ function MiniBarChart({ values }: { values: number[] }) {
           <small>{labels[index] ?? `${index + 1}`}</small>
         </div>
       ))}
-    </div>
-  )
-}
-
-function DonutProgress({ value, label, sub }: { value: number; label: string; sub: string }) {
-  const safe = Math.max(0, Math.min(100, value))
-  const circumference = 2 * Math.PI * 48
-  const dash = (safe / 100) * circumference
-  return (
-    <div className="shot-donut">
-      <svg viewBox="0 0 120 120">
-        <circle cx="60" cy="60" r="48" className="bg" />
-        <circle cx="60" cy="60" r="48" className="progress" strokeDasharray={`${dash} ${circumference - dash}`} />
-      </svg>
-      <div>
-        <strong>{label}</strong>
-        <span>{sub}</span>
-      </div>
     </div>
   )
 }
@@ -692,7 +668,7 @@ function AdminLeadFunnel({
   const totals = funnel?.totals
   const setters = users.filter((u) => u.role === 'setter')
   return (
-    <section className="glass-card w-full p-7 overflow-visible">
+    <section className="glass-card overview-funnel-section w-full p-7 overflow-visible">
       <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
         <div>
           <span className="eyebrow">FUNNEL LEADS CRM</span>
