@@ -334,7 +334,7 @@ function OverviewAdmin() {
   const [tab, setTab] = useState('overview')
   const [funnelPeriod] = useState<FunnelPeriodState>(DEFAULT_FUNNEL_PERIOD)
   const funnelRange = buildFunnelPeriodRange(funnelPeriod)
-  const { data: funnel, loading: funnelLoading } = useAnalyticsFunnel({
+  const { data: funnel } = useAnalyticsFunnel({
     from: funnelRange.from,
     to: funnelRange.to,
   })
@@ -454,10 +454,6 @@ function OverviewAdmin() {
           </div>
         </section>
 
-        <AdminLeadFunnel
-          funnel={funnel}
-          loading={funnelLoading}
-        />
       </main>
     </AppShell>
   )
@@ -606,47 +602,6 @@ function formatShortDate(date: Date): string {
   return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-function AdminLeadFunnel({
-  funnel, loading,
-}: {
-  funnel: AnalyticsFunnelResponse | null
-  loading: boolean
-}) {
-  const totals = funnel?.totals
-  return (
-    <section className="glass-card overview-funnel-section w-full p-7 overflow-visible">
-      {loading && !funnel ? (
-        <div className="py-10 text-center text-faint text-sm">Chargement du funnel CRM…</div>
-      ) : !funnel || !totals ? (
-        <div className="py-10 text-center text-faint text-sm">Aucune donnée funnel disponible.</div>
-      ) : (
-        <div className="grid grid-cols-12 gap-6">
-          <div className="col-span-12 grid grid-cols-12 gap-5">
-            <FunnelTopCard label="1. Nouveaux leads" value={totals.newLeads} sub="Leads créés sur la période" color="#6B7C8C" />
-            <FunnelTopCard label="2. Appels setters" value={totals.calls} sub={`${callsPerLead(totals.calls, totals.newLeads)} appels / lead`} color="#D4AF37" />
-            <FunnelTopCard label="3. Conversion finale" value={totals.rdv} sub={`${totals.globalConversionRate}% des nouveaux leads`} color="#3DA86A" />
-          </div>
-
-          <div className="col-span-12 xl:col-span-7">
-            <FunnelLogicTree totals={totals} />
-          </div>
-          <div className="col-span-12 xl:col-span-5">
-            <FunnelBranchChart totals={totals} />
-          </div>
-          <div className="col-span-12 lg:col-span-6 glass-card !p-5 bg-white/35">
-            <h4 className="font-bold mb-3">Comparaison setters</h4>
-            <FunnelComparisonTable rows={funnel.setterComparison.slice(0, 5)} empty="Aucune activité setter sur la période." />
-          </div>
-          <div className="col-span-12 lg:col-span-6 glass-card !p-5 bg-white/35">
-            <h4 className="font-bold mb-3">Comparaison commerciaux</h4>
-            <FunnelComparisonTable rows={funnel.commercialComparison.slice(0, 5)} empty="Aucun RDV commercial sur la période." />
-          </div>
-        </div>
-      )}
-    </section>
-  )
-}
-
 function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }) {
   const contactedLeads = funnelContactedLeads(totals)
   const responseRate = pct(totals.answered, contactedLeads)
@@ -709,110 +664,6 @@ function MiniFlowStep({ title, value, sub, color }: { title: string; value: numb
 
 function MiniArrow() {
   return <div className="hidden xl:flex items-center justify-center text-xl font-black text-or px-1">→</div>
-}
-
-function FunnelTopCard({ label, value, sub, color }: { label: string; value: number; sub: string; color: string }) {
-  return (
-    <div className="col-span-12 md:col-span-4 rounded-2xl border border-line-soft bg-white/55 p-5 min-h-[132px]">
-      <div className="text-[10px] font-bold uppercase text-faint">{label}</div>
-      <div className="mt-1 text-3xl font-extrabold" style={{ color }}>{fmtCompact(value)}</div>
-      <div className="text-xs text-muted mt-1">{sub}</div>
-    </div>
-  )
-}
-
-function FunnelLogicTree({ totals }: { totals: AnalyticsFunnelResponse['totals'] }) {
-  const contactedLeads = funnelContactedLeads(totals)
-  const responseRate = pct(totals.answered, contactedLeads)
-  const noAnswerRate = pct(totals.noAnswer, contactedLeads)
-  return (
-    <div className="funnel-tree rounded-3xl border border-line-soft bg-white/45 p-5">
-      <div className="text-center">
-        <div className="eyebrow">Question centrale</div>
-        <h4 className="text-lg font-extrabold">Après les appels setters, le lead a répondu ?</h4>
-      </div>
-
-      <div className="mt-5 grid grid-cols-2 gap-4">
-        <div className="funnel-branch funnel-branch-success rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
-          <div className="text-xs font-bold uppercase text-emerald-700">Oui, a répondu</div>
-          <div className="mt-1 text-4xl font-extrabold text-emerald-700">{fmtCompact(totals.answered)}</div>
-          <div className="text-sm font-bold text-emerald-800">{responseRate}% des leads appelés</div>
-
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <div className="funnel-subcard rounded-xl bg-white/70 p-3">
-              <div className="text-[10px] font-bold uppercase text-faint">Qualifiés</div>
-              <div className="text-2xl font-extrabold text-or-dark">{fmtCompact(totals.qualified)}</div>
-              <div className="text-[11px] text-muted">{totals.qualificationRate}% des réponses</div>
-              <div className="mt-2 text-[11px] font-bold text-emerald-700">→ {fmtCompact(totals.rdv)} RDV pris</div>
-            </div>
-            <div className="funnel-subcard rounded-xl bg-white/70 p-3">
-              <div className="text-[10px] font-bold uppercase text-faint">Pas qualifiés</div>
-              <div className="text-2xl font-extrabold text-rouille">{fmtCompact(totals.notQualified)}</div>
-              <div className="text-[11px] text-muted">{totals.notQualifiedRate}% des réponses</div>
-              <div className="mt-2 text-[11px] font-bold text-rouille">Perte commerciale</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="funnel-branch funnel-branch-warning rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
-          <div className="text-xs font-bold uppercase text-amber-700">Non, pas de réponse</div>
-          <div className="mt-1 text-4xl font-extrabold text-amber-700">{fmtCompact(totals.noAnswer)}</div>
-          <div className="text-sm font-bold text-amber-800">{noAnswerRate}% des leads appelés</div>
-          <div className="funnel-subcard mt-4 rounded-xl bg-white/70 p-3">
-            <div className="text-[10px] font-bold uppercase text-faint">Relances effectuées</div>
-            <div className="text-2xl font-extrabold text-amber-700">{fmtCompact(totals.relances)}</div>
-            <div className="text-[11px] text-muted">appels non joints, injoignables, messagerie ou rappel planifié</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="funnel-final mt-4 rounded-2xl border border-emerald-200 bg-white/65 p-4 flex items-center justify-between">
-        <div>
-          <div className="eyebrow">Résultat final</div>
-          <div className="font-extrabold">Nouveaux leads qui ont obtenu un rendez-vous</div>
-        </div>
-        <div className="text-right">
-          <div className="text-3xl font-extrabold text-emerald-700">{fmtCompact(totals.rdv)}</div>
-          <div className="text-xs font-bold text-emerald-700">{totals.globalConversionRate}% de conversion globale</div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function FunnelBranchChart({ totals }: { totals: AnalyticsFunnelResponse['totals'] }) {
-  const contactedLeads = funnelContactedLeads(totals)
-  const responseRate = pct(totals.answered, contactedLeads)
-  const noAnswerRate = pct(totals.noAnswer, contactedLeads)
-  return (
-    <div className="rounded-2xl border border-line-soft bg-white/45 p-4">
-      <h4 className="font-bold mb-3">Répartition après appel</h4>
-      <div className="space-y-3 text-xs font-semibold">
-        <Goal label="A répondu" value={`${totals.answered} · ${responseRate}% des leads appelés`} pct={responseRate} color="#3DA86A" />
-        <Goal label="Qualifiés" value={`${totals.qualified} · ${totals.qualificationRate}% des réponses`} pct={totals.qualificationRate} color="#D4AF37" />
-        <Goal label="Pas qualifiés" value={`${totals.notQualified} · ${totals.notQualifiedRate}% des réponses`} pct={totals.notQualifiedRate} color="#B7410E" />
-        <Goal label="Sans réponse" value={`${totals.noAnswer} · ${noAnswerRate}% des leads appelés · ${totals.relances} relances`} pct={noAnswerRate} color="#B87333" />
-      </div>
-    </div>
-  )
-}
-
-function FunnelComparisonTable({ rows, empty }: { rows: AnalyticsFunnelResponse['setterComparison']; empty: string }) {
-  if (rows.length === 0) return <div className="text-xs text-faint py-3">{empty}</div>
-  return (
-    <table className="w-full text-xs">
-      <thead className="eyebrow text-left border-b border-line"><tr><th className="pb-2">Nom</th><th className="pb-2">Appels/RDV</th><th className="pb-2 text-right">Conv.</th></tr></thead>
-      <tbody>
-        {rows.map((row) => (
-          <tr key={row.id} className="border-b border-line-soft last:border-0">
-            <td className="py-2 font-semibold">{row.name}</td>
-            <td>{row.calls ? `${row.calls} appels · ${row.rdv} RDV` : `${row.rdv} RDV`}</td>
-            <td className="text-right font-extrabold text-or">{row.conversionRate}%</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
 }
 
 // ===== Helpers =====
