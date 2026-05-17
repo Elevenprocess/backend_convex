@@ -276,8 +276,8 @@ body {
 .overview-air-kpi p { margin: 7px 0 0; font-size: 11px; line-height: 1.2; font-weight: 650; color: var(--color-muted); }
 .overview-air-card { padding: 20px; }
 .overview-air-chart { grid-column: span 4; min-height: 240px; }
-.overview-air-pie { grid-column: span 2; min-height: 240px; }
-.overview-air-pipeline { grid-column: span 6; min-height: 240px; display: flex; flex-direction: column; gap: 13px; }
+.overview-air-pie { grid-column: span 4; min-height: 240px; }
+.overview-air-pipeline { grid-column: span 4; min-height: 240px; display: flex; flex-direction: column; gap: 13px; }
 .overview-air-funnel { grid-column: span 12; min-height: 0; }
 .shot-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .shot-card-head h3 { margin: 0; font-size: 18px; line-height: 1.08; font-weight: 750; letter-spacing: -.03em; color: var(--color-text); }
