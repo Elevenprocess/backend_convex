@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Icon } from '../components/Icon'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
@@ -389,14 +390,95 @@ function OverviewAdmin() {
           if (id === 'commerciaux' || id === 'ventes') navigate('/analytics')
         }}
       />
-      <main className="p-8 pt-6 flex-grow overflow-auto space-y-8">
-        <section className="grid grid-cols-12 gap-5">
-          <SmallKpi title="CA TOTAL" value={fmtKEur(stats.caMois)} haloColor="#D4AF37" lineColor="#D4AF37" linePoints="0,16 15,12 30,14 45,8 60,10 75,4 100,6" />
-          <SmallKpi title="VENTES" value={String(stats.ventes)} haloColor="#B87333" lineColor="#B87333" linePoints="0,14 15,16 30,10 45,12 60,6 75,8 100,4" />
-          <SmallKpi title="CLOSING" value={`${stats.closing}%`} haloColor="#3DA86A" lineColor="#3DA86A" linePoints="0,12 15,14 30,10 45,12 60,8 75,10 100,6" />
-          <SmallKpi title="LEADS" value={fmtCompact(stats.leads)} haloColor="#6B7C8C" lineColor="#6B7C8C" linePoints="0,16 15,14 30,10 45,8 60,12 75,6 100,4" />
-          <SmallKpi title="PANIER MOY." value={fmtKEur(stats.panier)} haloColor="#B7410E" lineColor="#B7410E" linePoints="0,8 15,10 30,12 45,10 60,14 75,12 100,16" />
-          <SmallKpi title="APPELS" value={fmtCompact(stats.appels)} haloColor="#D4AF37" lineColor="#D4AF37" linePoints="0,12 15,8 30,10 45,6 60,8 75,4 100,6" />
+      <main className="overview-shot-page flex-grow overflow-auto">
+        <section className="shot-hero">
+          <div>
+            <div className="shot-eyebrow">ECOI SaaS · overview</div>
+            <h1>Tableau de bord commercial</h1>
+            <div className="shot-pill-row">
+              <MetricPill label="CA total" value={fmtKEur(stats.caMois)} tone="dark" />
+              <MetricPill label="Leads" value={fmtCompact(stats.leads)} tone="blue" />
+              <MetricPill label="Closing" value={`${stats.closing}%`} tone="blue" />
+              <MetricPill label="Appels" value={fmtCompact(stats.appels)} tone="light" />
+            </div>
+          </div>
+          <div className="shot-top-stats">
+            <HeroStat icon="trophy" value={String(stats.ventes)} label="ventes signées" />
+            <HeroStat icon="users" value={`${stats.teamActive}/${stats.teamTotal}`} label="équipe active" />
+            <HeroStat icon="target" value={`${stats.qualifRate}%`} label="qualification" />
+          </div>
+        </section>
+
+        <section className="shot-dashboard-grid">
+          <div className="shot-profile-card">
+            <div className="shot-profile-bg" />
+            <div className="shot-profile-avatar">ECOI</div>
+            <div className="shot-profile-bottom">
+              <div>
+                <h3>Performance équipe</h3>
+                <p>{stats.teamActive} membres actifs · {fmtCompact(stats.classified)} leads traités</p>
+              </div>
+              <span>{fmtKEur(stats.panier)} panier</span>
+            </div>
+          </div>
+
+          <div className="shot-card shot-progress-card">
+            <CardHead title="Progression leads" icon="arrow-right" />
+            <div className="shot-bigline">
+              <strong>{fmtCompact(stats.leads)}</strong>
+              <span>leads dans le CRM<br />{fmtCompact(stats.qualified)} qualifiés</span>
+            </div>
+            <MiniBarChart values={monthlyLeadSeries(leads ?? [])} />
+          </div>
+
+          <div className="shot-card shot-tracker-card">
+            <CardHead title="Conversion" icon="chart" />
+            <DonutProgress value={stats.closing} label={`${stats.closing}%`} sub="closing" />
+            <div className="shot-tracker-actions">
+              <button type="button"><Icon name="pause" size={15} /></button>
+              <button type="button"><Icon name="phone" size={15} /></button>
+              <button type="button" className="primary" onClick={() => navigate('/analytics')}><Icon name="arrow-right" size={16} /></button>
+            </div>
+          </div>
+
+          <div className="shot-onboarding-card">
+            <div className="shot-onboarding-top">
+              <div>
+                <span className="shot-eyebrow">pipeline</span>
+                <h3>Objectifs SaaS</h3>
+              </div>
+              <strong>{Math.min(100, stats.closing)}%</strong>
+            </div>
+            <div className="shot-segments">
+              <span style={{ flex: 1.2 }} />
+              <span style={{ flex: 0.9 }} />
+              <span style={{ flex: 0.45 }} />
+            </div>
+            <div className="shot-dark-panel">
+              <div className="shot-dark-head">
+                <span>À suivre</span>
+                <strong>{stats.ventes}</strong>
+              </div>
+              <TaskLine icon="phone" title="Appels setters" sub={`${fmtCompact(stats.appels)} appels logiques`} done />
+              <TaskLine icon="target" title="RDV pris" sub={`${funnel?.totals?.rdv ?? 0} rendez-vous CRM`} done />
+              <TaskLine icon="trophy" title="Ventes" sub={`${stats.ventes} ventes signées`} done={stats.ventes > 0} />
+            </div>
+          </div>
+
+          <div className="shot-accordion-card">
+            <AccordionRow label="Période analysée" value={funnelRange.label} />
+            <AccordionRow label="Setters actifs" value={String((usersList ?? []).filter((u) => u.role === 'setter' && u.active).length)} />
+            <AccordionRow label="Commerciaux actifs" value={String((usersList ?? []).filter((u) => u.role === 'commercial' && u.active).length)} />
+          </div>
+
+          <div className="shot-card shot-calendar-card">
+            <div className="shot-calendar-head">
+              <span>{formatShortDate(new Date())}</span>
+              <strong>Funnel CRM</strong>
+              <button onClick={() => navigate('/analytics')}>Analytics</button>
+            </div>
+            {funnel?.totals ? <FunnelFlowMap totals={funnel.totals} /> : <div className="py-8 text-center text-faint text-sm">Chargement du funnel CRM…</div>}
+          </div>
         </section>
 
         <AdminLeadFunnel
@@ -411,40 +493,100 @@ function OverviewAdmin() {
           onSetterChange={setFunnelSetterId}
           onSectorChange={setFunnelSector}
         />
-
-        <section className="grid grid-cols-12 gap-6">
-          <div className="glass-card col-span-8 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold">Évolution CA — par mode de paiement</h3>
-            <PillTabs items={[{ id: 'w', label: 'Sem' }, { id: 'm', label: 'Mois' }, { id: 't', label: 'Trim' }]} active="m" onChange={() => {}} />
-          </div>
-          <div className="h-[200px]">
-            <FuturisticBars values={monthlyLeadSeries(leads ?? [])} colors={["#D4AF37", "#B87333"]} />
-          </div>
-          <div className="flex items-center gap-4 mt-4 text-[11px]">
-            <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-or"></div><span>Comptant</span></div>
-            <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-cuivre"></div><span>Financement</span></div>
-          </div>
-        </div>
-
-        <BigNumberCard
-          eyebrow="VENTES SIGNÉES"
-          value={String(stats.ventes)}
-          desc={`Total des RDV signés sur la période — ${fmtKEur(stats.caMois)} de CA cumulé.`}
-          haloColor="#B7410E"
-          spark={[30, 48, 60, 55, 75, 90, 100]}
-          sparkColor="#B7410E"
-          className="col-span-4"
-        />
-        </section>
-
-        {funnel?.totals && <FunnelFlowMap totals={funnel.totals} />}
       </main>
     </AppShell>
   )
 }
 
 // ===== Helpers =====
+
+type ShotIcon = 'trophy' | 'users' | 'target' | 'arrow-right' | 'chart' | 'phone' | 'check'
+
+function MetricPill({ label, value, tone }: { label: string; value: string; tone: 'dark' | 'blue' | 'light' }) {
+  return (
+    <div className="shot-metric">
+      <span>{label}</span>
+      <strong className={`shot-metric-pill ${tone}`}>{value}</strong>
+    </div>
+  )
+}
+
+function HeroStat({ icon, value, label }: { icon: ShotIcon; value: string; label: string }) {
+  return (
+    <div className="shot-hero-stat">
+      <span><Icon name={icon} size={15} /></span>
+      <strong>{value}</strong>
+      <small>{label}</small>
+    </div>
+  )
+}
+
+function CardHead({ title, icon }: { title: string; icon: ShotIcon }) {
+  return (
+    <div className="shot-card-head">
+      <h3>{title}</h3>
+      <span><Icon name={icon} size={16} /></span>
+    </div>
+  )
+}
+
+function MiniBarChart({ values }: { values: number[] }) {
+  const max = Math.max(1, ...values)
+  const labels = ['J-7', 'J-6', 'J-5', 'J-4', 'J-3', 'J-2', 'Now']
+  return (
+    <div className="shot-bars">
+      {values.slice(-7).map((value, index) => (
+        <div key={`${value}-${index}`} className="shot-bar-col">
+          <span className={index === values.slice(-7).length - 1 ? 'active' : ''} style={{ height: `${Math.max(14, (value / max) * 118)}px` }} />
+          <small>{labels[index] ?? `${index + 1}`}</small>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function DonutProgress({ value, label, sub }: { value: number; label: string; sub: string }) {
+  const safe = Math.max(0, Math.min(100, value))
+  const circumference = 2 * Math.PI * 48
+  const dash = (safe / 100) * circumference
+  return (
+    <div className="shot-donut">
+      <svg viewBox="0 0 120 120">
+        <circle cx="60" cy="60" r="48" className="bg" />
+        <circle cx="60" cy="60" r="48" className="progress" strokeDasharray={`${dash} ${circumference - dash}`} />
+      </svg>
+      <div>
+        <strong>{label}</strong>
+        <span>{sub}</span>
+      </div>
+    </div>
+  )
+}
+
+function TaskLine({ icon, title, sub, done }: { icon: ShotIcon; title: string; sub: string; done: boolean }) {
+  return (
+    <div className="shot-task-line">
+      <span className="task-icon"><Icon name={icon} size={16} /></span>
+      <div>
+        <strong>{title}</strong>
+        <small>{sub}</small>
+      </div>
+      <span className={`task-check ${done ? 'done' : ''}`}><Icon name="check" size={13} /></span>
+    </div>
+  )
+}
+
+function AccordionRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="shot-accordion-row">
+      <div>
+        <strong>{label}</strong>
+        <small>{value}</small>
+      </div>
+      <Icon name="chevron-right" size={16} />
+    </div>
+  )
+}
 
 function FunnelPeriodSelector({ value, onChange }: { value: FunnelPeriodState; onChange: (v: FunnelPeriodState) => void }) {
   return (
@@ -1003,20 +1145,6 @@ function FuturisticAreaChart({ values, color }: { values: number[]; color: strin
   )
 }
 
-function FuturisticBars({ values, colors }: { values: number[]; colors: string[] }) {
-  const max = Math.max(1, ...values)
-  return (
-    <div className="h-full rounded-2xl bg-white/35 border border-line-soft p-4 flex items-end gap-3 overflow-hidden relative">
-      {values.map((v, i) => (
-        <div key={i} className="relative z-10 flex-1 flex flex-col items-center gap-2">
-          <div className="w-full rounded-t-xl shadow-sm" style={{ height: `${Math.max(8, (v / max) * 150)}px`, background: colors[i % colors.length], opacity: 0.72 + (i / values.length) * 0.25 }} />
-          <span className="text-[10px] text-faint font-semibold">{v}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 function KpiCard({
   title, value, valueSize = 32, delta, deltaType, haloColor, lineColor, sparkPoints, className = '',
 }: {
@@ -1046,36 +1174,6 @@ function KpiCard({
             <polyline points={sparkPoints} fill="none" stroke={lineColor} strokeWidth="2" />
           </svg>
         </div>
-      </div>
-    </div>
-  )
-}
-
-function SmallKpi({
-  title, value, delta, deltaType, haloColor, lineColor, linePoints,
-}: {
-  title: string
-  value: string
-  delta?: string
-  deltaType?: DeltaType
-  haloColor: string
-  lineColor: string
-  linePoints: string
-}) {
-  return (
-    <div className="col-span-12 sm:col-span-6 xl:col-span-2 kpi-card min-h-[132px]">
-      <div className="kpi-content">
-        <div className="flex items-center justify-between mb-2">
-          <span className="eyebrow block">{title}</span>
-          <span className="h-2 w-2 rounded-full" style={{ background: haloColor }} />
-        </div>
-        <div className="flex items-end justify-between">
-          <span className="text-[24px] font-black leading-none tracking-tight">{value}</span>
-          {delta && <span className={`delta-badge delta-${deltaType}`}>{delta}</span>}
-        </div>
-        <svg className="mt-3 rounded-lg bg-cream/60" width="100%" height="24" viewBox="0 0 100 20" preserveAspectRatio="none">
-          <polyline points={linePoints} fill="none" stroke={lineColor} strokeWidth="2" />
-        </svg>
       </div>
     </div>
   )
