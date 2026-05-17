@@ -330,6 +330,7 @@ function OverviewCommercial() {
 // ----- F4 Admin -----
 function OverviewAdmin() {
   const navigate = useNavigate()
+  const me = useAuth((s) => s.user)
   const [tab, setTab] = useState('overview')
   const [funnelPeriod, setFunnelPeriod] = useState<FunnelPeriodState>(DEFAULT_FUNNEL_PERIOD)
   const funnelRange = buildFunnelPeriodRange(funnelPeriod)
@@ -391,91 +392,73 @@ function OverviewAdmin() {
         }}
       />
       <main className="overview-shot-page flex-grow overflow-auto">
-        <section className="shot-hero">
+        <section className="overview-air-header">
           <div>
-            <div className="shot-eyebrow">ECOI SaaS · overview</div>
-            <h1>Tableau de bord commercial</h1>
-            <div className="shot-pill-row">
-              <MetricPill label="CA total" value={fmtKEur(stats.caMois)} tone="dark" />
-              <MetricPill label="Leads" value={fmtCompact(stats.leads)} tone="blue" />
-              <MetricPill label="Closing" value={`${stats.closing}%`} tone="blue" />
-              <MetricPill label="Appels" value={fmtCompact(stats.appels)} tone="light" />
-            </div>
+            <div className="shot-eyebrow">ECOI SaaS · {funnelRange.label}</div>
+            <h1>Vue d’ensemble</h1>
           </div>
-          <div className="shot-top-stats">
-            <HeroStat icon="trophy" value={String(stats.ventes)} label="ventes signées" />
-            <HeroStat icon="users" value={`${stats.teamActive}/${stats.teamTotal}`} label="équipe active" />
-            <HeroStat icon="target" value={`${stats.qualifRate}%`} label="qualification" />
+          <div className="overview-profile-chip">
+            <div className="overview-profile-photo">
+              {me?.image ? <img src={me.image} alt={me.name} /> : <span>{userInitials(me?.name)}</span>}
+            </div>
+            <div>
+              <strong>{me?.name}</strong>
+              <small>{me?.email}</small>
+            </div>
           </div>
         </section>
 
-        <section className="shot-dashboard-grid">
-          <div className="shot-profile-card">
-            <div className="shot-profile-bg" />
-            <div className="shot-profile-avatar">ECOI</div>
-            <div className="shot-profile-bottom">
-              <div>
-                <h3>Performance équipe</h3>
-                <p>{stats.teamActive} membres actifs · {fmtCompact(stats.classified)} leads traités</p>
-              </div>
-              <span>{fmtKEur(stats.panier)} panier</span>
+        <section className="overview-air-grid">
+          <div className="overview-profile-panel">
+            <div className="overview-profile-large">
+              {me?.image ? <img src={me.image} alt={me.name} /> : <span>{userInitials(me?.name)}</span>}
+            </div>
+            <div>
+              <span className="shot-eyebrow">Profil connecté</span>
+              <h2>{me?.name}</h2>
+              <p>{me?.role ?? 'admin'} · {stats.teamActive} membres actifs sur {stats.teamTotal}</p>
             </div>
           </div>
 
-          <div className="shot-card shot-progress-card">
-            <CardHead title="Progression leads" icon="arrow-right" />
-            <div className="shot-bigline">
-              <strong>{fmtCompact(stats.leads)}</strong>
-              <span>leads dans le CRM<br />{fmtCompact(stats.qualified)} qualifiés</span>
-            </div>
+          <AirKpi icon="trophy" label="CA total" value={fmtKEur(stats.caMois)} sub={`${stats.ventes} ventes signées`} />
+          <AirKpi icon="target" label="Closing" value={`${stats.closing}%`} sub={`${rdvs?.length ?? 0} RDV suivis`} />
+          <AirKpi icon="phone" label="Appels" value={fmtCompact(stats.appels)} sub={`${fmtCompact(stats.classified)} leads traités`} />
+          <AirKpi icon="users" label="Leads" value={fmtCompact(stats.leads)} sub={`${fmtCompact(stats.qualified)} qualifiés`} />
+
+          <div className="overview-air-card overview-air-chart">
+            <CardHead title="Évolution des leads" icon="chart" />
             <MiniBarChart values={monthlyLeadSeries(leads ?? [])} />
           </div>
 
-          <div className="shot-card shot-tracker-card">
-            <CardHead title="Conversion" icon="chart" />
+          <div className="overview-air-card overview-air-conversion">
+            <CardHead title="Conversion commerciale" icon="target" />
             <DonutProgress value={stats.closing} label={`${stats.closing}%`} sub="closing" />
-            <div className="shot-tracker-actions">
-              <button type="button"><Icon name="pause" size={15} /></button>
-              <button type="button"><Icon name="phone" size={15} /></button>
-              <button type="button" className="primary" onClick={() => navigate('/analytics')}><Icon name="arrow-right" size={16} /></button>
-            </div>
+            <button type="button" className="overview-air-link" onClick={() => navigate('/analytics')}>Voir Analytics</button>
           </div>
 
-          <div className="shot-onboarding-card">
+          <div className="overview-air-card overview-air-pipeline">
             <div className="shot-onboarding-top">
               <div>
-                <span className="shot-eyebrow">pipeline</span>
-                <h3>Objectifs SaaS</h3>
+                <span className="shot-eyebrow">Pipeline réel</span>
+                <h3>Avancement CRM</h3>
               </div>
-              <strong>{Math.min(100, stats.closing)}%</strong>
+              <strong>{funnel?.totals?.globalConversionRate ?? stats.closing}%</strong>
             </div>
-            <div className="shot-segments">
-              <span style={{ flex: 1.2 }} />
-              <span style={{ flex: 0.9 }} />
-              <span style={{ flex: 0.45 }} />
+            <div className="overview-real-segments" style={{ ['--seg-a' as string]: `${Math.max(1, funnel?.totals?.newLeads ?? stats.leads)}`, ['--seg-b' as string]: `${Math.max(1, funnel?.totals?.qualified ?? stats.qualified)}`, ['--seg-c' as string]: `${Math.max(1, funnel?.totals?.rdv ?? 0)}` }}>
+              <span />
+              <span />
+              <span />
             </div>
-            <div className="shot-dark-panel">
-              <div className="shot-dark-head">
-                <span>À suivre</span>
-                <strong>{stats.ventes}</strong>
-              </div>
-              <TaskLine icon="phone" title="Appels setters" sub={`${fmtCompact(stats.appels)} appels logiques`} done />
-              <TaskLine icon="target" title="RDV pris" sub={`${funnel?.totals?.rdv ?? 0} rendez-vous CRM`} done />
-              <TaskLine icon="trophy" title="Ventes" sub={`${stats.ventes} ventes signées`} done={stats.ventes > 0} />
-            </div>
+            <TaskLine icon="phone" title="Appels setters" sub={`${fmtCompact(funnel?.totals?.calls ?? stats.appels)} appels`} done={(funnel?.totals?.calls ?? stats.appels) > 0} />
+            <TaskLine icon="target" title="Leads qualifiés" sub={`${fmtCompact(funnel?.totals?.qualified ?? stats.qualified)} leads`} done={(funnel?.totals?.qualified ?? stats.qualified) > 0} />
+            <TaskLine icon="trophy" title="RDV obtenus" sub={`${fmtCompact(funnel?.totals?.rdv ?? 0)} RDV`} done={(funnel?.totals?.rdv ?? 0) > 0} />
           </div>
 
-          <div className="shot-accordion-card">
-            <AccordionRow label="Période analysée" value={funnelRange.label} />
-            <AccordionRow label="Setters actifs" value={String((usersList ?? []).filter((u) => u.role === 'setter' && u.active).length)} />
-            <AccordionRow label="Commerciaux actifs" value={String((usersList ?? []).filter((u) => u.role === 'commercial' && u.active).length)} />
-          </div>
-
-          <div className="shot-card shot-calendar-card">
+          <div className="overview-air-card overview-air-funnel">
             <div className="shot-calendar-head">
               <span>{formatShortDate(new Date())}</span>
               <strong>Funnel CRM</strong>
-              <button onClick={() => navigate('/analytics')}>Analytics</button>
+              <button onClick={() => navigate('/analytics')}>Détails</button>
             </div>
             {funnel?.totals ? <FunnelFlowMap totals={funnel.totals} /> : <div className="py-8 text-center text-faint text-sm">Chargement du funnel CRM…</div>}
           </div>
@@ -502,21 +485,21 @@ function OverviewAdmin() {
 
 type ShotIcon = 'trophy' | 'users' | 'target' | 'arrow-right' | 'chart' | 'phone' | 'check'
 
-function MetricPill({ label, value, tone }: { label: string; value: string; tone: 'dark' | 'blue' | 'light' }) {
-  return (
-    <div className="shot-metric">
-      <span>{label}</span>
-      <strong className={`shot-metric-pill ${tone}`}>{value}</strong>
-    </div>
-  )
+function userInitials(name: string | null | undefined): string {
+  const clean = (name ?? '').trim()
+  if (!clean) return '—'
+  return clean.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')
 }
 
-function HeroStat({ icon, value, label }: { icon: ShotIcon; value: string; label: string }) {
+function AirKpi({ icon, label, value, sub }: { icon: ShotIcon; label: string; value: string; sub: string }) {
   return (
-    <div className="shot-hero-stat">
-      <span><Icon name={icon} size={15} /></span>
-      <strong>{value}</strong>
-      <small>{label}</small>
+    <div className="overview-air-kpi">
+      <span><Icon name={icon} size={18} /></span>
+      <div>
+        <small>{label}</small>
+        <strong>{value}</strong>
+        <p>{sub}</p>
+      </div>
     </div>
   )
 }
@@ -531,13 +514,17 @@ function CardHead({ title, icon }: { title: string; icon: ShotIcon }) {
 }
 
 function MiniBarChart({ values }: { values: number[] }) {
-  const max = Math.max(1, ...values)
-  const labels = ['J-7', 'J-6', 'J-5', 'J-4', 'J-3', 'J-2', 'Now']
+  const visible = values.slice(-7)
+  const max = Math.max(1, ...visible)
+  const labels = lastNMonths(values.length).slice(-7).map((month) => {
+    const d = new Date(`${month}-01T12:00:00`)
+    return d.toLocaleDateString('fr-FR', { month: 'short' }).replace('.', '')
+  })
   return (
     <div className="shot-bars">
-      {values.slice(-7).map((value, index) => (
+      {visible.map((value, index) => (
         <div key={`${value}-${index}`} className="shot-bar-col">
-          <span className={index === values.slice(-7).length - 1 ? 'active' : ''} style={{ height: `${Math.max(14, (value / max) * 118)}px` }} />
+          <span className={index === visible.length - 1 ? 'active' : ''} style={{ height: `${Math.max(14, (value / max) * 118)}px` }} />
           <small>{labels[index] ?? `${index + 1}`}</small>
         </div>
       ))}
@@ -572,18 +559,6 @@ function TaskLine({ icon, title, sub, done }: { icon: ShotIcon; title: string; s
         <small>{sub}</small>
       </div>
       <span className={`task-check ${done ? 'done' : ''}`}><Icon name="check" size={13} /></span>
-    </div>
-  )
-}
-
-function AccordionRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="shot-accordion-row">
-      <div>
-        <strong>{label}</strong>
-        <small>{value}</small>
-      </div>
-      <Icon name="chevron-right" size={16} />
     </div>
   )
 }
