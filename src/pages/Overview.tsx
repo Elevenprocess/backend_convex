@@ -332,15 +332,11 @@ function OverviewAdmin() {
   const navigate = useNavigate()
   const me = useAuth((s) => s.user)
   const [tab, setTab] = useState('overview')
-  const [funnelPeriod, setFunnelPeriod] = useState<FunnelPeriodState>(DEFAULT_FUNNEL_PERIOD)
+  const [funnelPeriod] = useState<FunnelPeriodState>(DEFAULT_FUNNEL_PERIOD)
   const funnelRange = buildFunnelPeriodRange(funnelPeriod)
-  const [funnelSetterId, setFunnelSetterId] = useState('')
-  const [funnelSector, setFunnelSector] = useState('')
   const { data: funnel, loading: funnelLoading } = useAnalyticsFunnel({
     from: funnelRange.from,
     to: funnelRange.to,
-    setterId: funnelSetterId || undefined,
-    sector: funnelSector || undefined,
   })
   const { data: leads = [] } = useLeads({ limit: 1500 })
   const { data: rdvs = [] } = useRdvList({ limit: 200 })
@@ -394,7 +390,7 @@ function OverviewAdmin() {
       <main className="overview-shot-page flex-grow overflow-auto">
         <section className="overview-air-header">
           <div>
-            <div className="shot-eyebrow">ECOI SaaS · {funnelRange.label}</div>
+            <div className="shot-eyebrow">ECOI SaaS</div>
             <h1>Vue d’ensemble</h1>
           </div>
           <div className="overview-profile-chip">
@@ -461,14 +457,6 @@ function OverviewAdmin() {
         <AdminLeadFunnel
           funnel={funnel}
           loading={funnelLoading}
-          users={usersList ?? []}
-          period={funnelPeriod}
-          range={funnelRange}
-          setterId={funnelSetterId}
-          sector={funnelSector}
-          onPeriodChange={setFunnelPeriod}
-          onSetterChange={setFunnelSetterId}
-          onSectorChange={setFunnelSector}
         />
       </main>
     </AppShell>
@@ -535,39 +523,6 @@ function TaskLine({ icon, title, sub, done }: { icon: ShotIcon; title: string; s
         <small>{sub}</small>
       </div>
       <span className={`task-check ${done ? 'done' : ''}`}><Icon name="check" size={13} /></span>
-    </div>
-  )
-}
-
-function FunnelPeriodSelector({ value, onChange }: { value: FunnelPeriodState; onChange: (v: FunnelPeriodState) => void }) {
-  return (
-    <div className="flex flex-wrap items-center justify-end gap-2">
-      <select
-        value={value.mode}
-        onChange={(e) => onChange({ ...value, mode: e.target.value as FunnelPeriodMode })}
-        className="rounded-xl border border-line bg-white/70 px-3 py-2 font-semibold text-text shadow-sm"
-      >
-        {FUNNEL_PERIOD_OPTIONS.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
-      </select>
-      {value.mode === 'custom' && (
-        <>
-          <input
-            type="date"
-            max={funnelTodayInput}
-            value={value.customFrom}
-            onChange={(e) => onChange({ ...value, customFrom: e.target.value > funnelTodayInput ? funnelTodayInput : e.target.value })}
-            className="rounded-xl border border-line bg-white/70 px-3 py-2 font-semibold"
-          />
-          <span className="font-bold text-faint">à</span>
-          <input
-            type="date"
-            max={funnelTodayInput}
-            value={value.customTo}
-            onChange={(e) => onChange({ ...value, customTo: e.target.value > funnelTodayInput ? funnelTodayInput : e.target.value })}
-            className="rounded-xl border border-line bg-white/70 px-3 py-2 font-semibold"
-          />
-        </>
-      )}
     </div>
   )
 }
@@ -652,45 +607,14 @@ function formatShortDate(date: Date): string {
 }
 
 function AdminLeadFunnel({
-  funnel, loading, users, period, range, setterId, sector, onPeriodChange, onSetterChange, onSectorChange,
+  funnel, loading,
 }: {
   funnel: AnalyticsFunnelResponse | null
   loading: boolean
-  users: { id: string; name: string; role: string }[]
-  period: FunnelPeriodState
-  range: FunnelPeriodRange
-  setterId: string
-  sector: string
-  onPeriodChange: (period: FunnelPeriodState) => void
-  onSetterChange: (id: string) => void
-  onSectorChange: (sector: string) => void
 }) {
   const totals = funnel?.totals
-  const setters = users.filter((u) => u.role === 'setter')
   return (
     <section className="glass-card overview-funnel-section w-full p-7 overflow-visible">
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
-        <div>
-          <span className="eyebrow">FUNNEL LEADS CRM</span>
-          <h3 className="text-xl font-extrabold mt-1">Parcours des leads jusqu’au rendez-vous</h3>
-          <p className="text-xs text-faint mt-1">Mesure les pertes, la qualité lead, les réponses setter et la conversion globale.</p>
-        </div>
-        <div className="flex flex-wrap gap-2 text-xs items-center justify-end">
-          <div className="min-w-full text-right text-[11px] font-bold text-faint sm:min-w-0 sm:mr-1">
-            {range.label}
-          </div>
-          <FunnelPeriodSelector value={period} onChange={onPeriodChange} />
-          <select className="rounded-xl border border-line bg-white/70 px-3 py-2 font-semibold" value={setterId} onChange={(e) => onSetterChange(e.target.value)}>
-            <option value="">Tous les setters</option>
-            {setters.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
-          <select className="rounded-xl border border-line bg-white/70 px-3 py-2 font-semibold" value={sector} onChange={(e) => onSectorChange(e.target.value)}>
-            <option value="">Tous secteurs</option>
-            {(funnel?.sectors ?? []).map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </div>
-      </div>
-
       {loading && !funnel ? (
         <div className="py-10 text-center text-faint text-sm">Chargement du funnel CRM…</div>
       ) : !funnel || !totals ? (
