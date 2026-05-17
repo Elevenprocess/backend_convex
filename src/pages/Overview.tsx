@@ -532,7 +532,7 @@ function LeadPieAnalysis({ leads }: { leads: LeadResponse[] }) {
 
   return (
     <div className="overview-air-card overview-air-pie">
-      <CardHead title="Analyse camembert" icon="target" />
+      <CardHead title="Répartition des leads" icon="target" />
       <div className="overview-pie-body">
         <div className="overview-pie" style={{ background: `conic-gradient(${gradient})` }}>
           <div>
