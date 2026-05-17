@@ -85,7 +85,7 @@ export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) 
 
   const handleSignOut = async () => {
     await signOut()
-    navigate('/login', { replace: true })
+    navigate('/', { replace: true })
   }
 
   const runSearch = () => {

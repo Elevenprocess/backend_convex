@@ -6,6 +6,7 @@ import './index.css'
 import { RootLayout } from './RootLayout'
 import { RequireAuth } from './components/RequireAuth'
 import { Login } from './pages/Login'
+import { Landing } from './pages/Landing'
 import { Overview } from './pages/Overview'
 import { LeadsList } from './pages/leads/LeadsList'
 import { LeadDetail } from './pages/leads/LeadDetail'
@@ -29,12 +30,12 @@ const router = createHashRouter([
   {
     element: <RootLayout />,
     children: [
+      { path: '/', element: <Landing /> },
       { path: '/login', element: <Login /> },
       { path: '/accept-invitation', element: <AcceptInvitation /> },
       {
         element: <RequireAuth />,
         children: [
-          { path: '/', element: <Navigate to="/overview" replace /> },
           { path: '/overview', element: <Overview /> },
           { path: '/leads', element: <LeadsList /> },
           { path: '/leads/split', element: <LeadsSplit /> },
