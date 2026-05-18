@@ -179,7 +179,9 @@ function LeadsSetter() {
 
   // Côté setter, l'écran s'ouvre directement sur les nouveaux leads.
   // Le filtre global "Tous" n'est pas affiché aux setters.
-  const { data, loading, error } = useLeads({ limit: 250 })
+  // Limit haut (3000) pour couvrir le pool complet — DB a ~5k leads actifs et
+  // les tabs filtrent client-side sur toutes les statuses actionnables.
+  const { data, loading, error } = useLeads({ limit: 3000 })
   const { data: usersList } = useUsers()
   const mine = data ?? []
   const userMap = useMemo(() => {

@@ -212,7 +212,7 @@ function useFetch<T>(
   return { data, loading, error, refetch: () => setTick((t) => t + 1) }
 }
 
-const LEADS_LIMIT_MAX = 500
+const LEADS_LIMIT_MAX = 5000
 const CALL_LOGS_LIMIT_MAX = 200
 const RDV_LIMIT_MAX = 200
 
