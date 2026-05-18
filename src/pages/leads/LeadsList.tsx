@@ -166,9 +166,11 @@ function LeadsCommercial() {
 // flux de travail actif pendant 11 jours de contact/relance, puis passe dans
 // "Relance à long terme". Les leads non éligibles restent classés "Non qualifiés".
 const LONG_TERM_RELANCE_THRESHOLD_DAYS = 11
+const SETTER_STATUS_FILTER_LAUNCH_DATE = '2026-05-18'
+type SetterFilter = 'rappel' | 'qualifie' | 'sans_reponse' | 'perdu'
 
 function LeadsSetter() {
-  const [filter, setFilter] = useState<'nouveau' | 'rappel' | 'qualifie' | 'sans_reponse' | 'perdu'>('nouveau')
+  const [filter, setFilter] = useState<SetterFilter>('rappel')
   const [leadFilters, setLeadFilters] = useState<LeadListFilters>(DEFAULT_LEAD_FILTERS)
   const [searchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('search') ?? '')
@@ -191,18 +193,19 @@ function LeadsSetter() {
     return m
   }, [usersList])
 
+  const setterCycleStart = useMemo(() => currentSetterStatusCycleStart(), [])
+  const categoryLeads = useMemo(() => mine.filter((lead) => isSetterCurrentCycleLead(lead, setterCycleStart)), [mine, setterCycleStart])
+
   const counts = useMemo(() => ({
-    all: mine.length,
-    nouveau: mine.filter(isNouveauLead).length,
-    rappel: mine.filter(isCallbackLead).length,
-    qualifie: mine.filter((l) => l.status === 'qualifie').length,
-    sansReponse: mine.filter(isLongTermRelanceLead).length,
-    perdu: mine.filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie').length,
-  }), [mine])
+    all: categoryLeads.length,
+    rappel: categoryLeads.filter(isCallbackLead).length,
+    qualifie: categoryLeads.filter((l) => l.status === 'qualifie').length,
+    sansReponse: categoryLeads.filter(isLongTermRelanceLead).length,
+    perdu: categoryLeads.filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie').length,
+  }), [categoryLeads])
 
   const filtered = useMemo(() => {
-    let list = mine
-    if (filter === 'nouveau') list = list.filter(isNouveauLead)
+    let list = categoryLeads
     if (filter === 'rappel') list = list.filter(isCallbackLead)
     if (filter === 'qualifie') list = list.filter((l) => l.status === 'qualifie')
     if (filter === 'sans_reponse') list = list.filter(isLongTermRelanceLead)
@@ -213,7 +216,7 @@ function LeadsSetter() {
       list = list.filter((l) => [fullName(l), l.phone, l.email, l.city].filter(Boolean).join(' ').toLowerCase().includes(q))
     }
     return list
-  }, [mine, filter, leadFilters, query])
+  }, [categoryLeads, filter, leadFilters, query])
 
   const selected = useMemo(
     () => (selectedId ? mine.find((l) => l.id === selectedId) ?? null : null),
@@ -225,7 +228,7 @@ function LeadsSetter() {
     <AppShell>
       <Topbar
         eyebrow="LEADS / SETTER"
-        title="Nouveaux leads"
+        title="Suivi leads"
       />
       <div className="flex flex-grow overflow-hidden">
         <div className="flex-grow flex flex-col min-w-0">
@@ -244,12 +247,11 @@ function LeadsSetter() {
 
           <main className="p-8 pt-4 flex-grow flex flex-col min-h-0 overflow-hidden">
             <div className="flex items-center gap-2 mb-4 flex-wrap flex-shrink-0 bg-cream-darker/95 backdrop-blur z-20 pb-2">
-              <FilterPill active={filter === 'nouveau'} onClick={() => setFilter('nouveau')}>Nouveaux ({counts.nouveau})</FilterPill>
               <FilterPill active={filter === 'rappel'} onClick={() => setFilter('rappel')}>À rappeler ({counts.rappel})</FilterPill>
               <FilterPill active={filter === 'qualifie'} onClick={() => setFilter('qualifie')}>Qualifiés ({counts.qualifie})</FilterPill>
               <FilterPill active={filter === 'sans_reponse'} onClick={() => setFilter('sans_reponse')}>Relance à long terme ({counts.sansReponse})</FilterPill>
               <FilterPill active={filter === 'perdu'} onClick={() => setFilter('perdu')}>Non qualifiés ({counts.perdu})</FilterPill>
-              <LeadFiltersBar filters={leadFilters} onChange={setLeadFilters} total={mine.length} filtered={filtered.length} />
+              <LeadFiltersBar filters={leadFilters} onChange={setLeadFilters} total={categoryLeads.length} filtered={filtered.length} />
               <ColumnVisibilityMenu columns={SETTER_COLUMNS} visible={visibleColumns} onChange={setVisibleColumns} />
               {(loading || backgroundLoading) && mine.length > 0 && <span className="text-xs text-faint ml-auto">Actualisation…</span>}
             </div>
@@ -263,8 +265,8 @@ function LeadsSetter() {
                 <EmptyState
                   icon="users"
                   title={mine.length === 0 ? 'Aucun lead pour le moment' : 'Aucun lead ne correspond'}
-                  description={mine.length === 0 ? "Aucun lead disponible pour le moment." : 'Essayez un autre filtre ou créez un nouveau lead.'}
-                  secondaryAction={{ label: 'Voir les nouveaux leads', onClick: () => { setFilter('nouveau'); setQuery('') } }}
+                  description={mine.length === 0 ? "Aucun lead disponible pour le moment." : "Aucun lead depuis aujourd'hui pour cette catégorie."}
+                  secondaryAction={{ label: 'Voir les À rappeler', onClick: () => { setFilter('rappel'); setQuery('') } }}
                 />
               </div>
             ) : (
@@ -546,10 +548,40 @@ function isCallbackLead(lead: LeadResponse): boolean {
   return (lead.status === 'a_rappeler' || lead.status === 'relance' || Boolean(lead.nextCallbackAt)) && !isLongTermRelanceLead(lead)
 }
 
-function isNouveauLead(lead: LeadResponse): boolean {
-  if (lead.status === 'nouveau') return true
-  if (lead.status === 'pas_de_reponse' && !isLongTermRelanceLead(lead)) return true
-  return false
+function isSetterCurrentCycleLead(lead: LeadResponse, cycleStart: Date): boolean {
+  const cycleEnd = addMonths(cycleStart, 1)
+  const dateIso = setterCategoryDate(lead)
+  if (!dateIso) return false
+  const date = new Date(dateIso)
+  if (Number.isNaN(date.getTime())) return false
+  return date >= cycleStart && date < cycleEnd
+}
+
+function setterCategoryDate(lead: LeadResponse): string | null {
+  if (isCallbackLead(lead)) return lead.nextCallbackAt ?? lead.updatedAt
+  if (isLongTermRelanceLead(lead)) return lead.datePassageRelance ?? lead.updatedAt
+  return lead.updatedAt
+}
+
+function currentSetterStatusCycleStart(now = new Date()): Date {
+  const launch = parseLocalDate(SETTER_STATUS_FILTER_LAUNCH_DATE)
+  let start = startOfLocalDay(launch)
+  const today = startOfLocalDay(now)
+  while (addMonths(start, 1) <= today) start = addMonths(start, 1)
+  return start
+}
+
+function parseLocalDate(value: string): Date {
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
+function startOfLocalDay(value: Date): Date {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate())
+}
+
+function addMonths(value: Date, months: number): Date {
+  return new Date(value.getFullYear(), value.getMonth() + months, value.getDate())
 }
 
 function isLongTermRelanceLead(lead: LeadResponse): boolean {
