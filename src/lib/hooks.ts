@@ -252,10 +252,15 @@ export function useLeadsProgressive(filters?: {
   city?: string
   quickLimit?: number
   fullLimit?: number
+  notInAirtable?: boolean
 }): AsyncProgressive<LeadResponse[]> {
   const quickLimit = clampLimit(filters?.quickLimit, 50, LEADS_LIMIT_MAX)
   const fullLimit = clampLimit(filters?.fullLimit, 500, LEADS_LIMIT_MAX)
-  const baseFilters = { ...filters, quickLimit: undefined, fullLimit: undefined }
+  const { notInAirtable, quickLimit: _q, fullLimit: _f, ...rest } = filters ?? {}
+  const baseFilters = {
+    ...rest,
+    notInAirtable: notInAirtable ? 'true' : undefined,
+  }
   const quick = useFetch<LeadResponse[]>('/leads', { ...baseFilters, limit: quickLimit })
   const full = useFetch<LeadResponse[]>('/leads', { ...baseFilters, limit: fullLimit })
   return {
@@ -511,8 +516,6 @@ export async function runPipelineBackfill(opts: { dryRun: boolean; limit?: numbe
   return api<PipelineBackfillSummary>('/analytics/pipeline/backfill', {
     method: 'POST',
     query: { dryRun: opts.dryRun ? 'true' : 'false', limit: opts.limit },
-    // Le backfill peut tenir 2-3 min sur 1k+ opportunités GHL : on rallonge le timeout.
-    timeoutMs: 180_000,
   })
 }
 
@@ -725,7 +728,7 @@ export function useGhlOpportunities(filters?: {
 }
 
 export function syncGhlCalendarEvents(filters: { from: string; to: string; sector?: string; calendarId?: string }): Promise<{ configured: boolean; created: number; updated: number; skipped: number; events: GhlCalendarEvent[] }> {
-  return api<{ configured: boolean; created: number; updated: number; skipped: number; events: GhlCalendarEvent[] }>('/ghl-calendar/sync-events', { method: 'POST', query: filters, timeoutMs: 90_000 })
+  return api<{ configured: boolean; created: number; updated: number; skipped: number; events: GhlCalendarEvent[] }>('/ghl-calendar/sync-events', { method: 'POST', query: filters })
 }
 
 export function moveGhlOpportunity(
@@ -734,7 +737,7 @@ export function moveGhlOpportunity(
 ): Promise<{ opportunity: unknown; synced: boolean }> {
   return api<{ opportunity: unknown; synced: boolean }>(
     `/ghl-calendar/opportunities/${encodeURIComponent(opportunityId)}/stage`,
-    { method: 'PATCH', body: payload, timeoutMs: 20_000 },
+    { method: 'PATCH', body: payload },
   )
 }
 
@@ -757,12 +760,9 @@ export type CreateGhlAppointmentInput = CreateRdvInput & {
 }
 
 export async function createGhlAppointment(input: CreateGhlAppointmentInput): Promise<{ rdv: RdvResponse; ghl: unknown }> {
-  // GHL appointment creation does several external calls (contact upsert, note,
-  // appointment). On Render free tier this can exceed the default API timeout.
   return api<{ rdv: RdvResponse; ghl: unknown }>('/ghl-calendar/appointments', {
     method: 'POST',
     body: input,
-    timeoutMs: 90_000,
   })
 }
 
