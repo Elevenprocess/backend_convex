@@ -171,7 +171,6 @@ type SetterFilter = 'rappel' | 'qualifie' | 'sans_reponse' | 'perdu'
 
 function LeadsSetter() {
   const [filter, setFilter] = useState<SetterFilter>('rappel')
-  const [leadFilters, setLeadFilters] = useState<LeadListFilters>(DEFAULT_LEAD_FILTERS)
   const [searchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('search') ?? '')
   const selectedId = useLeadSidebar((s) => s.selectedLeadId)
@@ -210,13 +209,12 @@ function LeadsSetter() {
     if (filter === 'qualifie') list = list.filter((l) => l.status === 'qualifie')
     if (filter === 'sans_reponse') list = list.filter(isLongTermRelanceLead)
     if (filter === 'perdu') list = list.filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie')
-    list = applyLeadFilters(list, leadFilters)
     if (query) {
       const q = query.toLowerCase()
       list = list.filter((l) => [fullName(l), l.phone, l.email, l.city].filter(Boolean).join(' ').toLowerCase().includes(q))
     }
     return list
-  }, [categoryLeads, filter, leadFilters, query])
+  }, [categoryLeads, filter, query])
 
   const selected = useMemo(
     () => (selectedId ? mine.find((l) => l.id === selectedId) ?? null : null),
@@ -251,7 +249,7 @@ function LeadsSetter() {
               <FilterPill active={filter === 'qualifie'} onClick={() => setFilter('qualifie')}>Qualifiés ({counts.qualifie})</FilterPill>
               <FilterPill active={filter === 'sans_reponse'} onClick={() => setFilter('sans_reponse')}>Relance à long terme ({counts.sansReponse})</FilterPill>
               <FilterPill active={filter === 'perdu'} onClick={() => setFilter('perdu')}>Non qualifiés ({counts.perdu})</FilterPill>
-              <LeadFiltersBar filters={leadFilters} onChange={setLeadFilters} total={categoryLeads.length} filtered={filtered.length} />
+              <span className="text-xs text-faint font-semibold">{filtered.length}/{categoryLeads.length}</span>
               <ColumnVisibilityMenu columns={SETTER_COLUMNS} visible={visibleColumns} onChange={setVisibleColumns} />
               {(loading || backgroundLoading) && mine.length > 0 && <span className="text-xs text-faint ml-auto">Actualisation…</span>}
             </div>
@@ -558,9 +556,7 @@ function isSetterCurrentCycleLead(lead: LeadResponse, cycleStart: Date): boolean
 }
 
 function setterCategoryDate(lead: LeadResponse): string | null {
-  if (isCallbackLead(lead)) return lead.nextCallbackAt ?? lead.updatedAt
-  if (isLongTermRelanceLead(lead)) return lead.datePassageRelance ?? lead.updatedAt
-  return lead.updatedAt
+  return leadArrivalDate(lead)
 }
 
 function currentSetterStatusCycleStart(now = new Date()): Date {
