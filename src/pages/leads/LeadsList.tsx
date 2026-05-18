@@ -630,6 +630,10 @@ function prettySource(l: Pick<LeadResponse, 'source' | 'canalAcquisition' | 'utm
   }
 }
 
+function leadArrivalDate(lead: Pick<LeadResponse, 'createdAt' | 'arrivalAt'>): string {
+  return lead.arrivalAt || lead.createdAt
+}
+
 function fullDateTime(iso: string): string {
   const d = new Date(iso)
   return `${shortDate(iso)} ${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`
@@ -728,7 +732,7 @@ function renderSetterCell(
         </Td>
       )
     case 'telephone': return <Td key={key}><PhoneCell lead={lead} onStartCall={startCall} /></Td>
-    case 'dateArrivee': return <Td key={key} className="text-faint">{fullDateTime(lead.createdAt)}</Td>
+    case 'dateArrivee': return <Td key={key} className="text-faint">{fullDateTime(leadArrivalDate(lead))}</Td>
     case 'adresseComplete': return <Td key={key} className="text-muted truncate" title={addressFull(lead)}>{addressFull(lead)}</Td>
     case 'setter': return <Td key={key}><SetterChips lead={lead} userMap={userMap} /></Td>
     case 'jaugeAppels': return <Td key={key}><DailyCallGauge count={lead.callsToday ?? 0} /></Td>

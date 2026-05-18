@@ -103,6 +103,7 @@ export type LeadResponse = {
   lostReason: string | null
   lastStageChangeAt: string | null
   daysSinceLastStageChange: number | null
+  arrivalAt: string | null
   customFields?: { fieldKey: string; fieldName: string; value: string | null; updatedAt: string }[]
 }
 

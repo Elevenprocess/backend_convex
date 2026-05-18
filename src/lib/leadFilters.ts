@@ -18,7 +18,9 @@ export const DEFAULT_LEAD_FILTERS: LeadListFilters = {
   arrivedAt: 'all',
 }
 
-// Matche createdAt OU updatedAt sur le jour Réunion (UTC+4, pas de DST).
+// Matche la vraie date d'arrivée SaaS (createdAt) sur le jour Réunion (UTC+4, pas de DST).
+// Ne PAS utiliser updatedAt ici : les sync/backfills GHL mettent à jour beaucoup
+// de leads historiques en masse, ce qui faisait gonfler "Aujourd'hui" à 1796.
 function reunionDayKey(date: Date): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Indian/Reunion',
@@ -28,19 +30,22 @@ function reunionDayKey(date: Date): string {
   }).format(date)
 }
 
+function leadArrivalDate(lead: Pick<LeadResponse, 'createdAt' | 'arrivalAt'>): string {
+  return lead.arrivalAt || lead.createdAt
+}
+
 function leadInArrivedRange(
-  lead: Pick<LeadResponse, 'createdAt' | 'updatedAt'>,
+  lead: Pick<LeadResponse, 'createdAt' | 'arrivalAt'>,
   range: LeadArrivedAtFilter,
 ): boolean {
   if (range === 'all') return true
   const now = new Date()
   const todayKey = reunionDayKey(now)
-  const createdKey = reunionDayKey(new Date(lead.createdAt))
-  const updatedKey = reunionDayKey(new Date(lead.updatedAt))
-  if (range === 'today') return createdKey === todayKey || updatedKey === todayKey
+  const createdKey = reunionDayKey(new Date(leadArrivalDate(lead)))
+  if (range === 'today') return createdKey === todayKey
   if (range === 'yesterday') {
     const yKey = reunionDayKey(new Date(now.getTime() - 24 * 60 * 60 * 1000))
-    return createdKey === yKey || updatedKey === yKey
+    return createdKey === yKey
   }
   if (range === 'this_week') {
     // Lundi 00:00 Réunion en clé YYYY-MM-DD. Day-of-week selon TZ Réunion.
@@ -51,13 +56,13 @@ function leadInArrivedRange(
     const offset = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 }[reunionWeekday as 'Mon'] ?? 0
     const monday = new Date(now.getTime() - offset * 24 * 60 * 60 * 1000)
     const mondayKey = reunionDayKey(monday)
-    return createdKey >= mondayKey || updatedKey >= mondayKey
+    return createdKey >= mondayKey
   }
   return true
 }
 
 export function applyLeadFilters<
-  T extends Pick<LeadResponse, 'status' | 'joursSansContact' | 'createdAt' | 'updatedAt'>,
+  T extends Pick<LeadResponse, 'status' | 'joursSansContact' | 'createdAt' | 'arrivalAt'>,
 >(leads: T[], filters: LeadListFilters): T[] {
   return leads.filter((lead) => {
     if (filters.onlyNew && lead.status !== 'nouveau') return false
