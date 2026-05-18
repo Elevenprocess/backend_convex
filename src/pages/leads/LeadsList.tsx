@@ -6,7 +6,7 @@ import { Icon } from '../../components/Icon'
 import { EmptyState } from '../../components/EmptyState'
 import { LeadFiltersBar } from '../../components/LeadFiltersBar'
 import { useAuth } from '../../lib/auth'
-import { deleteLead, useLeads, useUsers, useStartCall } from '../../lib/hooks'
+import { deleteLead, useLeads, useLeadsProgressive, useUsers, useStartCall } from '../../lib/hooks'
 import { useLeadSidebar } from '../../lib/leadSidebar'
 import { DEFAULT_LEAD_FILTERS, applyLeadFilters, type LeadListFilters } from '../../lib/leadFilters'
 import {
@@ -182,7 +182,7 @@ function LeadsSetter() {
   // Le filtre global "Tous" n'est pas affiché aux setters.
   // Limit 3000 pour couvrir tout le pool (~5k actifs en mai 2026, setter voit
   // ~3.1k actionnables après status). Default 250 historique cachait 90% du pool.
-  const { data, loading, error } = useLeads({ limit: 3000 })
+  const { data, loading, error, backgroundLoading } = useLeadsProgressive({ quickLimit: 100, fullLimit: 3000 })
   const { data: usersList } = useUsers()
   const mine = data ?? []
   const userMap = useMemo(() => {
@@ -251,7 +251,7 @@ function LeadsSetter() {
               <FilterPill active={filter === 'perdu'} onClick={() => setFilter('perdu')}>Non qualifiés ({counts.perdu})</FilterPill>
               <LeadFiltersBar filters={leadFilters} onChange={setLeadFilters} total={mine.length} filtered={filtered.length} />
               <ColumnVisibilityMenu columns={SETTER_COLUMNS} visible={visibleColumns} onChange={setVisibleColumns} />
-              {loading && mine.length > 0 && <span className="text-xs text-faint ml-auto">Actualisation…</span>}
+              {(loading || backgroundLoading) && mine.length > 0 && <span className="text-xs text-faint ml-auto">Actualisation…</span>}
             </div>
 
             {loading && mine.length === 0 ? (
