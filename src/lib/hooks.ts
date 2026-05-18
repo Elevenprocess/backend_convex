@@ -228,6 +228,7 @@ export function useLeads(filters?: {
   city?: string
   limit?: number
   offset?: number
+  notInAirtable?: boolean
 } | null): Async<LeadResponse[]> {
   return useFetch<LeadResponse[]>(filters === null ? null : '/leads', filters === null ? undefined : { ...filters, limit: clampLimit(filters?.limit, 250, LEADS_LIMIT_MAX) })
 }

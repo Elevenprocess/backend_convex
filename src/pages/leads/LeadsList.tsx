@@ -178,12 +178,15 @@ function LeadsSetter() {
   const [visibleColumns, setVisibleColumns] = useColumnVisibility('ecoi.leads.setter.columns.v4', SETTER_COLUMNS)
   const startCall = useStartCall()
   const orderedColumns = useOrderedColumns(SETTER_COLUMNS, visibleColumns)
+  // Toggle "Pas dans Airtable" : ne charger que les leads dont le GHL Contact ID
+  // n'est pas dans Airtable (= vrais nouveaux post-migration ~4 mai 2026).
+  const [notInAirtable, setNotInAirtable] = useState(false)
 
   // Côté setter, l'écran s'ouvre directement sur les nouveaux leads.
   // Le filtre global "Tous" n'est pas affiché aux setters.
   // Limit 3000 pour couvrir tout le pool (~5k actifs en mai 2026, setter voit
   // ~3.1k actionnables après status). Default 250 historique cachait 90% du pool.
-  const { data, loading, error } = useLeads({ limit: 3000 })
+  const { data, loading, error } = useLeads({ limit: 3000, notInAirtable: notInAirtable || undefined })
   const { data: usersList } = useUsers()
   const mine = data ?? []
   const userMap = useMemo(() => {
@@ -272,6 +275,13 @@ function LeadsSetter() {
                 }
               >
                 Cette semaine ({counts.thisWeek})
+              </FilterPill>
+              <span className="text-xs uppercase tracking-wider text-faint ml-4 mr-1">Source</span>
+              <FilterPill
+                active={notInAirtable}
+                onClick={() => setNotInAirtable((v) => !v)}
+              >
+                Pas dans Airtable
               </FilterPill>
             </div>
             <div className="flex items-center gap-2 mb-4 flex-wrap flex-shrink-0 bg-cream-darker/95 backdrop-blur z-20 pb-2">
