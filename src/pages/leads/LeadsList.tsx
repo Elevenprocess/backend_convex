@@ -166,7 +166,6 @@ function LeadsCommercial() {
 // flux de travail actif pendant 11 jours de contact/relance, puis passe dans
 // "Relance à long terme". Les leads non éligibles restent classés "Non qualifiés".
 const LONG_TERM_RELANCE_THRESHOLD_DAYS = 11
-const SETTER_NEW_LEADS_FROM_DATE = '2026-03-01'
 type SetterFilter = 'nouveau' | 'rappel' | 'qualifie' | 'sans_reponse' | 'perdu'
 
 function LeadsSetter() {
@@ -181,9 +180,9 @@ function LeadsSetter() {
   const orderedColumns = useOrderedColumns(SETTER_COLUMNS, visibleColumns)
   // Côté setter, l'écran s'ouvre directement sur les nouveaux leads.
   // Le filtre global "Tous" n'est pas affiché aux setters.
-  // Limit 3000 pour couvrir tout le pool (~5k actifs en mai 2026, setter voit
-  // ~3.1k actionnables après status). Default 250 historique cachait 90% du pool.
-  const { data, loading, error, backgroundLoading } = useLeadsProgressive({ quickLimit: 100, fullLimit: 3000 })
+  // On hydrate tout le pool actif : les imports GHL massifs peuvent mettre à jour
+  // des leads déjà créés, et une limite partielle les faisait disparaître du tableau setter.
+  const { data, loading, error, backgroundLoading } = useLeadsProgressive({ quickLimit: 100, fullLimit: 5000 })
   const { data: usersList } = useUsers()
   const mine = data ?? []
   const userMap = useMemo(() => {
@@ -192,8 +191,7 @@ function LeadsSetter() {
     return m
   }, [usersList])
 
-  const setterCycleStart = useMemo(() => parseLocalDate(SETTER_NEW_LEADS_FROM_DATE), [])
-  const categoryLeads = useMemo(() => mine.filter((lead) => isSetterCurrentCycleLead(lead, setterCycleStart)), [mine, setterCycleStart])
+  const categoryLeads = mine
 
   const counts = useMemo(() => ({
     all: categoryLeads.length,
@@ -266,7 +264,7 @@ function LeadsSetter() {
                 <EmptyState
                   icon="users"
                   title={mine.length === 0 ? 'Aucun lead pour le moment' : 'Aucun lead ne correspond'}
-                  description={mine.length === 0 ? "Aucun lead disponible pour le moment." : 'Aucun nouveau lead depuis mars pour cette catégorie.'}
+                  description={mine.length === 0 ? "Aucun lead disponible pour le moment." : 'Aucun lead ne correspond à cette catégorie.'}
                   secondaryAction={{ label: 'Voir les nouveaux leads', onClick: () => { setFilter('nouveau'); setQuery('') } }}
                 />
               </div>
@@ -553,23 +551,6 @@ function isNouveauLead(lead: LeadResponse): boolean {
   if (lead.status === 'nouveau') return true
   if (lead.status === 'pas_de_reponse' && !isLongTermRelanceLead(lead)) return true
   return false
-}
-
-function isSetterCurrentCycleLead(lead: LeadResponse, cycleStart: Date): boolean {
-  const dateIso = setterCategoryDate(lead)
-  if (!dateIso) return false
-  const date = new Date(dateIso)
-  if (Number.isNaN(date.getTime())) return false
-  return date >= cycleStart
-}
-
-function setterCategoryDate(lead: LeadResponse): string | null {
-  return leadArrivalDate(lead)
-}
-
-function parseLocalDate(value: string): Date {
-  const [year, month, day] = value.split('-').map(Number)
-  return new Date(year, month - 1, day)
 }
 
 function isLongTermRelanceLead(lead: LeadResponse): boolean {
