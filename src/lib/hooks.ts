@@ -230,7 +230,15 @@ export function useLeads(filters?: {
   offset?: number
   notInAirtable?: boolean
 } | null): Async<LeadResponse[]> {
-  return useFetch<LeadResponse[]>(filters === null ? null : '/leads', filters === null ? undefined : { ...filters, limit: clampLimit(filters?.limit, 250, LEADS_LIMIT_MAX) })
+  const query = filters === null ? undefined : (() => {
+    const { notInAirtable, ...rest } = filters ?? {}
+    return {
+      ...rest,
+      limit: clampLimit(filters?.limit, 250, LEADS_LIMIT_MAX),
+      notInAirtable: notInAirtable ? 'true' : undefined,
+    }
+  })()
+  return useFetch<LeadResponse[]>(filters === null ? null : '/leads', query)
 }
 
 // Two-phase fetch (Facebook News-Feed style):
