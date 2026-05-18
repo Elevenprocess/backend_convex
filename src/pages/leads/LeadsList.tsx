@@ -197,6 +197,9 @@ function LeadsSetter() {
     qualifie: mine.filter((l) => l.status === 'qualifie').length,
     sansReponse: mine.filter(isLongTermRelanceLead).length,
     perdu: mine.filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie').length,
+    today: applyLeadFilters(mine, { ...DEFAULT_LEAD_FILTERS, arrivedAt: 'today' }).length,
+    yesterday: applyLeadFilters(mine, { ...DEFAULT_LEAD_FILTERS, arrivedAt: 'yesterday' }).length,
+    thisWeek: applyLeadFilters(mine, { ...DEFAULT_LEAD_FILTERS, arrivedAt: 'this_week' }).length,
   }), [mine])
 
   const filtered = useMemo(() => {
@@ -242,6 +245,33 @@ function LeadsSetter() {
           </div>
 
           <main className="p-8 pt-4 flex-grow flex flex-col min-h-0 overflow-hidden">
+            <div className="flex items-center gap-2 mb-2 flex-wrap flex-shrink-0">
+              <span className="text-xs uppercase tracking-wider text-faint mr-1">Période</span>
+              <FilterPill
+                active={leadFilters.arrivedAt === 'today'}
+                onClick={() =>
+                  setLeadFilters((f) => ({ ...f, arrivedAt: f.arrivedAt === 'today' ? 'all' : 'today' }))
+                }
+              >
+                Aujourd'hui ({counts.today})
+              </FilterPill>
+              <FilterPill
+                active={leadFilters.arrivedAt === 'yesterday'}
+                onClick={() =>
+                  setLeadFilters((f) => ({ ...f, arrivedAt: f.arrivedAt === 'yesterday' ? 'all' : 'yesterday' }))
+                }
+              >
+                Hier ({counts.yesterday})
+              </FilterPill>
+              <FilterPill
+                active={leadFilters.arrivedAt === 'this_week'}
+                onClick={() =>
+                  setLeadFilters((f) => ({ ...f, arrivedAt: f.arrivedAt === 'this_week' ? 'all' : 'this_week' }))
+                }
+              >
+                Cette semaine ({counts.thisWeek})
+              </FilterPill>
+            </div>
             <div className="flex items-center gap-2 mb-4 flex-wrap flex-shrink-0 bg-cream-darker/95 backdrop-blur z-20 pb-2">
               <FilterPill active={filter === 'nouveau'} onClick={() => setFilter('nouveau')}>Nouveaux ({counts.nouveau})</FilterPill>
               <FilterPill active={filter === 'rappel'} onClick={() => setFilter('rappel')}>À rappeler ({counts.rappel})</FilterPill>
