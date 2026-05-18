@@ -178,15 +178,11 @@ function LeadsSetter() {
   const [visibleColumns, setVisibleColumns] = useColumnVisibility('ecoi.leads.setter.columns.v4', SETTER_COLUMNS)
   const startCall = useStartCall()
   const orderedColumns = useOrderedColumns(SETTER_COLUMNS, visibleColumns)
-  // Toggle "Pas dans Airtable" : ne charger que les leads dont le GHL Contact ID
-  // n'est pas dans Airtable (= vrais nouveaux post-migration ~4 mai 2026).
-  const [notInAirtable, setNotInAirtable] = useState(false)
-
   // Côté setter, l'écran s'ouvre directement sur les nouveaux leads.
   // Le filtre global "Tous" n'est pas affiché aux setters.
   // Limit 3000 pour couvrir tout le pool (~5k actifs en mai 2026, setter voit
   // ~3.1k actionnables après status). Default 250 historique cachait 90% du pool.
-  const { data, loading, error } = useLeads({ limit: 3000, notInAirtable: notInAirtable || undefined })
+  const { data, loading, error } = useLeads({ limit: 3000 })
   const { data: usersList } = useUsers()
   const mine = data ?? []
   const userMap = useMemo(() => {
@@ -202,9 +198,6 @@ function LeadsSetter() {
     qualifie: mine.filter((l) => l.status === 'qualifie').length,
     sansReponse: mine.filter(isLongTermRelanceLead).length,
     perdu: mine.filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie').length,
-    today: applyLeadFilters(mine, { ...DEFAULT_LEAD_FILTERS, arrivedAt: 'today' }).length,
-    yesterday: applyLeadFilters(mine, { ...DEFAULT_LEAD_FILTERS, arrivedAt: 'yesterday' }).length,
-    thisWeek: applyLeadFilters(mine, { ...DEFAULT_LEAD_FILTERS, arrivedAt: 'this_week' }).length,
   }), [mine])
 
   const filtered = useMemo(() => {
@@ -250,40 +243,6 @@ function LeadsSetter() {
           </div>
 
           <main className="p-8 pt-4 flex-grow flex flex-col min-h-0 overflow-hidden">
-            <div className="flex items-center gap-2 mb-2 flex-wrap flex-shrink-0">
-              <span className="text-xs uppercase tracking-wider text-faint mr-1">Période</span>
-              <FilterPill
-                active={leadFilters.arrivedAt === 'today'}
-                onClick={() =>
-                  setLeadFilters((f) => ({ ...f, arrivedAt: f.arrivedAt === 'today' ? 'all' : 'today' }))
-                }
-              >
-                Aujourd'hui ({counts.today})
-              </FilterPill>
-              <FilterPill
-                active={leadFilters.arrivedAt === 'yesterday'}
-                onClick={() =>
-                  setLeadFilters((f) => ({ ...f, arrivedAt: f.arrivedAt === 'yesterday' ? 'all' : 'yesterday' }))
-                }
-              >
-                Hier ({counts.yesterday})
-              </FilterPill>
-              <FilterPill
-                active={leadFilters.arrivedAt === 'this_week'}
-                onClick={() =>
-                  setLeadFilters((f) => ({ ...f, arrivedAt: f.arrivedAt === 'this_week' ? 'all' : 'this_week' }))
-                }
-              >
-                Cette semaine ({counts.thisWeek})
-              </FilterPill>
-              <span className="text-xs uppercase tracking-wider text-faint ml-4 mr-1">Source</span>
-              <FilterPill
-                active={notInAirtable}
-                onClick={() => setNotInAirtable((v) => !v)}
-              >
-                Pas dans Airtable
-              </FilterPill>
-            </div>
             <div className="flex items-center gap-2 mb-4 flex-wrap flex-shrink-0 bg-cream-darker/95 backdrop-blur z-20 pb-2">
               <FilterPill active={filter === 'nouveau'} onClick={() => setFilter('nouveau')}>Nouveaux ({counts.nouveau})</FilterPill>
               <FilterPill active={filter === 'rappel'} onClick={() => setFilter('rappel')}>À rappeler ({counts.rappel})</FilterPill>
