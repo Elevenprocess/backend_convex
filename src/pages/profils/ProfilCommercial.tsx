@@ -1,4 +1,4 @@
-import { useMemo, useState, type DragEvent } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
@@ -73,7 +73,6 @@ export function ProfilCommercial() {
   const { data: commercialAnalytics } = useCommercialAnalytics(profileId, { from: periodRange.from, to: periodRange.to })
   const { data: ghlConfig } = useGhlCalendarConfig()
   const { data: ghlEventsData } = useGhlCalendarEvents(member?.ghlUserId ? { from: periodRange.from, to: periodRange.to } : undefined)
-  const [draggedCardId, setDraggedCardId] = useState<string | null>(null)
   const [movingId, setMovingId] = useState<string | null>(null)
   const [selectedCard, setSelectedCard] = useState<ProspectCard | null>(null)
   const { data: users } = useUsers()
@@ -104,13 +103,11 @@ export function ProfilCommercial() {
     return grouped
   }, [cards])
   const stageMetrics = useMemo(() => buildStageMetrics(cardsByStage), [cardsByStage])
+  const sortedCards = useMemo(() => [...cards].sort((a, b) => new Date(a.rdv.scheduledAt).getTime() - new Date(b.rdv.scheduledAt).getTime()), [cards])
 
-  const handleDropOnStage = async (event: DragEvent<HTMLDivElement>, stage: PipelineStage) => {
-    event.preventDefault()
-    const cardId = event.dataTransfer.getData('text/rdv-id') || draggedCardId
-    const card = cards.find((c) => c.id === cardId)
-    setDraggedCardId(null)
-    if (!card || card.stageId === stage.id || movingId) return
+  const handleStageChange = async (card: ProspectCard, stageId: PipelineStageId) => {
+    const stage = PIPELINE_STAGES.find((item) => item.id === stageId)
+    if (!stage || card.stageId === stage.id || movingId) return
 
     setMovingId(card.id)
     try {
@@ -122,9 +119,25 @@ export function ProfilCommercial() {
       refetchRdvs()
       refetchLeads()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Impossible de déplacer ce prospect')
+      alert(err instanceof Error ? err.message : 'Impossible de modifier l’évolution')
     } finally {
       setMovingId(null)
+    }
+  }
+
+  const handleAddDebrief = async (card: ProspectCard, text: string) => {
+    const content = text.trim()
+    if (!content) return
+    const now = new Date().toISOString()
+    const nextNotes = appendDebriefToNotes(card.rdv.notes, content, me?.name ?? member?.name ?? 'Commercial', now)
+    try {
+      const updated = await updateRdv(card.rdv.id, { notes: nextNotes, debriefFilledAt: now })
+      const updatedCard = { ...card, rdv: updated, stageId: resolveStageId(updated, card.lead) }
+      setSelectedCard(updatedCard)
+      refetchRdvs()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Impossible d’ajouter le débriefing')
+      throw err
     }
   }
 
@@ -198,63 +211,31 @@ export function ProfilCommercial() {
                   <button key={mode} onClick={() => setPeriodMode(mode)} className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${periodMode === mode ? 'bg-noir text-white' : 'text-muted hover:text-text'}`}>{PERIOD_LABEL[mode]}</button>
                 ))}
               </div>
-              <span className="hidden xl:inline">Glisse une carte vers une colonne.</span>
+              <span className="hidden xl:inline">Liste RDV du commercial · sélectionne l’évolution du prospect.</span>
               <span className="rounded-full border border-line-soft bg-info-tint px-2.5 py-1 text-[11px] font-bold text-info whitespace-nowrap">{cards.length} cartes</span>
             </div>
           </div>
 
-          <div className="overflow-x-auto overflow-y-hidden flex-grow min-h-0 pb-1">
-            <div className="flex gap-3 min-w-max h-full">
-              {PIPELINE_STAGES.map((stage) => {
-                const rows = cardsByStage.get(stage.id) ?? []
-                const metrics = stageMetrics.get(stage.id) ?? { opportunities: 0, amount: 0 }
-                return (
-                  <div
-                    key={stage.id}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={(event) => handleDropOnStage(event, stage)}
-                    className="commercial-pipeline-column w-[236px] rounded-[18px] border border-line-soft bg-cream/45 p-2.5 flex flex-col min-h-0"
-                  >
-                    <div className="commercial-pipeline-column-head bg-white rounded-[14px] border border-line-soft p-2.5 mb-2 flex-shrink-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <h4 className="font-black text-xs leading-snug">{stage.title}</h4>
-                          <p className="text-[10px] text-muted mt-0.5 truncate">{stage.hint}</p>
-                        </div>
-                        <span className="rounded-full border border-line-soft px-1.5 py-0.5 text-[10px] font-bold text-muted">{rows.length}</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-1.5 mt-2 text-[11px]">
-                        <div>
-                          <p className="text-faint uppercase tracking-wide text-[9px]">Opp.</p>
-                          <p className="font-black">{metrics.opportunities}</p>
-                        </div>
-                        <div>
-                          <p className="text-faint uppercase tracking-wide text-[9px]">Valeur</p>
-                          <p className="font-black truncate">{formatCurrency(metrics.amount)}</p>
-                        </div>
-                      </div>
-                    </div>
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 mb-3 flex-shrink-0">
+            {PIPELINE_STAGES.map((stage) => {
+              const metrics = stageMetrics.get(stage.id) ?? { opportunities: 0, amount: 0 }
+              return <MiniStageStat key={stage.id} stage={stage} metrics={metrics} />
+            })}
+          </div>
 
-                    <div className="space-y-1.5 overflow-y-auto pr-1 flex-grow min-h-0">
-                      {rows.length === 0 ? (
-                        <div className="commercial-pipeline-empty rounded-[18px] border border-dashed border-line-soft bg-white/70 p-5 text-center text-[11px] text-faint">Dépose un prospect ici</div>
-                      ) : rows.map((card) => (
-                        <ProspectKanbanCard
-                          key={card.id}
-                          card={card}
-                          moving={movingId === card.id}
-                          onOpen={() => setSelectedCard(card)}
-                          onDragStart={(event) => {
-                            setDraggedCardId(card.id)
-                            event.dataTransfer.effectAllowed = 'move'
-                            event.dataTransfer.setData('text/rdv-id', card.id)
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )
-              })}
+          <div className="overflow-y-auto flex-grow min-h-0 pr-1">
+            <div className="space-y-2">
+              {sortedCards.length === 0 ? (
+                <div className="commercial-pipeline-empty rounded-[18px] border border-dashed border-line-soft bg-white/70 p-8 text-center text-sm text-faint">Aucun RDV pour ce commercial sur la période.</div>
+              ) : sortedCards.map((card) => (
+                <ProspectRdvRow
+                  key={card.id}
+                  card={card}
+                  moving={movingId === card.id}
+                  onOpen={() => setSelectedCard(card)}
+                  onStageChange={(stageId) => handleStageChange(card, stageId)}
+                />
+              ))}
             </div>
           </div>
         </section>
@@ -264,6 +245,7 @@ export function ProfilCommercial() {
           card={selectedCard}
           callLogs={selectedCallLogs ?? []}
           userMap={userMap}
+          onAddDebrief={(text) => handleAddDebrief(selectedCard, text)}
           onClose={() => setSelectedCard(null)}
         />
       )}
@@ -310,6 +292,11 @@ function buildStageMetrics(cardsByStage: Map<PipelineStageId, ProspectCard[]>): 
     })
   }
   return metrics
+}
+
+function appendDebriefToNotes(currentNotes: string | null, text: string, author: string, iso: string): string {
+  const entry = `Débriefing — ${formatDateTime(iso)} — ${author}\n${text}`
+  return [currentNotes?.trim(), entry].filter(Boolean).join('\n\n')
 }
 
 function buildPeriodRange(mode: PeriodMode): { from: string; to: string } {
@@ -375,47 +362,70 @@ function Metric({ label, value, hint }: { label: string; value: string; hint?: s
   )
 }
 
-function ProspectKanbanCard({ card, moving, onOpen, onDragStart }: { card: ProspectCard; moving: boolean; onOpen: () => void; onDragStart: (event: DragEvent<HTMLDivElement>) => void }) {
+function MiniStageStat({ stage, metrics }: { stage: PipelineStage; metrics: StageMetrics }) {
+  return (
+    <div className="rounded-2xl border border-line-soft bg-cream/45 px-3 py-2 min-w-0">
+      <div className="flex items-start justify-between gap-2">
+        <p className="font-black text-[11px] leading-tight truncate">{stage.title}</p>
+        <span className="rounded-full border border-line-soft bg-white px-1.5 py-0.5 text-[10px] font-bold text-muted">{metrics.opportunities}</span>
+      </div>
+      <p className="text-[10px] text-muted mt-1 truncate">{formatCurrency(metrics.amount)}</p>
+    </div>
+  )
+}
+
+function ProspectRdvRow({ card, moving, onOpen, onStageChange }: { card: ProspectCard; moving: boolean; onOpen: () => void; onStageChange: (stageId: PipelineStageId) => void }) {
   const { rdv, lead } = card
   const name = lead ? fullName(lead) || lead.email || lead.phone || 'Prospect' : 'Prospect lié'
   const value = rdv.montantTotal ? Number(rdv.montantTotal) : null
+  const debriefCount = countDebriefs(rdv.notes)
   return (
     <div
       role="button"
       tabIndex={0}
-      draggable={!moving}
       onClick={onOpen}
       onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') onOpen() }}
-      onDragStart={onDragStart}
-      className={`commercial-prospect-card commercial-prospect-card-${card.stageId} rounded-[18px] border p-3 shadow-sm cursor-pointer active:cursor-grabbing transition ${stageCardTone(card.stageId)} ${moving ? 'opacity-50 scale-[0.98]' : 'hover:-translate-y-0.5 hover:shadow-md'}`}
-      title="Cliquer pour voir la fiche complète. Glisser pour déplacer."
+      className={`commercial-prospect-card commercial-prospect-card-${card.stageId} rounded-[18px] border p-3 shadow-sm cursor-pointer transition ${stageCardTone(card.stageId)} ${moving ? 'opacity-50 scale-[0.98]' : 'hover:-translate-y-0.5 hover:shadow-md'}`}
+      title="Cliquer pour voir la fiche complète."
     >
-      <div className="flex items-start justify-between gap-2">
+      <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr_1fr_220px] gap-3 items-center">
         <div className="min-w-0">
           <p className="font-black text-sm truncate">{name}</p>
           <p className="text-[11px] text-muted mt-0.5">{formatDateTime(rdv.scheduledAt)}</p>
         </div>
-        <Icon name="more" size={14} className="text-faint flex-shrink-0" />
-      </div>
-      <div className="mt-3 space-y-1.5 text-[11px] text-muted">
-        <MiniLine icon="calendar" text={rdv.locationType} />
-        {lead?.phone && <MiniLine icon="phone" text={lead.phone} />}
-        {lead?.city && <MiniLine icon="map-pin" text={lead.city} />}
-      </div>
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-1.5">
+        <div className="space-y-1 text-[11px] text-muted min-w-0">
+          {lead?.phone && <MiniLine icon="phone" text={lead.phone} />}
+          {lead?.city && <MiniLine icon="map-pin" text={lead.city} />}
+          <MiniLine icon="calendar" text={rdv.locationType} />
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5 min-w-0">
           {rdv.externalId && <span className="rounded-full bg-success-tint px-2 py-0.5 text-[10px] font-bold text-success">GHL</span>}
           {lead?.status && <span className="rounded-full bg-cream-darker px-2 py-0.5 text-[10px] font-bold text-muted">{lead.status}</span>}
+          <span className="rounded-full bg-white border border-line-soft px-2 py-0.5 text-[10px] font-bold text-muted">{debriefCount} débrief.</span>
+          <span className={`text-xs font-black ${value ? 'text-text' : 'text-faint'}`}>{value ? formatCurrency(value) : '—'}</span>
         </div>
-        <span className={`text-xs font-black ${value ? 'text-text' : 'text-faint'}`}>{value ? formatCurrency(value) : '—'}</span>
+        <div className="flex items-center gap-2" onClick={(event) => event.stopPropagation()}>
+          <select
+            value={card.stageId}
+            disabled={moving}
+            onChange={(event) => onStageChange(event.target.value as PipelineStageId)}
+            className="w-full rounded-xl border border-line-soft bg-white px-3 py-2 text-xs font-bold text-text outline-none focus:border-noir"
+            title="Évolution du prospect"
+          >
+            {PIPELINE_STAGES.map((stage) => <option key={stage.id} value={stage.id}>{stage.title}</option>)}
+          </select>
+          <Icon name="more" size={14} className="text-faint flex-shrink-0" />
+        </div>
       </div>
     </div>
   )
 }
 
 
-function ProspectDetailModal({ card, callLogs, userMap, onClose }: { card: ProspectCard; callLogs: CallLogResponse[]; userMap: Map<string, UserResponse>; onClose: () => void }) {
+function ProspectDetailModal({ card, callLogs, userMap, onAddDebrief, onClose }: { card: ProspectCard; callLogs: CallLogResponse[]; userMap: Map<string, UserResponse>; onAddDebrief: (text: string) => Promise<void>; onClose: () => void }) {
   const { lead, rdv, stageId } = card
+  const [debriefText, setDebriefText] = useState('')
+  const [savingDebrief, setSavingDebrief] = useState(false)
   const setterIds = Array.from(new Set([
     lead?.setterId,
     ...(lead?.assignedSetterIds ?? []),
@@ -429,6 +439,19 @@ function ProspectDetailModal({ card, callLogs, userMap, onClose }: { card: Prosp
     rdv.objections ? { label: 'Objections', value: rdv.objections } : null,
     rdv.nonSaleReason ? { label: 'Raison de non-vente', value: rdv.nonSaleReason } : null,
   ].filter(Boolean) as Array<{ label: string; value: string }>
+
+
+  const saveDebrief = async () => {
+    const value = debriefText.trim()
+    if (!value || savingDebrief) return
+    setSavingDebrief(true)
+    try {
+      await onAddDebrief(value)
+      setDebriefText('')
+    } finally {
+      setSavingDebrief(false)
+    }
+  }
 
   return (
     <div className="commercial-prospect-modal-backdrop fixed inset-0 z-[300] flex items-center justify-center bg-noir/35 backdrop-blur-sm px-4" onClick={onClose}>
@@ -484,7 +507,22 @@ function ProspectDetailModal({ card, callLogs, userMap, onClose }: { card: Prosp
           </div>
 
           <section className="commercial-prospect-section rounded-[22px] border border-line-soft bg-white p-4">
-            <h4 className="font-black text-sm mb-3">Commentaires</h4>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h4 className="font-black text-sm">Commentaires & débriefings</h4>
+              <span className="rounded-full bg-info-tint px-2 py-0.5 text-[10px] font-bold text-info">{countDebriefs(rdv.notes)} débriefings</span>
+            </div>
+            <div className="rounded-[18px] border border-line-soft bg-cream/45 p-3 mb-4">
+              <label className="text-[10px] font-black uppercase tracking-widest text-faint">Ajouter un débriefing</label>
+              <textarea
+                value={debriefText}
+                onChange={(event) => setDebriefText(event.target.value)}
+                placeholder="Résumé du RDV, objections, prochaines actions…"
+                className="mt-2 w-full min-h-[92px] rounded-2xl border border-line-soft bg-white px-3 py-2 text-sm outline-none focus:border-noir"
+              />
+              <div className="mt-2 flex justify-end">
+                <button onClick={saveDebrief} disabled={!debriefText.trim() || savingDebrief} className="btn-primary px-4 py-2 rounded-xl text-xs disabled:opacity-50">{savingDebrief ? 'Enregistrement…' : 'Ajouter le débriefing'}</button>
+              </div>
+            </div>
             {latestComments.length === 0 && callLogs.every((log) => !log.notes) ? (
               <p className="text-sm text-faint">Aucun commentaire enregistré.</p>
             ) : (
@@ -521,6 +559,11 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 function CommentBlock({ label, value }: { label: string; value: string }) {
   return <div className="commercial-comment-block rounded-2xl bg-cream/55 border border-line-soft p-3"><p className="text-[10px] font-black uppercase tracking-widest text-faint mb-1">{label}</p><p className="text-sm whitespace-pre-wrap">{value}</p></div>
+}
+
+function countDebriefs(notes: string | null): number {
+  if (!notes) return 0
+  return (notes.match(/Débriefing —/g) ?? []).length
 }
 
 function stageCardTone(stageId: PipelineStageId): string {
