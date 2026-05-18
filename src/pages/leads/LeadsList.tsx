@@ -472,8 +472,8 @@ function LeadsAdmin() {
         </div>
       </div>
 
-      <main className="p-8 pt-4 flex-grow flex flex-col min-h-0 overflow-hidden">
-        <div className="grid grid-cols-4 gap-6 mb-4 flex-shrink-0">
+      <main className="p-8 pt-3 flex-grow flex flex-col min-h-0 overflow-hidden">
+        <div className="grid grid-cols-4 gap-3 mb-3 flex-shrink-0">
           <StatCard label="TOTAL LEADS" value={stats.total.toLocaleString('fr-FR')} />
           <StatCard label="QUALIFIÉS" value={stats.qualifies.toString()} />
           <StatCard label="EN ATTENTE" value={stats.waiting.toString()} />
@@ -1064,9 +1064,11 @@ function Td({
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="glass-card p-5">
-      <span className="eyebrow">{label}</span>
-      <div className="text-[28px] font-bold mt-2 leading-none">{value}</div>
+    <div className="glass-card !p-3 min-h-[58px]">
+      <div className="flex items-center justify-between gap-3">
+        <span className="eyebrow text-[10px] leading-none truncate">{label}</span>
+        <div className="text-xl font-bold leading-none tabular-nums">{value}</div>
+      </div>
     </div>
   )
 }
