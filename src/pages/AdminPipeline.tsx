@@ -214,9 +214,12 @@ function TrackingView() {
       <div className="rounded-[18px] border border-line-soft bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-[10px] uppercase tracking-wide text-faint">Centre de contrôle</p>
-            <h2 className="text-lg font-black">Suivi RDV par commercial</h2>
-            <p className="text-xs text-muted mt-1">Évolution du prospect, statut RDV, stage GHL, montant et debrief réel renseigné.</p>
+            <p className="text-[10px] uppercase tracking-wide text-faint">Mode d’emploi</p>
+            <h2 className="text-lg font-black">1. Choisis un commercial → 2. lis ses RDV et debriefs</h2>
+            <p className="text-xs text-muted mt-1 max-w-3xl">
+              À gauche : les commerciaux avec leurs compteurs. À droite : chaque RDV du commercial sélectionné,
+              avec le stage du prospect, le résultat, le montant et les notes de debrief.
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             {[
@@ -242,7 +245,7 @@ function TrackingView() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[420px_minmax(0,1fr)] gap-4 items-start">
-        <div className="space-y-3">
+        <div className="space-y-3 max-h-[calc(100vh-360px)] min-h-[360px] overflow-y-auto pr-1">
           <button
             type="button"
             onClick={() => setSelectedCommercialId('all')}
@@ -271,12 +274,13 @@ function TrackingView() {
         <div className="rounded-[18px] border border-line-soft bg-white overflow-hidden">
           <div className="px-4 py-3 border-b border-line-soft flex items-center justify-between gap-3">
             <div>
-              <p className="text-[10px] uppercase tracking-wide text-faint">Timeline prospects</p>
-              <h3 className="font-black">Évolution + debriefs</h3>
+              <p className="text-[10px] uppercase tracking-wide text-faint">RDV du commercial sélectionné</p>
+              <h3 className="font-black">Évolution prospect + debrief</h3>
+              <p className="text-xs text-muted mt-0.5">Clique sur un prospect pour ouvrir sa fiche complète.</p>
             </div>
             <span className="text-xs font-bold text-muted">{filteredRdvs.length} RDV</span>
           </div>
-          <div className="divide-y divide-line-soft max-h-[680px] overflow-y-auto">
+          <div className="divide-y divide-line-soft max-h-[calc(100vh-360px)] min-h-[360px] overflow-y-auto">
             {filteredRdvs.length === 0 ? (
               <div className="p-8 text-center text-sm text-muted">Aucun RDV dans ce filtre.</div>
             ) : (
