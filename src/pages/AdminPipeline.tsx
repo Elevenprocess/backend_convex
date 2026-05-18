@@ -6,6 +6,7 @@ import { useAuth } from '../lib/auth'
 import {
   runPipelineBackfill,
   useLeads,
+  useRdvList,
   usePipelineByCommercial,
   usePipelineDistribution,
   usePipelineStuck,
@@ -15,9 +16,9 @@ import {
   type PipelineDistributionEntry,
   type PipelineStuckLead,
 } from '../lib/hooks'
-import type { LeadResponse, UserResponse } from '../lib/types'
+import type { LeadResponse, RdvResponse, UserResponse } from '../lib/types'
 
-type Tab = 'kanban' | 'commercials' | 'stuck'
+type Tab = 'tracking' | 'kanban' | 'commercials' | 'stuck'
 
 // Ordre figé pour le rendu kanban (suit l'organisation logique du pipeline GHL).
 const STAGE_ORDER: string[] = [
@@ -44,7 +45,7 @@ export function AdminPipeline() {
   const role = useAuth((s) => s.user?.role)
   if (role && role !== 'admin') return <Navigate to="/overview" replace />
 
-  const [tab, setTab] = useState<Tab>('kanban')
+  const [tab, setTab] = useState<Tab>('tracking')
 
   return (
     <AppShell>
@@ -55,12 +56,13 @@ export function AdminPipeline() {
             <span className="eyebrow text-[10px]">PIPELINE GHL</span>
             <h1 className="text-2xl font-black tracking-tight">Pipeline (admin)</h1>
             <p className="text-sm text-muted mt-0.5">
-              Vue temps réel des opportunités GHL importées dans le SaaS.
+              Tracking admin des commerciaux : RDV, évolution prospect, debriefs et blocages.
             </p>
           </div>
           <TabSwitcher tab={tab} setTab={setTab} />
         </div>
         <div className="px-6 pb-6 flex-1 min-h-0">
+          {tab === 'tracking' && <TrackingView />}
           {tab === 'kanban' && <KanbanView />}
           {tab === 'commercials' && <CommercialsView />}
           {tab === 'stuck' && <StuckView />}
@@ -74,6 +76,7 @@ export function AdminPipeline() {
 
 function TabSwitcher({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   const tabs: { id: Tab; label: string }[] = [
+    { id: 'tracking', label: 'Tracking' },
     { id: 'kanban', label: 'Kanban' },
     { id: 'commercials', label: 'Performance' },
     { id: 'stuck', label: 'Leads stuck' },
@@ -93,6 +96,370 @@ function TabSwitcher({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
       ))}
     </div>
   )
+}
+
+
+// ─── Tracking commerciaux ──────────────────────────────────
+
+type TrackingFilter = 'all' | 'today' | 'missingDebrief' | 'signed' | 'blocked'
+
+type CommercialTracking = {
+  userId: string
+  name: string
+  image: string | null
+  ghlUserId: string | null
+  rdvs: RdvResponse[]
+  prospects: number
+  planned: number
+  done: number
+  signed: number
+  noShow: number
+  missingDebrief: number
+  ca: number
+}
+
+function TrackingView() {
+  const [filter, setFilter] = useState<TrackingFilter>('all')
+  const [selectedCommercialId, setSelectedCommercialId] = useState<string>('all')
+  const { data: rdvs, loading: rdvLoading, error: rdvError } = useRdvList({ limit: 200 })
+  const { data: leads, loading: leadsLoading, error: leadsError } = useLeads({ limit: 2000 })
+  const { data: users } = useUsers()
+
+  const userMap = useMemo(() => {
+    const m = new Map<string, UserResponse>()
+    for (const u of users ?? []) m.set(u.id, u)
+    return m
+  }, [users])
+
+  const leadMap = useMemo(() => {
+    const m = new Map<string, LeadResponse>()
+    for (const lead of leads ?? []) m.set(lead.id, lead)
+    return m
+  }, [leads])
+
+  const commercials = useMemo<CommercialTracking[]>(() => {
+    const commercialUsers = (users ?? []).filter((u) => u.role === 'commercial' || u.team === 'closing')
+    const ids = new Set<string>(commercialUsers.map((u) => u.id))
+    for (const rdv of rdvs ?? []) if (rdv.commercialId) ids.add(rdv.commercialId)
+
+    return Array.from(ids)
+      .map((userId) => {
+        const user = userMap.get(userId)
+        const list = (rdvs ?? [])
+          .filter((rdv) => rdv.commercialId === userId)
+          .sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime())
+        const prospectIds = new Set(list.map((rdv) => rdv.leadId))
+        return {
+          userId,
+          name: user?.name ?? 'Commercial non relié',
+          image: user?.image ?? null,
+          ghlUserId: user?.ghlUserId ?? null,
+          rdvs: list,
+          prospects: prospectIds.size,
+          planned: list.filter((r) => r.status === 'planifie' || r.status === 'reporte').length,
+          done: list.filter((r) => r.status === 'honore').length,
+          signed: list.filter((r) => r.result === 'signe').length,
+          noShow: list.filter((r) => r.status === 'no_show' || r.result === 'no_show').length,
+          missingDebrief: list.filter((r) => needsDebrief(r)).length,
+          ca: list.reduce((sum, r) => sum + Number(r.montantTotal ?? 0), 0),
+        }
+      })
+      .filter((c) => c.rdvs.length > 0 || commercialUsers.some((u) => u.id === c.userId))
+      .sort((a, b) => b.rdvs.length - a.rdvs.length || a.name.localeCompare(b.name))
+  }, [rdvs, users, userMap])
+
+  const filteredRdvs = useMemo(() => {
+    const now = new Date()
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    const end = start + 24 * 60 * 60 * 1000
+    return (rdvs ?? [])
+      .filter((rdv) => selectedCommercialId === 'all' || rdv.commercialId === selectedCommercialId)
+      .filter((rdv) => {
+        const t = new Date(rdv.scheduledAt).getTime()
+        if (filter === 'today') return t >= start && t < end
+        if (filter === 'missingDebrief') return needsDebrief(rdv)
+        if (filter === 'signed') return rdv.result === 'signe'
+        if (filter === 'blocked') {
+          const lead = leadMap.get(rdv.leadId)
+          return (lead?.daysSinceLastStageChange ?? 0) >= 14 || rdv.status === 'no_show' || rdv.result === 'perdu'
+        }
+        return true
+      })
+      .sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime())
+  }, [rdvs, selectedCommercialId, filter, leadMap])
+
+  const totals = useMemo(() => {
+    const allRdvs = rdvs ?? []
+    return {
+      rdvs: allRdvs.length,
+      prospects: new Set(allRdvs.map((r) => r.leadId)).size,
+      missingDebrief: allRdvs.filter((r) => needsDebrief(r)).length,
+      signed: allRdvs.filter((r) => r.result === 'signe').length,
+    }
+  }, [rdvs])
+
+  if (rdvLoading || leadsLoading) return <Skeleton label="Chargement du tracking commercial…" />
+  if (rdvError) return <ErrorBanner error={rdvError} />
+  if (leadsError) return <ErrorBanner error={leadsError} />
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+        <KpiCard label="RDV suivis" value={totals.rdvs.toLocaleString('fr-FR')} />
+        <KpiCard label="Prospects uniques" value={totals.prospects.toLocaleString('fr-FR')} />
+        <KpiCard label="Debriefs à faire" value={totals.missingDebrief.toLocaleString('fr-FR')} />
+        <KpiCard label="Signés" value={totals.signed.toLocaleString('fr-FR')} />
+      </div>
+
+      <div className="rounded-[18px] border border-line-soft bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-faint">Centre de contrôle</p>
+            <h2 className="text-lg font-black">Suivi RDV par commercial</h2>
+            <p className="text-xs text-muted mt-1">Évolution du prospect, statut RDV, stage GHL, montant et debrief réel renseigné.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              ['all', 'Tous'],
+              ['today', 'Aujourd’hui'],
+              ['missingDebrief', 'Debrief manquant'],
+              ['signed', 'Signés'],
+              ['blocked', 'À débloquer'],
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setFilter(id as TrackingFilter)}
+                className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${
+                  filter === id ? 'border-or-fonce bg-or-fonce text-white' : 'border-line-soft text-muted hover:text-foreground'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[420px_minmax(0,1fr)] gap-4 items-start">
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => setSelectedCommercialId('all')}
+            className={`w-full rounded-[18px] border p-3 text-left transition ${
+              selectedCommercialId === 'all' ? 'border-or-fonce bg-or-fonce/5' : 'border-line-soft bg-white hover:bg-cream/40'
+            }`}
+          >
+            <div className="flex justify-between gap-3">
+              <div>
+                <p className="font-black text-sm">Tous les commerciaux</p>
+                <p className="text-xs text-muted">Vue consolidée de tous les RDV</p>
+              </div>
+              <span className="text-xl font-black">{totals.rdvs}</span>
+            </div>
+          </button>
+          {commercials.map((commercial) => (
+            <CommercialTrackingCard
+              key={commercial.userId}
+              commercial={commercial}
+              selected={selectedCommercialId === commercial.userId}
+              onSelect={() => setSelectedCommercialId(commercial.userId)}
+            />
+          ))}
+        </div>
+
+        <div className="rounded-[18px] border border-line-soft bg-white overflow-hidden">
+          <div className="px-4 py-3 border-b border-line-soft flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-faint">Timeline prospects</p>
+              <h3 className="font-black">Évolution + debriefs</h3>
+            </div>
+            <span className="text-xs font-bold text-muted">{filteredRdvs.length} RDV</span>
+          </div>
+          <div className="divide-y divide-line-soft max-h-[680px] overflow-y-auto">
+            {filteredRdvs.length === 0 ? (
+              <div className="p-8 text-center text-sm text-muted">Aucun RDV dans ce filtre.</div>
+            ) : (
+              filteredRdvs.map((rdv) => (
+                <TrackingRdvRow
+                  key={rdv.id}
+                  rdv={rdv}
+                  lead={leadMap.get(rdv.leadId)}
+                  commercial={rdv.commercialId ? userMap.get(rdv.commercialId) : undefined}
+                />
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CommercialTrackingCard({
+  commercial,
+  selected,
+  onSelect,
+}: {
+  commercial: CommercialTracking
+  selected: boolean
+  onSelect: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`w-full rounded-[18px] border p-3 text-left transition ${
+        selected ? 'border-or-fonce bg-or-fonce/5' : 'border-line-soft bg-white hover:bg-cream/40'
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <div className="h-11 w-11 rounded-full bg-cream border border-line-soft overflow-hidden flex items-center justify-center font-black text-sm shrink-0">
+          {commercial.image ? <img src={commercial.image} alt="" className="h-full w-full object-cover" /> : initials(commercial.name)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-black truncate">{commercial.name}</p>
+              <p className="text-[10px] text-muted">{commercial.ghlUserId ? 'GHL relié' : 'GHL non relié'}</p>
+            </div>
+            {commercial.missingDebrief > 0 && (
+              <span className="rounded-full bg-rouille/10 text-rouille px-2 py-0.5 text-[10px] font-black whitespace-nowrap">
+                {commercial.missingDebrief} debrief
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-4 gap-2 mt-3 text-center">
+            <MiniStat label="RDV" value={commercial.rdvs.length} />
+            <MiniStat label="Prospects" value={commercial.prospects} />
+            <MiniStat label="Signés" value={commercial.signed} />
+            <MiniStat label="CA" value={formatCompactCurrency(commercial.ca)} />
+          </div>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+function TrackingRdvRow({
+  rdv,
+  lead,
+  commercial,
+}: {
+  rdv: RdvResponse
+  lead?: LeadResponse
+  commercial?: UserResponse
+}) {
+  const navigate = useNavigate()
+  const name = leadName(lead) || 'Prospect'
+  const days = lead?.daysSinceLastStageChange ?? null
+  const debriefMissing = needsDebrief(rdv)
+  const hasDebrief = Boolean(rdv.debriefFilledAt || rdv.notes?.trim())
+  return (
+    <div className="p-4 hover:bg-cream/30 transition">
+      <div className="flex flex-col lg:flex-row lg:items-start gap-3 justify-between">
+        <button type="button" onClick={() => navigate(`/leads/${rdv.leadId}`)} className="text-left min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-black text-sm truncate">{name}</p>
+            <StatusPill label={rdvStatusLabel(rdv.status)} tone={rdv.status === 'honore' ? 'green' : rdv.status === 'no_show' || rdv.status === 'annule' ? 'red' : 'neutral'} />
+            {rdv.result && <StatusPill label={rdvResultLabel(rdv.result)} tone={rdv.result === 'signe' ? 'green' : rdv.result === 'perdu' ? 'red' : 'neutral'} />}
+            {debriefMissing && <StatusPill label="Debrief à faire" tone="red" />}
+          </div>
+          <p className="text-xs text-muted mt-1">
+            {formatDateTime(rdv.scheduledAt)} · {commercial?.name ?? 'Commercial non attribué'}
+          </p>
+        </button>
+        <div className="text-left lg:text-right shrink-0">
+          <p className="text-[10px] uppercase tracking-wide text-faint">Montant</p>
+          <p className="font-black">{formatCurrency(Number(rdv.montantTotal ?? 0))}</p>
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
+        <div className="rounded-[14px] border border-line-soft bg-cream/30 p-3">
+          <p className="text-[10px] uppercase tracking-wide text-faint">Évolution prospect</p>
+          <p className="text-sm font-bold mt-1">{lead?.ghlStageName ?? 'Stage GHL non renseigné'}</p>
+          <p className="text-xs text-muted mt-1">
+            SaaS : {lead?.status ?? '—'}{days != null ? ` · ${days}j sans mouvement stage` : ''}
+          </p>
+        </div>
+        <div className="rounded-[14px] border border-line-soft bg-white p-3">
+          <p className="text-[10px] uppercase tracking-wide text-faint">Debrief / notes</p>
+          <p className={`text-sm mt-1 ${hasDebrief ? 'text-foreground' : 'text-muted italic'}`}>
+            {hasDebrief ? compactText(rdv.notes ?? 'Debrief renseigné', 150) : 'Aucun debrief renseigné'}
+          </p>
+          {rdv.debriefDueAt && !rdv.debriefFilledAt && (
+            <p className="text-[11px] text-rouille mt-1">À compléter avant {formatDateTime(rdv.debriefDueAt)}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MiniStat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-[12px] bg-cream/45 border border-line-soft px-2 py-1.5">
+      <p className="text-[9px] uppercase tracking-wide text-faint">{label}</p>
+      <p className="font-black text-sm">{value}</p>
+    </div>
+  )
+}
+
+function StatusPill({ label, tone }: { label: string; tone: 'green' | 'red' | 'neutral' }) {
+  const cls = tone === 'green' ? 'bg-success-tint text-success' : tone === 'red' ? 'bg-rouille/10 text-rouille' : 'bg-cream text-muted'
+  return <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${cls}`}>{label}</span>
+}
+
+function needsDebrief(rdv: RdvResponse) {
+  return (rdv.status === 'honore' || rdv.result != null) && !rdv.debriefFilledAt && !rdv.notes?.trim()
+}
+
+function leadName(lead?: LeadResponse) {
+  if (!lead) return ''
+  return [lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.email || lead.phone || ''
+}
+
+function initials(name: string) {
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'C'
+}
+
+function compactText(text: string, max: number) {
+  const clean = text.replace(/\s+/g, ' ').trim()
+  return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean
+}
+
+function rdvStatusLabel(status: RdvResponse['status']) {
+  return {
+    planifie: 'Planifié',
+    honore: 'Honoré',
+    no_show: 'No-show',
+    reporte: 'Reporté',
+    annule: 'Annulé',
+  }[status]
+}
+
+function rdvResultLabel(result: NonNullable<RdvResponse['result']>) {
+  return {
+    signe: 'Signé',
+    reflexion: 'Réflexion',
+    perdu: 'Perdu',
+    no_show: 'No-show',
+    reporte: 'Reporté',
+  }[result]
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
+}
+
+function formatCompactCurrency(value: number): string {
+  return value.toLocaleString('fr-FR', { notation: 'compact', style: 'currency', currency: 'EUR', maximumFractionDigits: 1 })
 }
 
 // ─── Kanban view ──────────────────────────────────────────
