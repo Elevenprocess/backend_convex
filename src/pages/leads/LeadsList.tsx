@@ -28,6 +28,7 @@ type ColumnChoice = {
 const SETTER_COLUMNS: ColumnChoice[] = [
   { key: 'nom', label: 'Nom' },
   { key: 'telephone', label: 'Téléphone du Prospect' },
+  { key: 'dateArrivee', label: "Date/heure d'arrivée" },
   { key: 'adresseComplete', label: 'Adresse complète' },
   { key: 'setter', label: 'Setter assigné' },
   { key: 'jaugeAppels', label: 'Jauge appels (4/jour)' },
@@ -88,6 +89,7 @@ const ADMIN_DEFAULT_COLUMNS: ColumnKey[] = [
   'nom',
   'telephone',
   'statut',
+  'leadGenere',
   'setter',
   'dernierAppel',
   'jaugeAppels',
@@ -173,15 +175,13 @@ function LeadsSetter() {
   const selectedId = useLeadSidebar((s) => s.selectedLeadId)
   const selectLead = useLeadSidebar((s) => s.selectLead)
   const [openComment, setOpenComment] = useState<{ leadName: string; comment: string } | null>(null)
-  const [visibleColumns, setVisibleColumns] = useColumnVisibility('ecoi.leads.setter.columns.v3', SETTER_COLUMNS)
+  const [visibleColumns, setVisibleColumns] = useColumnVisibility('ecoi.leads.setter.columns.v4', SETTER_COLUMNS)
   const startCall = useStartCall()
   const orderedColumns = useOrderedColumns(SETTER_COLUMNS, visibleColumns)
 
   // Côté setter, l'écran s'ouvre directement sur les nouveaux leads.
   // Le filtre global "Tous" n'est pas affiché aux setters.
-  // Limit haut (3000) pour couvrir le pool complet — DB a ~5k leads actifs et
-  // les tabs filtrent client-side sur toutes les statuses actionnables.
-  const { data, loading, error } = useLeads({ limit: 3000 })
+  const { data, loading, error } = useLeads({ limit: 250 })
   const { data: usersList } = useUsers()
   const mine = data ?? []
   const userMap = useMemo(() => {
@@ -320,7 +320,7 @@ function LeadsAdmin() {
   const [commercialFilter, setCommercialFilter] = useState('all')
   const [leadFilters, setLeadFilters] = useState<LeadListFilters>(DEFAULT_LEAD_FILTERS)
   const [openComment, setOpenComment] = useState<{ leadName: string; comment: string } | null>(null)
-  const [visibleColumns, setVisibleColumns] = useColumnVisibility('ecoi.leads.admin.columns.v5', ADMIN_COLUMNS, ADMIN_DEFAULT_COLUMNS)
+  const [visibleColumns, setVisibleColumns] = useColumnVisibility('ecoi.leads.admin.columns.v6', ADMIN_COLUMNS, ADMIN_DEFAULT_COLUMNS)
   const selectedId = useLeadSidebar((s) => s.selectedLeadId)
   const selectLead = useLeadSidebar((s) => s.selectLead)
   const clearLead = useLeadSidebar((s) => s.clearLead)
@@ -363,14 +363,6 @@ function LeadsAdmin() {
   const allFilteredSelected = filtered.length > 0 && selectedFilteredIds.length === filtered.length
   const someFilteredSelected = selectedFilteredIds.length > 0 && !allFilteredSelected
   const tableScrollRef = useRememberedLeadTableScroll('ecoi.leads.admin.tableScroll.v1', filtered, selectedId)
-  const ADMIN_VISIBLE_BATCH = 80
-  const [visibleCount, setVisibleCount] = useState(ADMIN_VISIBLE_BATCH)
-  const visibleRows = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount])
-  const hasMoreRows = visibleRows.length < filtered.length
-
-  useEffect(() => {
-    setVisibleCount(ADMIN_VISIBLE_BATCH)
-  }, [setterFilter, commercialFilter, leadFilters, leads.length])
 
   useEffect(() => {
     const existingIds = new Set(leads.map((lead) => lead.id))
@@ -460,9 +452,6 @@ function LeadsAdmin() {
           ))}
         </select>
         <LeadFiltersBar filters={leadFilters} onChange={setLeadFilters} total={(leads ?? []).length} filtered={filtered.length} />
-        <span className="rounded-full border border-line-soft bg-white/70 px-3 py-2 text-xs font-bold text-muted">
-          Affichés {visibleRows.length}/{filtered.length}
-        </span>
         <ColumnVisibilityMenu columns={ADMIN_COLUMNS} visible={visibleColumns} onChange={setVisibleColumns} />
         {loading && leads.length > 0 && <span className="text-xs text-faint">Actualisation…</span>}
         <div className="ml-auto flex items-center gap-2">
@@ -517,15 +506,15 @@ function LeadsAdmin() {
                 </tr>
               </thead>
               <tbody>
-                {visibleRows.map((l) => (
+                {filtered.map((l) => (
                   <tr
                     key={l.id}
                     data-lead-id={l.id}
                     className={`border-b border-line-soft last:border-0 cursor-pointer transition-colors ${
                       selectedId === l.id ? 'bg-or/20 shadow-[inset_4px_0_0_var(--color-or-dark)] !text-text' : selectedLeadIds.includes(l.id) ? 'bg-or/10' : 'hover:bg-white/40'
                     }`}
-                    onClick={() => selectLead(l.id)}
-                    title="Cliquer pour ouvrir le détail du lead"
+                    onDoubleClick={() => selectLead(l.id)}
+                    title="Double-cliquer pour ouvrir le détail du lead"
                   >
                     <Td className="text-center" onClick={(event) => event.stopPropagation()}>
                       <input
@@ -541,18 +530,6 @@ function LeadsAdmin() {
                 ))}
               </tbody>
             </table>
-            {hasMoreRows && (
-              <div className="lead-load-more">
-                <button
-                  type="button"
-                  className="lead-load-more-button"
-                  onClick={() => setVisibleCount((count) => Math.min(count + ADMIN_VISIBLE_BATCH, filtered.length))}
-                >
-                  <span className="lead-load-more-title">Charger 80 leads de plus</span>
-                  <span className="lead-load-more-count">{visibleRows.length}/{filtered.length}</span>
-                </button>
-              </div>
-            )}
             </div>
           </div>
         )}
@@ -676,6 +653,7 @@ function renderSetterHeader(key: ColumnKey) {
   switch (key) {
     case 'nom': return <Th key={key} className="w-[240px] lead-sticky-head">NOM</Th>
     case 'telephone': return <Th key={key} className="w-[190px]">TÉLÉPHONE DU PROSPECT</Th>
+    case 'dateArrivee': return <Th key={key} className="w-[180px]">DATE/HEURE D'ARRIVÉE</Th>
     case 'adresseComplete': return <Th key={key} className="w-[260px]">ADRESSE COMPLÈTE</Th>
     case 'setter': return <Th key={key} className="w-[210px]">SETTER ASSIGNÉ</Th>
     case 'jaugeAppels': return <Th key={key} className="w-[160px]">JAUGE APPELS (4/JOUR)</Th>
@@ -708,6 +686,7 @@ function renderSetterCell(
         </Td>
       )
     case 'telephone': return <Td key={key}><PhoneCell lead={lead} onStartCall={startCall} /></Td>
+    case 'dateArrivee': return <Td key={key} className="text-faint">{fullDateTime(lead.createdAt)}</Td>
     case 'adresseComplete': return <Td key={key} className="text-muted truncate" title={addressFull(lead)}>{addressFull(lead)}</Td>
     case 'setter': return <Td key={key}><SetterChips lead={lead} userMap={userMap} /></Td>
     case 'jaugeAppels': return <Td key={key}><DailyCallGauge count={lead.callsToday ?? 0} /></Td>

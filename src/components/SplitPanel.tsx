@@ -810,6 +810,7 @@ function NotesTab({
             <div className="grid grid-cols-1 gap-2">
               <StatusChoice active={setterStatus === 'a_rappeler'} icon="clock" title="À rappeler" text="Date et heure du rappel" onClick={() => { setSetterStatus('a_rappeler'); setResult('rappel_planifie') }} />
               <StatusChoice active={setterStatus === 'pas_de_reponse'} icon="phone-off" title="Pas de réponse" text="Aucun champ requis" onClick={() => { setSetterStatus('pas_de_reponse'); setResult('non_joint') }} />
+              <StatusChoice active={setterStatus === 'non_qualifie'} icon="x" title="Pas qualifié" text="Commentaire obligatoire" onClick={() => { setSetterStatus('non_qualifie'); setResult('refus') }} />
             </div>
             {setterStatus === 'a_rappeler' && (
               <div className="space-y-3">
@@ -825,7 +826,16 @@ function NotesTab({
             {setterStatus === 'pas_de_reponse' && (
               <p className="text-sm text-muted">Aucun champ obligatoire : tu peux enregistrer directement.</p>
             )}
-            {(setterStatus === 'a_rappeler' || setterStatus === 'pas_de_reponse') && (
+            {setterStatus === 'non_qualifie' && (
+              <textarea
+                value={commentaire}
+                onChange={(e) => setCommentaire(e.target.value)}
+                placeholder="Commentaire obligatoire : pourquoi pas qualifié ?"
+                className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full h-24 resize-none"
+                autoFocus={isActiveCall}
+              />
+            )}
+            {(setterStatus === 'a_rappeler' || setterStatus === 'pas_de_reponse' || setterStatus === 'non_qualifie') && (
               <button
                 type="button"
                 onClick={() => saveCallAndLead(setterStatus)}
@@ -916,30 +926,27 @@ function NotesTab({
           <div>
             <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-2">Statut setter</div>
             <div className="grid grid-cols-1 gap-2">
-              <StatusChoice active={setterStatus === 'non_qualifie'} icon="x" title="Pas qualifié" text="Commentaire obligatoire" onClick={() => { setSetterStatus('non_qualifie'); setResult('refus') }} />
               <StatusChoice active={setterStatus === 'qualifie'} icon="check" title="Qualifié" text="Commentaire principal, secteur et RDV" onClick={() => { setSetterStatus('qualifie'); setResult('joint') }} />
             </div>
           </div>
 
-          {(setterStatus === 'non_qualifie' || setterStatus === 'qualifie') && (
+          {setterStatus === 'qualifie' && (
             <div className="rounded-[18px] border border-line bg-white/70 p-4 space-y-3">
               <textarea
                 value={commentaire}
                 onChange={(e) => setCommentaire(e.target.value)}
-                placeholder={setterStatus === 'non_qualifie' ? 'Commentaire obligatoire : pourquoi pas qualifié ?' : 'Commentaire obligatoire : besoins, contexte, objections…'}
+                placeholder="Commentaire obligatoire : besoins, contexte, objections…"
                 className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full h-24 resize-none"
                 autoFocus={isActiveCall}
               />
-              {setterStatus === 'qualifie' && (
-                <p className="text-sm text-muted">Valide la qualification pour passer à la sélection du secteur puis au RDV.</p>
-              )}
+              <p className="text-sm text-muted">Valide la qualification pour passer à la sélection du secteur puis au RDV.</p>
               <button
                 onClick={() => saveCallAndLead(setterStatus)}
                 disabled={saving}
                 className="btn-primary w-full rounded-xl py-2 text-sm disabled:opacity-60 flex items-center justify-center gap-2"
               >
                 {saving ? <Spinner size={16} stroke={2} /> : null}
-                {setterStatus === 'qualifie' ? 'Continuer vers secteur' : 'Enregistrer le statut'}
+                Continuer vers secteur
               </button>
             </div>
           )}
