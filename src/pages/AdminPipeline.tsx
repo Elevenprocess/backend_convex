@@ -203,15 +203,15 @@ function TrackingView() {
   if (leadsError) return <ErrorBanner error={leadsError} />
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+    <div className="h-[calc(100vh-150px)] min-h-[620px] flex flex-col gap-4 overflow-hidden">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 shrink-0">
         <KpiCard label="RDV suivis" value={totals.rdvs.toLocaleString('fr-FR')} />
         <KpiCard label="Prospects uniques" value={totals.prospects.toLocaleString('fr-FR')} />
         <KpiCard label="Debriefs à faire" value={totals.missingDebrief.toLocaleString('fr-FR')} />
         <KpiCard label="Signés" value={totals.signed.toLocaleString('fr-FR')} />
       </div>
 
-      <div className="rounded-[18px] border border-line-soft bg-white p-4">
+      <div className="rounded-[18px] border border-line-soft bg-white p-4 shrink-0">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-[10px] uppercase tracking-wide text-faint">Mode d’emploi</p>
@@ -244,8 +244,8 @@ function TrackingView() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[420px_minmax(0,1fr)] gap-4 items-start">
-        <div className="space-y-3 max-h-[calc(100vh-360px)] min-h-[360px] overflow-y-auto pr-1">
+      <div className="grid grid-cols-1 xl:grid-cols-[420px_minmax(0,1fr)] gap-4 items-stretch flex-1 min-h-0 overflow-hidden">
+        <div className="space-y-3 h-full min-h-0 overflow-y-auto pr-1 overscroll-contain">
           <button
             type="button"
             onClick={() => setSelectedCommercialId('all')}
@@ -271,8 +271,8 @@ function TrackingView() {
           ))}
         </div>
 
-        <div className="rounded-[18px] border border-line-soft bg-white overflow-hidden">
-          <div className="px-4 py-3 border-b border-line-soft flex items-center justify-between gap-3">
+        <div className="rounded-[18px] border border-line-soft bg-white overflow-hidden h-full min-h-0 flex flex-col">
+          <div className="px-4 py-3 border-b border-line-soft flex items-center justify-between gap-3 shrink-0">
             <div>
               <p className="text-[10px] uppercase tracking-wide text-faint">RDV du commercial sélectionné</p>
               <h3 className="font-black">Évolution prospect + debrief</h3>
@@ -280,7 +280,7 @@ function TrackingView() {
             </div>
             <span className="text-xs font-bold text-muted">{filteredRdvs.length} RDV</span>
           </div>
-          <div className="divide-y divide-line-soft max-h-[calc(100vh-360px)] min-h-[360px] overflow-y-auto">
+          <div className="divide-y divide-line-soft flex-1 min-h-0 overflow-y-auto overscroll-contain">
             {filteredRdvs.length === 0 ? (
               <div className="p-8 text-center text-sm text-muted">Aucun RDV dans ce filtre.</div>
             ) : (
