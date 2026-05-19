@@ -6,6 +6,7 @@ import type {
   CallLogResponse,
   InvitationResponse,
   LeadResponse,
+  LeadStatsResponse,
   LeadStatus,
   RdvLocation,
   RdvResponse,
@@ -212,7 +213,7 @@ function useFetch<T>(
   return { data, loading, error, refetch: () => setTick((t) => t + 1) }
 }
 
-const LEADS_LIMIT_MAX = 5000
+const LEADS_LIMIT_MAX = 10000
 const CALL_LOGS_LIMIT_MAX = 200
 const RDV_LIMIT_MAX = 200
 
@@ -276,6 +277,13 @@ export function useLead(id: string | undefined): Async<LeadResponse> {
   return useFetch<LeadResponse>(id ? `/leads/${id}` : null)
 }
 
+export function useLeadStats(): Async<LeadStatsResponse> {
+  return useFetch<LeadStatsResponse>('/leads/stats', undefined, {
+    refreshCachedOnMount: true,
+    silentInitialLoading: true,
+  })
+}
+
 // ─── RDV ───────────────────────────────────────────────────
 export function useRdvList(filters?: {
   leadId?: string
@@ -284,8 +292,8 @@ export function useRdvList(filters?: {
   fromDate?: string
   toDate?: string
   limit?: number
-}): Async<RdvResponse[]> {
-  return useFetch<RdvResponse[]>('/rdv', { ...filters, limit: clampLimit(filters?.limit, 200, RDV_LIMIT_MAX) })
+} | null): Async<RdvResponse[]> {
+  return useFetch<RdvResponse[]>(filters === null ? null : '/rdv', filters === null ? undefined : { ...filters, limit: clampLimit(filters?.limit, 200, RDV_LIMIT_MAX) })
 }
 
 // Cf. useLeadsProgressive — même pattern pour les RDV.

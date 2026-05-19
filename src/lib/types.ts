@@ -53,6 +53,14 @@ export type LeadStatus =
 
 export type LeadSource = 'ghl' | 'airtable_migration' | 'manual' | 'referrer'
 
+export type LeadStatsResponse = {
+  total: number
+  byStatus: Partial<Record<LeadStatus, number>>
+  bySource: Partial<Record<LeadSource, number>>
+  imported: number
+  directGhl: number
+}
+
 export type LeadResponse = {
   id: string
   externalId: string | null

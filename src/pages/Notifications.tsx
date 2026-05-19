@@ -17,6 +17,7 @@ type Notif = {
   title: string
   body: React.ReactNode
   time: string
+  sortAt?: number
   urgency: 'now' | 'soon' | 'info'
   to?: string
 }
@@ -30,9 +31,10 @@ export function Notifications() {
   const { data: rdvsData, loading: rdvLoading } = useRdvList(rdvFilters)
   const leads = leadsData ?? []
   const rdvs = rdvsData ?? []
+  const minuteTick = useMinuteTicker()
   const notifs = useMemo(() => (
     isCommercial ? buildCommercialNotifications(leads, rdvs) : buildNotifications(leads, rdvs)
-  ), [isCommercial, leads, rdvs])
+  ), [isCommercial, leads, rdvs, minuteTick])
   const groups = Array.from(new Set(notifs.map((n) => n.group)))
   const loading = leadsLoading || rdvLoading
   const [permission, setPermission] = useState(notificationPermission())
@@ -63,12 +65,16 @@ export function Notifications() {
               ? 'Aucune notification commerciale : pas de nouveau RDV, pas de RDV imminent et pas de mouvement pipeline récent.'
               : 'Aucune notification urgente : pas de nouveau lead récent, pas de rappel à traiter, pas de RDV imminent.'}
           </div>
-        ) : groups.map((g) => (
+        ) : isCommercial ? groups.map((g) => (
           <div key={g} className="space-y-3">
             <div className="text-xs eyebrow text-muted mt-4 first:mt-0">{g}</div>
             {notifs.filter((n) => n.group === g).map((n) => <NotificationCard key={n.id} notif={n} />)}
           </div>
-        ))}
+        )) : (
+          <div className="space-y-3">
+            {notifs.map((n) => <NotificationCard key={n.id} notif={n} />)}
+          </div>
+        )}
       </main>
     </AppShell>
   )
@@ -117,6 +123,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         title: 'Appel à rappeler maintenant',
         body: <><strong>{name}</strong>{lead.phone ? ` · ${lead.phone}` : ''}</>,
         time: formatDateTime(lead.nextCallbackAt!),
+        sortAt: callbackAt,
         urgency: 'now',
         to: leadLink,
       })
@@ -131,6 +138,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         title: 'Rappel téléphonique imminent',
         body: <><strong>{name}</strong>{lead.phone ? ` · ${lead.phone}` : ''}</>,
         time: formatDateTime(lead.nextCallbackAt!),
+        sortAt: callbackAt,
         urgency: 'soon',
         to: leadLink,
       })
@@ -145,6 +153,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         title: 'Client à rappeler',
         body: <><strong>{name}</strong>{lead.phone ? ` · ${lead.phone}` : ''}</>,
         time: formatDateTime(lead.nextCallbackAt!),
+        sortAt: callbackAt,
         urgency: 'info',
         to: leadLink,
       })
@@ -161,6 +170,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         title: 'Nouveau lead arrivé',
         body: <><strong>{name}</strong>{lead.city ? ` · ${lead.city}` : ''}{lead.phone ? ` · ${lead.phone}` : ''}</>,
         time: relativeTime(lead.createdAt),
+        sortAt: new Date(lead.createdAt).getTime(),
         urgency: 'info',
         to: leadLink,
       })
@@ -181,13 +191,14 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         title: 'RDV dans moins de 10 minutes',
         body: <>Prépare le RDV {rdv.locationType} prévu à {formatDateTime(rdv.scheduledAt)}.</>,
         time: formatDateTime(rdv.scheduledAt),
+        sortAt: scheduled,
         urgency: 'soon',
         to: '/rdv',
       })
     }
   }
 
-  return notifications.sort((a, b) => urgencyRank(a) - urgencyRank(b))
+  return notifications.sort(setterRawRank)
 }
 
 export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): Notif[] {
@@ -218,6 +229,7 @@ export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvRes
         title: 'RDV Planifié imminent',
         body: <><strong>{name}</strong>{details}</>,
         time: formatDateTime(rdv.scheduledAt),
+        sortAt: scheduled,
         urgency: 'soon',
         to: '/leads',
       })
@@ -232,6 +244,7 @@ export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvRes
         title: 'RDV Planifié',
         body: <><strong>{name}</strong>{details}</>,
         time: formatDateTime(rdv.scheduledAt),
+        sortAt: scheduled,
         urgency: 'info',
         to: '/leads',
       })
@@ -248,6 +261,7 @@ export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvRes
         title: 'Nouveau RDV attribué',
         body: <><strong>{name}</strong>{details}</>,
         time: relativeTime(rdv.createdAt),
+        sortAt: created,
         urgency: 'info',
         to: '/leads',
       })
@@ -262,6 +276,7 @@ export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvRes
         title: stage,
         body: <><strong>{name}</strong>{details}</>,
         time: relativeTime(rdv.updatedAt),
+        sortAt: updated,
         urgency: 'info',
         to: '/leads',
       })
@@ -343,7 +358,7 @@ function writeSeenNotificationIds(ids: Set<string>) {
   localStorage.setItem('ecoi.seenNotificationIds', JSON.stringify(Array.from(ids).slice(-5000)))
 }
 
-function useBrowserNotifications(notifs: Notif[]) {
+export function useBrowserNotifications(notifs: Notif[]) {
   useEffect(() => {
     if (!supportsBrowserNotifications() || Notification.permission !== 'granted') return
     const ids = readNotifiedIds()
@@ -351,15 +366,38 @@ function useBrowserNotifications(notifs: Notif[]) {
     for (const notif of urgent) {
       if (ids.has(notif.id)) continue
       ids.add(notif.id)
-      new Notification(notif.title, { body: notificationBody(notif), tag: notif.id })
+      showBrowserNotification(notif.title, notificationBody(notif), notif.id)
     }
     writeNotifiedIds(ids)
   }, [notifs])
 }
 
+export function useMinuteTicker(): number {
+  const [tick, setTick] = useState(() => Math.floor(Date.now() / 60000))
+  useEffect(() => {
+    const interval = window.setInterval(() => setTick(Math.floor(Date.now() / 60000)), 30_000)
+    return () => window.clearInterval(interval)
+  }, [])
+  return tick
+}
+
+export function showBrowserNotification(title: string, body?: string, tag?: string) {
+  if (!supportsBrowserNotifications() || Notification.permission !== 'granted') return
+  try {
+    new Notification(title, {
+      body,
+      tag,
+      requireInteraction: true,
+      silent: false,
+    } as NotificationOptions)
+  } catch {
+    try { new Notification(title, { body, tag }) } catch { /* navigateur/OS bloque la notification */ }
+  }
+}
+
 function notificationBody(notif: Notif): string {
   if (typeof notif.body === 'string') return notif.body
-  return `${notif.group} · ${notif.time}`
+  return notif.time
 }
 
 function readNotifiedIds(): Set<string> {
@@ -368,6 +406,16 @@ function readNotifiedIds(): Set<string> {
 
 function writeNotifiedIds(ids: Set<string>) {
   localStorage.setItem('ecoi.notifiedIds', JSON.stringify(Array.from(ids).slice(-100)))
+}
+
+function setterRawRank(a: Notif, b: Notif): number {
+  const rank = (notif: Notif) => notif.group === 'NOUVEAUX LEADS' ? 0 : notif.group === 'DANS 10 MIN' ? 1 : notif.group === 'RAPPELS EN RETARD' ? 2 : notif.group === 'RAPPELS PROGRAMMÉS' ? 3 : 4
+  const diff = rank(a) - rank(b)
+  if (diff !== 0) return diff
+  const aTime = a.sortAt ?? 0
+  const bTime = b.sortAt ?? 0
+  if (a.group === 'NOUVEAUX LEADS') return bTime - aTime
+  return aTime - bTime
 }
 
 function urgencyRank(notif: Notif): number {

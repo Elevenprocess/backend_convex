@@ -11,9 +11,16 @@ export type RealtimeRefreshPayload = {
 
 function realtimeBaseUrl(): string {
   const configured = import.meta.env.VITE_REALTIME_URL as string | undefined
-  const base = (configured || API_BASE).replace(/\/$/, '')
-  if (base.endsWith('/api')) return base.slice(0, -4)
+  const rawBase = (configured || API_BASE).replace(/\/$/, '')
+  const apiBase = API_BASE.replace(/\/$/, '')
+  const safeBase = isMixedContentUrl(rawBase) ? apiBase : rawBase
+  const base = safeBase.endsWith('/api') ? safeBase.slice(0, -4) : safeBase
   return base
+}
+
+function isMixedContentUrl(url: string): boolean {
+  if (typeof window === 'undefined' || window.location.protocol !== 'https:') return false
+  try { return new URL(url).protocol === 'http:' } catch { return false }
 }
 
 export function notifyRealtimeRefresh(payload: RealtimeRefreshPayload) {
@@ -35,7 +42,11 @@ export function useRealtimeSocket() {
     socket.on('notification:new', (notification: { title?: string; body?: string; id?: string }) => {
       notifyRealtimeRefresh({ event: 'notification:new', paths: ['/leads', '/rdv', '/call-logs', '/analytics/summary', '/analytics/funnel'] })
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && notification.title) {
-        new Notification(notification.title, { body: notification.body, tag: notification.id })
+        try {
+          new Notification(notification.title, { body: notification.body, tag: notification.id, requireInteraction: true, silent: false } as NotificationOptions)
+        } catch {
+          try { new Notification(notification.title, { body: notification.body, tag: notification.id }) } catch { /* notification bloquée par le navigateur */ }
+        }
       }
     })
 
