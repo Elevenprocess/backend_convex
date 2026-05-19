@@ -312,14 +312,8 @@ function OverviewCommercial() {
           <AirKpi icon="chart" label="Panier moyen" value={fmtKEur(stats.panier)} sub="sur ventes signées" />
           <AirKpi icon="users" label="RDV suivis" value={fmtCompact(stats.totalRdv)} sub={`${fmtCompact(stats.totalHonored)} honorés`} />
 
-          <div className="overview-air-card overview-role-wide">
-            <div className="shot-card-head">
-              <h3>Évolution CA</h3>
-              <strong>{fmtKEur(stats.ca)}</strong>
-            </div>
-            <div className="overview-role-chart">
-              <FuturisticAreaChart values={rdvRevenueSeries(rdvs ?? [])} color="#3DA86A" />
-            </div>
+          <div className="overview-air-card overview-role-wide overview-revenue-evolution-card">
+            <RevenueEvolutionChart points={rdvRevenueSeries(rdvs ?? [])} total={stats.ca} />
           </div>
 
           <div className="overview-air-card overview-role-side">
@@ -1199,11 +1193,14 @@ function leadStatusSegments(leads: LeadResponse[]): { status: LeadStatus; label:
     .sort((a, b) => b.value - a.value)
 }
 
-function rdvRevenueSeries(rdvs: RdvResponse[]): number[] {
+function rdvRevenueSeries(rdvs: RdvResponse[]): ActivityPoint[] {
   const months = lastNMonths(8)
-  return months.map((m) => rdvs
-    .filter((r) => r.result === 'signe' && isoMonthKey(r.signatureAt ?? r.scheduledAt) === m)
-    .reduce((sum, r) => sum + (parseFloat(r.montantTotal ?? '0') || 0), 0))
+  return months.map((m) => ({
+    label: monthLabel(m),
+    value: rdvs
+      .filter((r) => r.result === 'signe' && isoMonthKey(r.signatureAt ?? r.scheduledAt) === m)
+      .reduce((sum, r) => sum + (parseFloat(r.montantTotal ?? '0') || 0), 0),
+  }))
 }
 
 function lastNDays(n: number): string[] {
@@ -1222,12 +1219,132 @@ function lastNMonths(n: number): string[] {
   })
 }
 
+function monthLabel(month: string): string {
+  const d = new Date(`${month}-01T12:00:00`)
+  return d.toLocaleDateString('fr-FR', { month: 'short' }).replace('.', '')
+}
+
 // ===== Atoms =====
 
 function chartPoints(values: number[], width = 300, height = 150): string {
   const max = Math.max(1, ...values)
   const step = values.length <= 1 ? width : width / (values.length - 1)
   return values.map((v, i) => `${Math.round(i * step)},${Math.round(height - (v / max) * (height - 18) - 9)}`).join(' ')
+}
+
+function RevenueEvolutionChart({ points, total }: { points: ActivityPoint[]; total: number }) {
+  const color = '#3DA86A'
+  const safePoints = points.length ? points : [{ label: 'Live', value: 0 }]
+  const [hover, setHover] = useState<{ x: number; y: number; value: number; index: number } | null>(null)
+  const width = 620
+  const height = 218
+  const padX = 44
+  const padTop = 22
+  const padBottom = 38
+  const chartWidth = width - padX * 2
+  const chartHeight = height - padTop - padBottom
+  const max = Math.max(1, ...safePoints.map((point) => point.value))
+  const peak = safePoints.reduce((best, point) => point.value > best.value ? point : best, safePoints[0])
+  const first = safePoints[0]
+  const last = safePoints[safePoints.length - 1]
+  const delta = last.value - first.value
+  const xFor = (index: number) => padX + (safePoints.length === 1 ? chartWidth / 2 : (index / (safePoints.length - 1)) * chartWidth)
+  const yFor = (value: number) => padTop + chartHeight - (value / max) * chartHeight
+  const path = safePoints.map((point, index) => `${index === 0 ? 'M' : 'L'} ${xFor(index).toFixed(1)} ${yFor(point.value).toFixed(1)}`).join(' ')
+  const activePoint = hover ? safePoints[hover.index] : null
+
+  const onMove = (event: MouseEvent<SVGSVGElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const x = Math.min(width - padX, Math.max(padX, ((event.clientX - rect.left) / rect.width) * width))
+    const ratio = chartWidth ? (x - padX) / chartWidth : 0
+    const index = safePoints.length <= 1 ? 0 : Math.min(safePoints.length - 1, Math.max(0, Math.round(ratio * (safePoints.length - 1))))
+    const point = safePoints[index]
+    setHover({ x: xFor(index), y: yFor(point.value), value: point.value, index })
+  }
+
+  return (
+    <div className="lead-evolution revenue-evolution">
+      <div className="lead-evolution-head">
+        <div>
+          <h3>Évolution CA</h3>
+          <p>CA signé par mois · données réelles</p>
+        </div>
+        <span>commercial</span>
+      </div>
+      <div className="lead-evolution-tabs revenue-evolution-tabs" aria-label="Indicateur CA">
+        <button type="button" className="active" style={{ ['--series-color' as string]: color }}>
+          <small><i style={{ background: color }} />CA signé</small>
+          <strong>{fmtKEur(total)}</strong>
+        </button>
+        <button type="button" style={{ ['--series-color' as string]: '#D4AF37' }}>
+          <small><i style={{ background: '#D4AF37' }} />Pic mensuel</small>
+          <strong>{fmtKEur(peak.value)}</strong>
+        </button>
+        <button type="button" style={{ ['--series-color' as string]: '#B87333' }}>
+          <small><i style={{ background: '#B87333' }} />Tendance</small>
+          <strong className={delta >= 0 ? 'positive' : 'negative'}>{delta >= 0 ? '+' : ''}{fmtKEur(delta)}</strong>
+        </button>
+      </div>
+      <div className="lead-evolution-svg-wrap revenue-evolution-svg-wrap">
+        <div className="lead-evolution-last-card">
+          <small>Dernier mois</small>
+          <strong style={{ color }}>{fmtKEur(last.value)}</strong>
+          <span className={delta >= 0 ? 'positive' : 'negative'}>{delta >= 0 ? '+' : ''}{fmtKEur(delta)} vs début</span>
+        </div>
+        <svg viewBox={`0 0 ${width} ${height}`} onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img" aria-label="Évolution CA commercial">
+          <defs>
+            <linearGradient id="revenueEvolutionFill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity="0.24" />
+              <stop offset="100%" stopColor={color} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {[0, 0.5, 1].map((ratio) => {
+            const y = padTop + ratio * chartHeight
+            const label = max * (1 - ratio)
+            return (
+              <g key={ratio}>
+                <line x1={padX} x2={width - padX} y1={y} y2={y} className="lead-evolution-grid" />
+                <text x="10" y={y + 4} className="lead-evolution-yaxis">{fmtKEur(label)}</text>
+              </g>
+            )
+          })}
+          <path d={`${path} L ${xFor(safePoints.length - 1)} ${height - padBottom} L ${xFor(0)} ${height - padBottom} Z`} fill="url(#revenueEvolutionFill)" />
+          <path d={path} className="lead-evolution-line" style={{ stroke: color }} />
+          {hover ? (
+            <g pointerEvents="none">
+              <line x1={hover.x} x2={hover.x} y1={padTop} y2={height - padBottom} className="lead-evolution-guide" style={{ stroke: color }} />
+              <circle cx={hover.x} cy={hover.y} r="7" className="lead-evolution-dot" style={{ stroke: color }} />
+              <text x={Math.min(width - 92, hover.x + 10)} y={Math.max(16, hover.y - 10)} className="lead-evolution-cursor-label" style={{ fill: color }}>{fmtKEur(hover.value)}</text>
+            </g>
+          ) : null}
+          {safePoints.map((point, index) => {
+            const x = xFor(index)
+            const y = yFor(point.value)
+            const isPeak = point.label === peak.label && peak.value > 0
+            return (
+              <g key={`${point.label}-${index}`}>
+                <circle cx={x} cy={y} r={isPeak ? 6 : 4} className="lead-evolution-dot" style={{ stroke: color }} />
+                {isPeak ? <text x={x} y={Math.max(13, y - 12)} className="lead-evolution-peak" style={{ fill: color }}>pic {fmtKEur(point.value)}</text> : null}
+                <text x={x} y={height - 12} className="lead-evolution-axis" textAnchor={index === 0 ? 'start' : index === safePoints.length - 1 ? 'end' : 'middle'}>{point.label}</text>
+              </g>
+            )
+          })}
+        </svg>
+        {activePoint && hover ? (
+          <div className="lead-evolution-tooltip" style={{ left: hover.x > width * 0.58 ? 'auto' : `${Math.min(58, Math.max(2, (hover.x / width) * 100))}%`, right: hover.x > width * 0.58 ? `${Math.min(58, Math.max(2, ((width - hover.x) / width) * 100))}%` : 'auto', top: `${Math.min(62, Math.max(6, (hover.y / height) * 100))}%` }}>
+            <small>{activePoint.label}</small>
+            <strong style={{ color }}>{fmtKEur(activePoint.value)} CA</strong>
+            <em>Total période : {fmtKEur(total)} · Pic : {fmtKEur(peak.value)}</em>
+          </div>
+        ) : null}
+      </div>
+      <div className="lead-evolution-footer">
+        <div><small>Total période</small><strong>{fmtKEur(total)}</strong></div>
+        <div><small>Pic</small><strong>{fmtKEur(peak.value)}</strong></div>
+        <div><small>Tendance</small><strong className={delta >= 0 ? 'positive' : 'negative'}>{delta >= 0 ? 'Hausse' : 'Baisse'}</strong></div>
+      </div>
+    </div>
+  )
 }
 
 function FuturisticLineChart({ points, color, caption }: { points: ActivityPoint[]; color: string; caption: string }) {
@@ -1266,19 +1383,6 @@ function FuturisticLineChart({ points, color, caption }: { points: ActivityPoint
           ))}
         </div>
       </div>
-    </div>
-  )
-}
-
-function FuturisticAreaChart({ values, color }: { values: number[]; color: string }) {
-  const points = chartPoints(values)
-  return (
-    <div className="relative h-full rounded-2xl bg-white/35 border border-line-soft overflow-hidden p-4">
-      <svg viewBox="0 0 300 150" className="relative z-10 w-full h-full" preserveAspectRatio="none">
-        <polygon points={`0,150 ${points} 300,150`} fill={color} opacity="0.18" />
-        <polyline points={points} fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-      <div className="absolute top-4 right-4 z-20 text-right"><span className="eyebrow">CA 12 mois</span></div>
     </div>
   )
 }
