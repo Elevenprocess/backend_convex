@@ -220,11 +220,12 @@ function LeadsSetter() {
   }, [categoryLeads, filter])
 
   const filtered = useMemo(() => {
-    let list = categoryLeads
-    list = filterSetterLeadsByStatus(list, filter)
+    const q = query.trim().toLowerCase()
+    // Si une recherche est saisie, elle doit être globale sur toutes les catégories
+    // setter, même si l’onglet actif est "Nouveaux", "À rappeler", etc.
+    let list = q ? categoryLeads : filterSetterLeadsByStatus(categoryLeads, filter)
     if (missingFilter !== 'all') list = list.filter((l) => matchesMissingFilter(l, missingFilter))
-    if (query) {
-      const q = query.toLowerCase()
+    if (q) {
       list = list.filter((l) => [fullName(l), l.phone, l.email, l.city].filter(Boolean).join(' ').toLowerCase().includes(q))
     }
     return list
