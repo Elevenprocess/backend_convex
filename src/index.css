@@ -322,6 +322,9 @@ body {
 .overview-commercial-grid .overview-role-list { max-height: none; }
 .overview-commercial-grid .overview-role-wide { min-height: 260px; }
 .overview-commercial-grid .overview-role-side { min-height: 260px; }
+.overview-commercial-rdv-actions { grid-column: span 12; display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 14px; align-items: stretch; }
+.overview-commercial-rdv-actions .overview-role-wide,
+.overview-commercial-rdv-actions .overview-role-side { grid-column: auto; min-height: 260px; }
 .overview-commercial-grid .overview-air-kpi { grid-column: span 3; min-height: 116px; }
 .overview-air-kpi {
   grid-column: span 2;
@@ -493,6 +496,7 @@ body {
 @media (max-width: 980px) {
   .overview-admin-main-grid .overview-lead-evolution-card { grid-column: span 12; }
   .overview-commercial-grid .overview-air-kpi { grid-column: span 12; }
+  .overview-commercial-rdv-actions { grid-template-columns: 1fr; }
   .overview-profile-panel, .overview-air-kpi, .overview-air-chart, .overview-air-pie, .overview-air-pipeline, .overview-air-funnel, .overview-role-wide, .overview-role-side { grid-column: span 12; }
   .overview-role-list-grid { grid-template-columns: 1fr; }
 }

@@ -390,28 +390,30 @@ function OverviewCommercial() {
             </div>
           </div>
 
-          <div className="overview-air-card overview-role-wide">
-            <CardHead title="Mes RDV à venir" icon="phone" />
-            <div className="overview-role-list overview-role-list-grid">
-              {stats.upcoming.length === 0 ? (
-                <div className="text-xs text-faint">Aucun RDV à venir.</div>
-              ) : stats.upcoming.slice(0, 6).map((r, i) => (
-                <RdvRow
-                  key={r.id}
-                  color={['#D4AF37', '#B87333', '#B7410E', '#3DA86A'][i % 4]}
-                  time={`${shortDateTime(r.scheduledAt)}`}
-                  sub={r.locationType === 'visio' ? 'Visio' : r.locationType === 'agence' ? 'Agence' : 'Domicile'}
-                />
-              ))}
+          <div className="overview-commercial-rdv-actions">
+            <div className="overview-air-card overview-role-wide">
+              <CardHead title="Mes RDV à venir" icon="phone" />
+              <div className="overview-role-list overview-role-list-grid">
+                {stats.upcoming.length === 0 ? (
+                  <div className="text-xs text-faint">Aucun RDV à venir.</div>
+                ) : stats.upcoming.slice(0, 6).map((r, i) => (
+                  <RdvRow
+                    key={r.id}
+                    color={['#D4AF37', '#B87333', '#B7410E', '#3DA86A'][i % 4]}
+                    time={`${shortDateTime(r.scheduledAt)}`}
+                    sub={r.locationType === 'visio' ? 'Visio' : r.locationType === 'agence' ? 'Agence' : 'Domicile'}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
 
-          <div className="overview-air-card overview-role-side">
-            <CardHead title="Actions" icon="check" />
-            <TaskLine icon="phone" title="Préparer RDV" sub={`${fmtCompact(stats.upcoming.length)} rendez-vous à venir`} done={stats.upcoming.length > 0} />
-            <TaskLine icon="target" title="Honorés" sub={`${fmtCompact(stats.totalHonored)} RDV honorés`} done={stats.totalHonored > 0} />
-            <TaskLine icon="trophy" title="Signatures" sub={`${fmtCompact(stats.signed)} ventes signées`} done={stats.signed > 0} />
-            <button onClick={() => navigate('/rdv')} className="overview-role-action">Voir mes RDV</button>
+            <div className="overview-air-card overview-role-side">
+              <CardHead title="Actions" icon="check" />
+              <TaskLine icon="phone" title="Préparer RDV" sub={`${fmtCompact(stats.upcoming.length)} rendez-vous à venir`} done={stats.upcoming.length > 0} />
+              <TaskLine icon="target" title="Honorés" sub={`${fmtCompact(stats.totalHonored)} RDV honorés`} done={stats.totalHonored > 0} />
+              <TaskLine icon="trophy" title="Signatures" sub={`${fmtCompact(stats.signed)} ventes signées`} done={stats.signed > 0} />
+              <button onClick={() => navigate('/rdv')} className="overview-role-action">Voir mes RDV</button>
+            </div>
           </div>
         </section>
       </main>
