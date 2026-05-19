@@ -3,7 +3,7 @@ import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Spinner } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
-import { useAnalyticsSummary } from '../lib/hooks'
+import { useAnalyticsSummary, prefetchAnalyticsSummary } from '../lib/hooks'
 import type { AnalyticsAdminSummary, AnalyticsCommercialPerf, AnalyticsCommercialSummary, AnalyticsDailyPoint, AnalyticsHourlyCallPoint, AnalyticsSegment, AnalyticsSetterSummary } from '../lib/types'
 
 type Segment = AnalyticsSegment
@@ -93,10 +93,25 @@ export function Analytics() {
 }
 
 function useWarmAnalyticsPresetRanges() {
-  // Ancien comportement: préchargeait toutes les périodes en parallèle.
-  // En admin cela lançait 5-8 appels /analytics/summary dont une période longue,
-  // ce qui saturait le backend et donnait des chargements à 8-20s.
-  useEffect(() => undefined, [])
+  useEffect(() => {
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      if (cancelled) return
+      const initialRange = buildPeriodRange(DEFAULT_PERIOD)
+      const currentKey = `${initialRange.from}|${initialRange.to}`
+      const warmRanges = getAnalyticsWarmupRanges()
+      void Promise.allSettled(
+        warmRanges.map((range) => {
+          const force = `${range.from}|${range.to}` !== currentKey
+          return prefetchAnalyticsSummary({ from: range.from, to: range.to }, { force })
+        }),
+      )
+    }, 180)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [])
 }
 
 // ----- F11 Setter -----
@@ -513,6 +528,16 @@ function buildPeriodRange(period: PeriodState): PeriodRange {
   const days = Math.max(1, Math.round((endOfDay(to).getTime() - startOfDay(from).getTime()) / 86_400_000) + 1)
   const option = PERIOD_OPTIONS.find((p) => p.id === period.mode)?.label ?? 'Période'
   return { from: startOfDay(from).toISOString(), to: endOfDay(to).toISOString(), label: `${option} · ${formatShortDate(from)} → ${formatShortDate(to)}`, days }
+}
+
+function getAnalyticsWarmupRanges(): PeriodRange[] {
+  const modes: PeriodMode[] = ['today', 'yesterday', 'this_week', 'this_month', 'this_year']
+  const unique = new Map<string, PeriodRange>()
+  modes.forEach((mode) => {
+    const range = buildPeriodRange({ ...DEFAULT_PERIOD, mode })
+    unique.set(`${range.from}|${range.to}`, range)
+  })
+  return Array.from(unique.values())
 }
 
 function toDateInputValue(date: Date): string {
