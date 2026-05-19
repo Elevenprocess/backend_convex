@@ -423,13 +423,19 @@ function OverviewAdmin() {
       rdvPris,
     }
   }, [adminSummary, funnelTotals, treatedLeadTotal, usersList])
-  const funnelAnswered = Math.max(funnelTotals.answered, stats.qualified)
+  const funnelNoAnswer = Math.min(funnelTotals.noAnswer, stats.leads)
+  const funnelAnswered = Math.max(
+    funnelTotals.answered,
+    stats.leads - funnelNoAnswer,
+    stats.qualified + funnelTotals.notQualified + Math.max(0, funnelTotals.relances - funnelNoAnswer),
+    stats.rdvPris,
+  )
   const overviewFunnelTotals: AnalyticsFunnelResponse['totals'] = {
     ...funnelTotals,
     calls: Math.max(funnelTotals.calls, stats.appels),
     answered: funnelAnswered,
     responseRate: pct(funnelAnswered, stats.leads),
-    noAnswer: Math.max(funnelTotals.noAnswer, stats.leads - funnelAnswered),
+    noAnswer: funnelNoAnswer,
     qualified: Math.max(funnelTotals.qualified, stats.qualified),
     qualificationRate: pct(Math.max(funnelTotals.qualified, stats.qualified), Math.max(1, funnelAnswered)),
     rdv: Math.max(funnelTotals.rdv, stats.rdvPris),
