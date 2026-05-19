@@ -154,6 +154,13 @@ export type AnalyticsDailyPoint = {
   ca: number
 }
 
+export type AnalyticsHourlyCallPoint = {
+  date: string
+  hour: number
+  label: string
+  calls: number
+}
+
 export type AnalyticsSetterSummary = {
   newLeads: number
   calls: number
@@ -176,6 +183,7 @@ export type AnalyticsSetterSummary = {
   rdvRate: number
   resultSegments: AnalyticsSegment[]
   dailyCalls: number[]
+  hourlyCalls?: AnalyticsHourlyCallPoint[]
   dailyEvolution: AnalyticsDailyPoint[]
 }
 
@@ -231,6 +239,7 @@ export type AnalyticsAdminSummary = {
   ca: number
   signed: number
   resultSegments: AnalyticsSegment[]
+  hourlyCalls?: AnalyticsHourlyCallPoint[]
   dailyEvolution: AnalyticsDailyPoint[]
   setters: AnalyticsSetterPerf[]
   commercials: AnalyticsCommercialPerf[]

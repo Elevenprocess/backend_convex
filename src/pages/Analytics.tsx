@@ -3,7 +3,7 @@ import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
 import { useAnalyticsSummary } from '../lib/hooks'
-import type { AnalyticsAdminSummary, AnalyticsCommercialPerf, AnalyticsCommercialSummary, AnalyticsDailyPoint, AnalyticsSegment, AnalyticsSetterSummary } from '../lib/types'
+import type { AnalyticsAdminSummary, AnalyticsCommercialPerf, AnalyticsCommercialSummary, AnalyticsDailyPoint, AnalyticsHourlyCallPoint, AnalyticsSegment, AnalyticsSetterSummary } from '../lib/types'
 
 type Segment = AnalyticsSegment
 
@@ -49,6 +49,7 @@ const EMPTY_SETTER_STATS: AnalyticsSetterSummary = {
   rdvRate: 0,
   resultSegments: [],
   dailyCalls: [],
+  hourlyCalls: [],
   dailyEvolution: [],
 }
 
@@ -76,6 +77,7 @@ const EMPTY_ADMIN_STATS: AnalyticsAdminSummary = {
   ca: 0,
   signed: 0,
   resultSegments: [],
+  hourlyCalls: [],
   dailyEvolution: [],
   setters: [],
   commercials: [],
@@ -125,7 +127,7 @@ function AnalyticsSetter({ name }: { name: string }) {
           <div className="col-span-12 xl:col-span-7">
             <AnalyticsStatsTable title="Tableau statistiques setter" rows={setterTableRows(stats)} />
           </div>
-          <EvolutionChart title="Courbes d'évolution setter" data={stats.dailyEvolution} series={[
+          <EvolutionChart title="Courbes d'évolution setter" data={stats.dailyEvolution} hourlyCalls={stats.hourlyCalls} series={[
             { key: 'calls', label: 'Appels', color: '#D4AF37' },
             { key: 'rdv', label: 'RDV', color: '#B87333' },
           ]} />
@@ -247,7 +249,7 @@ function AnalyticsAdmin() {
           <div className="col-span-12 xl:col-span-7">
             <AnalyticsStatsTable title="Tableau statistiques global" rows={adminTableRows(stats)} />
           </div>
-          <EvolutionChart title="Courbes d'évolution globales" data={stats.dailyEvolution} series={[
+          <EvolutionChart title="Courbes d'évolution globales" data={stats.dailyEvolution} hourlyCalls={stats.hourlyCalls} series={[
             { key: 'calls', label: 'Appels', color: '#D4AF37' },
             { key: 'rdv', label: 'RDV', color: '#B87333' },
             { key: 'signed', label: 'Ventes', color: '#3DA86A' },
@@ -730,7 +732,7 @@ function Row({ label, value, highlight = false }: { label: string; value: string
 
 type EvolutionSeries = { key: keyof Pick<AnalyticsDailyPoint, 'calls' | 'rdv' | 'signed' | 'ca'>; label: string; color: string }
 
-function EvolutionChart({ title, data, series }: { title: string; data?: AnalyticsDailyPoint[]; series: EvolutionSeries[] }) {
+function EvolutionChart({ title, data, hourlyCalls, series }: { title: string; data?: AnalyticsDailyPoint[]; hourlyCalls?: AnalyticsHourlyCallPoint[]; series: EvolutionSeries[] }) {
   const [activeKey, setActiveKey] = useState<EvolutionSeries['key']>(series[0]?.key ?? 'calls')
   const [hoveredPoint, setHoveredPoint] = useState<{ point: AnalyticsDailyPoint; x: number; y: number; cursorX: number; cursorY: number; cursorValue: number } | null>(null)
   const width = 620
@@ -739,12 +741,22 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
   const padTop = 24
   const padBottom = 42
   const points = data ?? []
-  const sample = points.length > 36 ? points.filter((_, i) => i % Math.ceil(points.length / 36) === 0 || i === points.length - 1) : points
+  const hourlyPoints: AnalyticsDailyPoint[] = (hourlyCalls ?? []).map((point) => ({
+    date: `${point.date}-${point.hour}`,
+    label: point.label,
+    calls: point.calls,
+    rdv: 0,
+    signed: 0,
+    ca: 0,
+  }))
   const active = series.find((serie) => serie.key === activeKey) ?? series[0]
+  const showHourlyCalls = active?.key === 'calls' && hourlyPoints.length > 0
+  const chartPoints = showHourlyCalls ? hourlyPoints : points
+  const sample = chartPoints.length > 56 ? chartPoints.filter((_, i) => i % Math.ceil(chartPoints.length / 56) === 0 || i === chartPoints.length - 1) : chartPoints
   const max = Math.max(1, ...sample.map((point) => active ? point[active.key] || 0 : 0))
-  const total = points.reduce((sum, point) => sum + (active ? point[active.key] || 0 : 0), 0)
-  const peak = points.reduce((best, point) => ((active ? point[active.key] || 0 : 0) > (active ? best[active.key] || 0 : 0) ? point : best), points[0] ?? null)
-  const last = points[points.length - 1]
+  const total = chartPoints.reduce((sum, point) => sum + (active ? point[active.key] || 0 : 0), 0)
+  const peak = chartPoints.reduce((best, point) => ((active ? point[active.key] || 0 : 0) > (active ? best[active.key] || 0 : 0) ? point : best), chartPoints[0] ?? null)
+  const last = chartPoints[chartPoints.length - 1]
   const chartHeight = height - padTop - padBottom
   const xFor = (idx: number) => sample.length <= 1 ? width / 2 : padX + (idx / (sample.length - 1)) * (width - padX * 2)
   const yFor = (value: number) => padTop + chartHeight - (value / max) * chartHeight
@@ -783,7 +795,7 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
           <h3 className="font-bold">{title}</h3>
-          <div className="text-xs text-faint mt-1">Courbe claire par indicateur — clique sur une statistique</div>
+          <div className="text-xs text-faint mt-1">{showHourlyCalls ? 'Appels réels par heure — 8h à 21h' : 'Courbe claire par indicateur — clique sur une statistique'}</div>
         </div>
         <span className="eyebrow">évolution</span>
       </div>
@@ -812,8 +824,8 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
           </div>
 
           <div className="evolution-chart relative rounded-[28px] bg-white border border-line-soft p-3 shadow-inner overflow-hidden flat-target">
-            <div className="evolution-last-card absolute right-4 top-4 rounded-2xl bg-white/80 border border-line-soft px-3 py-2 shadow-sm">
-              <div className="text-[10px] font-extrabold uppercase tracking-widest text-faint">Dernier jour</div>
+            <div className="evolution-last-card pointer-events-none absolute right-4 top-4 rounded-2xl bg-white/80 border border-line-soft px-3 py-2 shadow-sm">
+              <div className="text-[10px] font-extrabold uppercase tracking-widest text-faint">{showHourlyCalls ? 'Dernière heure' : 'Dernier jour'}</div>
               <div className="text-2xl font-extrabold" style={{ color: active.color }}>{formatMetric(active.key, last?.[active.key] || 0)}</div>
               <div className={`text-[11px] font-bold ${delta >= 0 ? 'text-success' : 'text-rouille'}`}>{delta >= 0 ? '+' : ''}{formatMetric(active.key, delta)} vs début</div>
             </div>
@@ -835,7 +847,7 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
                   </g>
                 )
               })}
-              {series.filter((serie) => serie.key !== active.key).map((serie) => (
+              {!showHourlyCalls && series.filter((serie) => serie.key !== active.key).map((serie) => (
                 <polyline key={serie.key} points={ghostPointsFor(serie)} fill="none" stroke={serie.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.2" strokeDasharray="5 8" />
               ))}
               <polygon points={areaPoints} fill={active.color} opacity="0.08" />
@@ -863,7 +875,9 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
                 const y = yFor(point[active.key] || 0)
                 const isPeak = peak?.date === point.date
                 const isHovered = hoveredPoint?.point.date === point.date
-                const showLabel = sample.length <= 10 || idx === 0 || idx === sample.length - 1 || isPeak
+                const showLabel = showHourlyCalls
+                  ? idx === 0 || idx === sample.length - 1 || idx % 7 === 0 || isPeak
+                  : sample.length <= 10 || idx === 0 || idx === sample.length - 1 || isPeak
                 return (
                   <g key={point.date}>
                     <title>{`${point.label} — ${active.label}: ${formatMetric(active.key, point[active.key] || 0)}`}</title>
@@ -880,9 +894,10 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
               <div
                 className="pointer-events-none absolute z-30 min-w-[170px] rounded-2xl border border-line-soft bg-white/95 px-3 py-2 text-xs shadow-xl backdrop-blur-md"
                 style={{
-                  left: `${Math.min(82, Math.max(8, (hoveredPoint.cursorX / width) * 100))}%`,
-                  top: `${Math.min(72, Math.max(12, (hoveredPoint.cursorY / height) * 100))}%`,
-                  transform: hoveredPoint.cursorX > width * 0.72 ? 'translate(-100%, -110%)' : 'translate(10px, -110%)',
+                  left: hoveredPoint.cursorX > width * 0.58 ? 'auto' : `${Math.min(58, Math.max(2, (hoveredPoint.cursorX / width) * 100))}%`,
+                  right: hoveredPoint.cursorX > width * 0.58 ? `${Math.min(58, Math.max(2, ((width - hoveredPoint.cursorX) / width) * 100))}%` : 'auto',
+                  top: `${Math.min(62, Math.max(4, (hoveredPoint.cursorY / height) * 100))}%`,
+                  transform: hoveredPoint.cursorY > height * 0.62 ? 'translateY(-100%)' : 'translateY(10px)',
                 }}
               >
                 <div className="font-extrabold text-text">{hoveredPoint.point.label}</div>
