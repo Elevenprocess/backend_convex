@@ -451,10 +451,29 @@ function reminderKey(lead: LeadResponse): string {
 }
 
 function notificationFeedRank(a: Notif, b: Notif): number {
+  const aGroup = notificationGroupRank(a.group)
+  const bGroup = notificationGroupRank(b.group)
+  if (aGroup !== bGroup) return aGroup - bGroup
+
   const aTime = a.sortAt ?? 0
   const bTime = b.sortAt ?? 0
-  if (aTime !== bTime) return bTime - aTime
+  if (aTime !== bTime) {
+    if (a.group === 'DANS 10 MIN' || a.group === 'RAPPELS PROGRAMMÉS' || a.group === 'RDV À VENIR') return aTime - bTime
+    if (a.group === 'RAPPELS EN RETARD') return bTime - aTime
+    return bTime - aTime
+  }
   return a.title.localeCompare(b.title, 'fr')
+}
+
+function notificationGroupRank(group: string): number {
+  if (group === 'DANS 10 MIN') return 0
+  if (group === 'RAPPELS PROGRAMMÉS') return 1
+  if (group === 'RAPPELS EN RETARD') return 2
+  if (group === 'RDV À VENIR') return 3
+  if (group === 'NOUVEAUX RDV COMMERCIAL') return 4
+  if (group === 'PIPELINE COMMERCIAL') return 5
+  if (group === 'NOUVEAUX LEADS') return 6
+  return 7
 }
 
 function supportsBrowserNotifications(): boolean {

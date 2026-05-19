@@ -111,17 +111,12 @@ function SetterCallbackToastStack() {
     return (leadsData ?? [])
       .filter((lead) => {
         if (!lead.nextCallbackAt) return false
-        if (dismissedIds.has(lead.id)) return false
+        if (dismissedIds.has(callbackToastKey(lead))) return false
         return lead.status === 'a_rappeler' || lead.status === 'relance'
       })
       .map((lead) => ({ lead, callbackAt: new Date(lead.nextCallbackAt!).getTime() }))
       .filter(({ callbackAt }) => Number.isFinite(callbackAt))
-      .sort((a, b) => {
-        const aLate = a.callbackAt <= now ? 0 : 1
-        const bLate = b.callbackAt <= now ? 0 : 1
-        if (aLate !== bLate) return aLate - bLate
-        return a.callbackAt - b.callbackAt
-      })
+      .sort((a, b) => callbackToastRank(a.callbackAt, b.callbackAt, now))
       .slice(0, 8)
   }, [dismissedIds, isSetter, leadsData, minuteTick])
 
@@ -140,10 +135,10 @@ function SetterCallbackToastStack() {
       <div className="callback-toast-list">
         {visibleCallbacks.map(({ lead, callbackAt }) => (
           <CallbackToast
-            key={lead.id}
+            key={callbackToastKey(lead)}
             lead={lead}
             callbackAt={callbackAt}
-            onDismiss={() => setDismissedIds((ids) => new Set(ids).add(lead.id))}
+            onDismiss={() => setDismissedIds((ids) => new Set(ids).add(callbackToastKey(lead)))}
           />
         ))}
       </div>
@@ -184,6 +179,24 @@ function CallbackToast({ lead, callbackAt, onDismiss }: { lead: LeadResponse; ca
       </div>
     </div>
   )
+}
+
+function callbackToastRank(aTime: number, bTime: number, now: number): number {
+  const aRank = callbackToastPriority(aTime, now)
+  const bRank = callbackToastPriority(bTime, now)
+  if (aRank !== bRank) return aRank - bRank
+  if (aRank === 1) return bTime - aTime
+  return aTime - bTime
+}
+
+function callbackToastPriority(callbackAt: number, now: number): number {
+  if (callbackAt > now && callbackAt <= now + 10 * 60 * 1000) return 0
+  if (callbackAt <= now) return 1
+  return 2
+}
+
+function callbackToastKey(lead: LeadResponse): string {
+  return `${lead.id}:${lead.nextCallbackAt ?? ''}`
 }
 
 function useStateSet(storageKey: string): [Set<string>, (updater: (ids: Set<string>) => Set<string>) => void] {
