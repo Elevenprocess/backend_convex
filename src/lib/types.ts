@@ -131,7 +131,7 @@ export const CALL_RESULT_LABEL: Record<CallResult, string> = {
   joint: 'Joint',
   non_joint: 'Non joint',
   rappel_planifie: 'Rappel planifié',
-  rdv_pris: 'RDV pris',
+  rdv_pris: 'Qualifié',
   refus: 'Refus',
   injoignable: 'Injoignable',
   messagerie: 'Messagerie',
@@ -346,7 +346,7 @@ export type RdvResponse = {
 export const STATUS_LABEL: Record<LeadStatus, string> = {
   nouveau: 'Nouveau',
   qualifie: 'Qualifié',
-  rdv_pris: 'RDV pris',
+  rdv_pris: 'Qualifié',
   rdv_honore: 'RDV honoré',
   signe: 'Signé',
   perdu: 'Non qualifié',
@@ -359,7 +359,7 @@ export const STATUS_LABEL: Record<LeadStatus, string> = {
 export const STATUS_BADGE: Record<LeadStatus, string> = {
   nouveau: 'bg-info-tint text-info',
   qualifie: 'bg-success-tint text-success',
-  rdv_pris: 'bg-or-tint text-or-dark',
+  rdv_pris: 'bg-success-tint text-success',
   rdv_honore: 'bg-or-tint text-or-dark',
   signe: 'bg-success-tint text-success',
   perdu: 'bg-rouille-tint text-rouille',

@@ -207,7 +207,7 @@ function LeadsSetter() {
     all: categoryLeads.length,
     nouveau: categoryLeads.filter(isNouveauLead).length,
     rappel: categoryLeads.filter(isCallbackLead).length,
-    qualifie: categoryLeads.filter((l) => l.status === 'qualifie').length,
+    qualifie: categoryLeads.filter(isQualifiedLeadStatus).length,
     sansReponse: categoryLeads.filter((l) => l.status === 'pas_de_reponse').length,
     perdu: categoryLeads.filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie').length,
   }), [categoryLeads])
@@ -575,6 +575,10 @@ function isNouveauLead(lead: LeadResponse): boolean {
   return lead.status === 'nouveau'
 }
 
+function isQualifiedLeadStatus(lead: LeadResponse): boolean {
+  return lead.status === 'qualifie' || lead.status === 'rdv_pris'
+}
+
 function filterSetterLeadsByStatus(leads: LeadResponse[], filter: SetterFilter): LeadResponse[] {
   switch (filter) {
     case 'nouveau':
@@ -582,7 +586,7 @@ function filterSetterLeadsByStatus(leads: LeadResponse[], filter: SetterFilter):
     case 'rappel':
       return leads.filter(isCallbackLead)
     case 'qualifie':
-      return leads.filter((lead) => lead.status === 'qualifie')
+      return leads.filter(isQualifiedLeadStatus)
     case 'sans_reponse':
       return leads.filter((lead) => lead.status === 'pas_de_reponse')
     case 'perdu':
