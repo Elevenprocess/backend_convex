@@ -649,7 +649,7 @@ function LeadEvolutionChart({ points, rangeLabel, totals }: { points: LeadEvolut
       </div>
       <div className="lead-evolution-svg-wrap">
         <div className="lead-evolution-last-card">
-          <small>Dernier jour</small>
+          <small>{hasHourlyPoints ? 'Dernière heure' : 'Dernier jour'}</small>
           <strong style={{ color: activeSeries.color }}>{fmtCompact(activeValue)}</strong>
           <span className={delta >= 0 ? 'positive' : 'negative'}>{delta >= 0 ? '+' : ''}{fmtCompact(delta)} vs début</span>
         </div>
