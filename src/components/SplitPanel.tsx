@@ -657,10 +657,9 @@ function NotesTab({
   const eligibilitySummary = formatEligibilityNotes(eligibilityNotes)
   const noteFinale = [eligibilitySummary, commentaire.trim()].filter(Boolean).join('\n\n') || null
   const rdvTransferNote = formatRdvTransferNote({
-    lead,
-    form,
     sector,
-    callNote: noteFinale,
+    eligibilitySummary,
+    commentaire,
   })
 
   async function saveCallAndLead(kind: Exclude<SetterStatus, ''>) {
@@ -719,7 +718,7 @@ function NotesTab({
       if (email && !isValidEmail(email)) throw new Error('Email invalide : corrige ou vide le champ email.')
       if (postalCode && postalCode.length > 20) throw new Error('Code postal trop long : 20 caractères maximum.')
       if (typeLogement && typeLogement.length > 80) throw new Error('Type logement trop long : 80 caractères maximum.')
-      await updateLead(lead.id, {
+      const leadPatch = {
         status: 'qualifie',
         firstName,
         lastName,
@@ -730,9 +729,9 @@ function NotesTab({
         postalCode,
         typeLogement,
         revenuFiscal: revenu,
-      })
-      if (ghlConfig?.configured) {
-        await createGhlAppointment({
+      } as const
+      const rdvPromise = ghlConfig?.configured
+        ? createGhlAppointment({
           leadId: lead.id,
           sector,
           calendarId: selectedSectorConfig?.calendarId || undefined,
@@ -749,19 +748,21 @@ function NotesTab({
           typeLogement,
           revenuFiscal: revenu,
         })
-      } else {
-        await createRdv({
+        : createRdv({
           leadId: lead.id,
           commercialId: null,
           scheduledAt: rdvAtToReunionIso(rdvAt),
           locationType: 'domicile',
           notes: rdvTransferNote,
         })
-      }
-      await createCallLog({ leadId: lead.id, result: 'joint', notes: noteFinale || null })
+      await Promise.all([
+        updateLead(lead.id, leadPatch),
+        rdvPromise,
+        createCallLog({ leadId: lead.id, result: 'joint', notes: noteFinale || null }),
+      ])
       refetchAgenda()
       refetchGhlSlots()
-      setSuccess(ghlConfig?.configured ? 'RDV créé dans GHL + remarque prospect envoyée, agenda actualisé.' : 'RDV créé en local. Agenda actualisé.')
+      setSuccess(ghlConfig?.configured ? 'RDV créé dans GHL, agenda actualisé.' : 'RDV créé en local. Agenda actualisé.')
       setStep('done')
       onSaved?.()
     } catch (e) {
@@ -1169,31 +1170,19 @@ function ChoicePill({ active, onClick, children }: { active: boolean; onClick: (
 }
 
 function formatRdvTransferNote({
-  lead,
-  form,
   sector,
-  callNote,
+  eligibilitySummary,
+  commentaire,
 }: {
-  lead: LeadResponse
-  form: {
-    firstName: string
-    lastName: string
-    email: string
-    phone: string
-  }
   sector: string
-  callNote: string | null
+  eligibilitySummary: string
+  commentaire: string
 }): string {
-  const name = `${form.firstName} ${form.lastName}`.trim() || fullName(lead)
-  const email = form.email.trim() || lead.email || '—'
-  const phone = form.phone.trim() || lead.phone || '—'
+  const eligibility = eligibilitySummary.replace(/^Notes d’éligibilité setter\n?/, '').trim()
   return [
-    'Transmission RDV commercial',
-    `Nom complet du lead : ${name}`,
-    `Email : ${email}`,
-    `Numéro : ${phone}`,
-    sector ? `Secteur : ${sector}` : null,
-    callNote ? `Note de l’appel :\n${callNote}` : 'Note de l’appel : —',
+    `RDV ECOI${sector ? ` — ${sector}` : ''}`,
+    commentaire.trim() ? `Commentaire setter :\n${commentaire.trim()}` : null,
+    eligibility ? `Éligibilité :\n${eligibility}` : null,
   ].filter(Boolean).join('\n')
 }
 
