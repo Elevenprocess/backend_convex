@@ -562,8 +562,36 @@ export type UpdateLeadInput = Partial<Pick<LeadResponse,
   | 'assignedToId'
 >>
 
+function updateLeadInCachedData(data: unknown, updated: LeadResponse): unknown {
+  if (Array.isArray(data)) {
+    let changed = false
+    const rows = data.map((item) => {
+      if (!item || typeof item !== 'object' || (item as LeadResponse).id !== updated.id) return item
+      changed = true
+      return { ...(item as LeadResponse), ...updated }
+    })
+    return changed ? rows : data
+  }
+  if (data && typeof data === 'object' && (data as LeadResponse).id === updated.id) {
+    return { ...(data as LeadResponse), ...updated }
+  }
+  return data
+}
+
+function updateLeadCaches(updated: LeadResponse) {
+  const now = Date.now()
+  for (const [cacheKey, entry] of Array.from(fetchCache.entries())) {
+    if (!cacheKey.startsWith('/leads?') && !cacheKey.startsWith(`/leads/${updated.id}?`)) continue
+    const nextData = updateLeadInCachedData(entry.data, updated)
+    if (nextData !== entry.data) writeCache(cacheKey, { data: nextData, timestamp: now })
+  }
+  writeCache(`/leads/${updated.id}?{}`, { data: updated, timestamp: now })
+}
+
 export async function updateLead(id: string, input: UpdateLeadInput): Promise<LeadResponse> {
-  return api<LeadResponse>(`/leads/${id}`, { method: 'PATCH', body: input })
+  const updated = await api<LeadResponse>(`/leads/${id}`, { method: 'PATCH', body: input })
+  updateLeadCaches(updated)
+  return updated
 }
 
 export async function deleteLead(id: string): Promise<{ ok: true }> {
