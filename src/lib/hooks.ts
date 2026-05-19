@@ -736,8 +736,8 @@ export type GhlMySector = {
   sectors: Array<{ sector: string; calendarId: string; label: string; primary: boolean }>
 }
 
-export function useGhlCalendarConfig(): Async<GhlCalendarConfig> {
-  return useFetch<GhlCalendarConfig>('/ghl-calendar/config')
+export function useGhlCalendarConfig(enabled = true): Async<GhlCalendarConfig> {
+  return useFetch<GhlCalendarConfig>(enabled ? '/ghl-calendar/config' : null)
 }
 
 export function useGhlUsers(): Async<GhlUser[]> {

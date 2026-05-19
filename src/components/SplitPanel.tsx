@@ -561,17 +561,18 @@ function NotesTab({
   const [success, setSuccess] = useState<string | null>(null)
   const agendaDate = rdvDate || todayInputValue()
   const agendaPeriod = useMemo(() => dayPeriodFromInput(agendaDate), [agendaDate])
-  const { data: agendaRdvs, loading: agendaLoading, refetch: refetchAgenda } = useRdvList({
+  const shouldLoadCalendarData = step === 'rdv' || step === 'confirmation'
+  const { data: agendaRdvs, loading: agendaLoading, refetch: refetchAgenda } = useRdvList(shouldLoadCalendarData ? {
     fromDate: agendaPeriod.from.toISOString(),
     toDate: agendaPeriod.to.toISOString(),
     limit: 80,
-  })
-  const { data: ghlConfig } = useGhlCalendarConfig()
+  } : null)
+  const { data: ghlConfig } = useGhlCalendarConfig(shouldLoadCalendarData)
   const selectedSectorConfig = ghlConfig?.sectors.find((item) => normalizeSectorKey(item.sector) === normalizeSectorKey(sector))
-  const slotRange = buildDayRange(rdvDate)
+  const slotRange = shouldLoadCalendarData && sector ? buildDayRange(rdvDate) : null
   const { data: ghlSlotsData, loading: ghlSlotsLoading, refetch: refetchGhlSlots } = useGhlFreeSlots({
-    sector: sector || undefined,
-    calendarId: selectedSectorConfig?.calendarId || undefined,
+    sector: shouldLoadCalendarData ? sector || undefined : undefined,
+    calendarId: shouldLoadCalendarData ? selectedSectorConfig?.calendarId || undefined : undefined,
     from: slotRange?.from,
     to: slotRange?.to,
     timezone: 'Indian/Reunion',
@@ -669,20 +670,17 @@ function NotesTab({
       if (kind === 'non_qualifie') {
         if (!commentaire.trim()) throw new Error('Ajoute un commentaire pour expliquer pourquoi le lead est non qualifié.')
         await createCallLog({ leadId: lead.id, result: 'refus', notes: noteFinale })
-        await updateLead(lead.id, { status: 'pas_qualifie' })
         setResult('')
         setSuccess('Lead marqué non qualifié.')
         setStep('done')
       } else if (kind === 'pas_de_reponse') {
         await createCallLog({ leadId: lead.id, result: 'non_joint', notes: noteFinale || null })
-        await updateLead(lead.id, { status: 'pas_de_reponse' })
         setResult('')
         setSuccess('Lead marqué en pas de réponse.')
         setStep('done')
       } else if (kind === 'a_rappeler') {
         if (!callbackAt) throw new Error('Choisis la date et l’heure du rappel.')
         await createCallLog({ leadId: lead.id, result: 'rappel_planifie', nextCallbackAt: new Date(callbackAt).toISOString(), notes: noteFinale || null })
-        await updateLead(lead.id, { status: 'a_rappeler', datePassageRelance: new Date(callbackAt).toISOString() })
         setResult('')
         setSuccess('Rappel planifié et lead passé en À rappeler.')
         setStep('done')
