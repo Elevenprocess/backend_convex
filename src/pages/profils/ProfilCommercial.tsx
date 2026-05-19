@@ -103,10 +103,19 @@ export function ProfilCommercial() {
   const rdvList = rdvs ?? []
   const liveGhlEvents = useMemo(() => (ghlEventsData?.events ?? []).filter((event) => event.commercialId === profileId || event.assignedUserId === member?.ghlUserId), [ghlEventsData?.events, member?.ghlUserId, profileId])
   const ghlStageNames = useMemo(() => new Map((ghlOpps?.stages ?? []).map((stage) => [stage.id, stage.name])), [ghlOpps?.stages])
+  const localRdvContactIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const rdv of rdvList) {
+      const leadExternalId = leadMap.get(rdv.leadId)?.externalId
+      if (leadExternalId) ids.add(leadExternalId)
+    }
+    return ids
+  }, [rdvList, leadMap])
   const liveGhlOpportunityRows = useMemo<GhlOpportunityRow[]>(() => {
     if (!profileId && !member?.ghlUserId) return []
     return (ghlOpps?.opportunities ?? [])
       .filter((opportunity) => opportunity.mappedCommercialId === profileId || opportunity.assignedTo === member?.ghlUserId)
+      .filter((opportunity) => !opportunity.contactId || !localRdvContactIds.has(opportunity.contactId))
       .map((opportunity) => {
         const stageName = ghlStageNames.get(opportunity.pipelineStageId) ?? ''
         return {
@@ -118,7 +127,7 @@ export function ProfilCommercial() {
         }
       })
       .filter((row) => isDateInPeriod(row.changedAt, periodRange.from, periodRange.to))
-  }, [ghlOpps?.opportunities, ghlStageNames, member?.ghlUserId, periodRange.from, periodRange.to, profileId])
+  }, [ghlOpps?.opportunities, ghlStageNames, localRdvContactIds, member?.ghlUserId, periodRange.from, periodRange.to, profileId])
   const sectorInfo = useMemo(() => deriveSectorInfo(member, ghlConfig?.sectors ?? [], liveGhlEvents), [ghlConfig?.sectors, liveGhlEvents, member])
   const stats = useMemo(() => addGhlRowsToStats(computeStats(rdvList, commercialAnalytics), liveGhlOpportunityRows), [rdvList, commercialAnalytics, liveGhlOpportunityRows])
   const cards = useMemo<ProspectCard[]>(() => rdvList.map((rdv) => ({ id: rdv.id, rdv, lead: leadMap.get(rdv.leadId), stageId: resolveStageId(rdv, leadMap.get(rdv.leadId)) })), [rdvList, leadMap])
