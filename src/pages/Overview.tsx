@@ -756,23 +756,25 @@ function formatShortDate(date: Date): string {
 
 function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }) {
   const contactedLeads = funnelContactedLeads(totals)
+  const treatedLeads = funnelTreatedLeads(totals)
   const responseRate = pct(totals.answered, contactedLeads)
+  const treatedConversionRate = pct(totals.rdv, treatedLeads)
   return (
     <div className="flow-map col-span-12 mt-4 rounded-2xl border border-line-soft bg-white/65 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div>
           <div className="eyebrow">Flux leads CRM</div>
-          <div className="text-sm font-extrabold">Lecture minimaliste du parcours jusqu’au RDV</div>
+          <div className="text-sm font-extrabold">Lecture minimaliste des leads traités jusqu’au RDV</div>
         </div>
         <div className="flow-pill flow-pill-success rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-extrabold text-emerald-700">
-          {totals.rdv} RDV · {totals.globalConversionRate}% conv.
+          {totals.rdv} RDV · {treatedConversionRate}% conv.
         </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_auto_1fr_auto_1.35fr_auto_1fr] gap-2 items-stretch">
-        <MiniFlowStep title="Nouveaux" value={totals.newLeads} sub="leads" color="#6B7C8C" />
+        <MiniFlowStep title="Traités" value={treatedLeads} sub="leads" color="#6B7C8C" />
         <MiniArrow />
-        <MiniFlowStep title="Appels" value={totals.calls} sub={`${callsPerLead(totals.calls, totals.newLeads)} / lead`} color="#D4AF37" />
+        <MiniFlowStep title="Appels" value={totals.calls} sub={`${callsPerLead(totals.calls, treatedLeads)} / lead traité`} color="#D4AF37" />
         <MiniArrow />
         <div className="flow-response rounded-xl border border-line-soft bg-white/70 p-3">
           <div className="text-[10px] font-black uppercase text-faint">A répondu ?</div>
@@ -792,13 +794,13 @@ function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }
         <MiniArrow />
         <div className="grid grid-cols-2 gap-2">
           <MiniFlowStep title="Qualifiés" value={totals.qualified} sub={`${totals.qualificationRate}% réponses`} color="#D4AF37" />
-          <MiniFlowStep title="RDV" value={totals.rdv} sub={`${totals.globalConversionRate}% leads`} color="#3DA86A" />
+          <MiniFlowStep title="RDV" value={totals.rdv} sub={`${treatedConversionRate}% leads traités`} color="#3DA86A" />
         </div>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted">
         <span className="flow-pill rounded-full bg-white/70 px-2 py-1 border border-line-soft">Pas qualifiés : <b>{totals.notQualified}</b> · {totals.notQualifiedRate}% réponses</span>
-        <span className="flow-pill rounded-full bg-white/70 px-2 py-1 border border-line-soft">Formule : RDV / nouveaux leads</span>
+        <span className="flow-pill rounded-full bg-white/70 px-2 py-1 border border-line-soft">Formule : RDV / leads traités</span>
       </div>
     </div>
   )
@@ -832,6 +834,14 @@ function pct(num: number, denom: number): number {
 
 function funnelContactedLeads(totals: AnalyticsFunnelResponse['totals']): number {
   return Math.max(0, totals.answered + totals.noAnswer)
+}
+
+function funnelTreatedLeads(totals: AnalyticsFunnelResponse['totals']): number {
+  return Math.max(
+    funnelContactedLeads(totals),
+    totals.qualified + totals.notQualified,
+    totals.rdv,
+  )
 }
 
 function callsPerLead(calls: number, leads: number): string {
