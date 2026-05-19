@@ -8,8 +8,6 @@ import { useDisplayUser } from '../lib/role'
 import { useCallLogs, useLeads, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary, prefetchAnalyticsFunnel, prefetchAnalyticsSummary } from '../lib/hooks'
 import { STATUS_LABEL, fullName, initials, type AnalyticsFunnelResponse, type CallLogResponse, type LeadResponse, type LeadStatus, type RdvResponse } from '../lib/types'
 
-const ALL_TIME_FROM_ISO = '2020-01-01T00:00:00.000Z'
-
 type FunnelPeriodMode = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'custom'
 type FunnelPeriodState = { mode: FunnelPeriodMode; customFrom: string; customTo: string }
 type FunnelPeriodRange = { from: string; to: string; label: string; days: number }
@@ -225,10 +223,11 @@ function OverviewCommercial() {
   const me = useAuth((s) => s.user)
   const display = useDisplayUser()
   const [tab, setTab] = useState('overview')
+  const [commercialPeriod, setCommercialPeriod] = useState<FunnelPeriodState>({ ...DEFAULT_FUNNEL_PERIOD, mode: 'this_month' })
+  const commercialRange = buildFunnelPeriodRange(commercialPeriod)
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), [])
-  const allTimeTo = useMemo(() => new Date().toISOString(), [])
-  const { data: rdvs = [] } = useRdvList({ commercialId: me?.id, limit: 200 })
-  const { data: commercialSummary } = useAnalyticsSummary({ from: ALL_TIME_FROM_ISO, to: allTimeTo })
+  const { data: rdvs = [] } = useRdvList({ commercialId: me?.id, fromDate: commercialRange.from, toDate: commercialRange.to, limit: 200 })
+  const { data: commercialSummary } = useAnalyticsSummary({ from: commercialRange.from, to: commercialRange.to })
 
   const stats = useMemo(() => {
     const list = rdvs ?? []
@@ -284,14 +283,59 @@ function OverviewCommercial() {
           <div>
             <span className="shot-eyebrow">ECOI SaaS · commercial</span>
             <h1>Mon closing commercial</h1>
+            <p className="text-sm text-muted mt-2">{commercialRange.label}</p>
           </div>
-          <div className="overview-profile-chip">
-            <div className="overview-profile-photo">
-              {me?.image ? <img src={me.image} alt={me.name ?? 'Profil'} /> : <span>{userInitials(me?.name ?? display.firstName)}</span>}
+          <div className="overview-commercial-toolbar">
+            <div className="overview-range-switch" aria-label="Période tableau de bord commercial">
+              {FUNNEL_PERIOD_OPTIONS.filter((period) => period.id === 'today' || period.id === 'this_week' || period.id === 'this_month' || period.id === 'this_year').map((period) => (
+                <button
+                  key={period.id}
+                  type="button"
+                  className={commercialPeriod.mode === period.id ? 'active' : ''}
+                  onClick={() => setCommercialPeriod((current) => ({ ...current, mode: period.id }))}
+                >
+                  {period.label}
+                </button>
+              ))}
             </div>
-            <div>
-              <strong>{me?.name ?? display.firstName}</strong>
-              <small>{me?.email ?? 'Commercial ECOI'}</small>
+            <div className="overview-commercial-date-range">
+              <label>
+                <span>Du</span>
+                <input
+                  type="date"
+                  value={toDateInputValue(new Date(commercialRange.from))}
+                  max={funnelTodayInput}
+                  onChange={(event) => setCommercialPeriod((current) => ({
+                    ...current,
+                    mode: 'custom',
+                    customFrom: event.target.value,
+                    customTo: current.mode === 'custom' ? current.customTo : toDateInputValue(new Date(commercialRange.to)),
+                  }))}
+                />
+              </label>
+              <label>
+                <span>Au</span>
+                <input
+                  type="date"
+                  value={toDateInputValue(new Date(commercialRange.to))}
+                  max={funnelTodayInput}
+                  onChange={(event) => setCommercialPeriod((current) => ({
+                    ...current,
+                    mode: 'custom',
+                    customFrom: current.mode === 'custom' ? current.customFrom : toDateInputValue(new Date(commercialRange.from)),
+                    customTo: event.target.value,
+                  }))}
+                />
+              </label>
+            </div>
+            <div className="overview-profile-chip">
+              <div className="overview-profile-photo">
+                {me?.image ? <img src={me.image} alt={me.name ?? 'Profil'} /> : <span>{userInitials(me?.name ?? display.firstName)}</span>}
+              </div>
+              <div>
+                <strong>{me?.name ?? display.firstName}</strong>
+                <small>{me?.email ?? 'Commercial ECOI'}</small>
+              </div>
             </div>
           </div>
         </div>
