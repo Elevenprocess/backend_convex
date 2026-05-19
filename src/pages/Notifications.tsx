@@ -409,13 +409,10 @@ function writeNotifiedIds(ids: Set<string>) {
 }
 
 function setterRawRank(a: Notif, b: Notif): number {
-  const rank = (notif: Notif) => notif.group === 'NOUVEAUX LEADS' ? 0 : notif.group === 'DANS 10 MIN' ? 1 : notif.group === 'RAPPELS EN RETARD' ? 2 : notif.group === 'RAPPELS PROGRAMMÉS' ? 3 : 4
-  const diff = rank(a) - rank(b)
-  if (diff !== 0) return diff
   const aTime = a.sortAt ?? 0
   const bTime = b.sortAt ?? 0
-  if (a.group === 'NOUVEAUX LEADS') return bTime - aTime
-  return aTime - bTime
+  if (aTime !== bTime) return bTime - aTime
+  return a.title.localeCompare(b.title, 'fr')
 }
 
 function urgencyRank(notif: Notif): number {
