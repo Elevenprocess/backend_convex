@@ -12,6 +12,7 @@ import { DEFAULT_LEAD_FILTERS, applyLeadFilters, type LeadListFilters } from '..
 import {
   STATUS_BADGE,
   STATUS_LABEL,
+  cleanField,
   fullName,
   initials,
   type LeadResponse,
@@ -161,15 +162,24 @@ function LeadsCommercial() {
   )
 }
 
-// ----- F5 Setter -----
-// Seuil métier : un lead en "pas de réponse" ou "à rappeler" reste dans le
-// flux de travail actif pendant 11 jours de contact/relance, puis passe dans
-// "Relance à long terme". Les leads non éligibles restent classés "Non qualifiés".
-const LONG_TERM_RELANCE_THRESHOLD_DAYS = 11
 type SetterFilter = 'nouveau' | 'rappel' | 'qualifie' | 'sans_reponse' | 'perdu'
+type SetterMissingFilter = 'all' | 'any' | 'phone' | 'address' | 'postalCode' | 'email' | 'city'
+
+const SETTER_MISSING_FILTERS: { key: SetterMissingFilter; label: string }[] = [
+  { key: 'all', label: 'Toutes les données' },
+  { key: 'any', label: 'Donnée manquante' },
+  { key: 'phone', label: 'Sans numéro' },
+  { key: 'address', label: 'Sans adresse' },
+  { key: 'postalCode', label: 'Sans CP' },
+  { key: 'email', label: 'Sans email' },
+  { key: 'city', label: 'Sans ville' },
+]
+
+// ----- F5 Setter -----
 
 function LeadsSetter() {
   const [filter, setFilter] = useState<SetterFilter>('nouveau')
+  const [missingFilter, setMissingFilter] = useState<SetterMissingFilter>('all')
   const [searchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('search') ?? '')
   const selectedId = useLeadSidebar((s) => s.selectedLeadId)
@@ -198,23 +208,27 @@ function LeadsSetter() {
     nouveau: categoryLeads.filter(isNouveauLead).length,
     rappel: categoryLeads.filter(isCallbackLead).length,
     qualifie: categoryLeads.filter((l) => l.status === 'qualifie').length,
-    sansReponse: categoryLeads.filter(isLongTermRelanceLead).length,
+    sansReponse: categoryLeads.filter((l) => l.status === 'pas_de_reponse').length,
     perdu: categoryLeads.filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie').length,
   }), [categoryLeads])
 
+  const missingCounts = useMemo(() => {
+    const withinStatus = filterSetterLeadsByStatus(categoryLeads, filter)
+    return Object.fromEntries(
+      SETTER_MISSING_FILTERS.map((item) => [item.key, withinStatus.filter((lead) => matchesMissingFilter(lead, item.key)).length]),
+    ) as Record<SetterMissingFilter, number>
+  }, [categoryLeads, filter])
+
   const filtered = useMemo(() => {
     let list = categoryLeads
-    if (filter === 'nouveau') list = list.filter(isNouveauLead)
-    if (filter === 'rappel') list = list.filter(isCallbackLead)
-    if (filter === 'qualifie') list = list.filter((l) => l.status === 'qualifie')
-    if (filter === 'sans_reponse') list = list.filter(isLongTermRelanceLead)
-    if (filter === 'perdu') list = list.filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie')
+    list = filterSetterLeadsByStatus(list, filter)
+    if (missingFilter !== 'all') list = list.filter((l) => matchesMissingFilter(l, missingFilter))
     if (query) {
       const q = query.toLowerCase()
       list = list.filter((l) => [fullName(l), l.phone, l.email, l.city].filter(Boolean).join(' ').toLowerCase().includes(q))
     }
     return list
-  }, [categoryLeads, filter, query])
+  }, [categoryLeads, filter, missingFilter, query])
 
   const selected = useMemo(
     () => (selectedId ? mine.find((l) => l.id === selectedId) ?? null : null),
@@ -248,8 +262,18 @@ function LeadsSetter() {
               <FilterPill active={filter === 'nouveau'} onClick={() => setFilter('nouveau')}>Nouveaux ({counts.nouveau})</FilterPill>
               <FilterPill active={filter === 'rappel'} onClick={() => setFilter('rappel')}>À rappeler ({counts.rappel})</FilterPill>
               <FilterPill active={filter === 'qualifie'} onClick={() => setFilter('qualifie')}>Qualifiés ({counts.qualifie})</FilterPill>
-              <FilterPill active={filter === 'sans_reponse'} onClick={() => setFilter('sans_reponse')}>Relance à long terme ({counts.sansReponse})</FilterPill>
+              <FilterPill active={filter === 'sans_reponse'} onClick={() => setFilter('sans_reponse')}>Sans réponse ({counts.sansReponse})</FilterPill>
               <FilterPill active={filter === 'perdu'} onClick={() => setFilter('perdu')}>Non qualifiés ({counts.perdu})</FilterPill>
+              <select
+                value={missingFilter}
+                onChange={(event) => setMissingFilter(event.target.value as SetterMissingFilter)}
+                className="rounded-full border border-line bg-white px-3 py-2 text-xs font-bold text-muted outline-none transition focus:border-or focus:text-text"
+                title="Filtrer les leads avec des informations manquantes"
+              >
+                {SETTER_MISSING_FILTERS.map((item) => (
+                  <option key={item.key} value={item.key}>{item.label} ({missingCounts[item.key]})</option>
+                ))}
+              </select>
               <span className="text-xs text-faint font-semibold">{filtered.length}/{categoryLeads.length}</span>
               <ColumnVisibilityMenu columns={SETTER_COLUMNS} visible={visibleColumns} onChange={setVisibleColumns} />
               {(loading || backgroundLoading) && mine.length > 0 && <span className="text-xs text-faint ml-auto">Actualisation…</span>}
@@ -265,7 +289,7 @@ function LeadsSetter() {
                   icon="users"
                   title={mine.length === 0 ? 'Aucun lead pour le moment' : 'Aucun lead ne correspond'}
                   description={mine.length === 0 ? "Aucun lead disponible pour le moment." : 'Aucun lead ne correspond à cette catégorie.'}
-                  secondaryAction={{ label: 'Voir les nouveaux leads', onClick: () => { setFilter('nouveau'); setQuery('') } }}
+                  secondaryAction={{ label: 'Voir les nouveaux leads', onClick: () => { setFilter('nouveau'); setMissingFilter('all'); setQuery('') } }}
                 />
               </div>
             ) : (
@@ -544,31 +568,57 @@ function LeadsAdmin() {
 // ===== Helpers =====
 
 function isCallbackLead(lead: LeadResponse): boolean {
-  return (lead.status === 'a_rappeler' || lead.status === 'relance' || Boolean(lead.nextCallbackAt)) && !isLongTermRelanceLead(lead)
+  return lead.status === 'a_rappeler' || lead.status === 'relance'
 }
 
 function isNouveauLead(lead: LeadResponse): boolean {
-  if (lead.status === 'nouveau') return true
-  if (lead.status === 'pas_de_reponse' && !isLongTermRelanceLead(lead)) return true
-  return false
+  return lead.status === 'nouveau'
 }
 
-function isLongTermRelanceLead(lead: LeadResponse): boolean {
-  const canAgeToLongTerm = lead.status === 'pas_de_reponse' || lead.status === 'a_rappeler' || lead.status === 'relance'
-  if (!canAgeToLongTerm) return false
-  const noAnswerAttempts = 'consecutiveNoAnswerCount' in lead ? Number(lead.consecutiveNoAnswerCount ?? 0) : 0
-  const relanceAge = Math.max(lead.joursRelance ?? 0, noAnswerAttempts)
-  return relanceAge >= LONG_TERM_RELANCE_THRESHOLD_DAYS
+function filterSetterLeadsByStatus(leads: LeadResponse[], filter: SetterFilter): LeadResponse[] {
+  switch (filter) {
+    case 'nouveau':
+      return leads.filter(isNouveauLead)
+    case 'rappel':
+      return leads.filter(isCallbackLead)
+    case 'qualifie':
+      return leads.filter((lead) => lead.status === 'qualifie')
+    case 'sans_reponse':
+      return leads.filter((lead) => lead.status === 'pas_de_reponse')
+    case 'perdu':
+      return leads.filter((lead) => lead.status === 'perdu' || lead.status === 'pas_qualifie')
+  }
+}
+
+function matchesMissingFilter(lead: LeadResponse, filter: SetterMissingFilter): boolean {
+  switch (filter) {
+    case 'all':
+      return true
+    case 'any':
+      return !hasValue(lead.phone) || !hasValue(lead.addressLine) || !hasValue(lead.postalCode) || !hasValue(lead.email) || !hasValue(lead.city)
+    case 'phone':
+      return !hasValue(lead.phone)
+    case 'address':
+      return !hasValue(lead.addressLine)
+    case 'postalCode':
+      return !hasValue(lead.postalCode)
+    case 'email':
+      return !hasValue(lead.email)
+    case 'city':
+      return !hasValue(lead.city)
+  }
+}
+
+function hasValue(value: string | null | undefined): boolean {
+  return Boolean(cleanField(value))
 }
 
 function statusLabelForLead(lead: LeadResponse): string {
-  if (isLongTermRelanceLead(lead)) return 'Relance à long terme'
   if (lead.status === 'perdu' || lead.status === 'pas_qualifie') return 'Non qualifié'
   return STATUS_LABEL[lead.status]
 }
 
 function statusBadgeForLead(lead: LeadResponse): string {
-  if (isLongTermRelanceLead(lead)) return 'bg-cuivre-tint text-cuivre'
   if (lead.status === 'perdu' || lead.status === 'pas_qualifie') return 'bg-rouille-tint text-rouille'
   return STATUS_BADGE[lead.status]
 }
