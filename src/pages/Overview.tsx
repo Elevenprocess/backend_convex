@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { type MouseEvent, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '../components/Icon'
 import { AppShell } from '../components/shell/AppShell'
@@ -390,11 +390,7 @@ function OverviewAdmin() {
   const funnelTotals = funnel?.totals ?? EMPTY_FUNNEL_TOTALS
   const leadSegments = adminSummary?.resultSegments ?? []
   const leadTotal = Math.max(funnelTotals.newLeads, leadSegments.reduce((sum, segment) => sum + segment.value, 0))
-  const evolutionPoints = funnelRange.days === 1 && adminSummary?.hourlyCalls?.length
-    ? hourlyCallsToChartPoints(adminSummary.hourlyCalls)
-    : adminSummary?.dailyEvolution?.length
-      ? analyticsDailyToChartPoints(adminSummary.dailyEvolution)
-      : funnelDailyToChartPoints(funnel?.daily ?? [], funnelRange)
+  const evolutionPoints = buildLeadEvolutionPoints(adminSummary?.dailyEvolution ?? [], funnel?.daily ?? [], funnelRange)
 
   const stats = useMemo(() => {
     const calls = adminSummary?.calls ?? funnelTotals.calls
@@ -486,12 +482,12 @@ function OverviewAdmin() {
           <AirKpi icon="phone" label="Appels" value={fmtCompact(stats.appels)} sub={`${fmtCompact(stats.classified)} leads traités`} />
           <AirKpi icon="users" label="Leads" value={fmtCompact(stats.leads)} sub={`${fmtCompact(stats.qualified)} qualifiés`} />
 
-          <div className="overview-air-card overview-air-chart">
-            <div className="shot-card-head">
-              <h3>Évolution des leads</h3>
-              <span className="text-xs font-bold text-muted">{funnelRange.days === 1 ? 'Heures du jour' : `${funnelRange.days} jours`}</span>
-            </div>
-            <MiniBarChart points={evolutionPoints} />
+          <div className="overview-air-card overview-air-chart overview-lead-evolution-card">
+            <LeadEvolutionChart
+              points={evolutionPoints}
+              rangeLabel={funnelRange.days === 1 ? "Aujourd'hui" : `${funnelRange.days} jours`}
+              totals={{ leads: stats.leads, rdv: stats.rdvPris, signed: stats.ventes }}
+            />
           </div>
 
           <LeadPieAnalysis segments={leadSegments} totalFallback={stats.leads} />
@@ -561,61 +557,140 @@ function CardHead({ title, icon }: { title: string; icon: ShotIcon }) {
   )
 }
 
-type LeadChartPoint = { key: string; value: number; labelTop: string; labelBottom: string }
+type LeadEvolutionPoint = { key: string; date: string; label: string; leads: number; rdv: number; signed: number }
+type LeadEvolutionSeriesKey = 'leads' | 'rdv' | 'signed'
 
-function MiniBarChart({ points }: { points: LeadChartPoint[] }) {
-  const safePoints = points.length > 0 ? points : [{ key: 'empty', value: 0, labelTop: '—', labelBottom: 'instant' }]
-  const max = Math.max(1, ...safePoints.map((p) => p.value))
+const LEAD_EVOLUTION_SERIES: { key: LeadEvolutionSeriesKey; label: string; color: string }[] = [
+  { key: 'leads', label: 'Leads', color: '#D4AF37' },
+  { key: 'rdv', label: 'RDV', color: '#3DA86A' },
+  { key: 'signed', label: 'Ventes', color: '#B87333' },
+]
+
+function LeadEvolutionChart({ points, rangeLabel, totals }: { points: LeadEvolutionPoint[]; rangeLabel: string; totals: { leads: number; rdv: number; signed: number } }) {
+  const safePoints = points.length > 0 ? points : [{ key: 'empty', date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }]
+  const [activeKey, setActiveKey] = useState<LeadEvolutionSeriesKey>('leads')
+  const [hover, setHover] = useState<{ x: number; y: number; index: number } | null>(null)
+  const width = 560
+  const height = 226
+  const padX = 36
+  const padTop = 24
+  const padBottom = 44
+  const chartWidth = width - padX * 2
+  const chartHeight = height - padTop - padBottom
+  const activeSeries = LEAD_EVOLUTION_SERIES.find((series) => series.key === activeKey) ?? LEAD_EVOLUTION_SERIES[0]
+  const max = Math.max(1, ...safePoints.flatMap((point) => LEAD_EVOLUTION_SERIES.map((series) => point[series.key])))
+  const last = safePoints[safePoints.length - 1]
+  const first = safePoints[0]
+  const activeValue = last[activeKey]
+  const delta = activeValue - first[activeKey]
+  const pathFor = (key: LeadEvolutionSeriesKey) => safePoints.map((point, index) => {
+    const x = padX + (safePoints.length === 1 ? chartWidth : (index / (safePoints.length - 1)) * chartWidth)
+    const y = padTop + chartHeight - (point[key] / max) * chartHeight
+    return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`
+  }).join(' ')
+  const coords = safePoints.map((point, index) => ({
+    point,
+    x: padX + (safePoints.length === 1 ? chartWidth : (index / (safePoints.length - 1)) * chartWidth),
+    y: padTop + chartHeight - (point[activeKey] / max) * chartHeight,
+  }))
+  const activeHover = hover ? coords[hover.index] : null
+
+  const onMove = (event: MouseEvent<SVGSVGElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const rawX = ((event.clientX - rect.left) / rect.width) * width
+    const rawY = ((event.clientY - rect.top) / rect.height) * height
+    const clampedX = Math.min(width - padX, Math.max(padX, rawX))
+    const clampedY = Math.min(padTop + chartHeight, Math.max(padTop, rawY))
+    const ratio = chartWidth === 0 ? 0 : (clampedX - padX) / chartWidth
+    const index = Math.min(safePoints.length - 1, Math.max(0, Math.round(ratio * (safePoints.length - 1))))
+    setHover({ x: clampedX, y: clampedY, index })
+  }
+
   return (
-    <div className="shot-bars">
-      {safePoints.map((point, index) => (
-        <div key={point.key} className="shot-bar-col">
-          <span className={index === safePoints.length - 1 ? 'active' : ''} style={{ height: `${Math.max(14, (point.value / max) * 118)}px` }} />
-          <small>
-            <b>{point.labelTop}</b>
-            <em>{point.labelBottom}</em>
-          </small>
+    <div className="lead-evolution">
+      <div className="lead-evolution-head">
+        <div>
+          <h3>Courbes d’évolution des leads</h3>
+          <p>Leads réels par jour — {rangeLabel}</p>
         </div>
-      ))}
+        <span>évolution</span>
+      </div>
+      <div className="lead-evolution-tabs" aria-label="Courbe active">
+        {LEAD_EVOLUTION_SERIES.map((series) => (
+          <button key={series.key} type="button" className={activeKey === series.key ? 'active' : ''} onClick={() => setActiveKey(series.key)} style={{ ['--series-color' as string]: series.color }}>
+            <small>{series.label}</small>
+            <strong>{fmtCompact(totals[series.key])}</strong>
+          </button>
+        ))}
+      </div>
+      <div className="lead-evolution-meta">
+        <div><small>Dernier jour</small><strong>{fmtCompact(activeValue)}</strong></div>
+        <div><small>{delta >= 0 ? '+' : ''}{fmtCompact(delta)} vs début</small><strong>{fmtCompact(max)}</strong></div>
+      </div>
+      <div className="lead-evolution-svg-wrap">
+        <svg viewBox={`0 0 ${width} ${height}`} onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img" aria-label="Évolution leads RDV ventes">
+          <defs>
+            <linearGradient id="leadEvolutionFill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor={activeSeries.color} stopOpacity="0.2" />
+              <stop offset="100%" stopColor={activeSeries.color} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {[0, 0.5, 1].map((tick) => <line key={tick} x1={padX} x2={width - padX} y1={padTop + tick * chartHeight} y2={padTop + tick * chartHeight} className="lead-evolution-grid" />)}
+          {LEAD_EVOLUTION_SERIES.filter((series) => series.key !== activeKey).map((series) => <path key={series.key} d={pathFor(series.key)} className="lead-evolution-ghost" style={{ stroke: series.color }} />)}
+          <path d={`${pathFor(activeKey)} L ${width - padX} ${padTop + chartHeight} L ${padX} ${padTop + chartHeight} Z`} fill="url(#leadEvolutionFill)" />
+          <path d={pathFor(activeKey)} className="lead-evolution-line" style={{ stroke: activeSeries.color }} />
+          {coords.map(({ point, x, y }, index) => (
+            <g key={point.key}>
+              <circle cx={x} cy={y} r={hover?.index === index ? 5.5 : 3.5} className="lead-evolution-dot" style={{ fill: activeSeries.color }} />
+              {point[activeKey] === max && max > 0 ? <text x={x} y={Math.max(13, y - 10)} className="lead-evolution-peak">pic {fmtCompact(max)}</text> : null}
+            </g>
+          ))}
+          {activeHover ? (
+            <g>
+              <line x1={activeHover.x} x2={activeHover.x} y1={padTop} y2={padTop + chartHeight} className="lead-evolution-guide" />
+              <line x1={padX} x2={width - padX} y1={hover!.y} y2={hover!.y} className="lead-evolution-guide" />
+              <circle cx={activeHover.x} cy={activeHover.y} r="6" className="lead-evolution-cursor" style={{ stroke: activeSeries.color }} />
+            </g>
+          ) : null}
+          {coords.map(({ point, x }, index) => index === 0 || index === coords.length - 1 || index === Math.floor((coords.length - 1) / 2) ? <text key={`label-${point.key}`} x={x} y={height - 13} className="lead-evolution-axis">{point.label}</text> : null)}
+        </svg>
+        {activeHover ? (
+          <div className="lead-evolution-tooltip" style={{ left: `${(activeHover.x / width) * 100}%`, top: `${Math.max(8, Math.min(78, (activeHover.y / height) * 100))}%` }}>
+            <small>{activeHover.point.label}</small>
+            <strong>{fmtCompact(activeHover.point[activeKey])} {activeSeries.label}</strong>
+            <span>{fmtCompact(activeHover.point.leads)} leads · {fmtCompact(activeHover.point.rdv)} RDV · {fmtCompact(activeHover.point.signed)} ventes</span>
+          </div>
+        ) : null}
+      </div>
     </div>
   )
 }
 
-function analyticsDailyToChartPoints(points: { date: string; label: string; calls: number; rdv: number; signed: number; ca: number }[]): LeadChartPoint[] {
-  return points.slice(-14).map((point) => ({
-    key: point.date,
-    value: point.rdv || point.calls || point.signed,
-    labelTop: point.label || dayLabel(point.date),
-    labelBottom: `${point.rdv} RDV`,
-  }))
-}
-
-function funnelDailyToChartPoints(points: AnalyticsFunnelResponse['daily'], range: FunnelPeriodRange): LeadChartPoint[] {
-  if (points.length > 0) {
-    return points.slice(-14).map((point) => ({
-      key: point.date,
-      value: point.newLeads,
-      labelTop: point.label || dayLabel(point.date),
-      labelBottom: `${point.rdv} RDV`,
-    }))
+function buildLeadEvolutionPoints(summaryDaily: { date: string; label: string; rdv: number; signed: number }[], funnelDaily: AnalyticsFunnelResponse['daily'], range: FunnelPeriodRange): LeadEvolutionPoint[] {
+  const summaryByDate = new Map(summaryDaily.map((point) => [point.date, point]))
+  const dates = new Set<string>([...funnelDaily.map((point) => point.date), ...summaryDaily.map((point) => point.date)])
+  if (dates.size > 0) {
+    return [...dates].sort().slice(-14).map((date) => {
+      const funnelPoint = funnelDaily.find((point) => point.date === date)
+      const summaryPoint = summaryByDate.get(date)
+      return {
+        key: date,
+        date,
+        label: funnelPoint?.label || summaryPoint?.label || dayLabel(date),
+        leads: funnelPoint?.newLeads ?? 0,
+        rdv: summaryPoint?.rdv ?? funnelPoint?.rdv ?? 0,
+        signed: summaryPoint?.signed ?? 0,
+      }
+    })
   }
   return Array.from({ length: Math.min(7, Math.max(1, range.days)) }, (_, index) => ({
     key: `empty-${index}`,
-    value: 0,
-    labelTop: index === 0 ? 'Live' : '—',
-    labelBottom: '0',
+    date: '',
+    label: index === 0 ? 'Live' : '—',
+    leads: 0,
+    rdv: 0,
+    signed: 0,
   }))
-}
-
-function hourlyCallsToChartPoints(points: { date: string; hour: number; label: string; calls: number }[]): LeadChartPoint[] {
-  return points
-    .filter((point) => point.hour >= 8 && point.hour <= 19)
-    .map((point) => ({
-      key: `${point.date}-${point.hour}`,
-      value: point.calls,
-      labelTop: point.label || `${point.hour}h`,
-      labelBottom: `${point.calls}`,
-    }))
 }
 
 const PIE_COLORS = ['#D4AF37', '#3DA86A', '#B87333', '#6B7C8C', '#B7410E', '#7C6A46']
@@ -1067,6 +1142,3 @@ function RdvRow({ color, time, sub }: { color: string; time: string; sub: string
     </div>
   )
 }
-
-
-
