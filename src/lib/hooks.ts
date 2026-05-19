@@ -227,6 +227,7 @@ export function useLeads(filters?: {
   setterId?: string
   assignedToId?: string
   city?: string
+  search?: string
   limit?: number
   offset?: number
   notInAirtable?: boolean
@@ -251,19 +252,21 @@ export function useLeadsProgressive(filters?: {
   setterId?: string
   assignedToId?: string
   city?: string
+  search?: string
   quickLimit?: number
   fullLimit?: number
   notInAirtable?: boolean
-}): AsyncProgressive<LeadResponse[]> {
+} | null): AsyncProgressive<LeadResponse[]> {
   const quickLimit = clampLimit(filters?.quickLimit, 50, LEADS_LIMIT_MAX)
   const fullLimit = clampLimit(filters?.fullLimit, 500, LEADS_LIMIT_MAX)
   const { notInAirtable, quickLimit: _q, fullLimit: _f, ...rest } = filters ?? {}
-  const baseFilters = {
+  const baseFilters = filters === null ? undefined : {
     ...rest,
     notInAirtable: notInAirtable ? 'true' : undefined,
   }
-  const quick = useFetch<LeadResponse[]>('/leads', { ...baseFilters, limit: quickLimit })
-  const full = useFetch<LeadResponse[]>('/leads', { ...baseFilters, limit: fullLimit })
+  const endpoint = filters === null ? null : '/leads'
+  const quick = useFetch<LeadResponse[]>(endpoint, baseFilters ? { ...baseFilters, limit: quickLimit } : undefined)
+  const full = useFetch<LeadResponse[]>(endpoint, baseFilters ? { ...baseFilters, limit: fullLimit } : undefined)
   return {
     data: full.data ?? quick.data,
     loading: !quick.data && !full.data && (quick.loading || full.loading),

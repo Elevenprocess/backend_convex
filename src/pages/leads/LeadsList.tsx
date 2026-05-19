@@ -192,7 +192,13 @@ function LeadsSetter() {
   // Le filtre global "Tous" n'est pas affiché aux setters.
   // On hydrate tout le pool actif : les imports GHL massifs peuvent mettre à jour
   // des leads déjà créés, et une limite partielle les faisait disparaître du tableau setter.
-  const { data, loading, error, backgroundLoading } = useLeadsProgressive({ quickLimit: 100, fullLimit: 5000 })
+  const baseLeadsState = useLeadsProgressive({ quickLimit: 100, fullLimit: 5000 })
+  const searchTerm = query.trim()
+  const searchLeadsState = useLeadsProgressive(searchTerm ? { quickLimit: 100, fullLimit: 10000, search: searchTerm } : null)
+  const data = searchTerm ? searchLeadsState.data : baseLeadsState.data
+  const loading = searchTerm ? searchLeadsState.loading : baseLeadsState.loading
+  const error = searchTerm ? searchLeadsState.error : baseLeadsState.error
+  const backgroundLoading = searchTerm ? searchLeadsState.backgroundLoading : baseLeadsState.backgroundLoading
   const { data: usersList } = useUsers()
   const mine = data ?? []
   const userMap = useMemo(() => {
