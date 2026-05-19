@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '../components/Icon'
-import { LoadingBlock } from '../components/Spinner'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
@@ -16,7 +15,7 @@ type FunnelPeriodState = { mode: FunnelPeriodMode; customFrom: string; customTo:
 type FunnelPeriodRange = { from: string; to: string; label: string; days: number }
 
 const funnelTodayInput = toDateInputValue(new Date())
-const DEFAULT_FUNNEL_PERIOD: FunnelPeriodState = { mode: 'this_month', customFrom: funnelTodayInput, customTo: funnelTodayInput }
+const DEFAULT_FUNNEL_PERIOD: FunnelPeriodState = { mode: 'today', customFrom: funnelTodayInput, customTo: funnelTodayInput }
 const FUNNEL_PERIOD_OPTIONS: { id: FunnelPeriodMode; label: string }[] = [
   { id: 'today', label: "Aujourd'hui" },
   { id: 'yesterday', label: 'Hier' },
@@ -28,6 +27,24 @@ const FUNNEL_PERIOD_OPTIONS: { id: FunnelPeriodMode; label: string }[] = [
   { id: 'last_year', label: "L'année dernière" },
   { id: 'custom', label: 'Plage de dates' },
 ]
+
+const EMPTY_FUNNEL_TOTALS: AnalyticsFunnelResponse['totals'] = {
+  newLeads: 0,
+  calls: 0,
+  answered: 0,
+  responseRate: 0,
+  qualified: 0,
+  qualificationRate: 0,
+  notQualified: 0,
+  notQualifiedRate: 0,
+  noAnswer: 0,
+  relances: 0,
+  rdv: 0,
+  globalConversionRate: 0,
+  lossesBeforeCall: 0,
+  lossesAfterNoAnswer: 0,
+  lossesAfterNotQualified: 0,
+}
 
 export function Overview() {
   const role = useAuth((s) => s.user?.role)
@@ -352,50 +369,55 @@ function OverviewCommercial() {
   )
 }
 
-type LeadChartRange = 'day' | 'week' | 'month' | 'year'
-
 // ----- F4 Admin -----
 function OverviewAdmin() {
   const navigate = useNavigate()
   const me = useAuth((s) => s.user)
   const [tab, setTab] = useState('overview')
-  const [leadChartRange, setLeadChartRange] = useState<LeadChartRange>('day')
-  const [funnelPeriod] = useState<FunnelPeriodState>(DEFAULT_FUNNEL_PERIOD)
+  const [funnelPeriod, setFunnelPeriod] = useState<FunnelPeriodState>(DEFAULT_FUNNEL_PERIOD)
   const funnelRange = buildFunnelPeriodRange(funnelPeriod)
   const { data: funnel } = useAnalyticsFunnel({
     from: funnelRange.from,
     to: funnelRange.to,
   })
-  const { data: leads = [] } = useLeads({ limit: 1500 })
-  const { data: rdvs = [] } = useRdvList({ limit: 200 })
-  const { data: calls = [] } = useCallLogs({ limit: 5000 })
+  const { data: summary } = useAnalyticsSummary({
+    from: funnelRange.from,
+    to: funnelRange.to,
+  })
   const { data: usersList = [] } = useUsers()
 
+  const adminSummary = summary?.admin ?? null
+  const funnelTotals = funnel?.totals ?? EMPTY_FUNNEL_TOTALS
+  const leadSegments = adminSummary?.resultSegments ?? []
+  const leadTotal = Math.max(funnelTotals.newLeads, leadSegments.reduce((sum, segment) => sum + segment.value, 0))
+  const evolutionPoints = funnelRange.days === 1 && adminSummary?.hourlyCalls?.length
+    ? hourlyCallsToChartPoints(adminSummary.hourlyCalls)
+    : adminSummary?.dailyEvolution?.length
+      ? analyticsDailyToChartPoints(adminSummary.dailyEvolution)
+      : funnelDailyToChartPoints(funnel?.daily ?? [], funnelRange)
+
   const stats = useMemo(() => {
-    const lList = leads ?? []
-    const rList = rdvs ?? []
-    const honored = rList.filter((r) => r.status === 'honore')
-    const signed = rList.filter((r) => r.result === 'signe')
-    const classified = lList.filter(isClassifiedLead)
-    const logicalCalls = Math.max((calls ?? []).length, classified.length)
-    const qualified = classified.filter((l) => l.status === 'qualifie' || l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe').length
-    const ca = signed.reduce((sum, r) => sum + (parseFloat(r.montantTotal ?? '0') || 0), 0)
-    const closing = honored.length ? Math.round((signed.length / honored.length) * 100) : 0
+    const calls = adminSummary?.calls ?? funnelTotals.calls
+    const qualified = adminSummary?.qualified ?? funnelTotals.qualified
+    const rdvPris = adminSummary?.rdvPris ?? funnelTotals.rdv
+    const signed = adminSummary?.signed ?? 0
+    const ca = adminSummary?.ca ?? 0
     const team = (usersList ?? []).filter((u) => u.active)
     return {
       caMois: ca,
-      ventes: signed.length,
-      closing,
-      leads: lList.length,
-      appels: logicalCalls,
-      classified: classified.length,
+      ventes: signed,
+      closing: ratePct(Math.max(1, rdvPris), signed),
+      leads: leadTotal,
+      appels: calls,
+      classified: adminSummary?.classified ?? Math.max(funnelTotals.answered + funnelTotals.notQualified + funnelTotals.noAnswer, qualified),
       qualified,
-      qualifRate: ratePct(logicalCalls, qualified),
-      panier: signed.length ? ca / signed.length : 0,
+      qualifRate: adminSummary?.qualificationRate ?? funnelTotals.qualificationRate,
+      panier: signed ? ca / signed : 0,
       teamActive: team.length,
       teamTotal: (usersList ?? []).length,
+      rdvPris,
     }
-  }, [leads, rdvs, calls, usersList])
+  }, [adminSummary, funnelTotals, leadTotal, usersList])
 
   return (
     <AppShell blobsKey="admin" flat>
@@ -418,16 +440,31 @@ function OverviewAdmin() {
       <main className="overview-shot-page flex-grow overflow-auto">
         <section className="overview-air-header">
           <div>
-            <div className="shot-eyebrow">ECOI SaaS</div>
+            <div className="shot-eyebrow">ECOI SaaS · données réelles</div>
             <h1>Vue d’ensemble</h1>
+            <p className="text-sm text-muted mt-2">{funnelRange.label}</p>
           </div>
-          <div className="overview-profile-chip">
-            <div className="overview-profile-photo">
-              {me?.image ? <img src={me.image} alt={me.name} /> : <span>{userInitials(me?.name)}</span>}
+          <div className="flex flex-col items-end gap-3">
+            <div className="overview-range-switch" aria-label="Période tableau de bord admin">
+              {FUNNEL_PERIOD_OPTIONS.filter((period) => period.id !== 'custom' && period.id !== 'last_week' && period.id !== 'last_month' && period.id !== 'last_year').map((period) => (
+                <button
+                  key={period.id}
+                  type="button"
+                  className={funnelPeriod.mode === period.id ? 'active' : ''}
+                  onClick={() => setFunnelPeriod((current) => ({ ...current, mode: period.id }))}
+                >
+                  {period.label}
+                </button>
+              ))}
             </div>
-            <div>
-              <strong>{me?.name}</strong>
-              <small>{me?.email}</small>
+            <div className="overview-profile-chip">
+              <div className="overview-profile-photo">
+                {me?.image ? <img src={me.image} alt={me.name} /> : <span>{userInitials(me?.name)}</span>}
+              </div>
+              <div>
+                <strong>{me?.name}</strong>
+                <small>{me?.email}</small>
+              </div>
             </div>
           </div>
         </section>
@@ -445,30 +482,19 @@ function OverviewAdmin() {
           </div>
 
           <AirKpi icon="trophy" label="CA total" value={fmtKEur(stats.caMois)} sub={`${stats.ventes} ventes signées`} />
-          <AirKpi icon="target" label="Closing" value={`${stats.closing}%`} sub={`${rdvs?.length ?? 0} RDV suivis`} />
+          <AirKpi icon="target" label="Closing" value={`${stats.closing}%`} sub={`${fmtCompact(stats.rdvPris)} RDV suivis`} />
           <AirKpi icon="phone" label="Appels" value={fmtCompact(stats.appels)} sub={`${fmtCompact(stats.classified)} leads traités`} />
           <AirKpi icon="users" label="Leads" value={fmtCompact(stats.leads)} sub={`${fmtCompact(stats.qualified)} qualifiés`} />
 
           <div className="overview-air-card overview-air-chart">
             <div className="shot-card-head">
               <h3>Évolution des leads</h3>
-              <div className="overview-range-switch" aria-label="Période évolution des leads">
-                {LEAD_CHART_RANGES.map((range) => (
-                  <button
-                    key={range.id}
-                    type="button"
-                    className={leadChartRange === range.id ? 'active' : ''}
-                    onClick={() => setLeadChartRange(range.id)}
-                  >
-                    {range.label}
-                  </button>
-                ))}
-              </div>
+              <span className="text-xs font-bold text-muted">{funnelRange.days === 1 ? 'Heures du jour' : `${funnelRange.days} jours`}</span>
             </div>
-            <MiniBarChart points={leadEvolutionSeries(leads ?? [], leadChartRange)} />
+            <MiniBarChart points={evolutionPoints} />
           </div>
 
-          <LeadPieAnalysis leads={leads ?? []} />
+          <LeadPieAnalysis segments={leadSegments} totalFallback={stats.leads} />
 
           <div className="overview-air-card overview-air-pipeline">
             <div className="shot-onboarding-top">
@@ -476,25 +502,25 @@ function OverviewAdmin() {
                 <span className="shot-eyebrow">Pipeline réel</span>
                 <h3>Avancement CRM</h3>
               </div>
-              <strong>{funnel?.totals?.globalConversionRate ?? stats.closing}%</strong>
+              <strong>{funnelTotals.globalConversionRate || stats.closing}%</strong>
             </div>
-            <div className="overview-real-segments" style={{ ['--seg-a' as string]: `${Math.max(1, funnel?.totals?.newLeads ?? stats.leads)}`, ['--seg-b' as string]: `${Math.max(1, funnel?.totals?.qualified ?? stats.qualified)}`, ['--seg-c' as string]: `${Math.max(1, funnel?.totals?.rdv ?? 0)}` }}>
+            <div className="overview-real-segments" style={{ ['--seg-a' as string]: `${Math.max(1, funnelTotals.newLeads || stats.leads)}`, ['--seg-b' as string]: `${Math.max(1, funnelTotals.qualified || stats.qualified)}`, ['--seg-c' as string]: `${Math.max(1, funnelTotals.rdv || stats.rdvPris)}` }}>
               <span />
               <span />
               <span />
             </div>
-            <TaskLine icon="phone" title="Appels setters" sub={`${fmtCompact(funnel?.totals?.calls ?? stats.appels)} appels`} done={(funnel?.totals?.calls ?? stats.appels) > 0} />
-            <TaskLine icon="target" title="Leads qualifiés" sub={`${fmtCompact(funnel?.totals?.qualified ?? stats.qualified)} leads`} done={(funnel?.totals?.qualified ?? stats.qualified) > 0} />
-            <TaskLine icon="trophy" title="RDV obtenus" sub={`${fmtCompact(funnel?.totals?.rdv ?? 0)} RDV`} done={(funnel?.totals?.rdv ?? 0) > 0} />
+            <TaskLine icon="phone" title="Appels setters" sub={`${fmtCompact(funnelTotals.calls || stats.appels)} appels`} done={(funnelTotals.calls || stats.appels) > 0} />
+            <TaskLine icon="target" title="Leads qualifiés" sub={`${fmtCompact(funnelTotals.qualified || stats.qualified)} leads`} done={(funnelTotals.qualified || stats.qualified) > 0} />
+            <TaskLine icon="trophy" title="RDV obtenus" sub={`${fmtCompact(funnelTotals.rdv || stats.rdvPris)} RDV`} done={(funnelTotals.rdv || stats.rdvPris) > 0} />
           </div>
 
           <div className="overview-air-card overview-air-funnel">
             <div className="shot-calendar-head">
-              <span>{formatShortDate(new Date())}</span>
+              <span>{formatShortDate(new Date(funnelRange.from))}</span>
               <strong>Funnel CRM</strong>
               <button onClick={() => navigate('/analytics')}>Détails</button>
             </div>
-            {funnel?.totals ? <FunnelFlowMap totals={funnel.totals} /> : <LoadingBlock label="Chargement du funnel CRM…" />}
+            <FunnelFlowMap totals={funnelTotals} />
           </div>
         </section>
 
@@ -535,22 +561,16 @@ function CardHead({ title, icon }: { title: string; icon: ShotIcon }) {
   )
 }
 
-const LEAD_CHART_RANGES: { id: LeadChartRange; label: string }[] = [
-  { id: 'day', label: 'Jour' },
-  { id: 'week', label: 'Semaine' },
-  { id: 'month', label: 'Mois' },
-  { id: 'year', label: 'Année' },
-]
-
 type LeadChartPoint = { key: string; value: number; labelTop: string; labelBottom: string }
 
 function MiniBarChart({ points }: { points: LeadChartPoint[] }) {
-  const max = Math.max(1, ...points.map((p) => p.value))
+  const safePoints = points.length > 0 ? points : [{ key: 'empty', value: 0, labelTop: '—', labelBottom: 'instant' }]
+  const max = Math.max(1, ...safePoints.map((p) => p.value))
   return (
     <div className="shot-bars">
-      {points.map((point, index) => (
+      {safePoints.map((point, index) => (
         <div key={point.key} className="shot-bar-col">
-          <span className={index === points.length - 1 ? 'active' : ''} style={{ height: `${Math.max(14, (point.value / max) * 118)}px` }} />
+          <span className={index === safePoints.length - 1 ? 'active' : ''} style={{ height: `${Math.max(14, (point.value / max) * 118)}px` }} />
           <small>
             <b>{point.labelTop}</b>
             <em>{point.labelBottom}</em>
@@ -561,13 +581,53 @@ function MiniBarChart({ points }: { points: LeadChartPoint[] }) {
   )
 }
 
+function analyticsDailyToChartPoints(points: { date: string; label: string; calls: number; rdv: number; signed: number; ca: number }[]): LeadChartPoint[] {
+  return points.slice(-14).map((point) => ({
+    key: point.date,
+    value: point.rdv || point.calls || point.signed,
+    labelTop: point.label || dayLabel(point.date),
+    labelBottom: `${point.rdv} RDV`,
+  }))
+}
+
+function funnelDailyToChartPoints(points: AnalyticsFunnelResponse['daily'], range: FunnelPeriodRange): LeadChartPoint[] {
+  if (points.length > 0) {
+    return points.slice(-14).map((point) => ({
+      key: point.date,
+      value: point.newLeads,
+      labelTop: point.label || dayLabel(point.date),
+      labelBottom: `${point.rdv} RDV`,
+    }))
+  }
+  return Array.from({ length: Math.min(7, Math.max(1, range.days)) }, (_, index) => ({
+    key: `empty-${index}`,
+    value: 0,
+    labelTop: index === 0 ? 'Live' : '—',
+    labelBottom: '0',
+  }))
+}
+
+function hourlyCallsToChartPoints(points: { date: string; hour: number; label: string; calls: number }[]): LeadChartPoint[] {
+  return points
+    .filter((point) => point.hour >= 8 && point.hour <= 19)
+    .map((point) => ({
+      key: `${point.date}-${point.hour}`,
+      value: point.calls,
+      labelTop: point.label || `${point.hour}h`,
+      labelBottom: `${point.calls}`,
+    }))
+}
+
 const PIE_COLORS = ['#D4AF37', '#3DA86A', '#B87333', '#6B7C8C', '#B7410E', '#7C6A46']
 
-function LeadPieAnalysis({ leads }: { leads: LeadResponse[] }) {
-  const segments = leadStatusSegments(leads)
-  const total = segments.reduce((sum, segment) => sum + segment.value, 0)
+type LeadSegment = { label: string; value: number }
+
+function LeadPieAnalysis({ segments, totalFallback = 0, leads }: { segments?: LeadSegment[]; totalFallback?: number; leads?: LeadResponse[] }) {
+  const resolvedSegments = segments ?? leadStatusSegments(leads ?? [])
+  const total = resolvedSegments.reduce((sum, segment) => sum + segment.value, 0) || totalFallback
+  const visibleSegments = resolvedSegments.length > 0 ? resolvedSegments : [{ label: 'Données en cours', value: totalFallback }]
   const gradient = total
-    ? segments.reduce<{ parts: string[]; cursor: number }>((acc, segment, index) => {
+    ? visibleSegments.reduce<{ parts: string[]; cursor: number }>((acc, segment, index) => {
         const start = acc.cursor
         const end = start + (segment.value / total) * 360
         acc.parts.push(`${PIE_COLORS[index % PIE_COLORS.length]} ${start}deg ${end}deg`)
@@ -587,10 +647,10 @@ function LeadPieAnalysis({ leads }: { leads: LeadResponse[] }) {
           </div>
         </div>
         <div className="overview-pie-legend">
-          {segments.length === 0 ? (
+          {visibleSegments.length === 0 ? (
             <span className="text-xs text-faint">Aucune donnée lead.</span>
-          ) : segments.slice(0, 5).map((segment, index) => (
-            <div key={segment.status}>
+          ) : visibleSegments.slice(0, 5).map((segment, index) => (
+            <div key={`${segment.label}-${index}`}>
               <i style={{ background: PIE_COLORS[index % PIE_COLORS.length] }} />
               <span>{segment.label}</span>
               <strong>{fmtCompact(segment.value)}</strong>
@@ -872,52 +932,6 @@ function shortDateTime(iso: string): string {
 
 // ===== Futuristic data helpers =====
 
-function leadEvolutionSeries(leads: LeadResponse[], range: LeadChartRange): LeadChartPoint[] {
-  if (range === 'day') {
-    return lastNDays(6).map((key) => {
-      const date = new Date(`${key}T12:00:00`)
-      return {
-        key,
-        value: leads.filter((lead) => lead.createdAt?.slice(0, 10) === key).length,
-        labelTop: date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }).replace('.', ''),
-        labelBottom: date.toLocaleDateString('fr-FR', { year: 'numeric' }),
-      }
-    })
-  }
-
-  if (range === 'week') {
-    const weeks = lastNWeeks(6)
-    return weeks.map((weekStart) => {
-      const key = toDateInputValue(weekStart)
-      return {
-        key,
-        value: leads.filter((lead) => toDateInputValue(startOfWeek(new Date(lead.createdAt))) === key).length,
-        labelTop: `S${weekNumber(weekStart)}`,
-        labelBottom: String(weekStart.getFullYear()),
-      }
-    })
-  }
-
-  if (range === 'month') {
-    return lastNMonths(6).map((key) => {
-      const date = new Date(`${key}-01T12:00:00`)
-      return {
-        key,
-        value: leads.filter((lead) => isoMonthKey(lead.createdAt) === key).length,
-        labelTop: date.toLocaleDateString('fr-FR', { month: 'short' }).replace('.', ''),
-        labelBottom: String(date.getFullYear()),
-      }
-    })
-  }
-
-  return lastNYears(6).map((year) => ({
-    key: String(year),
-    value: leads.filter((lead) => new Date(lead.createdAt).getFullYear() === year).length,
-    labelTop: String(year),
-    labelBottom: 'année',
-  }))
-}
-
 function leadStatusSegments(leads: LeadResponse[]): { status: LeadStatus; label: string; value: number }[] {
   const counts = leads.reduce<Record<string, number>>((acc, lead) => {
     acc[lead.status] = (acc[lead.status] ?? 0) + 1
@@ -950,24 +964,6 @@ function lastNMonths(n: number): string[] {
     d.setMonth(d.getMonth() - (n - 1 - i), 1)
     return d.toISOString().slice(0, 7)
   })
-}
-
-function lastNWeeks(n: number): Date[] {
-  const current = startOfWeek(new Date())
-  return Array.from({ length: n }, (_, i) => addDays(current, -7 * (n - 1 - i)))
-}
-
-function lastNYears(n: number): number[] {
-  const year = new Date().getFullYear()
-  return Array.from({ length: n }, (_, i) => year - (n - 1 - i))
-}
-
-function weekNumber(date: Date): number {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
-  const day = d.getUTCDay() || 7
-  d.setUTCDate(d.getUTCDate() + 4 - day)
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
-  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
 }
 
 // ===== Atoms =====
