@@ -1,5 +1,6 @@
 import { useLocation } from 'react-router-dom'
 import { SplitPanel } from '../SplitPanel'
+import { CommercialLeadTrackingSidebar } from './CommercialLeadTrackingSidebar'
 import { useLead, useLeads, useUsers } from '../../lib/hooks'
 import { useAuth } from '../../lib/auth'
 import { useLeadSidebar } from '../../lib/leadSidebar'
@@ -46,6 +47,17 @@ export function PersistentLeadSidebar() {
 
   const userMap = new Map<string, UserResponse>()
   for (const user of usersList ?? []) userMap.set(user.id, user)
+
+  if (role === 'commercial') {
+    return (
+      <CommercialLeadTrackingSidebar
+        lead={displayLead}
+        onClose={closeSidebar}
+        onSaved={refetch}
+        className="fixed top-0 right-0 bottom-0 z-[140]"
+      />
+    )
+  }
 
   return (
     <SplitPanel

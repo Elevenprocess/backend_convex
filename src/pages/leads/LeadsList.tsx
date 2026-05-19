@@ -145,7 +145,7 @@ function LeadsCommercial() {
                     key={lead.id}
                     className={`border-b border-line-soft last:border-0 cursor-pointer transition-colors ${selectedId === lead.id ? 'bg-or/20 shadow-[inset_4px_0_0_var(--color-or-dark)]' : 'hover:bg-white/40'}`}
                     onClick={() => selectLead(lead.id)}
-                    title="Cliquer pour ouvrir le détail du lead"
+                    title="Cliquer pour ouvrir le suivi commercial"
                   >
                     <Td><span className="font-semibold truncate" title={fullName(lead)}>{fullName(lead)}</span></Td>
                     <Td><span className={`status-badge ${statusBadgeForLead(lead)}`}>{statusLabelForLead(lead)}</span></Td>
