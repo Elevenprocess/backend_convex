@@ -754,6 +754,10 @@ function Row({ label, value, highlight = false }: { label: string; value: string
 
 
 type EvolutionSeries = { key: keyof Pick<AnalyticsDailyPoint, 'calls' | 'rdv' | 'signed' | 'ca'>; label: string; color: string }
+type EvolutionGranularity = 'hour' | 'day' | 'week' | 'month'
+type EvolutionPrepared = { points: AnalyticsDailyPoint[]; granularity: EvolutionGranularity; subtitle: string }
+
+const HOUR_SLOTS = Array.from({ length: 14 }, (_, idx) => idx + 8)
 
 function EvolutionChart({ title, data, hourlyCalls, series }: { title: string; data?: AnalyticsDailyPoint[]; hourlyCalls?: AnalyticsHourlyCallPoint[]; series: EvolutionSeries[] }) {
   const [activeKey, setActiveKey] = useState<EvolutionSeries['key']>(series[0]?.key ?? 'calls')
@@ -764,17 +768,9 @@ function EvolutionChart({ title, data, hourlyCalls, series }: { title: string; d
   const padTop = 24
   const padBottom = 42
   const points = data ?? []
-  const hourlyPoints: AnalyticsDailyPoint[] = (hourlyCalls ?? []).map((point) => ({
-    date: `${point.date}-${point.hour}`,
-    label: point.label,
-    calls: point.calls,
-    rdv: 0,
-    signed: 0,
-    ca: 0,
-  }))
+  const prepared = useMemo(() => buildAdaptiveEvolutionPoints(points, hourlyCalls ?? []), [points, hourlyCalls])
+  const chartPoints = prepared.points
   const active = series.find((serie) => serie.key === activeKey) ?? series[0]
-  const showHourlyCalls = active?.key === 'calls' && hourlyPoints.length > 0
-  const chartPoints = showHourlyCalls ? hourlyPoints : points
   const sample = chartPoints.length > 56 ? chartPoints.filter((_, i) => i % Math.ceil(chartPoints.length / 56) === 0 || i === chartPoints.length - 1) : chartPoints
   const max = Math.max(1, ...sample.map((point) => active ? point[active.key] || 0 : 0))
   const total = chartPoints.reduce((sum, point) => sum + (active ? point[active.key] || 0 : 0), 0)
@@ -794,9 +790,10 @@ function EvolutionChart({ title, data, hourlyCalls, series }: { title: string; d
     return `${x},${y}`
   }).join(' ')
   const formatMetric = (key: EvolutionSeries['key'], value: number) => key === 'ca' ? fmtKEur(value) : fmtInt(value)
-  const delta = active && points.length >= 2 ? (last?.[active.key] || 0) - (points[0]?.[active.key] || 0) : 0
+  const delta = active && chartPoints.length >= 2 ? (last?.[active.key] || 0) - (chartPoints[0]?.[active.key] || 0) : 0
   const hoveredValue = hoveredPoint && active ? hoveredPoint.point[active.key] || 0 : 0
   const clamp = (value: number, min: number, maxValue: number) => Math.min(maxValue, Math.max(min, value))
+  const lastLabel = prepared.granularity === 'hour' ? 'Dernière heure' : prepared.granularity === 'week' ? 'Dernière semaine' : prepared.granularity === 'month' ? 'Dernier mois' : 'Dernier jour'
   const handleChartMouseMove = (event: MouseEvent<SVGSVGElement>) => {
     if (!active || sample.length === 0) return
     const rect = event.currentTarget.getBoundingClientRect()
@@ -818,7 +815,7 @@ function EvolutionChart({ title, data, hourlyCalls, series }: { title: string; d
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
           <h3 className="font-bold">{title}</h3>
-          <div className="text-xs text-faint mt-1">{showHourlyCalls ? 'Appels réels par heure — 8h à 21h' : 'Courbe claire par indicateur — clique sur une statistique'}</div>
+          <div className="text-xs text-faint mt-1">{prepared.subtitle}</div>
         </div>
         <span className="eyebrow">évolution</span>
       </div>
@@ -829,7 +826,7 @@ function EvolutionChart({ title, data, hourlyCalls, series }: { title: string; d
           <div className="grid grid-cols-3 gap-2 mb-4">
             {series.map((serie) => {
               const isActive = serie.key === active.key
-              const serieTotal = points.reduce((sum, point) => sum + (point[serie.key] || 0), 0)
+              const serieTotal = chartPoints.reduce((sum, point) => sum + (point[serie.key] || 0), 0)
               return (
                 <button
                   key={serie.key}
@@ -848,7 +845,7 @@ function EvolutionChart({ title, data, hourlyCalls, series }: { title: string; d
 
           <div className="evolution-chart relative rounded-[28px] bg-white border border-line-soft p-3 shadow-inner overflow-hidden flat-target">
             <div className="evolution-last-card pointer-events-none absolute right-4 top-4 rounded-2xl bg-white/80 border border-line-soft px-3 py-2 shadow-sm">
-              <div className="text-[10px] font-extrabold uppercase tracking-widest text-faint">{showHourlyCalls ? 'Dernière heure' : 'Dernier jour'}</div>
+              <div className="text-[10px] font-extrabold uppercase tracking-widest text-faint">{lastLabel}</div>
               <div className="text-2xl font-extrabold" style={{ color: active.color }}>{formatMetric(active.key, last?.[active.key] || 0)}</div>
               <div className={`text-[11px] font-bold ${delta >= 0 ? 'text-success' : 'text-rouille'}`}>{delta >= 0 ? '+' : ''}{formatMetric(active.key, delta)} vs début</div>
             </div>
@@ -870,7 +867,7 @@ function EvolutionChart({ title, data, hourlyCalls, series }: { title: string; d
                   </g>
                 )
               })}
-              {!showHourlyCalls && series.filter((serie) => serie.key !== active.key).map((serie) => (
+              {series.filter((serie) => serie.key !== active.key).map((serie) => (
                 <polyline key={serie.key} points={ghostPointsFor(serie)} fill="none" stroke={serie.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.2" strokeDasharray="5 8" />
               ))}
               <polygon points={areaPoints} fill={active.color} opacity="0.08" />
@@ -898,9 +895,13 @@ function EvolutionChart({ title, data, hourlyCalls, series }: { title: string; d
                 const y = yFor(point[active.key] || 0)
                 const isPeak = peak?.date === point.date
                 const isHovered = hoveredPoint?.point.date === point.date
-                const showLabel = showHourlyCalls
+                const showLabel = prepared.granularity === 'hour'
                   ? idx === 0 || idx === sample.length - 1 || idx % 7 === 0 || isPeak
-                  : sample.length <= 10 || idx === 0 || idx === sample.length - 1 || isPeak
+                  : prepared.granularity === 'week'
+                    ? sample.length <= 12 || idx === 0 || idx === sample.length - 1 || isPeak
+                    : prepared.granularity === 'month'
+                      ? sample.length <= 14 || idx === 0 || idx === sample.length - 1 || isPeak
+                      : sample.length <= 10 || idx === 0 || idx === sample.length - 1 || isPeak
                 return (
                   <g key={point.date}>
                     <title>{`${point.label} — ${active.label}: ${formatMetric(active.key, point[active.key] || 0)}`}</title>
@@ -964,6 +965,139 @@ function EvolutionChart({ title, data, hourlyCalls, series }: { title: string; d
       )}
     </div>
   )
+}
+
+function buildAdaptiveEvolutionPoints(dailyPoints: AnalyticsDailyPoint[], hourlyCalls: AnalyticsHourlyCallPoint[]): EvolutionPrepared {
+  if (dailyPoints.length === 0) {
+    return { points: [], granularity: 'day', subtitle: 'Courbe claire par indicateur — clique sur une statistique' }
+  }
+  const sortedDaily = [...dailyPoints].sort((a, b) => dayTime(a.date) - dayTime(b.date))
+  const daySpan = Math.max(1, Math.round((dayTime(sortedDaily[sortedDaily.length - 1].date) - dayTime(sortedDaily[0].date)) / 86_400_000) + 1)
+  if (daySpan <= 2) {
+    const hourly = buildHourlyEvolutionPoints(sortedDaily, hourlyCalls)
+    if (hourly.length > 0) {
+      return { points: hourly, granularity: 'hour', subtitle: 'Courbe par heure — 8h à 21h pour Appels, RDV et Ventes' }
+    }
+  }
+  if (daySpan > 10 && daySpan <= 93) {
+    return { points: groupEvolutionPoints(sortedDaily, 'week'), granularity: 'week', subtitle: 'Courbe groupée par semaine selon la plage sélectionnée' }
+  }
+  if (daySpan > 93) {
+    return { points: groupEvolutionPoints(sortedDaily, 'month'), granularity: 'month', subtitle: 'Courbe groupée par mois selon la plage sélectionnée' }
+  }
+  return { points: sortedDaily, granularity: 'day', subtitle: 'Courbe claire par jour — clique sur une statistique' }
+}
+
+function buildHourlyEvolutionPoints(dailyPoints: AnalyticsDailyPoint[], hourlyCalls: AnalyticsHourlyCallPoint[]): AnalyticsDailyPoint[] {
+  const hourlyByDate = new Map<string, AnalyticsHourlyCallPoint[]>()
+  hourlyCalls.forEach((point) => {
+    const key = dateKey(point.date)
+    const rows = hourlyByDate.get(key) ?? []
+    rows.push(point)
+    hourlyByDate.set(key, rows)
+  })
+  return dailyPoints.flatMap((dailyPoint) => {
+    const key = dateKey(dailyPoint.date)
+    const existing = hourlyByDate.get(key)?.sort((a, b) => a.hour - b.hour)
+    const baseHours = existing?.length
+      ? existing
+      : HOUR_SLOTS.map((hour) => ({ date: key, hour, label: `${shortDateLabel(key)} ${hour}h`, calls: 0 }))
+    const callWeights = baseHours.map((point) => point.calls)
+    const rdvValues = distributeValue(dailyPoint.rdv, callWeights)
+    const signedValues = distributeValue(dailyPoint.signed, callWeights)
+    const caValues = distributeValue(dailyPoint.ca, callWeights, false)
+    return baseHours.map((hourPoint, idx) => ({
+      date: `${key}-${String(hourPoint.hour).padStart(2, '0')}`,
+      label: `${shortDateLabel(key)} ${hourPoint.hour}h`,
+      calls: hourPoint.calls,
+      rdv: rdvValues[idx] ?? 0,
+      signed: signedValues[idx] ?? 0,
+      ca: caValues[idx] ?? 0,
+    }))
+  })
+}
+
+function groupEvolutionPoints(points: AnalyticsDailyPoint[], mode: 'week' | 'month'): AnalyticsDailyPoint[] {
+  const grouped = new Map<string, AnalyticsDailyPoint>()
+  points.forEach((point) => {
+    const date = parseDay(point.date)
+    const key = mode === 'week' ? weekKey(date) : monthKey(date)
+    const label = mode === 'week' ? weekLabel(date) : monthLabel(date)
+    const current = grouped.get(key) ?? { date: key, label, calls: 0, rdv: 0, signed: 0, ca: 0 }
+    current.calls += point.calls || 0
+    current.rdv += point.rdv || 0
+    current.signed += point.signed || 0
+    current.ca += point.ca || 0
+    grouped.set(key, current)
+  })
+  return Array.from(grouped.values()).sort((a, b) => dayTime(a.date) - dayTime(b.date))
+}
+
+function distributeValue(total: number, weights: number[], integer = true): number[] {
+  if (weights.length === 0) return []
+  if (!total) return weights.map(() => 0)
+  const weightTotal = weights.reduce((sum, weight) => sum + Math.max(0, weight), 0)
+  const safeWeights = weightTotal > 0 ? weights.map((weight) => Math.max(0, weight)) : weights.map(() => 1)
+  const safeTotal = weightTotal > 0 ? weightTotal : weights.length
+  const raw = safeWeights.map((weight) => (total * weight) / safeTotal)
+  if (!integer) return raw
+  const values = raw.map(Math.floor)
+  let remainder = Math.round(total - values.reduce((sum, value) => sum + value, 0))
+  raw
+    .map((value, idx) => ({ idx, fraction: value - Math.floor(value) }))
+    .sort((a, b) => b.fraction - a.fraction)
+    .forEach(({ idx }) => {
+      if (remainder > 0) {
+        values[idx] += 1
+        remainder -= 1
+      }
+    })
+  return values
+}
+
+function dateKey(value: string): string {
+  const date = parseDay(value)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function parseDay(value: string): Date {
+  const clean = value.slice(0, 10)
+  const date = new Date(`${clean}T00:00:00`)
+  return Number.isNaN(date.getTime()) ? new Date() : date
+}
+
+function dayTime(value: string): number {
+  return parseDay(value).getTime()
+}
+
+function weekKey(date: Date): string {
+  const monday = weekStart(date)
+  return dateKey(monday.toISOString())
+}
+
+function weekLabel(date: Date): string {
+  return `Sem. ${shortDateLabel(weekKey(date))}`
+}
+
+function weekStart(date: Date): Date {
+  const copy = new Date(date)
+  const day = copy.getDay() || 7
+  copy.setDate(copy.getDate() - day + 1)
+  copy.setHours(0, 0, 0, 0)
+  return copy
+}
+
+function monthKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`
+}
+
+function monthLabel(date: Date): string {
+  return date.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' }).replace('.', '')
+}
+
+function shortDateLabel(value: string): string {
+  const date = parseDay(value)
+  return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
 function AnalyticsStatsTable({ title, rows }: { title: string; rows: string[][] }) {
@@ -1075,5 +1209,3 @@ function CommercialRow({ initials, name, total, honored, ventes, closing, panier
     </tr>
   )
 }
-
-
