@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
@@ -732,7 +732,7 @@ type EvolutionSeries = { key: keyof Pick<AnalyticsDailyPoint, 'calls' | 'rdv' | 
 
 function EvolutionChart({ title, data, series }: { title: string; data?: AnalyticsDailyPoint[]; series: EvolutionSeries[] }) {
   const [activeKey, setActiveKey] = useState<EvolutionSeries['key']>(series[0]?.key ?? 'calls')
-  const [hoveredPoint, setHoveredPoint] = useState<{ point: AnalyticsDailyPoint; x: number; y: number } | null>(null)
+  const [hoveredPoint, setHoveredPoint] = useState<{ point: AnalyticsDailyPoint; x: number; y: number; cursorX: number; cursorY: number; cursorValue: number } | null>(null)
   const width = 620
   const height = 260
   const padX = 44
@@ -761,6 +761,22 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
   const formatMetric = (key: EvolutionSeries['key'], value: number) => key === 'ca' ? fmtKEur(value) : fmtInt(value)
   const delta = active && points.length >= 2 ? (last?.[active.key] || 0) - (points[0]?.[active.key] || 0) : 0
   const hoveredValue = hoveredPoint && active ? hoveredPoint.point[active.key] || 0 : 0
+  const clamp = (value: number, min: number, maxValue: number) => Math.min(maxValue, Math.max(min, value))
+  const handleChartMouseMove = (event: MouseEvent<SVGSVGElement>) => {
+    if (!active || sample.length === 0) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    const cursorX = clamp(((event.clientX - rect.left) / rect.width) * width, padX, width - padX)
+    const cursorY = clamp(((event.clientY - rect.top) / rect.height) * height, padTop, height - padBottom)
+    const nearestIndex = sample.length <= 1
+      ? 0
+      : clamp(Math.round(((cursorX - padX) / (width - padX * 2)) * (sample.length - 1)), 0, sample.length - 1)
+    const point = sample[nearestIndex]
+    const x = xFor(nearestIndex)
+    const y = yFor(point[active.key] || 0)
+    const cursorRatio = (padTop + chartHeight - cursorY) / chartHeight
+    const cursorValue = Math.round(clamp(cursorRatio, 0, 1) * max)
+    setHoveredPoint({ point, x, y, cursorX, cursorY, cursorValue })
+  }
 
   return (
     <div className="glass-card p-6 col-span-12 xl:col-span-5 overflow-hidden">
@@ -801,7 +817,14 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
               <div className="text-2xl font-extrabold" style={{ color: active.color }}>{formatMetric(active.key, last?.[active.key] || 0)}</div>
               <div className={`text-[11px] font-bold ${delta >= 0 ? 'text-success' : 'text-rouille'}`}>{delta >= 0 ? '+' : ''}{formatMetric(active.key, delta)} vs début</div>
             </div>
-            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-[260px]" role="img" aria-label={title}>
+            <svg
+              viewBox={`0 0 ${width} ${height}`}
+              className="w-full h-[260px] cursor-crosshair"
+              role="img"
+              aria-label={title}
+              onMouseMove={handleChartMouseMove}
+              onMouseLeave={() => setHoveredPoint(null)}
+            >
               {[0, 0.5, 1].map((ratio) => {
                 const y = padTop + ratio * chartHeight
                 const label = Math.round(max * (1 - ratio))
@@ -825,6 +848,16 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
                 strokeLinejoin="round"
                 style={{ strokeDasharray: 1100, strokeDashoffset: 0, animation: 'dashDraw 1.05s ease both' }}
               />
+              {hoveredPoint && (
+                <g pointerEvents="none">
+                  <line x1={hoveredPoint.cursorX} x2={hoveredPoint.cursorX} y1={padTop} y2={height - padBottom} stroke={active.color} strokeWidth="1.5" opacity="0.35" strokeDasharray="4 5" />
+                  <line x1={padX} x2={width - padX} y1={hoveredPoint.cursorY} y2={hoveredPoint.cursorY} stroke={active.color} strokeWidth="1.2" opacity="0.22" strokeDasharray="3 6" />
+                  <circle cx={hoveredPoint.cursorX} cy={hoveredPoint.cursorY} r="4" fill={active.color} opacity="0.9" />
+                  <text x={hoveredPoint.cursorX + 8} y={hoveredPoint.cursorY - 8} fill={active.color} fontSize="11" fontWeight="800">
+                    {formatMetric(active.key, hoveredPoint.cursorValue)}
+                  </text>
+                </g>
+              )}
               {sample.map((point, idx) => {
                 const x = xFor(idx)
                 const y = yFor(point[active.key] || 0)
@@ -832,10 +865,10 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
                 const isHovered = hoveredPoint?.point.date === point.date
                 const showLabel = sample.length <= 10 || idx === 0 || idx === sample.length - 1 || isPeak
                 return (
-                  <g key={point.date} onMouseEnter={() => setHoveredPoint({ point, x, y })} onMouseLeave={() => setHoveredPoint(null)}>
+                  <g key={point.date}>
                     <title>{`${point.label} — ${active.label}: ${formatMetric(active.key, point[active.key] || 0)}`}</title>
-                    {isHovered && <line x1={x} x2={x} y1={padTop} y2={height - padBottom} stroke={active.color} strokeWidth="1.5" opacity="0.35" strokeDasharray="4 5" />}
-                    <circle cx={x} cy={y} r="14" fill="transparent" className="cursor-crosshair" />
+                    {isHovered && <line x1={x} x2={x} y1={padTop} y2={height - padBottom} stroke={active.color} strokeWidth="1.5" opacity="0.25" strokeDasharray="4 5" />}
+                    <circle cx={x} cy={y} r="14" fill="transparent" />
                     <circle cx={x} cy={y} r={isHovered ? 7 : isPeak ? 6 : 4} fill="var(--chart-point-fill, white)" stroke={active.color} strokeWidth={isHovered || isPeak ? 4 : 3} />
                     {isPeak && <text x={x} y={y - 12} fill={active.color} fontSize="11" fontWeight="800" textAnchor="middle">pic {formatMetric(active.key, point[active.key] || 0)}</text>}
                     {showLabel && <text x={x} y={height - 13} fill="var(--chart-label, #6B7C8C)" fontSize="11" fontWeight="700" textAnchor={idx === 0 ? 'start' : idx === sample.length - 1 ? 'end' : 'middle'}>{point.label}</text>}
@@ -847,15 +880,19 @@ function EvolutionChart({ title, data, series }: { title: string; data?: Analyti
               <div
                 className="pointer-events-none absolute z-30 min-w-[170px] rounded-2xl border border-line-soft bg-white/95 px-3 py-2 text-xs shadow-xl backdrop-blur-md"
                 style={{
-                  left: `${Math.min(82, Math.max(8, (hoveredPoint.x / width) * 100))}%`,
-                  top: `${Math.min(72, Math.max(10, (hoveredPoint.y / height) * 100))}%`,
-                  transform: hoveredPoint.x > width * 0.72 ? 'translate(-100%, -110%)' : 'translate(10px, -110%)',
+                  left: `${Math.min(82, Math.max(8, (hoveredPoint.cursorX / width) * 100))}%`,
+                  top: `${Math.min(72, Math.max(12, (hoveredPoint.cursorY / height) * 100))}%`,
+                  transform: hoveredPoint.cursorX > width * 0.72 ? 'translate(-100%, -110%)' : 'translate(10px, -110%)',
                 }}
               >
                 <div className="font-extrabold text-text">{hoveredPoint.point.label}</div>
                 <div className="mt-1 flex items-center justify-between gap-4">
                   <span className="font-bold" style={{ color: active.color }}>{active.label}</span>
                   <span className="text-lg font-extrabold" style={{ color: active.color }}>{formatMetric(active.key, hoveredValue)}</span>
+                </div>
+                <div className="mt-1 flex items-center justify-between gap-4 rounded-xl bg-or-tint px-2 py-1">
+                  <span className="font-bold text-muted">niveau souris</span>
+                  <span className="font-extrabold" style={{ color: active.color }}>{formatMetric(active.key, hoveredPoint.cursorValue)}</span>
                 </div>
                 <div className="mt-2 space-y-1 border-t border-line-soft pt-2 text-[11px] text-muted">
                   {series.filter((serie) => serie.key !== active.key).map((serie) => (
