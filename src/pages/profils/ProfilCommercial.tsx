@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
+import { LoadingScreen, Spinner } from '../../components/Spinner'
 import { useAuth } from '../../lib/auth'
 import { moveGhlOpportunity, updateLead, updateRdv, useCallLogs, useCommercialAnalytics, useGhlCalendarConfig, useGhlCalendarEvents, useGhlOpportunities, useUser, useUsers, useRdvList, useLeads, type GhlOpportunity } from '../../lib/hooks'
 import { CALL_RESULT_LABEL, STATUS_LABEL, fullName, type CallLogResponse, type LeadResponse, type LeadStatus, type RdvResponse, type RdvStatus, type UserResponse } from '../../lib/types'
@@ -190,7 +191,7 @@ export function ProfilCommercial() {
     return (
       <AppShell flat>
         <Topbar eyebrow="PROFIL COMMERCIAL" title="Chargement…" />
-        <main className="flex-grow flex items-center justify-center text-faint text-sm">Chargement…</main>
+        <LoadingScreen label="Chargement du profil commercial…" />
       </AppShell>
     )
   }
@@ -667,7 +668,7 @@ function ProspectDetailModal({ card, callLogs, userMap, onAddDebrief, onClose }:
                 className="mt-2 w-full min-h-[92px] rounded-2xl border border-line-soft bg-white px-3 py-2 text-sm outline-none focus:border-noir"
               />
               <div className="mt-2 flex justify-end">
-                <button onClick={saveDebrief} disabled={!debriefText.trim() || savingDebrief} className="btn-primary px-4 py-2 rounded-xl text-xs disabled:opacity-50">{savingDebrief ? 'Enregistrement…' : 'Ajouter le débriefing'}</button>
+                <button onClick={saveDebrief} disabled={!debriefText.trim() || savingDebrief} className="btn-primary px-4 py-2 rounded-xl text-xs disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2">{savingDebrief ? <Spinner size={14} stroke={3} label="Enregistrement…" /> : 'Ajouter le débriefing'}</button>
               </div>
             </div>
             {latestComments.length === 0 && callLogs.every((log) => !log.notes) ? (

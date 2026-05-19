@@ -6,6 +6,7 @@ import { roleLabel, teamLabel } from '../lib/role'
 import { Icon } from '../components/Icon'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
+import { Spinner } from '../components/Spinner'
 
 const formatDate = (value: string | null) => {
   if (!value) return '—'
@@ -56,6 +57,7 @@ export function MyProfile() {
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
+    if (saving) return
     setSaving(true)
     setError(null)
     setMessage(null)
@@ -181,8 +183,8 @@ export function MyProfile() {
                 {message && <div className="profile-alert profile-alert-success">{message}</div>}
                 {error && <div className="profile-alert profile-alert-error">{error}</div>}
 
-                <button disabled={saving || !name.trim()} className="profile-save-button disabled:cursor-not-allowed disabled:opacity-50">
-                  {saving ? 'Enregistrement…' : 'Enregistrer mon profil'}
+                <button disabled={saving || !name.trim()} className="profile-save-button disabled:cursor-not-allowed disabled:opacity-50 inline-flex items-center justify-center gap-2">
+                  {saving ? <Spinner size={16} stroke={3} label="Enregistrement…" /> : 'Enregistrer mon profil'}
                 </button>
               </div>
             </form>

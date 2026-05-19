@@ -3,6 +3,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon, type IconName } from '../../components/Icon'
+import { LoadingScreen } from '../../components/Spinner'
 import { useLead, useRdvList, useCallLogs, useUsers, useStartCall } from '../../lib/hooks'
 import {
   STATUS_BADGE,
@@ -45,9 +46,7 @@ export function LeadDetail() {
     return (
       <AppShell>
         <Topbar eyebrow="LEADS / DÉTAIL" title="Chargement…" />
-        <main className="p-8 flex items-center justify-center flex-grow">
-          <div className="text-faint text-sm">Chargement du lead…</div>
-        </main>
+        <LoadingScreen label="Chargement du lead…" />
       </AppShell>
     )
   }

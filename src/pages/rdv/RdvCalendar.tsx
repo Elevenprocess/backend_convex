@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
+import { LoadingBlock, Spinner } from '../../components/Spinner'
 import { useGhlCalendarEvents, useRdvList, useLeads, type GhlCalendarEvent } from '../../lib/hooks'
 import { fullName, type LeadResponse, type RdvResponse, type RdvStatus } from '../../lib/types'
 
@@ -137,7 +138,7 @@ export function RdvCalendar() {
           ))}
         </div>
         <span className="text-xs text-faint ml-auto hidden lg:inline">Scroll horizontal fluide dans le calendrier</span>
-        {ghlLoading && <span className="text-xs text-muted">Sync GHL…</span>}
+        {ghlLoading && <Spinner size={18} stroke={3} label="Sync GHL…" className="text-xs text-muted" />}
         <button onClick={() => navigate('/rdv/split')} className="btn-primary px-4 py-2 rounded-xl text-sm flex items-center gap-2">
           <Icon name="plus" size={14} />
           Nouveau RDV
@@ -151,7 +152,7 @@ export function RdvCalendar() {
           style={{ touchAction: 'pan-x pan-y', overscrollBehavior: 'contain' }}
         >
           {loading && !rdvs ? (
-            <div className="flex-grow flex items-center justify-center text-faint text-sm">Chargement…</div>
+            <LoadingBlock label="Chargement de l’agenda…" />
           ) : error || ghlError ? (
             <div className="flex-grow flex items-center justify-center text-rouille text-sm">Erreur : {error ?? ghlError}</div>
           ) : view === 'month' ? (

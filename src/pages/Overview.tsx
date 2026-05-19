@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '../components/Icon'
+import { LoadingBlock } from '../components/Spinner'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
@@ -493,7 +494,7 @@ function OverviewAdmin() {
               <strong>Funnel CRM</strong>
               <button onClick={() => navigate('/analytics')}>Détails</button>
             </div>
-            {funnel?.totals ? <FunnelFlowMap totals={funnel.totals} /> : <div className="py-8 text-center text-faint text-sm">Chargement du funnel CRM…</div>}
+            {funnel?.totals ? <FunnelFlowMap totals={funnel.totals} /> : <LoadingBlock label="Chargement du funnel CRM…" />}
           </div>
         </section>
 

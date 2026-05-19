@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { ApiError } from '../lib/api'
+import { Spinner } from '../components/Spinner'
 
 export function Login() {
   const [email, setEmail] = useState('')
@@ -90,9 +91,9 @@ export function Login() {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full btn-primary py-3 rounded-[14px] mt-2 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full btn-primary py-3 rounded-[14px] mt-2 disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
             >
-              {submitting ? 'Connexion…' : 'Se connecter'}
+              {submitting ? <Spinner size={18} stroke={3} label="Connexion…" /> : 'Se connecter'}
             </button>
 
             <div className="relative py-4 flex items-center">

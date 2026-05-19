@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
+import { Spinner } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
 import { useAnalyticsSummary } from '../lib/hooks'
 import type { AnalyticsAdminSummary, AnalyticsCommercialPerf, AnalyticsCommercialSummary, AnalyticsDailyPoint, AnalyticsHourlyCallPoint, AnalyticsSegment, AnalyticsSetterSummary } from '../lib/types'
@@ -600,10 +601,7 @@ function adminTableRows(stats: AnalyticsAdminSummary) {
 function AnalyticsInlineLoading() {
   return (
     <span className="ml-2 inline-flex items-center gap-1.5 rounded-full bg-or-tint/70 border border-or/20 px-2 py-0.5 text-or-dark shadow-sm">
-      <span className="relative inline-flex h-3 w-3 items-center justify-center">
-        <span className="absolute inline-flex h-full w-full rounded-full bg-or/40 animate-ping" />
-        <span className="relative inline-flex h-2 w-2 rounded-full bg-or" />
-      </span>
+      <Spinner size={14} stroke={3} color="currentColor" />
       <span className="font-extrabold">Chargement…</span>
     </span>
   )

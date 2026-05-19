@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Blobs, BLOB_PRESETS } from '../../components/shell/Blobs'
 import { Icon } from '../../components/Icon'
+import { LoadingBlock } from '../../components/Spinner'
 import { useLead, createCallLog, copyText } from '../../lib/hooks'
 import { notifyClipboardCopied } from '../../lib/clipboardToast'
 import { useCall } from '../../lib/call'
@@ -63,7 +64,7 @@ export function CallFullScreen() {
   if (loading) {
     return (
       <div className="w-full h-screen flex items-center justify-center bg-cream">
-        <p className="text-faint">Chargement du lead…</p>
+        <LoadingBlock label="Chargement du lead…" />
       </div>
     )
   }

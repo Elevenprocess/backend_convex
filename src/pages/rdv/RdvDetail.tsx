@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
+import { LoadingScreen } from '../../components/Spinner'
 import { useRdv, useLead, useUsers } from '../../lib/hooks'
 import {
   fullName,
@@ -49,9 +50,7 @@ export function RdvDetail() {
     return (
       <AppShell>
         <Topbar eyebrow="RDV / DÉTAIL" title="Chargement…" />
-        <main className="p-8 flex items-center justify-center flex-grow">
-          <div className="text-faint text-sm">Chargement du RDV…</div>
-        </main>
+        <LoadingScreen label="Chargement du RDV…" />
       </AppShell>
     )
   }

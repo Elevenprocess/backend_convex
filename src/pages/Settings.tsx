@@ -5,6 +5,7 @@ import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Icon } from '../components/Icon'
 import { UserEditModal } from '../components/UserEditModal'
+import { LoadingBlock, Spinner } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
 import { inviteUser, updateUser, useGhlUsers, useInvitations, useUsers } from '../lib/hooks'
 import { useTheme } from '../lib/theme'
@@ -92,7 +93,7 @@ function SettingsAdmin() {
         <div className="glass-card p-6">
           <h3 className="font-bold mb-4">Membres de l'équipe</h3>
           {loading ? (
-            <div className="py-8 text-center text-faint text-sm">Chargement…</div>
+            <LoadingBlock label="Chargement des membres…" />
           ) : error ? (
             <div className="py-8 text-center text-rouille text-sm">Erreur : {error}</div>
           ) : team.length === 0 ? (
@@ -183,6 +184,7 @@ function InviteModal({ onClose, onInvited }: { onClose: () => void; onInvited: (
 
   async function submit(e: FormEvent) {
     e.preventDefault()
+    if (saving) return
     setSaving(true)
     setError(null)
     setMessage(null)
@@ -238,8 +240,8 @@ function InviteModal({ onClose, onInvited }: { onClose: () => void; onInvited: (
 
         <div className="flex justify-end gap-3 pt-2">
           <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-semibold text-muted hover:text-text">Fermer</button>
-          <button disabled={saving} className="btn-primary px-4 py-2 rounded-xl text-sm disabled:opacity-60">
-            {saving ? 'Envoi…' : 'Envoyer invitation'}
+          <button disabled={saving} className="btn-primary px-4 py-2 rounded-xl text-sm disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2">
+            {saving ? <Spinner size={16} stroke={3} label="Envoi…" /> : 'Envoyer invitation'}
           </button>
         </div>
       </form>

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
+import { LoadingBlock } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
 import {
   runPipelineBackfill,
@@ -913,7 +914,7 @@ function KpiCard({ label, value }: { label: string; value: string }) {
 }
 
 function Skeleton({ label }: { label: string }) {
-  return <div className="text-sm text-muted py-12 text-center">{label}</div>
+  return <LoadingBlock label={label} />
 }
 
 function ErrorBanner({ error }: { error: string }) {

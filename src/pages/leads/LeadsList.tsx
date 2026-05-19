@@ -5,8 +5,9 @@ import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
 import { EmptyState } from '../../components/EmptyState'
 import { LeadFiltersBar } from '../../components/LeadFiltersBar'
+import { LoadingBlock } from '../../components/Spinner'
 import { useAuth } from '../../lib/auth'
-import { deleteLead, useLeads, useLeadsProgressive, useUsers, useStartCall } from '../../lib/hooks'
+import { deleteLead, useLeadStats, useLeads, useLeadsProgressive, useUsers, useStartCall } from '../../lib/hooks'
 import { useLeadSidebar } from '../../lib/leadSidebar'
 import { DEFAULT_LEAD_FILTERS, applyLeadFilters, type LeadListFilters } from '../../lib/leadFilters'
 import {
@@ -121,7 +122,7 @@ function LeadsCommercial() {
       <Topbar eyebrow="LEADS / COMMERCIAL" title="Mes leads" />
       <main className="p-8 flex-grow overflow-auto">
         {loading && leads.length === 0 ? (
-          <div className="py-16 text-center text-faint text-sm">Chargement des leads…</div>
+          <LoadingBlock label="Chargement des leads…" />
         ) : error ? (
           <div className="py-16 text-center text-rouille text-sm">Erreur : {error}</div>
         ) : leads.length === 0 ? (
@@ -287,7 +288,7 @@ function LeadsSetter() {
             </div>
 
             {loading && mine.length === 0 ? (
-              <div className="py-16 text-center text-faint text-sm">Chargement des leads…</div>
+              <LoadingBlock label="Chargement des leads…" />
             ) : error ? (
               <div className="py-16 text-center text-rouille text-sm">Erreur : {error}</div>
             ) : filtered.length === 0 ? (
@@ -361,7 +362,8 @@ function LeadsAdmin() {
   const [deletingLeadId, setDeletingLeadId] = useState<string | null>(null)
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([])
 
-  const { data: leadsData, loading, error, refetch } = useLeads({ limit: 500 })
+  const { data: leadsData, loading, error, backgroundLoading, refetch } = useLeadsProgressive({ quickLimit: 100, fullLimit: 10000 })
+  const { data: leadStats } = useLeadStats()
   const { data: users = [] } = useUsers()
   const leads = leadsData ?? []
 
@@ -381,14 +383,29 @@ function LeadsAdmin() {
     return list
   }, [leads, setterFilter, commercialFilter, leadFilters])
 
-  const stats = useMemo(() => ({
-    total: (leads ?? []).length,
-    qualifies: (leads ?? []).filter((l) =>
-      l.status === 'qualifie' || l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe',
-    ).length,
-    waiting: (leads ?? []).filter((l) => l.status === 'nouveau' || (l.joursSansContact ?? 0) >= 2).length,
-    perdus: (leads ?? []).filter((l) => l.status === 'perdu').length,
-  }), [leads])
+  const stats = useMemo(() => {
+    const byStatus = leadStats?.byStatus
+    if (leadStats && byStatus) {
+      return {
+        total: leadStats.total,
+        imported: leadStats.imported,
+        directGhl: leadStats.directGhl,
+        qualifies: (byStatus.qualifie ?? 0) + (byStatus.rdv_pris ?? 0) + (byStatus.rdv_honore ?? 0) + (byStatus.signe ?? 0),
+        waiting: (byStatus.nouveau ?? 0) + (byStatus.a_rappeler ?? 0) + (byStatus.relance ?? 0),
+        perdus: (byStatus.perdu ?? 0) + (byStatus.pas_qualifie ?? 0),
+      }
+    }
+    return {
+      total: (leads ?? []).length,
+      imported: (leads ?? []).filter((l) => l.source === 'ghl' || l.source === 'airtable_migration').length,
+      directGhl: (leads ?? []).filter((l) => l.source === 'ghl').length,
+      qualifies: (leads ?? []).filter((l) =>
+        l.status === 'qualifie' || l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe',
+      ).length,
+      waiting: (leads ?? []).filter((l) => l.status === 'nouveau' || l.status === 'a_rappeler' || l.status === 'relance').length,
+      perdus: (leads ?? []).filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie').length,
+    }
+  }, [leadStats, leads])
   const selectedFilteredIds = useMemo(() => {
     const visibleIds = new Set(filtered.map((lead) => lead.id))
     return selectedLeadIds.filter((id) => visibleIds.has(id))
@@ -486,7 +503,7 @@ function LeadsAdmin() {
         </select>
         <LeadFiltersBar filters={leadFilters} onChange={setLeadFilters} total={(leads ?? []).length} filtered={filtered.length} />
         <ColumnVisibilityMenu columns={ADMIN_COLUMNS} visible={visibleColumns} onChange={setVisibleColumns} />
-        {loading && leads.length > 0 && <span className="text-xs text-faint">Actualisation…</span>}
+        {(loading || backgroundLoading) && leads.length > 0 && <span className="text-xs text-faint">{backgroundLoading ? `100 premiers affichés, hydratation du reste (${leads.length.toLocaleString('fr-FR')} visibles)…` : 'Actualisation…'}</span>}
         <div className="ml-auto flex items-center gap-2">
           {selectedFilteredIds.length > 0 && (
             <button
@@ -505,14 +522,14 @@ function LeadsAdmin() {
 
       <main className="p-8 pt-3 flex-grow flex flex-col min-h-0 overflow-hidden">
         <div className="grid grid-cols-4 gap-3 mb-3 flex-shrink-0">
-          <StatCard label="TOTAL LEADS" value={stats.total.toLocaleString('fr-FR')} />
-          <StatCard label="QUALIFIÉS" value={stats.qualifies.toString()} />
-          <StatCard label="EN ATTENTE" value={stats.waiting.toString()} />
-          <StatCard label="NON QUALIFIÉS" value={stats.perdus.toString()} />
+          <StatCard label="TOTAL IMPORTÉ" value={stats.total.toLocaleString('fr-FR')} />
+          <StatCard label="IMPORT DIRECT GHL" value={stats.directGhl.toLocaleString('fr-FR')} />
+          <StatCard label="QUALIFIÉS" value={stats.qualifies.toLocaleString('fr-FR')} />
+          <StatCard label="NON QUALIFIÉS" value={stats.perdus.toLocaleString('fr-FR')} />
         </div>
 
         {loading && leads.length === 0 ? (
-          <div className="py-16 text-center text-faint text-sm">Chargement…</div>
+          <LoadingBlock label="Chargement des leads…" />
         ) : error ? (
           <div className="py-16 text-center text-rouille text-sm">Erreur : {error}</div>
         ) : filtered.length === 0 ? (

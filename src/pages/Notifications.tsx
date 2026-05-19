@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Icon, type IconName } from '../components/Icon'
+import { LoadingBlock, Spinner } from '../components/Spinner'
 import { useLeads, useRdvList } from '../lib/hooks'
 import { useAuth } from '../lib/auth'
 import { fullName, type LeadResponse, type RdvResponse } from '../lib/types'
@@ -47,7 +48,7 @@ export function Notifications() {
       <Topbar eyebrow="NOTIFICATIONS" title={isCommercial ? 'Notifications commerciales' : 'Notifications et rappels'} />
       <div className="px-8 pt-4 flex items-center justify-between flex-shrink-0 gap-4">
         <div className="text-sm text-muted">
-          {loading && notifs.length === 0 ? 'Chargement des notifications…' : `${notifs.length} notification${notifs.length > 1 ? 's' : ''} active${notifs.length > 1 ? 's' : ''}`}
+          {loading && notifs.length === 0 ? <Spinner size={16} stroke={3} label="Chargement des notifications…" /> : `${notifs.length} notification${notifs.length > 1 ? 's' : ''} active${notifs.length > 1 ? 's' : ''}`}
         </div>
         <button
           onClick={async () => setPermission(await requestNotificationPermission())}
@@ -59,7 +60,9 @@ export function Notifications() {
       </div>
 
       <main className="p-8 pt-4 max-w-3xl mx-auto w-full overflow-y-auto space-y-3 flex-grow">
-        {notifs.length === 0 ? (
+        {loading && notifs.length === 0 ? (
+          <LoadingBlock label="Chargement des notifications…" />
+        ) : notifs.length === 0 ? (
           <div className="glass-card p-6 text-sm text-muted">
             {isCommercial
               ? 'Aucune notification commerciale : pas de nouveau RDV, pas de RDV imminent et pas de mouvement pipeline récent.'
