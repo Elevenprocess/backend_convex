@@ -205,7 +205,7 @@ function AnalyticsCommercial({ name }: { name: string }) {
       </div>
       <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
         <div className="grid grid-cols-4 gap-6">
-          <BigStatCard label="CA SIGNÉ" value={fmtKEur(stats.ca)} delta={`${stats.signed} ventes`} />
+          <BigStatCard label="CA SIGNÉ" value={fmtKEur(stats.ca)} delta={`${stats.signed} ventes signées`} sub={fmtFullEur(stats.ca)} />
           <BigStatCard label="CLOSING RATE" value={`${stats.closing}%`} sub={`${commercialOutcomeCount(stats)} résultats RDV`} />
           <BigStatCard label="PANIER MOYEN" value={fmtKEur(stats.panier)} />
           <BigStatCard label="ACTIVITÉ RDV" value={fmtInt(stats.total)} sub={`${stats.honored} honorés confirmés`} />
@@ -258,7 +258,7 @@ function AnalyticsAdmin() {
           <BigStatCard label="APPELS CRM" value={fmtInt(stats.calls)} delta={`${stats.classified} traités`} sub="Appels et statuts suivis dans le CRM" />
           <BigStatCard label="LEADS CLASSIFIÉS" value={fmtInt(stats.classified)} sub={`${stats.qualificationRate}% qualifiés`} />
           <BigStatCard label="RDV PRIS" value={fmtInt(stats.rdvPris)} sub={`${stats.rdvRate}% / appels`} />
-          <BigStatCard label="CA SIGNÉ" value={fmtKEur(stats.ca)} delta={`${stats.signed} ventes`} />
+          <BigStatCard label="CA SIGNÉ" value={fmtKEur(stats.ca)} delta={`${stats.signed} ventes signées`} sub={fmtFullEur(stats.ca)} />
         </div>
 
         <div className="grid grid-cols-12 gap-6 items-stretch">
@@ -486,9 +486,15 @@ function fmtInt(n: number): string {
 }
 
 function fmtKEur(val: number): string {
-  if (val === 0) return '0€'
-  if (val >= 1000) return `${(val / 1000).toFixed(val >= 10000 ? 0 : 1)}k€`
-  return `${Math.round(val)}€`
+  if (val === 0) return '0 €'
+  if (Math.abs(val) >= 1_000_000) {
+    return `${(val / 1_000_000).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} M€`
+  }
+  return fmtFullEur(val)
+}
+
+function fmtFullEur(val: number): string {
+  return `${Math.round(val).toLocaleString('fr-FR')} €`
 }
 
 function buildPeriodRange(period: PeriodState): PeriodRange {
