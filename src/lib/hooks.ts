@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError } from './api'
 import { notifyClipboardCopied } from './clipboardToast'
-import { REALTIME_REFRESH_EVENT, type RealtimeRefreshPayload } from './realtime'
+import { notifyRealtimeRefresh, REALTIME_REFRESH_EVENT, type RealtimeRefreshPayload } from './realtime'
 import type {
   CallLogResponse,
   InvitationResponse,
@@ -591,6 +591,15 @@ function updateLeadCaches(updated: LeadResponse) {
 export async function updateLead(id: string, input: UpdateLeadInput): Promise<LeadResponse> {
   const updated = await api<LeadResponse>(`/leads/${id}`, { method: 'PATCH', body: input })
   updateLeadCaches(updated)
+  if (input.status === 'qualifie') {
+    void syncLeadGhlCalendarEvents(id)
+      .then((result) => {
+        if ((result.created + result.updated) > 0 || result.matched > 0) {
+          notifyRealtimeRefresh({ event: 'ghl-calendar:lead-sync', paths: ['/rdv', '/leads', '/ghl-calendar/events', '/analytics/summary', '/analytics/funnel'] })
+        }
+      })
+      .catch(() => undefined)
+  }
   return updated
 }
 
@@ -757,6 +766,10 @@ export function useGhlOpportunities(filters?: {
 
 export function syncGhlCalendarEvents(filters: { from: string; to: string; sector?: string; calendarId?: string }): Promise<{ configured: boolean; created: number; updated: number; skipped: number; events: GhlCalendarEvent[] }> {
   return api<{ configured: boolean; created: number; updated: number; skipped: number; events: GhlCalendarEvent[] }>('/ghl-calendar/sync-events', { method: 'POST', query: filters })
+}
+
+export function syncLeadGhlCalendarEvents(leadId: string): Promise<{ configured: boolean; created: number; updated: number; skipped: number; matched: number; events: GhlCalendarEvent[] }> {
+  return api<{ configured: boolean; created: number; updated: number; skipped: number; matched: number; events: GhlCalendarEvent[] }>(`/ghl-calendar/leads/${leadId}/sync-events`, { method: 'POST' })
 }
 
 export function moveGhlOpportunity(
