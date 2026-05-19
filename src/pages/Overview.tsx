@@ -389,7 +389,12 @@ function OverviewAdmin() {
   const adminSummary = summary?.admin ?? null
   const funnelTotals = funnel?.totals ?? EMPTY_FUNNEL_TOTALS
   const leadSegments = adminSummary?.resultSegments ?? []
-  const leadTotal = Math.max(funnelTotals.newLeads, leadSegments.reduce((sum, segment) => sum + segment.value, 0))
+  const treatedLeadTotal = Math.max(
+    funnelTreatedLeads(funnelTotals),
+    adminSummary?.classified ?? 0,
+    adminSummary?.qualified ?? 0,
+    adminSummary?.rdvPris ?? 0,
+  )
   const evolutionPoints = buildLeadEvolutionPoints(adminSummary?.dailyEvolution ?? [], funnel?.daily ?? [], funnelRange)
 
   const stats = useMemo(() => {
@@ -403,9 +408,9 @@ function OverviewAdmin() {
       caMois: ca,
       ventes: signed,
       closing: ratePct(Math.max(1, rdvPris), signed),
-      leads: leadTotal,
+      leads: treatedLeadTotal,
       appels: calls,
-      classified: adminSummary?.classified ?? Math.max(funnelTotals.answered + funnelTotals.notQualified + funnelTotals.noAnswer, qualified),
+      classified: treatedLeadTotal,
       qualified,
       qualifRate: adminSummary?.qualificationRate ?? funnelTotals.qualificationRate,
       panier: signed ? ca / signed : 0,
@@ -413,7 +418,7 @@ function OverviewAdmin() {
       teamTotal: (usersList ?? []).length,
       rdvPris,
     }
-  }, [adminSummary, funnelTotals, leadTotal, usersList])
+  }, [adminSummary, funnelTotals, treatedLeadTotal, usersList])
 
   return (
     <AppShell blobsKey="admin" flat>
@@ -567,43 +572,45 @@ const LEAD_EVOLUTION_SERIES: { key: LeadEvolutionSeriesKey; label: string; color
 ]
 
 function LeadEvolutionChart({ points, rangeLabel, totals }: { points: LeadEvolutionPoint[]; rangeLabel: string; totals: { leads: number; rdv: number; signed: number } }) {
-  const safePoints = points.length > 0 ? points : [{ key: 'empty', date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }]
+  const rawPoints = points.length > 0 ? points : [{ key: 'empty', date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }]
+  const safePoints = rawPoints.length > 56 ? rawPoints.filter((_, index) => index % Math.ceil(rawPoints.length / 56) === 0 || index === rawPoints.length - 1) : rawPoints
   const [activeKey, setActiveKey] = useState<LeadEvolutionSeriesKey>('leads')
-  const [hover, setHover] = useState<{ x: number; y: number; index: number } | null>(null)
-  const width = 560
-  const height = 226
-  const padX = 36
+  const [hover, setHover] = useState<{ x: number; y: number; cursorX: number; cursorY: number; cursorValue: number; index: number } | null>(null)
+  const width = 620
+  const height = 260
+  const padX = 44
   const padTop = 24
-  const padBottom = 44
+  const padBottom = 42
   const chartWidth = width - padX * 2
   const chartHeight = height - padTop - padBottom
   const activeSeries = LEAD_EVOLUTION_SERIES.find((series) => series.key === activeKey) ?? LEAD_EVOLUTION_SERIES[0]
-  const max = Math.max(1, ...safePoints.flatMap((point) => LEAD_EVOLUTION_SERIES.map((series) => point[series.key])))
+  const max = Math.max(1, ...safePoints.map((point) => point[activeKey]))
+  const ghostMax = Math.max(1, ...safePoints.flatMap((point) => LEAD_EVOLUTION_SERIES.map((series) => point[series.key])))
   const last = safePoints[safePoints.length - 1]
   const first = safePoints[0]
   const activeValue = last[activeKey]
   const delta = activeValue - first[activeKey]
-  const pathFor = (key: LeadEvolutionSeriesKey) => safePoints.map((point, index) => {
-    const x = padX + (safePoints.length === 1 ? chartWidth : (index / (safePoints.length - 1)) * chartWidth)
-    const y = padTop + chartHeight - (point[key] / max) * chartHeight
-    return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`
-  }).join(' ')
-  const coords = safePoints.map((point, index) => ({
-    point,
-    x: padX + (safePoints.length === 1 ? chartWidth : (index / (safePoints.length - 1)) * chartWidth),
-    y: padTop + chartHeight - (point[activeKey] / max) * chartHeight,
-  }))
-  const activeHover = hover ? coords[hover.index] : null
+  const total = totals[activeKey]
+  const peak = safePoints.reduce((best, point) => point[activeKey] > best[activeKey] ? point : best, safePoints[0])
+  const clamp = (value: number, min: number, maxValue: number) => Math.min(maxValue, Math.max(min, value))
+  const xFor = (index: number) => padX + (safePoints.length === 1 ? chartWidth / 2 : (index / (safePoints.length - 1)) * chartWidth)
+  const yFor = (value: number, baseMax = max) => padTop + chartHeight - (value / baseMax) * chartHeight
+  const pathFor = (key: LeadEvolutionSeriesKey, baseMax = max) => safePoints.map((point, index) => `${index === 0 ? 'M' : 'L'} ${xFor(index).toFixed(1)} ${yFor(point[key], baseMax).toFixed(1)}`).join(' ')
+  const activePath = pathFor(activeKey)
+  const activeHover = hover ? safePoints[hover.index] : null
 
   const onMove = (event: MouseEvent<SVGSVGElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
-    const rawX = ((event.clientX - rect.left) / rect.width) * width
-    const rawY = ((event.clientY - rect.top) / rect.height) * height
-    const clampedX = Math.min(width - padX, Math.max(padX, rawX))
-    const clampedY = Math.min(padTop + chartHeight, Math.max(padTop, rawY))
-    const ratio = chartWidth === 0 ? 0 : (clampedX - padX) / chartWidth
-    const index = Math.min(safePoints.length - 1, Math.max(0, Math.round(ratio * (safePoints.length - 1))))
-    setHover({ x: clampedX, y: clampedY, index })
+    const cursorX = clamp(((event.clientX - rect.left) / rect.width) * width, padX, width - padX)
+    const cursorY = clamp(((event.clientY - rect.top) / rect.height) * height, padTop, height - padBottom)
+    const ratio = chartWidth === 0 ? 0 : (cursorX - padX) / chartWidth
+    const index = safePoints.length <= 1 ? 0 : clamp(Math.round(ratio * (safePoints.length - 1)), 0, safePoints.length - 1)
+    const point = safePoints[index]
+    const x = xFor(index)
+    const y = yFor(point[activeKey])
+    const cursorRatio = (padTop + chartHeight - cursorY) / chartHeight
+    const cursorValue = Math.round(clamp(cursorRatio, 0, 1) * max)
+    setHover({ x, y, cursorX, cursorY, cursorValue, index })
   }
 
   return (
@@ -618,49 +625,82 @@ function LeadEvolutionChart({ points, rangeLabel, totals }: { points: LeadEvolut
       <div className="lead-evolution-tabs" aria-label="Courbe active">
         {LEAD_EVOLUTION_SERIES.map((series) => (
           <button key={series.key} type="button" className={activeKey === series.key ? 'active' : ''} onClick={() => setActiveKey(series.key)} style={{ ['--series-color' as string]: series.color }}>
-            <small>{series.label}</small>
+            <small><i style={{ background: series.color }} />{series.label}</small>
             <strong>{fmtCompact(totals[series.key])}</strong>
           </button>
         ))}
       </div>
-      <div className="lead-evolution-meta">
-        <div><small>Dernier jour</small><strong>{fmtCompact(activeValue)}</strong></div>
-        <div><small>{delta >= 0 ? '+' : ''}{fmtCompact(delta)} vs début</small><strong>{fmtCompact(max)}</strong></div>
-      </div>
       <div className="lead-evolution-svg-wrap">
+        <div className="lead-evolution-last-card">
+          <small>Dernier jour</small>
+          <strong style={{ color: activeSeries.color }}>{fmtCompact(activeValue)}</strong>
+          <span className={delta >= 0 ? 'positive' : 'negative'}>{delta >= 0 ? '+' : ''}{fmtCompact(delta)} vs début</span>
+        </div>
         <svg viewBox={`0 0 ${width} ${height}`} onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img" aria-label="Évolution leads RDV ventes">
           <defs>
             <linearGradient id="leadEvolutionFill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor={activeSeries.color} stopOpacity="0.2" />
+              <stop offset="0%" stopColor={activeSeries.color} stopOpacity="0.24" />
               <stop offset="100%" stopColor={activeSeries.color} stopOpacity="0" />
             </linearGradient>
           </defs>
-          {[0, 0.5, 1].map((tick) => <line key={tick} x1={padX} x2={width - padX} y1={padTop + tick * chartHeight} y2={padTop + tick * chartHeight} className="lead-evolution-grid" />)}
-          {LEAD_EVOLUTION_SERIES.filter((series) => series.key !== activeKey).map((series) => <path key={series.key} d={pathFor(series.key)} className="lead-evolution-ghost" style={{ stroke: series.color }} />)}
-          <path d={`${pathFor(activeKey)} L ${width - padX} ${padTop + chartHeight} L ${padX} ${padTop + chartHeight} Z`} fill="url(#leadEvolutionFill)" />
-          <path d={pathFor(activeKey)} className="lead-evolution-line" style={{ stroke: activeSeries.color }} />
-          {coords.map(({ point, x, y }, index) => (
-            <g key={point.key}>
-              <circle cx={x} cy={y} r={hover?.index === index ? 5.5 : 3.5} className="lead-evolution-dot" style={{ fill: activeSeries.color }} />
-              {point[activeKey] === max && max > 0 ? <text x={x} y={Math.max(13, y - 10)} className="lead-evolution-peak">pic {fmtCompact(max)}</text> : null}
-            </g>
-          ))}
-          {activeHover ? (
-            <g>
-              <line x1={activeHover.x} x2={activeHover.x} y1={padTop} y2={padTop + chartHeight} className="lead-evolution-guide" />
-              <line x1={padX} x2={width - padX} y1={hover!.y} y2={hover!.y} className="lead-evolution-guide" />
-              <circle cx={activeHover.x} cy={activeHover.y} r="6" className="lead-evolution-cursor" style={{ stroke: activeSeries.color }} />
+          {[0, 0.5, 1].map((ratio) => {
+            const y = padTop + ratio * chartHeight
+            const label = Math.round(max * (1 - ratio))
+            return (
+              <g key={ratio}>
+                <line x1={padX} x2={width - padX} y1={y} y2={y} className="lead-evolution-grid" />
+                <text x="10" y={y + 4} className="lead-evolution-yaxis">{fmtCompact(label)}</text>
+              </g>
+            )
+          })}
+          {LEAD_EVOLUTION_SERIES.filter((series) => series.key !== activeKey).map((series) => <path key={series.key} d={pathFor(series.key, ghostMax)} className="lead-evolution-ghost" style={{ stroke: series.color }} />)}
+          <path d={`${activePath} L ${xFor(safePoints.length - 1)} ${height - padBottom} L ${xFor(0)} ${height - padBottom} Z`} fill="url(#leadEvolutionFill)" />
+          <path d={activePath} className="lead-evolution-line" style={{ stroke: activeSeries.color }} />
+          {hover ? (
+            <g pointerEvents="none">
+              <line x1={hover.cursorX} x2={hover.cursorX} y1={padTop} y2={height - padBottom} className="lead-evolution-guide" style={{ stroke: activeSeries.color }} />
+              <line x1={padX} x2={width - padX} y1={hover.cursorY} y2={hover.cursorY} className="lead-evolution-guide subtle" style={{ stroke: activeSeries.color }} />
+              <circle cx={hover.cursorX} cy={hover.cursorY} r="4" className="lead-evolution-cursor-dot" style={{ fill: activeSeries.color }} />
+              <text x={Math.min(width - 70, hover.cursorX + 8)} y={Math.max(16, hover.cursorY - 8)} className="lead-evolution-cursor-label" style={{ fill: activeSeries.color }}>{fmtCompact(hover.cursorValue)}</text>
             </g>
           ) : null}
-          {coords.map(({ point, x }, index) => index === 0 || index === coords.length - 1 || index === Math.floor((coords.length - 1) / 2) ? <text key={`label-${point.key}`} x={x} y={height - 13} className="lead-evolution-axis">{point.label}</text> : null)}
+          {safePoints.map((point, index) => {
+            const x = xFor(index)
+            const y = yFor(point[activeKey])
+            const isPeak = point.key === peak.key && peak[activeKey] > 0
+            const isHovered = hover?.index === index
+            const showLabel = safePoints.length <= 8 || index === 0 || index === safePoints.length - 1 || index === Math.floor((safePoints.length - 1) / 2) || isPeak
+            return (
+              <g key={point.key}>
+                <circle cx={x} cy={y} r="14" fill="transparent" />
+                <circle cx={x} cy={y} r={isHovered ? 7 : isPeak ? 6 : 4} className="lead-evolution-dot" style={{ stroke: activeSeries.color }} />
+                {isPeak ? <text x={x} y={Math.max(13, y - 12)} className="lead-evolution-peak" style={{ fill: activeSeries.color }}>pic {fmtCompact(point[activeKey])}</text> : null}
+                {showLabel ? <text x={x} y={height - 13} className="lead-evolution-axis" textAnchor={index === 0 ? 'start' : index === safePoints.length - 1 ? 'end' : 'middle'}>{point.label}</text> : null}
+              </g>
+            )
+          })}
         </svg>
-        {activeHover ? (
-          <div className="lead-evolution-tooltip" style={{ left: `${(activeHover.x / width) * 100}%`, top: `${Math.max(8, Math.min(78, (activeHover.y / height) * 100))}%` }}>
-            <small>{activeHover.point.label}</small>
-            <strong>{fmtCompact(activeHover.point[activeKey])} {activeSeries.label}</strong>
-            <span>{fmtCompact(activeHover.point.leads)} leads · {fmtCompact(activeHover.point.rdv)} RDV · {fmtCompact(activeHover.point.signed)} ventes</span>
+        {activeHover && hover ? (
+          <div
+            className="lead-evolution-tooltip"
+            style={{
+              left: hover.cursorX > width * 0.58 ? 'auto' : `${Math.min(58, Math.max(2, (hover.cursorX / width) * 100))}%`,
+              right: hover.cursorX > width * 0.58 ? `${Math.min(58, Math.max(2, ((width - hover.cursorX) / width) * 100))}%` : 'auto',
+              top: `${Math.min(64, Math.max(5, (hover.cursorY / height) * 100))}%`,
+              transform: hover.cursorY > height * 0.62 ? 'translateY(-100%)' : 'translateY(10px)',
+            }}
+          >
+            <small>{activeHover.label}</small>
+            <strong style={{ color: activeSeries.color }}>{fmtCompact(activeHover[activeKey])} {activeSeries.label}</strong>
+            <div className="lead-evolution-tooltip-level"><span>niveau souris</span><b style={{ color: activeSeries.color }}>{fmtCompact(hover.cursorValue)}</b></div>
+            <em>{fmtCompact(activeHover.leads)} leads · {fmtCompact(activeHover.rdv)} RDV · {fmtCompact(activeHover.signed)} ventes</em>
           </div>
         ) : null}
+      </div>
+      <div className="lead-evolution-footer">
+        <div><small>Total période</small><strong>{fmtCompact(total)}</strong></div>
+        <div><small>Pic</small><strong>{fmtCompact(peak?.[activeKey] ?? 0)}</strong></div>
+        <div><small>Tendance</small><strong className={delta >= 0 ? 'positive' : 'negative'}>{delta >= 0 ? 'Hausse' : 'Baisse'}</strong></div>
       </div>
     </div>
   )
@@ -677,7 +717,7 @@ function buildLeadEvolutionPoints(summaryDaily: { date: string; label: string; r
         key: date,
         date,
         label: funnelPoint?.label || summaryPoint?.label || dayLabel(date),
-        leads: funnelPoint?.newLeads ?? 0,
+        leads: Math.max(funnelPoint?.newLeads ?? 0, funnelPoint?.answered ?? 0, funnelPoint?.qualified ?? 0, funnelPoint?.rdv ?? 0),
         rdv: summaryPoint?.rdv ?? funnelPoint?.rdv ?? 0,
         signed: summaryPoint?.signed ?? 0,
       }
