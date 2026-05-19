@@ -296,17 +296,29 @@ function OverviewCommercial() {
           </div>
         </div>
 
-        <section className="overview-air-grid">
-          <div className="overview-profile-panel">
-            <div className="overview-profile-large">
+        <section className="overview-commercial-hero">
+          <div className="overview-commercial-hero-main">
+            <div className="overview-commercial-avatar">
               {me?.image ? <img src={me.image} alt={me.name ?? 'Profil'} /> : <span>{userInitials(me?.name ?? display.firstName)}</span>}
             </div>
             <div>
-              <span className="shot-eyebrow">Performance</span>
+              <span className="shot-eyebrow">Performance commerciale</span>
               <h2>{fmtKEur(stats.ca)}</h2>
-              <p>{fmtCompact(stats.totalRdv)} RDV suivis · {fmtCompact(stats.signed)} ventes</p>
+              <p>{fmtCompact(stats.totalRdv)} RDV suivis · {fmtCompact(stats.totalHonored)} honorés · {fmtCompact(stats.signed)} ventes signées</p>
+              <div className="overview-commercial-actions">
+                <button type="button" onClick={() => navigate('/rdv')}>Voir mes RDV</button>
+                <button type="button" onClick={() => navigate('/analytics')}>Suivre mes ventes</button>
+              </div>
             </div>
           </div>
+          <div className="overview-commercial-hero-metrics">
+            <div><small>Closing</small><strong>{stats.closing}%</strong></div>
+            <div><small>Panier moyen</small><strong>{fmtKEur(stats.panier)}</strong></div>
+            <div><small>À venir</small><strong>{fmtCompact(stats.upcoming.length)}</strong></div>
+          </div>
+        </section>
+
+        <section className="overview-air-grid overview-commercial-grid">
           <AirKpi icon="trophy" label="CA signé" value={fmtKEur(stats.ca)} sub={`${fmtCompact(stats.signed)} ventes`} />
           <AirKpi icon="target" label="Closing" value={`${stats.closing}%`} sub={`${fmtCompact(stats.lost)} perdus`} />
           <AirKpi icon="chart" label="Panier moyen" value={fmtKEur(stats.panier)} sub="sur ventes signées" />
