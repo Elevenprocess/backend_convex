@@ -485,7 +485,7 @@ function OverviewAdmin() {
           <AirKpi icon="trophy" label="CA total" value={fmtKEur(stats.caMois)} sub={`${stats.ventes} ventes signées`} />
           <AirKpi icon="target" label="Closing" value={`${stats.closing}%`} sub={`${fmtCompact(stats.rdvPris)} RDV suivis`} />
           <AirKpi icon="phone" label="Appels" value={fmtCompact(stats.appels)} sub={`${fmtCompact(stats.classified)} leads traités`} />
-          <AirKpi icon="users" label="Leads" value={fmtCompact(stats.leads)} sub={`${fmtCompact(stats.qualified)} qualifiés`} />
+          <AirKpi icon="users" label="Leads traités" value={fmtCompact(stats.leads)} sub={`${fmtCompact(stats.qualified)} qualifiés`} />
 
           <div className="overview-air-card overview-air-chart overview-lead-evolution-card">
             <LeadEvolutionChart
@@ -503,14 +503,14 @@ function OverviewAdmin() {
                 <span className="shot-eyebrow">Pipeline réel</span>
                 <h3>Avancement CRM</h3>
               </div>
-              <strong>{funnelTotals.globalConversionRate || stats.closing}%</strong>
+              <strong>{pct(stats.rdvPris, stats.leads)}%</strong>
             </div>
-            <div className="overview-real-segments" style={{ ['--seg-a' as string]: `${Math.max(1, funnelTotals.newLeads || stats.leads)}`, ['--seg-b' as string]: `${Math.max(1, funnelTotals.qualified || stats.qualified)}`, ['--seg-c' as string]: `${Math.max(1, funnelTotals.rdv || stats.rdvPris)}` }}>
+            <div className="overview-real-segments" style={{ ['--seg-a' as string]: `${Math.max(1, stats.leads)}`, ['--seg-b' as string]: `${Math.max(1, funnelTotals.qualified || stats.qualified)}`, ['--seg-c' as string]: `${Math.max(1, funnelTotals.rdv || stats.rdvPris)}` }}>
               <span />
               <span />
               <span />
             </div>
-            <TaskLine icon="phone" title="Appels setters" sub={`${fmtCompact(funnelTotals.calls || stats.appels)} appels`} done={(funnelTotals.calls || stats.appels) > 0} />
+            <TaskLine icon="phone" title="Leads traités" sub={`${fmtCompact(stats.leads)} traités · ${fmtCompact(funnelTotals.calls || stats.appels)} appels`} done={stats.leads > 0} />
             <TaskLine icon="target" title="Leads qualifiés" sub={`${fmtCompact(funnelTotals.qualified || stats.qualified)} leads`} done={(funnelTotals.qualified || stats.qualified) > 0} />
             <TaskLine icon="trophy" title="RDV obtenus" sub={`${fmtCompact(funnelTotals.rdv || stats.rdvPris)} RDV`} done={(funnelTotals.rdv || stats.rdvPris) > 0} />
           </div>
@@ -618,7 +618,7 @@ function LeadEvolutionChart({ points, rangeLabel, totals }: { points: LeadEvolut
       <div className="lead-evolution-head">
         <div>
           <h3>Courbes d’évolution des leads</h3>
-          <p>Leads réels par jour — {rangeLabel}</p>
+          <p>Leads traités par jour — {rangeLabel}</p>
         </div>
         <span>évolution</span>
       </div>
@@ -717,7 +717,7 @@ function buildLeadEvolutionPoints(summaryDaily: { date: string; label: string; r
         key: date,
         date,
         label: funnelPoint?.label || summaryPoint?.label || dayLabel(date),
-        leads: Math.max(funnelPoint?.newLeads ?? 0, funnelPoint?.answered ?? 0, funnelPoint?.qualified ?? 0, funnelPoint?.rdv ?? 0),
+        leads: Math.max(funnelPoint?.answered ?? 0, funnelPoint?.qualified ?? 0, funnelPoint?.rdv ?? 0),
         rdv: summaryPoint?.rdv ?? funnelPoint?.rdv ?? 0,
         signed: summaryPoint?.signed ?? 0,
       }
