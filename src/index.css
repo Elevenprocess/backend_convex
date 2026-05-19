@@ -190,6 +190,10 @@ body {
   letter-spacing: -0.055em;
   color: var(--color-text);
 }
+.overview-commercial-page { padding-top: 18px; gap: 12px; }
+.overview-commercial-page .overview-air-header { gap: 12px; }
+.overview-commercial-page .overview-air-header h1 { font-size: clamp(28px, 3vw, 42px); }
+.overview-commercial-page .overview-air-header p { margin-top: 5px !important; font-size: 12px; }
 .shot-eyebrow {
   font-size: 10px;
   font-weight: 850;
@@ -277,13 +281,13 @@ body {
 .overview-commercial-hero {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(260px, .85fr);
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: 10px;
+  margin-bottom: 12px;
   border: 1px solid var(--color-line-soft);
-  border-radius: 26px;
+  border-radius: 22px;
   background: rgba(255,255,255,.76);
   box-shadow: 0 14px 34px rgba(58,45,28,.045);
-  padding: 16px;
+  padding: 12px 14px;
   overflow: visible;
   position: relative;
 }
@@ -298,19 +302,19 @@ body {
   background: radial-gradient(circle, rgba(61,168,106,.18), transparent 68%);
   pointer-events: none;
 }
-.overview-commercial-hero-main { display: flex; align-items: center; gap: 14px; min-width: 0; position: relative; z-index: 1; }
-.overview-commercial-avatar { width: 78px; height: 78px; flex: 0 0 auto; border-radius: 24px; display: grid; place-items: center; background: var(--color-text); color: var(--color-cream); overflow: hidden; box-shadow: 0 12px 26px rgba(42,37,32,.12); }
+.overview-commercial-hero-main { display: flex; align-items: center; gap: 12px; min-width: 0; position: relative; z-index: 1; }
+.overview-commercial-avatar { width: 64px; height: 64px; flex: 0 0 auto; border-radius: 20px; display: grid; place-items: center; background: var(--color-text); color: var(--color-cream); overflow: hidden; box-shadow: 0 10px 22px rgba(42,37,32,.1); }
 .overview-commercial-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.overview-commercial-avatar span { font-size: 23px; font-weight: 900; letter-spacing: -.08em; }
-.overview-commercial-hero h2 { margin: 5px 0 5px; font-size: clamp(34px, 4vw, 54px); line-height: .95; font-weight: 560; letter-spacing: -.06em; color: var(--color-text); overflow-wrap: anywhere; }
-.overview-commercial-hero p { margin: 0; font-size: 12px; line-height: 1.35; font-weight: 720; color: var(--color-muted); }
-.overview-commercial-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 11px; }
-.overview-commercial-actions button { border: 1px solid var(--color-line-soft); border-radius: 999px; padding: 9px 14px; background: rgba(255,255,255,.72); color: var(--color-text); font-size: 11px; font-weight: 900; cursor: pointer; }
+.overview-commercial-avatar span { font-size: 20px; font-weight: 900; letter-spacing: -.08em; }
+.overview-commercial-hero h2 { margin: 4px 0 4px; font-size: clamp(30px, 3.4vw, 44px); line-height: .98; font-weight: 560; letter-spacing: -.055em; color: var(--color-text); overflow-wrap: anywhere; }
+.overview-commercial-hero p { margin: 0; font-size: 11px; line-height: 1.28; font-weight: 720; color: var(--color-muted); }
+.overview-commercial-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+.overview-commercial-actions button { border: 1px solid var(--color-line-soft); border-radius: 999px; padding: 7px 11px; background: rgba(255,255,255,.72); color: var(--color-text); font-size: 10px; font-weight: 900; cursor: pointer; }
 .overview-commercial-actions button:first-child { background: var(--color-text); color: var(--color-cream); border-color: var(--color-text); }
 .overview-commercial-hero-metrics { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-self: stretch; }
-.overview-commercial-hero-metrics div { border: 1px solid var(--color-line-soft); border-radius: 18px; background: rgba(255,255,255,.58); padding: 12px; display: flex; flex-direction: column; justify-content: center; min-height: 86px; min-width: 0; }
+.overview-commercial-hero-metrics div { border: 1px solid var(--color-line-soft); border-radius: 16px; background: rgba(255,255,255,.58); padding: 10px; display: flex; flex-direction: column; justify-content: center; min-height: 70px; min-width: 0; }
 .overview-commercial-hero-metrics small { font-size: 9px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; color: var(--color-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.overview-commercial-hero-metrics strong { margin-top: 9px; font-size: clamp(20px, 2.3vw, 28px); line-height: 1; font-weight: 620; letter-spacing: -.055em; color: var(--color-text); overflow-wrap: anywhere; }
+.overview-commercial-hero-metrics strong { margin-top: 6px; font-size: clamp(18px, 2vw, 24px); line-height: 1; font-weight: 620; letter-spacing: -.05em; color: var(--color-text); overflow-wrap: anywhere; }
 .overview-commercial-toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 9px; min-width: 0; }
 .overview-commercial-date-range { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
 .overview-commercial-date-range label { display: flex; align-items: center; gap: 6px; border: 1px solid var(--color-line-soft); border-radius: 999px; background: rgba(255,255,255,.58); padding: 4px 8px; }
@@ -318,14 +322,19 @@ body {
 .overview-commercial-date-range input { width: 118px; border: 0; background: transparent; color: var(--color-text); font-size: 11px; font-weight: 850; outline: none; }
 .overview-commercial-grid .overview-air-card,
 .overview-commercial-grid .overview-air-kpi { overflow: visible; }
-.overview-commercial-grid .overview-role-side { display: flex; flex-direction: column; justify-content: space-between; gap: 12px; }
+.overview-commercial-grid .overview-role-side { display: flex; flex-direction: column; justify-content: space-between; gap: 10px; }
 .overview-commercial-grid .overview-role-list { max-height: none; }
-.overview-commercial-grid .overview-role-wide { min-height: 260px; }
-.overview-commercial-grid .overview-role-side { min-height: 260px; }
-.overview-commercial-rdv-actions { grid-column: span 12; display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 1.35fr) minmax(240px, 1fr); gap: 14px; align-items: stretch; }
+.overview-commercial-grid .overview-role-wide { min-height: 218px; }
+.overview-commercial-grid .overview-role-side { min-height: 218px; }
+.overview-commercial-rdv-actions { grid-column: span 12; display: grid; grid-template-columns: minmax(210px, 1fr) minmax(0, 1.35fr) minmax(230px, 1fr); gap: 12px; align-items: stretch; }
 .overview-commercial-rdv-actions .overview-role-wide,
-.overview-commercial-rdv-actions .overview-role-side { grid-column: auto; min-height: 260px; }
-.overview-commercial-grid .overview-air-kpi { grid-column: span 3; min-height: 116px; }
+.overview-commercial-rdv-actions .overview-role-side { grid-column: auto; min-height: 206px; }
+.overview-commercial-rdv-actions .overview-role-wide { grid-column: auto; min-height: 206px; }
+.overview-commercial-grid .overview-air-kpi { grid-column: span 3; min-height: 94px; padding: 14px; gap: 8px; }
+.overview-commercial-grid .overview-air-kpi > span { width: 30px; height: 30px; border-radius: 12px; }
+.overview-commercial-grid .overview-air-kpi small { font-size: 9px; letter-spacing: .1em; }
+.overview-commercial-grid .overview-air-kpi strong { margin-top: 5px; font-size: 23px; line-height: .96; }
+.overview-commercial-grid .overview-air-kpi p { margin-top: 5px; font-size: 10px; }
 .overview-air-kpi {
   grid-column: span 2;
   min-height: 124px;
@@ -413,6 +422,19 @@ body {
 .overview-role-closing { font-size: 64px; line-height: .9; font-weight: 520; letter-spacing: -.06em; color: var(--color-text); }
 .overview-role-muted { margin: 10px 0 0; font-size: 12px; line-height: 1.45; font-weight: 650; color: var(--color-muted); }
 .overview-role-action { display: inline-flex; margin-top: 14px; align-items: center; justify-content: center; }
+.overview-commercial-grid .overview-air-card { padding: 15px; }
+.overview-commercial-grid .shot-card-head { margin-bottom: 9px; }
+.overview-commercial-grid .shot-card-head h3 { font-size: 16px; }
+.overview-commercial-grid .shot-card-head span { width: 30px; height: 30px; border-radius: 12px; }
+.overview-commercial-grid .overview-role-closing { font-size: 44px; line-height: .95; }
+.overview-commercial-grid .overview-role-muted { margin-top: 6px; font-size: 11px; line-height: 1.32; }
+.overview-commercial-grid .overview-real-segments { height: 30px; margin: 2px 0 0; }
+.overview-commercial-grid .shot-task-line { grid-template-columns: 32px 1fr 18px; gap: 9px; padding: 5px 0; }
+.overview-commercial-grid .shot-task-line .task-icon { width: 32px; height: 32px; border-radius: 12px; }
+.overview-commercial-grid .shot-task-line strong { font-size: 12px; }
+.overview-commercial-grid .shot-task-line small { font-size: 10px; }
+.overview-commercial-grid .task-check { width: 18px; height: 18px; }
+.overview-commercial-grid .overview-role-action { margin-top: 8px; padding: 7px 10px; font-size: 10px; }
 .shot-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .shot-card-head h3 { margin: 0; font-size: 18px; line-height: 1.08; font-weight: 750; letter-spacing: -.03em; color: var(--color-text); }
 .overview-range-switch { display: inline-flex; align-items: center; gap: 3px; padding: 3px; border-radius: 999px; border: 1px solid var(--color-line-soft); background: rgba(255,255,255,.58); }

@@ -278,7 +278,7 @@ function OverviewCommercial() {
           if (id === 'pipeline' || id === 'ventes') navigate('/analytics')
         }}
       />
-      <main className="overview-shot-page flex-grow overflow-auto">
+      <main className="overview-shot-page overview-commercial-page flex-grow overflow-auto">
         <div className="overview-air-header">
           <div>
             <span className="shot-eyebrow">ECOI SaaS · commercial</span>
