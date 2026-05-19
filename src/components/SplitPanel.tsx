@@ -869,13 +869,13 @@ function NotesTab({
               </div>
               {eligibilityNotes.activity === 'retraite' && (
                 <div className="mt-2">
-                  <Input label="Si ce n’est pas trop indiscret, vous avez quel âge ?" type="number" value={eligibilityNotes.age} onChange={(value) => updateEligibility('age', value)} />
+                  <Input label="Si ce n’est pas trop indiscret, vous avez quel âge ?" value={eligibilityNotes.age} onChange={(value) => updateEligibility('age', value)} placeholder="ex: 64 ans / environ 70" />
                 </div>
               )}
             </div>
 
             <Input label="Projet rapidement ou juste à titre informatif ?" value={eligibilityNotes.projectTiming} onChange={(value) => updateEligibility('projectTiming', value)} />
-            <Input label="Factures d’électricité chaque mois (€ environ)" type="number" value={eligibilityNotes.monthlyBill} onChange={(value) => updateEligibility('monthlyBill', value)} />
+            <Input label="Factures d’électricité chaque mois" value={eligibilityNotes.monthlyBill} onChange={(value) => updateEligibility('monthlyBill', value)} placeholder="ex: 180 € / entre 150 et 200 € / ne sait pas" />
 
             <YesNoField
               label="Est-ce qu’il s’agit de votre premier renseignement sur le projet ?"
@@ -1191,7 +1191,7 @@ function formatEligibilityNotes(notes: EligibilityNotes): string {
     notes.isOwner && `Propriétaire maison : ${yesNoLabel(notes.isOwner)}`,
     notes.activity && `Situation : ${notes.activity === 'retraite' ? `Retraité${notes.age.trim() ? ` · âge ${notes.age.trim()}` : ''}` : 'En activité'}`,
     notes.projectTiming.trim() && `Intention projet : ${notes.projectTiming.trim()}`,
-    notes.monthlyBill.trim() && `Facture électricité mensuelle : ${notes.monthlyBill.trim()} € environ`,
+    notes.monthlyBill.trim() && `Facture électricité mensuelle : ${notes.monthlyBill.trim()}`,
     notes.firstInfo && `Premier renseignement : ${yesNoLabel(notes.firstInfo)}`,
     notes.wantsBattery && `Autonomie / batterie : ${yesNoLabel(notes.wantsBattery)}${notes.batteryNote.trim() ? ` · ${notes.batteryNote.trim()}` : ''}`,
     notes.hasBudget && `Budget déjà envisagé : ${yesNoLabel(notes.hasBudget)}${notes.budgetNote.trim() ? ` · ${notes.budgetNote.trim()}` : ''}`,
@@ -1288,11 +1288,11 @@ function DateTimeSlotInput({
   )
 }
 
-function Input({ label, value, onChange, type = 'text' }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
+function Input({ label, value, onChange, type = 'text', placeholder }: { label: string; value: string; onChange: (value: string) => void; type?: string; placeholder?: string }) {
   return (
     <label className="block">
       <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-1">{label}</div>
-      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full" />
+      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full" />
     </label>
   )
 }
