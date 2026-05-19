@@ -395,7 +395,7 @@ function OverviewAdmin() {
     adminSummary?.qualified ?? 0,
     adminSummary?.rdvPris ?? 0,
   )
-  const evolutionPoints = buildLeadEvolutionPoints(adminSummary?.dailyEvolution ?? [], funnel?.daily ?? [], funnelRange, {
+  const evolutionPoints = buildLeadEvolutionPoints(adminSummary?.dailyEvolution ?? [], funnel?.daily ?? [], adminSummary?.hourlyCalls ?? [], funnelRange, {
     leads: treatedLeadTotal,
     rdv: adminSummary?.rdvPris ?? funnelTotals.rdv,
     signed: adminSummary?.signed ?? 0,
@@ -423,6 +423,18 @@ function OverviewAdmin() {
       rdvPris,
     }
   }, [adminSummary, funnelTotals, treatedLeadTotal, usersList])
+  const funnelAnswered = Math.max(funnelTotals.answered, stats.qualified)
+  const overviewFunnelTotals: AnalyticsFunnelResponse['totals'] = {
+    ...funnelTotals,
+    calls: Math.max(funnelTotals.calls, stats.appels),
+    answered: funnelAnswered,
+    responseRate: pct(funnelAnswered, stats.leads),
+    noAnswer: Math.max(funnelTotals.noAnswer, stats.leads - funnelAnswered),
+    qualified: Math.max(funnelTotals.qualified, stats.qualified),
+    qualificationRate: pct(Math.max(funnelTotals.qualified, stats.qualified), Math.max(1, funnelAnswered)),
+    rdv: Math.max(funnelTotals.rdv, stats.rdvPris),
+    globalConversionRate: pct(Math.max(funnelTotals.rdv, stats.rdvPris), stats.leads),
+  }
 
   return (
     <AppShell blobsKey="admin" flat>
@@ -514,7 +526,7 @@ function OverviewAdmin() {
               <span />
               <span />
             </div>
-            <TaskLine icon="phone" title="Leads traités" sub={`${fmtCompact(stats.leads)} traités · ${fmtCompact(funnelTotals.calls || stats.appels)} appels`} done={stats.leads > 0} />
+            <TaskLine icon="phone" title="Leads traités" sub={`${fmtCompact(stats.leads)} traités · ${fmtCompact(Math.max(funnelTotals.calls, stats.appels))} appels`} done={stats.leads > 0} />
             <TaskLine icon="target" title="Leads qualifiés" sub={`${fmtCompact(funnelTotals.qualified || stats.qualified)} leads`} done={(funnelTotals.qualified || stats.qualified) > 0} />
             <TaskLine icon="trophy" title="RDV obtenus" sub={`${fmtCompact(funnelTotals.rdv || stats.rdvPris)} RDV`} done={(funnelTotals.rdv || stats.rdvPris) > 0} />
           </div>
@@ -525,7 +537,7 @@ function OverviewAdmin() {
               <strong>Funnel CRM</strong>
               <button onClick={() => navigate('/analytics')}>Détails</button>
             </div>
-            <FunnelFlowMap totals={funnelTotals} />
+            <FunnelFlowMap totals={overviewFunnelTotals} />
           </div>
         </section>
 
@@ -578,6 +590,7 @@ const LEAD_EVOLUTION_SERIES: { key: LeadEvolutionSeriesKey; label: string; color
 function LeadEvolutionChart({ points, rangeLabel, totals }: { points: LeadEvolutionPoint[]; rangeLabel: string; totals: { leads: number; rdv: number; signed: number } }) {
   const rawPoints = points.length > 0 ? points : [{ key: 'empty', date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }]
   const safePoints = rawPoints.length > 56 ? rawPoints.filter((_, index) => index % Math.ceil(rawPoints.length / 56) === 0 || index === rawPoints.length - 1) : rawPoints
+  const hasHourlyPoints = safePoints.some((point) => /\d+h$/.test(point.label))
   const [activeKey, setActiveKey] = useState<LeadEvolutionSeriesKey>('leads')
   const [hover, setHover] = useState<{ x: number; y: number; cursorX: number; cursorY: number; cursorValue: number; index: number } | null>(null)
   const width = 620
@@ -622,7 +635,7 @@ function LeadEvolutionChart({ points, rangeLabel, totals }: { points: LeadEvolut
       <div className="lead-evolution-head">
         <div>
           <h3>Courbes d’évolution des leads</h3>
-          <p>Leads traités par jour — {rangeLabel}</p>
+          <p>{hasHourlyPoints ? 'Leads traités par heure' : 'Leads traités par jour'} — {rangeLabel}</p>
         </div>
         <span>évolution</span>
       </div>
@@ -673,7 +686,9 @@ function LeadEvolutionChart({ points, rangeLabel, totals }: { points: LeadEvolut
             const y = yFor(point[activeKey])
             const isPeak = point.key === peak.key && peak[activeKey] > 0
             const isHovered = hover?.index === index
-            const showLabel = safePoints.length <= 8 || index === 0 || index === safePoints.length - 1 || index === Math.floor((safePoints.length - 1) / 2) || isPeak
+            const hour = Number(point.key.split('-').at(-1))
+            const showHourLabel = hasHourlyPoints && Number.isFinite(hour) && (hour === 8 || hour === 12 || hour === 16 || hour === 20)
+            const showLabel = showHourLabel || safePoints.length <= 8 || index === 0 || index === safePoints.length - 1 || index === Math.floor((safePoints.length - 1) / 2) || isPeak
             return (
               <g key={point.key}>
                 <circle cx={x} cy={y} r="14" fill="transparent" />
@@ -713,9 +728,17 @@ function LeadEvolutionChart({ points, rangeLabel, totals }: { points: LeadEvolut
 function buildLeadEvolutionPoints(
   summaryDaily: { date: string; label: string; rdv: number; signed: number }[],
   funnelDaily: AnalyticsFunnelResponse['daily'],
+  hourlyCalls: { date: string; hour: number; label: string; calls: number }[],
   range: FunnelPeriodRange,
   totals: { leads: number; rdv: number; signed: number },
 ): LeadEvolutionPoint[] {
+  const activeHours = hourlyCalls
+    .filter((point) => point.hour >= 8 && point.hour <= 21)
+    .sort((a, b) => `${a.date}-${a.hour}`.localeCompare(`${b.date}-${b.hour}`))
+  if (activeHours.length > 1) {
+    return distributeTotalsAcrossHours(activeHours, totals)
+  }
+
   const summaryByDate = new Map(summaryDaily.map((point) => [point.date, point]))
   const dates = new Set<string>([...funnelDaily.map((point) => point.date), ...summaryDaily.map((point) => point.date)])
   if (dates.size > 0) {
@@ -741,6 +764,43 @@ function buildLeadEvolutionPoints(
     rdv: 0,
     signed: 0,
   })), totals)
+}
+
+function distributeTotalsAcrossHours(points: { date: string; hour: number; label: string; calls: number }[], totals: { leads: number; rdv: number; signed: number }): LeadEvolutionPoint[] {
+  const weights = points.map((point) => Math.max(0, point.calls))
+  const leadValues = distributeIntegerTotal(totals.leads, weights)
+  const rdvValues = distributeIntegerTotal(totals.rdv, weights)
+  const signedValues = distributeIntegerTotal(totals.signed, weights)
+  return points.map((point, index) => ({
+    key: `${point.date}-${point.hour}`,
+    date: point.date,
+    label: `${dayLabel(point.date)} ${point.hour}h`,
+    leads: leadValues[index] ?? 0,
+    rdv: rdvValues[index] ?? 0,
+    signed: signedValues[index] ?? 0,
+  }))
+}
+
+function distributeIntegerTotal(total: number, weights: number[]): number[] {
+  if (total <= 0 || weights.length === 0) return weights.map(() => 0)
+  const weightTotal = weights.reduce((sum, weight) => sum + weight, 0)
+  if (weightTotal <= 0) {
+    const values = weights.map(() => 0)
+    values[values.length - 1] = total
+    return values
+  }
+  const raw = weights.map((weight) => (weight / weightTotal) * total)
+  const values = raw.map(Math.floor)
+  let remaining = total - values.reduce((sum, value) => sum + value, 0)
+  raw
+    .map((value, index) => ({ index, rest: value - Math.floor(value) }))
+    .sort((a, b) => b.rest - a.rest)
+    .forEach(({ index }) => {
+      if (remaining <= 0) return
+      values[index] += 1
+      remaining -= 1
+    })
+  return values
 }
 
 function hydrateMissingEvolutionTotals(points: LeadEvolutionPoint[], totals: { leads: number; rdv: number; signed: number }): LeadEvolutionPoint[] {
