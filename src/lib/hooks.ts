@@ -35,7 +35,7 @@ type FetchCacheEntry = {
 
 const FETCH_CACHE_TTL_MS = 10 * 60 * 1000
 const PERSISTED_CACHE_PREFIX = 'ecoi.fetchCache.v1:'
-const PERSISTED_CACHE_PATHS = ['/leads', '/users', '/analytics/summary', '/ghl-calendar/events']
+const PERSISTED_CACHE_PATHS = ['/leads', '/users', '/analytics/summary', '/analytics/funnel', '/ghl-calendar/events']
 const fetchCache = new Map<string, FetchCacheEntry>()
 
 function buildFetchCacheKey(path: string | null, queryKey: string): string | null {
@@ -446,7 +446,20 @@ export function useAnalyticsFunnel(filters?: {
   setterId?: string
   sector?: string
 }): Async<AnalyticsFunnelResponse> {
-  return useFetch<AnalyticsFunnelResponse>('/analytics/funnel', filters)
+  return useFetch<AnalyticsFunnelResponse>('/analytics/funnel', filters, {
+    refreshCachedOnMount: true,
+    silentInitialLoading: true,
+  })
+}
+
+export function prefetchAnalyticsFunnel(filters?: {
+  days?: number
+  from?: string
+  to?: string
+  setterId?: string
+  sector?: string
+}, options?: { force?: boolean }): Promise<AnalyticsFunnelResponse | null> {
+  return prefetchFetchCache<AnalyticsFunnelResponse>('/analytics/funnel', filters, options)
 }
 
 // ─── Pipeline analytics (admin) ─────────────────────────────

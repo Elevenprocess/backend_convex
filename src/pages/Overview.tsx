@@ -1,11 +1,11 @@
-import { type MouseEvent, useMemo, useState } from 'react'
+import { type MouseEvent, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '../components/Icon'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
 import { useDisplayUser } from '../lib/role'
-import { useCallLogs, useLeads, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary } from '../lib/hooks'
+import { useCallLogs, useLeads, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary, prefetchAnalyticsFunnel, prefetchAnalyticsSummary } from '../lib/hooks'
 import { STATUS_LABEL, fullName, initials, type AnalyticsFunnelResponse, type CallLogResponse, type LeadResponse, type LeadStatus, type RdvResponse } from '../lib/types'
 
 const ALL_TIME_FROM_ISO = '2020-01-01T00:00:00.000Z'
@@ -376,6 +376,31 @@ function OverviewAdmin() {
   const [tab, setTab] = useState('overview')
   const [funnelPeriod, setFunnelPeriod] = useState<FunnelPeriodState>(DEFAULT_FUNNEL_PERIOD)
   const funnelRange = buildFunnelPeriodRange(funnelPeriod)
+
+  useEffect(() => {
+    let cancelled = false
+    const warmupTimer = window.setTimeout(() => {
+      if (cancelled) return
+      const initialRange = buildFunnelPeriodRange(DEFAULT_FUNNEL_PERIOD)
+      const currentKey = `${initialRange.from}|${initialRange.to}`
+      const warmupRanges = getOverviewWarmupRanges()
+      void Promise.allSettled(
+        warmupRanges.flatMap((range) => {
+          const filters = { from: range.from, to: range.to }
+          const force = `${range.from}|${range.to}` !== currentKey
+          return [
+            prefetchAnalyticsSummary(filters, { force }),
+            prefetchAnalyticsFunnel(filters, { force }),
+          ]
+        }),
+      )
+    }, 220)
+    return () => {
+      cancelled = true
+      window.clearTimeout(warmupTimer)
+    }
+  }, [])
+
   const { data: funnel } = useAnalyticsFunnel({
     from: funnelRange.from,
     to: funnelRange.to,
@@ -492,7 +517,8 @@ function OverviewAdmin() {
           </div>
         </section>
 
-        <section className="overview-air-grid">
+        <div className="overview-admin-layout">
+          <section className="overview-air-grid overview-admin-main-grid">
           <div className="overview-profile-panel">
             <div className="overview-profile-large">
               {me?.image ? <img src={me.image} alt={me.name} /> : <span>{userInitials(me?.name)}</span>}
@@ -517,7 +543,6 @@ function OverviewAdmin() {
             />
           </div>
 
-          <LeadPieAnalysis segments={leadSegments} totalFallback={stats.leads} />
 
           <div className="overview-air-card overview-air-pipeline">
             <div className="shot-onboarding-top">
@@ -545,7 +570,12 @@ function OverviewAdmin() {
             </div>
             <FunnelFlowMap totals={overviewFunnelTotals} />
           </div>
-        </section>
+          </section>
+
+          <aside className="overview-admin-side-rail" aria-label="Répartition des leads">
+            <LeadPieAnalysis segments={leadSegments} totalFallback={stats.leads} />
+          </aside>
+        </div>
 
       </main>
     </AppShell>
@@ -918,6 +948,16 @@ function buildFunnelPeriodRange(period: FunnelPeriodState): FunnelPeriodRange {
   const days = Math.max(1, Math.round((endOfDay(to).getTime() - startOfDay(from).getTime()) / 86_400_000) + 1)
   const option = FUNNEL_PERIOD_OPTIONS.find((p) => p.id === period.mode)?.label ?? 'Période'
   return { from: startOfDay(from).toISOString(), to: endOfDay(to).toISOString(), label: `${option} · ${formatShortDate(from)} → ${formatShortDate(to)}`, days }
+}
+
+function getOverviewWarmupRanges(): FunnelPeriodRange[] {
+  const modes: FunnelPeriodMode[] = ['today', 'yesterday', 'this_week', 'this_month', 'this_year']
+  const unique = new Map<string, FunnelPeriodRange>()
+  modes.forEach((mode) => {
+    const range = buildFunnelPeriodRange({ ...DEFAULT_FUNNEL_PERIOD, mode })
+    unique.set(`${range.from}|${range.to}`, range)
+  })
+  return Array.from(unique.values())
 }
 
 function toDateInputValue(date: Date): string {
