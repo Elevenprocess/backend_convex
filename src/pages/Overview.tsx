@@ -395,7 +395,11 @@ function OverviewAdmin() {
     adminSummary?.qualified ?? 0,
     adminSummary?.rdvPris ?? 0,
   )
-  const evolutionPoints = buildLeadEvolutionPoints(adminSummary?.dailyEvolution ?? [], funnel?.daily ?? [], funnelRange)
+  const evolutionPoints = buildLeadEvolutionPoints(adminSummary?.dailyEvolution ?? [], funnel?.daily ?? [], funnelRange, {
+    leads: treatedLeadTotal,
+    rdv: adminSummary?.rdvPris ?? funnelTotals.rdv,
+    signed: adminSummary?.signed ?? 0,
+  })
 
   const stats = useMemo(() => {
     const calls = adminSummary?.calls ?? funnelTotals.calls
@@ -706,11 +710,16 @@ function LeadEvolutionChart({ points, rangeLabel, totals }: { points: LeadEvolut
   )
 }
 
-function buildLeadEvolutionPoints(summaryDaily: { date: string; label: string; rdv: number; signed: number }[], funnelDaily: AnalyticsFunnelResponse['daily'], range: FunnelPeriodRange): LeadEvolutionPoint[] {
+function buildLeadEvolutionPoints(
+  summaryDaily: { date: string; label: string; rdv: number; signed: number }[],
+  funnelDaily: AnalyticsFunnelResponse['daily'],
+  range: FunnelPeriodRange,
+  totals: { leads: number; rdv: number; signed: number },
+): LeadEvolutionPoint[] {
   const summaryByDate = new Map(summaryDaily.map((point) => [point.date, point]))
   const dates = new Set<string>([...funnelDaily.map((point) => point.date), ...summaryDaily.map((point) => point.date)])
   if (dates.size > 0) {
-    return [...dates].sort().slice(-14).map((date) => {
+    const points = [...dates].sort().slice(-14).map((date) => {
       const funnelPoint = funnelDaily.find((point) => point.date === date)
       const summaryPoint = summaryByDate.get(date)
       return {
@@ -722,15 +731,31 @@ function buildLeadEvolutionPoints(summaryDaily: { date: string; label: string; r
         signed: summaryPoint?.signed ?? 0,
       }
     })
+    return hydrateMissingEvolutionTotals(points, totals)
   }
-  return Array.from({ length: Math.min(7, Math.max(1, range.days)) }, (_, index) => ({
+  return hydrateMissingEvolutionTotals(Array.from({ length: Math.min(7, Math.max(1, range.days)) }, (_, index) => ({
     key: `empty-${index}`,
     date: '',
     label: index === 0 ? 'Live' : '—',
     leads: 0,
     rdv: 0,
     signed: 0,
-  }))
+  })), totals)
+}
+
+function hydrateMissingEvolutionTotals(points: LeadEvolutionPoint[], totals: { leads: number; rdv: number; signed: number }): LeadEvolutionPoint[] {
+  if (points.length === 0) return points
+  const lastIndex = points.length - 1
+  const sums = points.reduce(
+    (acc, point) => ({ leads: acc.leads + point.leads, rdv: acc.rdv + point.rdv, signed: acc.signed + point.signed }),
+    { leads: 0, rdv: 0, signed: 0 },
+  )
+  return points.map((point, index) => index === lastIndex ? {
+    ...point,
+    leads: point.leads + Math.max(0, totals.leads - sums.leads),
+    rdv: point.rdv + Math.max(0, totals.rdv - sums.rdv),
+    signed: point.signed + Math.max(0, totals.signed - sums.signed),
+  } : point)
 }
 
 const PIE_COLORS = ['#D4AF37', '#3DA86A', '#B87333', '#6B7C8C', '#B7410E', '#7C6A46']

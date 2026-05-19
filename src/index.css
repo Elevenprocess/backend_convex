@@ -317,8 +317,8 @@ body {
 .lead-evolution-footer strong { display: block; margin-top: 3px; font-size: 15px; font-weight: 900; color: var(--color-text); }
 .lead-evolution .positive { color: var(--color-success) !important; }
 .lead-evolution .negative { color: #B7410E !important; }
-.overview-air-pie { grid-column: span 4; min-height: 240px; }
-.overview-air-pipeline { grid-column: span 4; min-height: 240px; display: flex; flex-direction: column; gap: 13px; }
+.overview-air-pie { grid-column: span 4; min-height: 240px; display: flex; flex-direction: column; }
+.overview-air-pipeline { grid-column: span 4; min-height: 240px; display: flex; flex-direction: column; justify-content: space-between; gap: 16px; }
 .overview-air-funnel { grid-column: span 12; min-height: 0; }
 .overview-role-wide { grid-column: span 8; min-height: 248px; }
 .overview-role-side { grid-column: span 4; min-height: 248px; }
@@ -347,10 +347,10 @@ body {
 .shot-bar-col small { font-size: 9px; line-height: 1.05; color: var(--color-faint); font-weight: 800; text-transform: capitalize; white-space: nowrap; text-align: center; }
 .shot-bar-col small b,
 .shot-bar-col small em { display: block; font-style: normal; font-weight: 800; }
-.overview-pie-body { display: flex; flex-direction: column; align-items: center; gap: 14px; }
-.overview-pie { width: 118px; height: 118px; border-radius: 999px; display: grid; place-items: center; box-shadow: inset 0 0 0 1px rgba(255,255,255,.4); }
-.overview-pie > div { width: 72px; height: 72px; border-radius: 999px; display: grid; place-items: center; align-content: center; background: var(--color-cream); text-align: center; }
-.overview-pie strong { display: block; font-size: 22px; line-height: 1; font-weight: 850; color: var(--color-text); }
+.overview-pie-body { flex: 1; display: flex; flex-direction: column; align-items: stretch; justify-content: space-evenly; gap: 18px; }
+.overview-pie { width: 138px; height: 138px; margin: 0 auto; border-radius: 999px; display: grid; place-items: center; box-shadow: inset 0 0 0 1px rgba(255,255,255,.4); }
+.overview-pie > div { width: 82px; height: 82px; border-radius: 999px; display: grid; place-items: center; align-content: center; background: var(--color-cream); text-align: center; }
+.overview-pie strong { display: block; font-size: 25px; line-height: 1; font-weight: 850; color: var(--color-text); }
 .overview-pie span { display: block; margin-top: 3px; font-size: 9px; font-weight: 850; text-transform: uppercase; color: var(--color-faint); }
 .overview-pie-legend { width: 100%; display: flex; flex-direction: column; gap: 6px; }
 .overview-pie-legend div { display: grid; grid-template-columns: 8px 1fr auto; align-items: center; gap: 7px; font-size: 10px; font-weight: 750; color: var(--color-muted); }
@@ -359,12 +359,12 @@ body {
 .shot-onboarding-top { display: flex; justify-content: space-between; align-items: start; gap: 14px; }
 .shot-onboarding-top h3 { margin: 4px 0 0; font-size: 19px; font-weight: 750; letter-spacing: -.032em; color: var(--color-text); }
 .shot-onboarding-top strong { font-size: 32px; font-weight: 520; line-height: .95; letter-spacing: -.055em; color: var(--color-text); }
-.overview-real-segments { display: flex; gap: 6px; height: 32px; }
+.overview-real-segments { display: flex; gap: 6px; height: 48px; margin: 4px 0; }
 .overview-real-segments span { border-radius: 999px; min-width: 18px; }
 .overview-real-segments span:nth-child(1) { flex: var(--seg-a); background: var(--color-info); opacity: .38; }
 .overview-real-segments span:nth-child(2) { flex: var(--seg-b); background: var(--color-cuivre); opacity: .72; }
 .overview-real-segments span:nth-child(3) { flex: var(--seg-c); background: var(--color-or); }
-.shot-task-line { display: grid; grid-template-columns: 38px 1fr 22px; gap: 11px; align-items: center; padding: 5px 0; }
+.shot-task-line { display: grid; grid-template-columns: 38px 1fr 22px; gap: 11px; align-items: center; padding: 9px 0; }
 .shot-task-line .task-icon { width: 38px; height: 38px; border-radius: 14px; display: grid; place-items: center; background: var(--color-or-tint); color: var(--color-or-dark); }
 .shot-task-line strong { display: block; font-size: 13px; color: var(--color-text); }
 .shot-task-line small { display: block; margin-top: 2px; font-size: 11px; color: var(--color-muted); }
