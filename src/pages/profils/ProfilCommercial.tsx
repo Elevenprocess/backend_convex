@@ -4,7 +4,7 @@ import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
 import { useAuth } from '../../lib/auth'
-import { updateLead, updateRdv, useCallLogs, useCommercialAnalytics, useGhlCalendarConfig, useGhlCalendarEvents, useUser, useUsers, useRdvList, useLeads } from '../../lib/hooks'
+import { moveGhlOpportunity, updateLead, updateRdv, useCallLogs, useCommercialAnalytics, useGhlCalendarConfig, useGhlCalendarEvents, useGhlOpportunities, useUser, useUsers, useRdvList, useLeads, type GhlOpportunity } from '../../lib/hooks'
 import { CALL_RESULT_LABEL, STATUS_LABEL, fullName, type CallLogResponse, type LeadResponse, type LeadStatus, type RdvResponse, type RdvStatus, type UserResponse } from '../../lib/types'
 
 type PipelineStageId =
@@ -40,6 +40,14 @@ type PeriodMode = 'today' | 'week' | 'month' | 'all'
 
 type StageMetrics = { opportunities: number; amount: number }
 
+type GhlOpportunityRow = {
+  id: string
+  opportunity: GhlOpportunity
+  stageId: PipelineStageId
+  stageName: string
+  changedAt: string | null
+}
+
 const PERIOD_LABEL: Record<PeriodMode, string> = {
   today: "Aujourd'hui",
   week: 'Semaine',
@@ -73,6 +81,7 @@ export function ProfilCommercial() {
   const { data: commercialAnalytics } = useCommercialAnalytics(profileId, { from: periodRange.from, to: periodRange.to })
   const { data: ghlConfig } = useGhlCalendarConfig()
   const { data: ghlEventsData } = useGhlCalendarEvents(member?.ghlUserId ? { from: periodRange.from, to: periodRange.to } : undefined)
+  const { data: ghlOpps, refetch: refetchGhlOpps } = useGhlOpportunities(member?.ghlUserId ? { limit: 5000 } : undefined)
   const [movingId, setMovingId] = useState<string | null>(null)
   const [selectedCard, setSelectedCard] = useState<ProspectCard | null>(null)
   const { data: users } = useUsers()
@@ -92,8 +101,25 @@ export function ProfilCommercial() {
 
   const rdvList = rdvs ?? []
   const liveGhlEvents = useMemo(() => (ghlEventsData?.events ?? []).filter((event) => event.commercialId === profileId || event.assignedUserId === member?.ghlUserId), [ghlEventsData?.events, member?.ghlUserId, profileId])
+  const ghlStageNames = useMemo(() => new Map((ghlOpps?.stages ?? []).map((stage) => [stage.id, stage.name])), [ghlOpps?.stages])
+  const liveGhlOpportunityRows = useMemo<GhlOpportunityRow[]>(() => {
+    if (!profileId && !member?.ghlUserId) return []
+    return (ghlOpps?.opportunities ?? [])
+      .filter((opportunity) => opportunity.mappedCommercialId === profileId || opportunity.assignedTo === member?.ghlUserId)
+      .map((opportunity) => {
+        const stageName = ghlStageNames.get(opportunity.pipelineStageId) ?? ''
+        return {
+          id: `ghl-${opportunity.id}`,
+          opportunity,
+          stageId: resolveGhlStageId(stageName),
+          stageName,
+          changedAt: opportunity.lastStageChangeAt ?? opportunity.updatedAt ?? opportunity.createdAt ?? null,
+        }
+      })
+      .filter((row) => isDateInPeriod(row.changedAt, periodRange.from, periodRange.to))
+  }, [ghlOpps?.opportunities, ghlStageNames, member?.ghlUserId, periodRange.from, periodRange.to, profileId])
   const sectorInfo = useMemo(() => deriveSectorInfo(member, ghlConfig?.sectors ?? [], liveGhlEvents), [ghlConfig?.sectors, liveGhlEvents, member])
-  const stats = useMemo(() => computeStats(rdvList, commercialAnalytics), [rdvList, commercialAnalytics])
+  const stats = useMemo(() => addGhlRowsToStats(computeStats(rdvList, commercialAnalytics), liveGhlOpportunityRows), [rdvList, commercialAnalytics, liveGhlOpportunityRows])
   const cards = useMemo<ProspectCard[]>(() => rdvList.map((rdv) => ({ id: rdv.id, rdv, lead: leadMap.get(rdv.leadId), stageId: resolveStageId(rdv, leadMap.get(rdv.leadId)) })), [rdvList, leadMap])
   const cardsByStage = useMemo(() => {
     const grouped = new Map<PipelineStageId, ProspectCard[]>()
@@ -102,8 +128,10 @@ export function ProfilCommercial() {
     for (const rows of grouped.values()) rows.sort((a, b) => new Date(a.rdv.scheduledAt).getTime() - new Date(b.rdv.scheduledAt).getTime())
     return grouped
   }, [cards])
-  const stageMetrics = useMemo(() => buildStageMetrics(cardsByStage), [cardsByStage])
+  const stageMetrics = useMemo(() => buildStageMetrics(cardsByStage, liveGhlOpportunityRows), [cardsByStage, liveGhlOpportunityRows])
   const sortedCards = useMemo(() => [...cards].sort((a, b) => new Date(a.rdv.scheduledAt).getTime() - new Date(b.rdv.scheduledAt).getTime()), [cards])
+  const sortedGhlRows = useMemo(() => [...liveGhlOpportunityRows].sort((a, b) => new Date(b.changedAt ?? 0).getTime() - new Date(a.changedAt ?? 0).getTime()), [liveGhlOpportunityRows])
+  const totalRows = sortedGhlRows.length + sortedCards.length
 
   const handleStageChange = async (card: ProspectCard, stageId: PipelineStageId) => {
     const stage = PIPELINE_STAGES.find((item) => item.id === stageId)
@@ -120,6 +148,23 @@ export function ProfilCommercial() {
       refetchLeads()
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Impossible de modifier l’évolution')
+    } finally {
+      setMovingId(null)
+    }
+  }
+
+  const handleGhlStageChange = async (row: GhlOpportunityRow, stageId: PipelineStageId) => {
+    const stage = PIPELINE_STAGES.find((item) => item.id === stageId)
+    const ghlStage = findGhlStageForPipelineStage(ghlOpps?.stages ?? [], stageId)
+    if (!stage || !ghlStage || row.stageId === stageId || movingId) return
+
+    setMovingId(row.id)
+    try {
+      await moveGhlOpportunity(row.opportunity.id, { pipelineStageId: ghlStage.id, stageName: ghlStage.name })
+      refetchGhlOpps()
+      refetchLeads()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Impossible de modifier l’évolution GHL')
     } finally {
       setMovingId(null)
     }
@@ -211,8 +256,8 @@ export function ProfilCommercial() {
                   <button key={mode} onClick={() => setPeriodMode(mode)} className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${periodMode === mode ? 'bg-noir text-white' : 'text-muted hover:text-text'}`}>{PERIOD_LABEL[mode]}</button>
                 ))}
               </div>
-              <span className="hidden xl:inline">Liste RDV du commercial · sélectionne l’évolution du prospect.</span>
-              <span className="rounded-full border border-line-soft bg-info-tint px-2.5 py-1 text-[11px] font-bold text-info whitespace-nowrap">{cards.length} cartes</span>
+              <span className="hidden xl:inline">Liste RDV + pipeline GHL live du commercial · sélectionne l’évolution du prospect.</span>
+              <span className="rounded-full border border-line-soft bg-info-tint px-2.5 py-1 text-[11px] font-bold text-info whitespace-nowrap">{totalRows} cartes</span>
             </div>
           </div>
 
@@ -225,17 +270,29 @@ export function ProfilCommercial() {
 
           <div className="overflow-y-auto flex-grow min-h-0 pr-1">
             <div className="space-y-2">
-              {sortedCards.length === 0 ? (
-                <div className="commercial-pipeline-empty rounded-[18px] border border-dashed border-line-soft bg-white/70 p-8 text-center text-sm text-faint">Aucun RDV pour ce commercial sur la période.</div>
-              ) : sortedCards.map((card) => (
-                <ProspectRdvRow
-                  key={card.id}
-                  card={card}
-                  moving={movingId === card.id}
-                  onOpen={() => setSelectedCard(card)}
-                  onStageChange={(stageId) => handleStageChange(card, stageId)}
-                />
-              ))}
+              {totalRows === 0 ? (
+                <div className="commercial-pipeline-empty rounded-[18px] border border-dashed border-line-soft bg-white/70 p-8 text-center text-sm text-faint">Aucun RDV ou prospect GHL pour ce commercial sur la période.</div>
+              ) : (
+                <>
+                  {sortedGhlRows.map((row) => (
+                    <GhlOpportunityRowCard
+                      key={row.id}
+                      row={row}
+                      moving={movingId === row.id}
+                      onStageChange={(stageId) => handleGhlStageChange(row, stageId)}
+                    />
+                  ))}
+                  {sortedCards.map((card) => (
+                    <ProspectRdvRow
+                      key={card.id}
+                      card={card}
+                      moving={movingId === card.id}
+                      onOpen={() => setSelectedCard(card)}
+                      onStageChange={(stageId) => handleStageChange(card, stageId)}
+                    />
+                  ))}
+                </>
+              )}
             </div>
           </div>
         </section>
@@ -279,16 +336,25 @@ function computeStats(rdvs: RdvResponse[], analytics?: { total: number; honored:
   return { total: rdvs.length, honored, signed, ca, closing: honored ? Math.round((signed / honored) * 100) : 0 }
 }
 
-function buildStageMetrics(cardsByStage: Map<PipelineStageId, ProspectCard[]>): Map<PipelineStageId, StageMetrics> {
+function addGhlRowsToStats(stats: { total: number; honored: number; signed: number; ca: number; closing: number }, ghlRows: GhlOpportunityRow[]) {
+  const ca = stats.ca + ghlRows.reduce((sum, row) => sum + (Number.isFinite(row.opportunity.monetaryValue) ? row.opportunity.monetaryValue : 0), 0)
+  const signed = stats.signed + ghlRows.filter((row) => row.stageId === 'devis_signe' || row.opportunity.status === 'won').length
+  const total = stats.total + ghlRows.length
+  const honored = stats.honored + ghlRows.filter((row) => ['devis_en_attente', 'devis_signe', 'devis_perdu'].includes(row.stageId)).length
+  return { total, honored, signed, ca, closing: honored ? Math.round((signed / honored) * 100) : stats.closing }
+}
+
+function buildStageMetrics(cardsByStage: Map<PipelineStageId, ProspectCard[]>, ghlRows: GhlOpportunityRow[]): Map<PipelineStageId, StageMetrics> {
   const metrics = new Map<PipelineStageId, StageMetrics>()
   for (const stage of PIPELINE_STAGES) {
     const rows = cardsByStage.get(stage.id) ?? []
+    const stageGhlRows = ghlRows.filter((row) => row.stageId === stage.id)
     metrics.set(stage.id, {
-      opportunities: rows.length,
+      opportunities: rows.length + stageGhlRows.length,
       amount: rows.reduce((sum, card) => {
         const raw = card.rdv.montantTotal ?? card.lead?.monetaryValue ?? null
         return sum + (raw ? Number(raw) : 0)
-      }, 0),
+      }, stageGhlRows.reduce((sum, row) => sum + (Number.isFinite(row.opportunity.monetaryValue) ? row.opportunity.monetaryValue : 0), 0)),
     })
   }
   return metrics
@@ -372,6 +438,87 @@ function MiniStageStat({ stage, metrics }: { stage: PipelineStage; metrics: Stag
       <p className="text-[10px] text-muted mt-1 truncate">{formatCurrency(metrics.amount)}</p>
     </div>
   )
+}
+
+function GhlOpportunityRowCard({ row, moving, onStageChange }: { row: GhlOpportunityRow; moving: boolean; onStageChange: (stageId: PipelineStageId) => void }) {
+  const opportunity = row.opportunity
+  const name = opportunity.contactName || cleanGhlName(opportunity.name) || opportunity.contactEmail || opportunity.contactPhone || 'Prospect GHL'
+  const location = [opportunity.contactPostalCode, opportunity.contactCity].filter(Boolean).join(' ')
+  const value = Number.isFinite(opportunity.monetaryValue) ? opportunity.monetaryValue : 0
+  return (
+    <div className={`commercial-prospect-card commercial-prospect-card-${row.stageId} rounded-[18px] border p-3 shadow-sm transition ${stageCardTone(row.stageId)} ${moving ? 'opacity-50 scale-[0.98]' : ''}`}>
+      <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr_1fr_220px] gap-3 items-center">
+        <div className="min-w-0">
+          <p className="font-black text-sm truncate">{name}</p>
+          <p className="text-[11px] text-muted mt-0.5">GHL live · {row.changedAt ? formatDateTime(row.changedAt) : 'date GHL indisponible'}</p>
+        </div>
+        <div className="space-y-1 text-[11px] text-muted min-w-0">
+          {opportunity.contactPhone && <MiniLine icon="phone" text={opportunity.contactPhone} />}
+          {location && <MiniLine icon="map-pin" text={location} />}
+          <MiniLine icon="calendar" text={row.stageName || 'Pipeline GHL'} />
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+          <span className="rounded-full bg-success-tint px-2 py-0.5 text-[10px] font-bold text-success">GHL live</span>
+          {opportunity.status && <span className="rounded-full bg-cream-darker px-2 py-0.5 text-[10px] font-bold text-muted">{opportunity.status}</span>}
+          <span className={`text-xs font-black ${value ? 'text-text' : 'text-faint'}`}>{value ? formatCurrency(value) : '—'}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={row.stageId}
+            disabled={moving}
+            onChange={(event) => onStageChange(event.target.value as PipelineStageId)}
+            className="w-full rounded-xl border border-line-soft bg-white px-3 py-2 text-xs font-bold text-text outline-none focus:border-noir"
+            title="Évolution GHL du prospect"
+          >
+            {PIPELINE_STAGES.map((stage) => <option key={stage.id} value={stage.id}>{stage.title}</option>)}
+          </select>
+          <Icon name="more" size={14} className="text-faint flex-shrink-0" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function resolveGhlStageId(stageName: string): PipelineStageId {
+  const normalized = normalizeText(stageName)
+  if (normalized.includes('no-show')) return 'no_show_bis'
+  if (normalized.includes('annule')) return 'rdv_annule'
+  if (normalized.includes('pas qualifie')) return 'rdv_pas_qualifie'
+  if (normalized.includes('reprogramme')) return 'rdv_reprogramme'
+  if (normalized.includes('relance long terme')) return 'relance_long_terme'
+  if (normalized.includes('devis en attente')) return 'devis_en_attente'
+  if (normalized.includes('devis signe')) return 'devis_signe'
+  if (normalized.includes('devis perdu')) return 'devis_perdu'
+  return 'rdv_planifie'
+}
+
+function findGhlStageForPipelineStage(stages: Array<{ id: string; name: string }>, stageId: PipelineStageId) {
+  const needles: Record<PipelineStageId, string[]> = {
+    rdv_planifie: ['rdv planifie'],
+    no_show_bis: ['no-show'],
+    rdv_annule: ['rdv annule'],
+    rdv_pas_qualifie: ['rdv pas qualifie'],
+    rdv_reprogramme: ['rdv reprogramme'],
+    relance_long_terme: ['relance long terme'],
+    devis_en_attente: ['devis en attente'],
+    devis_signe: ['devis signe'],
+    devis_perdu: ['devis perdu'],
+  }
+  return stages.find((stage) => needles[stageId].some((needle) => normalizeText(stage.name).includes(needle)))
+}
+
+function isDateInPeriod(iso: string | null, from: string, to: string): boolean {
+  if (!iso) return true
+  const ts = new Date(iso).getTime()
+  return ts >= new Date(from).getTime() && ts <= new Date(to).getTime()
+}
+
+function cleanGhlName(value: string): string {
+  return value.replace(/^opportunity\s*/i, '').trim()
+}
+
+function normalizeText(value: string): string {
+  return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim()
 }
 
 function ProspectRdvRow({ card, moving, onOpen, onStageChange }: { card: ProspectCard; moving: boolean; onOpen: () => void; onStageChange: (stageId: PipelineStageId) => void }) {
