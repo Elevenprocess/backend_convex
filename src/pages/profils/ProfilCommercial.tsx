@@ -378,21 +378,27 @@ function appendDebriefToNotes(currentNotes: string | null, text: string, author:
 function buildPeriodRange(mode: PeriodMode): { from: string; to: string } {
   const now = new Date()
   const from = new Date(now)
+  const to = new Date(now)
   if (mode === 'today') {
     from.setHours(0, 0, 0, 0)
+    to.setHours(23, 59, 59, 999)
   } else if (mode === 'week') {
     const day = (from.getDay() + 6) % 7
     from.setDate(from.getDate() - day)
     from.setHours(0, 0, 0, 0)
+    to.setDate(from.getDate() + 6)
+    to.setHours(23, 59, 59, 999)
   } else if (mode === 'month') {
     from.setDate(1)
     from.setHours(0, 0, 0, 0)
+    to.setMonth(from.getMonth() + 1, 0)
+    to.setHours(23, 59, 59, 999)
   } else {
     from.setFullYear(from.getFullYear() - 2)
     from.setHours(0, 0, 0, 0)
+    to.setFullYear(to.getFullYear() + 2)
+    to.setHours(23, 59, 59, 999)
   }
-  const to = new Date(now)
-  to.setHours(23, 59, 59, 999)
   return { from: from.toISOString(), to: to.toISOString() }
 }
 
