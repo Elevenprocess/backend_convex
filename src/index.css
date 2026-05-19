@@ -322,7 +322,7 @@ body {
 .overview-commercial-grid .overview-role-list { max-height: none; }
 .overview-commercial-grid .overview-role-wide { min-height: 260px; }
 .overview-commercial-grid .overview-role-side { min-height: 260px; }
-.overview-commercial-rdv-actions { grid-column: span 12; display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 14px; align-items: stretch; }
+.overview-commercial-rdv-actions { grid-column: span 12; display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 1.35fr) minmax(240px, 1fr); gap: 14px; align-items: stretch; }
 .overview-commercial-rdv-actions .overview-role-wide,
 .overview-commercial-rdv-actions .overview-role-side { grid-column: auto; min-height: 260px; }
 .overview-commercial-grid .overview-air-kpi { grid-column: span 3; min-height: 116px; }

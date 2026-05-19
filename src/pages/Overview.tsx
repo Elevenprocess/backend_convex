@@ -381,16 +381,16 @@ function OverviewCommercial() {
             </div>
           </div>
 
-          <div className="overview-air-card overview-role-side">
-            <CardHead title="Pipeline" icon="arrow-right" />
-            <div className="space-y-3">
-              <PipelineRow label="RDV planifiés" count={stats.totalPlanifie} pct={100} color="#D4AF37" />
-              <PipelineRow label="Honorés" count={stats.totalHonored} pct={pct(stats.totalHonored, stats.totalPlanifie)} color="#B87333" />
-              <PipelineRow label="Ventes" count={stats.signed} pct={pct(stats.signed, Math.max(stats.signed + stats.lost, stats.totalHonored))} color="#3DA86A" />
-            </div>
-          </div>
-
           <div className="overview-commercial-rdv-actions">
+            <div className="overview-air-card overview-role-side">
+              <CardHead title="Pipeline" icon="arrow-right" />
+              <div className="space-y-3">
+                <PipelineRow label="RDV planifiés" count={stats.totalPlanifie} pct={100} color="#D4AF37" />
+                <PipelineRow label="Honorés" count={stats.totalHonored} pct={pct(stats.totalHonored, stats.totalPlanifie)} color="#B87333" />
+                <PipelineRow label="Ventes" count={stats.signed} pct={pct(stats.signed, Math.max(stats.signed + stats.lost, stats.totalHonored))} color="#3DA86A" />
+              </div>
+            </div>
+
             <div className="overview-air-card overview-role-wide">
               <CardHead title="Mes RDV à venir" icon="phone" />
               <div className="overview-role-list overview-role-list-grid">
