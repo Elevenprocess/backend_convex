@@ -198,7 +198,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
     }
   }
 
-  return notifications.sort(setterRawRank)
+  return notifications.sort(setterNotificationRank)
 }
 
 export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): Notif[] {
@@ -408,11 +408,27 @@ function writeNotifiedIds(ids: Set<string>) {
   localStorage.setItem('ecoi.notifiedIds', JSON.stringify(Array.from(ids).slice(-100)))
 }
 
-function setterRawRank(a: Notif, b: Notif): number {
+function setterNotificationRank(a: Notif, b: Notif): number {
+  const aGroup = setterGroupRank(a.group)
+  const bGroup = setterGroupRank(b.group)
+  if (aGroup !== bGroup) return aGroup - bGroup
+
   const aTime = a.sortAt ?? 0
   const bTime = b.sortAt ?? 0
-  if (aTime !== bTime) return bTime - aTime
+  if (aTime !== bTime) {
+    // Les rappels imminents/programmés doivent afficher le prochain à traiter en premier.
+    // Les rappels en retard doivent afficher le retard le plus récent en premier.
+    return a.group === 'RAPPELS EN RETARD' ? bTime - aTime : aTime - bTime
+  }
   return a.title.localeCompare(b.title, 'fr')
+}
+
+function setterGroupRank(group: string): number {
+  if (group === 'DANS 10 MIN') return 0
+  if (group === 'RAPPELS PROGRAMMÉS') return 1
+  if (group === 'RAPPELS EN RETARD') return 2
+  if (group === 'NOUVEAUX LEADS') return 3
+  return 4
 }
 
 function urgencyRank(notif: Notif): number {
