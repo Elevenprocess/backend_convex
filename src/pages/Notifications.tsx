@@ -20,6 +20,7 @@ type Notif = {
   sortAt?: number
   urgency: 'now' | 'soon' | 'info'
   to?: string
+  reminderKey?: string
 }
 
 export function Notifications() {
@@ -35,7 +36,6 @@ export function Notifications() {
   const notifs = useMemo(() => (
     isCommercial ? buildCommercialNotifications(leads, rdvs) : buildNotifications(leads, rdvs)
   ), [isCommercial, leads, rdvs, minuteTick])
-  const groups = Array.from(new Set(notifs.map((n) => n.group)))
   const loading = leadsLoading || rdvLoading
   const [permission, setPermission] = useState(notificationPermission())
 
@@ -65,12 +65,7 @@ export function Notifications() {
               ? 'Aucune notification commerciale : pas de nouveau RDV, pas de RDV imminent et pas de mouvement pipeline récent.'
               : 'Aucune notification urgente : pas de nouveau lead récent, pas de rappel à traiter, pas de RDV imminent.'}
           </div>
-        ) : isCommercial ? groups.map((g) => (
-          <div key={g} className="space-y-3">
-            <div className="text-xs eyebrow text-muted mt-4 first:mt-0">{g}</div>
-            {notifs.filter((n) => n.group === g).map((n) => <NotificationCard key={n.id} notif={n} />)}
-          </div>
-        )) : (
+        ) : (
           <div className="space-y-3">
             {notifs.map((n) => <NotificationCard key={n.id} notif={n} />)}
           </div>
@@ -81,24 +76,43 @@ export function Notifications() {
 }
 
 function NotificationCard({ notif }: { notif: Notif }) {
-  const content = (
-    <>
+  const [calledReminders, setCalledReminders] = useCalledReminders()
+  const isCalled = notif.reminderKey ? calledReminders.has(notif.reminderKey) : false
+  const toggleCalled = () => {
+    if (!notif.reminderKey) return
+    const next = new Set(calledReminders)
+    if (next.has(notif.reminderKey)) next.delete(notif.reminderKey)
+    else next.add(notif.reminderKey)
+    writeCalledReminderKeys(next)
+    setCalledReminders(next)
+  }
+
+  return (
+    <div className={`glass-card p-4 flex items-start gap-4 ${notif.borderColor ? `border-l-4 ${notif.borderColor}` : ''} ${isCalled ? 'opacity-60' : ''}`}>
       <div className={`w-10 h-10 rounded-full ${notif.iconBg} flex items-center justify-center shrink-0`}>
         <Icon name={notif.icon} size={18} className={notif.iconColor} />
       </div>
       <div className="flex-grow min-w-0">
         <div className="flex justify-between items-start gap-2">
-          <span className="font-semibold text-sm">{notif.title}</span>
+          <span className={`font-semibold text-sm ${isCalled ? 'line-through text-muted' : ''}`}>{notif.title}</span>
           <span className="text-xs text-faint shrink-0">{notif.time}</span>
         </div>
-        <p className="text-sm text-muted mt-1">{notif.body}</p>
+        <p className={`text-sm text-muted mt-1 ${isCalled ? 'line-through' : ''}`}>{notif.body}</p>
+        <div className="mt-3 flex items-center gap-2">
+          {notif.to && <Link to={notif.to} className="text-xs font-semibold text-or-dark hover:underline">Ouvrir</Link>}
+          {notif.reminderKey && (
+            <button
+              type="button"
+              onClick={toggleCalled}
+              className={`text-xs font-semibold rounded-full border px-3 py-1 transition ${isCalled ? 'border-success/40 bg-success-tint text-success' : 'border-line bg-white/70 text-muted hover:border-or hover:text-text'}`}
+            >
+              {isCalled ? 'Rappel barré' : 'Barrer comme appelé'}
+            </button>
+          )}
+        </div>
       </div>
-    </>
+    </div>
   )
-
-  const className = `glass-card p-4 flex items-start gap-4 ${notif.borderColor ? `border-l-4 ${notif.borderColor}` : ''}`
-  if (!notif.to) return <div className={className}>{content}</div>
-  return <Link to={notif.to} className={`${className} hover:border-or transition-colors`}>{content}</Link>
 }
 
 export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): Notif[] {
@@ -126,6 +140,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         sortAt: callbackAt,
         urgency: 'now',
         to: leadLink,
+        reminderKey: reminderKey(lead),
       })
     } else if (callbackAt && callbackAt <= in10Min && callbackAt > now) {
       notifications.push({
@@ -141,6 +156,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         sortAt: callbackAt,
         urgency: 'soon',
         to: leadLink,
+        reminderKey: reminderKey(lead),
       })
     } else if (callbackAt && lead.status === 'a_rappeler') {
       notifications.push({
@@ -156,6 +172,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         sortAt: callbackAt,
         urgency: 'info',
         to: leadLink,
+        reminderKey: reminderKey(lead),
       })
     }
 
@@ -198,7 +215,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
     }
   }
 
-  return notifications.sort(setterNotificationRank)
+  return notifications.sort(notificationFeedRank)
 }
 
 export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): Notif[] {
@@ -283,7 +300,7 @@ export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvRes
     }
   }
 
-  return dedupeNotifications(notifications).sort((a, b) => urgencyRank(a) - urgencyRank(b))
+  return dedupeNotifications(notifications).sort(notificationFeedRank)
 }
 
 function commercialRdvDetails(rdv: RdvResponse, lead?: LeadResponse): React.ReactNode {
@@ -408,32 +425,33 @@ function writeNotifiedIds(ids: Set<string>) {
   localStorage.setItem('ecoi.notifiedIds', JSON.stringify(Array.from(ids).slice(-100)))
 }
 
-function setterNotificationRank(a: Notif, b: Notif): number {
-  const aGroup = setterGroupRank(a.group)
-  const bGroup = setterGroupRank(b.group)
-  if (aGroup !== bGroup) return aGroup - bGroup
+function useCalledReminders(): [Set<string>, (ids: Set<string>) => void] {
+  const [ids, setIds] = useState(() => readCalledReminderKeys())
+  useEffect(() => {
+    const refresh = () => setIds(readCalledReminderKeys())
+    window.addEventListener('storage', refresh)
+    return () => window.removeEventListener('storage', refresh)
+  }, [])
+  return [ids, setIds]
+}
 
+function readCalledReminderKeys(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem('ecoi.calledReminderKeys') ?? '[]')) } catch { return new Set() }
+}
+
+function writeCalledReminderKeys(ids: Set<string>) {
+  localStorage.setItem('ecoi.calledReminderKeys', JSON.stringify(Array.from(ids).slice(-5000)))
+}
+
+function reminderKey(lead: LeadResponse): string {
+  return `${lead.id}:${lead.nextCallbackAt ?? ''}`
+}
+
+function notificationFeedRank(a: Notif, b: Notif): number {
   const aTime = a.sortAt ?? 0
   const bTime = b.sortAt ?? 0
-  if (aTime !== bTime) {
-    // Les rappels imminents/programmés doivent afficher le prochain à traiter en premier.
-    // Les rappels en retard doivent afficher le retard le plus récent en premier.
-    return a.group === 'RAPPELS EN RETARD' ? bTime - aTime : aTime - bTime
-  }
+  if (aTime !== bTime) return bTime - aTime
   return a.title.localeCompare(b.title, 'fr')
-}
-
-function setterGroupRank(group: string): number {
-  if (group === 'DANS 10 MIN') return 0
-  if (group === 'RAPPELS PROGRAMMÉS') return 1
-  if (group === 'RAPPELS EN RETARD') return 2
-  if (group === 'NOUVEAUX LEADS') return 3
-  return 4
-}
-
-function urgencyRank(notif: Notif): number {
-  const groupRank = notif.group === 'RAPPELS EN RETARD' ? 0 : notif.group === 'DANS 10 MIN' ? 1 : notif.group === 'RDV À VENIR' ? 2 : notif.group === 'NOUVEAUX RDV COMMERCIAL' ? 3 : notif.group === 'NOUVEAUX LEADS' ? 4 : 5
-  return groupRank * 10 + (notif.urgency === 'now' ? 0 : notif.urgency === 'soon' ? 1 : 2)
 }
 
 function supportsBrowserNotifications(): boolean {
