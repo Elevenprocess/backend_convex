@@ -315,10 +315,12 @@ function InfosTab({ lead, userMap, onSaved }: { lead: LeadResponse; userMap?: Ma
             <Icon name="edit" size={12} /> Modifier
           </button>
         </div>
-        <Field label="NOM" value={[lead.firstName, lead.lastName].filter(Boolean).join(' ') || '—'} />
+        <Field label="PRÉNOM" value={fieldOrDash(lead.firstName)} />
+        <Field label="NOM" value={fieldOrDash(lead.lastName)} />
         <Field label="TÉLÉPHONE" value={fieldOrDash(lead.phone)} />
         <Field label="EMAIL" value={fieldOrDash(lead.email)} />
-        <Field label="ADRESSE" value={[cleanField(lead.addressLine), cleanField(lead.postalCode), cleanField(lead.city)].filter(Boolean).join(', ') || '—'} />
+        <Field label="ADRESSE" value={fieldOrDash(lead.addressLine)} />
+        <Field label="CODE POSTAL" value={fieldOrDash(lead.postalCode)} />
         <Field label="VILLE" value={fieldOrDash(lead.city)} />
         <Field label="TYPE LOGEMENT" value={fieldOrDash(lead.typeLogement)} />
         <Field label="REVENU FISCAL" value={lead.revenuFiscal != null ? lead.revenuFiscal.toLocaleString('fr-FR') : '—'} />
