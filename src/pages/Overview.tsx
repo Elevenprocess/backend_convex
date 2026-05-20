@@ -11,6 +11,7 @@ import { STATUS_LABEL, fullName, initials, type AnalyticsFunnelResponse, type Ca
 type FunnelPeriodMode = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'custom'
 type FunnelPeriodState = { mode: FunnelPeriodMode; customFrom: string; customTo: string }
 type FunnelPeriodRange = { from: string; to: string; label: string; days: number }
+type EvolutionGranularity = 'hour' | 'day' | 'week' | 'month'
 
 const funnelTodayInput = toDateInputValue(new Date())
 const DEFAULT_FUNNEL_PERIOD: FunnelPeriodState = { mode: 'today', customFrom: funnelTodayInput, customTo: funnelTodayInput }
@@ -472,7 +473,8 @@ function OverviewAdmin() {
     adminSummary?.qualified ?? 0,
     adminSummary?.rdvPris ?? 0,
   )
-  const evolutionPoints = buildLeadEvolutionPoints(adminSummary?.dailyEvolution ?? [], funnel?.daily ?? [], adminSummary?.hourlyCalls ?? [], funnelRange, {
+  const evolutionGranularity = chooseGranularity(funnelPeriod.mode, funnelRange)
+  const evolutionPoints = buildLeadEvolutionPoints(adminSummary?.dailyEvolution ?? [], funnel?.daily ?? [], adminSummary?.hourlyCalls ?? [], funnelRange, evolutionGranularity, {
     leads: treatedLeadTotal,
     rdv: adminSummary?.rdvPris ?? funnelTotals.rdv,
     signed: adminSummary?.signed ?? 0,
@@ -590,6 +592,7 @@ function OverviewAdmin() {
           <div className="overview-air-card overview-air-chart overview-lead-evolution-card">
             <LeadEvolutionChart
               points={evolutionPoints}
+              granularity={evolutionGranularity}
               rangeLabel={funnelRange.days === 1 ? "Aujourd'hui" : `${funnelRange.days} jours`}
               totals={{ leads: stats.leads, rdv: stats.rdvPris, signed: stats.ventes }}
             />
@@ -675,10 +678,24 @@ const LEAD_EVOLUTION_SERIES: { key: LeadEvolutionSeriesKey; label: string; color
   { key: 'signed', label: 'Ventes', color: '#B87333' },
 ]
 
-function LeadEvolutionChart({ points, rangeLabel, totals }: { points: LeadEvolutionPoint[]; rangeLabel: string; totals: { leads: number; rdv: number; signed: number } }) {
+const GRANULARITY_SUBTITLE: Record<EvolutionGranularity, string> = {
+  hour: 'Leads traités par heure',
+  day: 'Leads traités par jour',
+  week: 'Leads traités par semaine',
+  month: 'Leads traités par mois',
+}
+
+const LAST_BUCKET_LABEL: Record<EvolutionGranularity, string> = {
+  hour: 'Dernière heure',
+  day: 'Dernier jour',
+  week: 'Dernière semaine',
+  month: 'Dernier mois',
+}
+
+function LeadEvolutionChart({ points, granularity, rangeLabel, totals }: { points: LeadEvolutionPoint[]; granularity: EvolutionGranularity; rangeLabel: string; totals: { leads: number; rdv: number; signed: number } }) {
   const rawPoints = points.length > 0 ? points : [{ key: 'empty', date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }]
   const safePoints = rawPoints.length > 56 ? rawPoints.filter((_, index) => index % Math.ceil(rawPoints.length / 56) === 0 || index === rawPoints.length - 1) : rawPoints
-  const hasHourlyPoints = safePoints.some((point) => /\d+h$/.test(point.label))
+  const subtitle = GRANULARITY_SUBTITLE[granularity]
   const [activeKey, setActiveKey] = useState<LeadEvolutionSeriesKey>('leads')
   const [hover, setHover] = useState<{ x: number; y: number; cursorX: number; cursorY: number; cursorValue: number; index: number } | null>(null)
   const width = 620
@@ -723,7 +740,7 @@ function LeadEvolutionChart({ points, rangeLabel, totals }: { points: LeadEvolut
       <div className="lead-evolution-head">
         <div>
           <h3>Courbes d’évolution des leads</h3>
-          <p>{hasHourlyPoints ? 'Leads traités par heure' : 'Leads traités par jour'} — {rangeLabel}</p>
+          <p>{subtitle} — {rangeLabel}</p>
         </div>
         <span>évolution</span>
       </div>
@@ -737,7 +754,7 @@ function LeadEvolutionChart({ points, rangeLabel, totals }: { points: LeadEvolut
       </div>
       <div className="lead-evolution-svg-wrap">
         <div className="lead-evolution-last-card">
-          <small>{hasHourlyPoints ? 'Dernière heure' : 'Dernier jour'}</small>
+          <small>{LAST_BUCKET_LABEL[granularity]}</small>
           <strong style={{ color: activeSeries.color }}>{fmtCompact(activeValue)}</strong>
           <span className={delta >= 0 ? 'positive' : 'negative'}>{delta >= 0 ? '+' : ''}{fmtCompact(delta)} vs début</span>
         </div>
@@ -775,7 +792,7 @@ function LeadEvolutionChart({ points, rangeLabel, totals }: { points: LeadEvolut
             const isPeak = point.key === peak.key && peak[activeKey] > 0
             const isHovered = hover?.index === index
             const hour = Number(point.key.split('-').at(-1))
-            const showHourLabel = hasHourlyPoints && Number.isFinite(hour) && (hour === 8 || hour === 12 || hour === 16 || hour === 20)
+            const showHourLabel = granularity === 'hour' && Number.isFinite(hour) && (hour === 8 || hour === 12 || hour === 16 || hour === 20)
             const showLabel = showHourLabel || safePoints.length <= 8 || index === 0 || index === safePoints.length - 1 || index === Math.floor((safePoints.length - 1) / 2) || isPeak
             return (
               <g key={point.key}>
@@ -813,24 +830,53 @@ function LeadEvolutionChart({ points, rangeLabel, totals }: { points: LeadEvolut
   )
 }
 
+function chooseGranularity(mode: FunnelPeriodMode, range: FunnelPeriodRange): EvolutionGranularity {
+  if (mode === 'today' || mode === 'yesterday') return 'hour'
+  if (mode === 'this_week' || mode === 'last_week') return 'day'
+  if (mode === 'this_month' || mode === 'last_month') return 'week'
+  if (mode === 'this_year' || mode === 'last_year') return 'month'
+  // custom: derive from span
+  if (range.days <= 1) return 'hour'
+  if (range.days <= 7) return 'day'
+  if (range.days <= 31) return 'week'
+  return 'month'
+}
+
 function buildLeadEvolutionPoints(
   summaryDaily: { date: string; label: string; rdv: number; signed: number }[],
   funnelDaily: AnalyticsFunnelResponse['daily'],
   hourlyCalls: { date: string; hour: number; label: string; calls: number }[],
   range: FunnelPeriodRange,
+  granularity: EvolutionGranularity,
   totals: { leads: number; rdv: number; signed: number },
 ): LeadEvolutionPoint[] {
-  const activeHours = hourlyCalls
-    .filter((point) => point.hour >= 8 && point.hour <= 21)
-    .sort((a, b) => `${a.date}-${a.hour}`.localeCompare(`${b.date}-${b.hour}`))
-  if (activeHours.length > 1) {
-    return distributeTotalsAcrossHours(activeHours, totals)
+  if (granularity === 'hour') {
+    const rangeStart = startOfDay(new Date(range.from)).getTime()
+    const rangeEnd = endOfDay(new Date(range.to)).getTime()
+    const activeHours = hourlyCalls
+      .filter((point) => point.hour >= 8 && point.hour <= 21)
+      .filter((point) => {
+        const t = new Date(point.date).getTime()
+        return t >= rangeStart && t <= rangeEnd
+      })
+      .sort((a, b) => `${a.date}-${String(a.hour).padStart(2, '0')}`.localeCompare(`${b.date}-${String(b.hour).padStart(2, '0')}`))
+    if (activeHours.length > 0) {
+      return distributeTotalsAcrossHours(activeHours, totals)
+    }
   }
 
+  if (granularity === 'week') {
+    return buildWeeklyEvolutionPoints(summaryDaily, funnelDaily, totals)
+  }
+  if (granularity === 'month') {
+    return buildMonthlyEvolutionPoints(summaryDaily, funnelDaily, totals)
+  }
+
+  // daily (default fallback for hour with no hourly data, and explicit 'day')
   const summaryByDate = new Map(summaryDaily.map((point) => [point.date, point]))
   const dates = new Set<string>([...funnelDaily.map((point) => point.date), ...summaryDaily.map((point) => point.date)])
   if (dates.size > 0) {
-    const points = [...dates].sort().slice(-14).map((date) => {
+    const points = [...dates].sort().map((date) => {
       const funnelPoint = funnelDaily.find((point) => point.date === date)
       const summaryPoint = summaryByDate.get(date)
       return {
@@ -852,6 +898,106 @@ function buildLeadEvolutionPoints(
     rdv: 0,
     signed: 0,
   })), totals)
+}
+
+function buildWeeklyEvolutionPoints(
+  summaryDaily: { date: string; label: string; rdv: number; signed: number }[],
+  funnelDaily: AnalyticsFunnelResponse['daily'],
+  totals: { leads: number; rdv: number; signed: number },
+): LeadEvolutionPoint[] {
+  const buckets = new Map<string, LeadEvolutionPoint>()
+  const addToBucket = (date: string, leads: number, rdv: number, signed: number) => {
+    const weekStart = startOfWeek(new Date(date))
+    const key = weekStart.toISOString().slice(0, 10)
+    const existing = buckets.get(key)
+    if (existing) {
+      existing.leads = Math.max(existing.leads, leads) // leads use max (already aggregated upstream)
+      existing.rdv += rdv
+      existing.signed += signed
+    } else {
+      buckets.set(key, {
+        key,
+        date: key,
+        label: `sem. ${formatDayMonth(weekStart)}`,
+        leads,
+        rdv,
+        signed,
+      })
+    }
+  }
+  const summaryByDate = new Map(summaryDaily.map((point) => [point.date, point]))
+  const allDates = new Set<string>([...funnelDaily.map((point) => point.date), ...summaryDaily.map((point) => point.date)])
+  ;[...allDates].sort().forEach((date) => {
+    const funnelPoint = funnelDaily.find((point) => point.date === date)
+    const summaryPoint = summaryByDate.get(date)
+    const leads = Math.max(funnelPoint?.answered ?? 0, funnelPoint?.qualified ?? 0, funnelPoint?.rdv ?? 0)
+    const rdv = summaryPoint?.rdv ?? funnelPoint?.rdv ?? 0
+    const signed = summaryPoint?.signed ?? 0
+    addToBucket(date, leads, rdv, signed)
+  })
+  // For weekly leads aggregation, sum instead of max if we accumulated per day already.
+  // Recompute leads as sum across days within each week to avoid undercounting.
+  const dailyLeadsByWeek = new Map<string, number>()
+  ;[...allDates].sort().forEach((date) => {
+    const funnelPoint = funnelDaily.find((point) => point.date === date)
+    const leads = Math.max(funnelPoint?.answered ?? 0, funnelPoint?.qualified ?? 0, funnelPoint?.rdv ?? 0)
+    const weekKey = startOfWeek(new Date(date)).toISOString().slice(0, 10)
+    dailyLeadsByWeek.set(weekKey, (dailyLeadsByWeek.get(weekKey) ?? 0) + leads)
+  })
+  buckets.forEach((point, key) => {
+    point.leads = dailyLeadsByWeek.get(key) ?? point.leads
+  })
+  const sorted = [...buckets.values()].sort((a, b) => a.date.localeCompare(b.date))
+  if (sorted.length === 0) {
+    return hydrateMissingEvolutionTotals([{ key: 'empty', date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }], totals)
+  }
+  return hydrateMissingEvolutionTotals(sorted, totals)
+}
+
+function buildMonthlyEvolutionPoints(
+  summaryDaily: { date: string; label: string; rdv: number; signed: number }[],
+  funnelDaily: AnalyticsFunnelResponse['daily'],
+  totals: { leads: number; rdv: number; signed: number },
+): LeadEvolutionPoint[] {
+  const buckets = new Map<string, LeadEvolutionPoint>()
+  const summaryByDate = new Map(summaryDaily.map((point) => [point.date, point]))
+  const allDates = new Set<string>([...funnelDaily.map((point) => point.date), ...summaryDaily.map((point) => point.date)])
+  ;[...allDates].sort().forEach((date) => {
+    const funnelPoint = funnelDaily.find((point) => point.date === date)
+    const summaryPoint = summaryByDate.get(date)
+    const leads = Math.max(funnelPoint?.answered ?? 0, funnelPoint?.qualified ?? 0, funnelPoint?.rdv ?? 0)
+    const rdv = summaryPoint?.rdv ?? funnelPoint?.rdv ?? 0
+    const signed = summaryPoint?.signed ?? 0
+    const monthKey = date.slice(0, 7) // YYYY-MM
+    const existing = buckets.get(monthKey)
+    if (existing) {
+      existing.leads += leads
+      existing.rdv += rdv
+      existing.signed += signed
+    } else {
+      buckets.set(monthKey, {
+        key: monthKey,
+        date: `${monthKey}-01`,
+        label: formatMonthLabel(new Date(`${monthKey}-01`)),
+        leads,
+        rdv,
+        signed,
+      })
+    }
+  })
+  const sorted = [...buckets.values()].sort((a, b) => a.date.localeCompare(b.date))
+  if (sorted.length === 0) {
+    return hydrateMissingEvolutionTotals([{ key: 'empty', date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }], totals)
+  }
+  return hydrateMissingEvolutionTotals(sorted, totals)
+}
+
+function formatDayMonth(date: Date): string {
+  return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
+}
+
+function formatMonthLabel(date: Date): string {
+  return date.toLocaleDateString('fr-FR', { month: 'short' }).replace('.', '')
 }
 
 function distributeTotalsAcrossHours(points: { date: string; hour: number; label: string; calls: number }[], totals: { leads: number; rdv: number; signed: number }): LeadEvolutionPoint[] {
