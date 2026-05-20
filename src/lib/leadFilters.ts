@@ -61,12 +61,19 @@ function leadInArrivedRange(
   return true
 }
 
+function leadMatchesStatus(lead: Pick<LeadResponse, 'status'>, status: LeadStatusFilter): boolean {
+  if (status === 'all') return true
+  if (status === 'qualifie') return lead.status === 'qualifie' || lead.status === 'rdv_pris'
+  if (status === 'pas_qualifie') return lead.status === 'pas_qualifie' || lead.status === 'perdu'
+  return lead.status === status
+}
+
 export function applyLeadFilters<
   T extends Pick<LeadResponse, 'status' | 'joursSansContact' | 'createdAt' | 'arrivalAt'>,
 >(leads: T[], filters: LeadListFilters): T[] {
   return leads.filter((lead) => {
     if (filters.onlyNew && lead.status !== 'nouveau') return false
-    if (filters.status !== 'all' && lead.status !== filters.status) return false
+    if (!leadMatchesStatus(lead, filters.status)) return false
     if (filters.lastCall === 'never' && lead.joursSansContact !== null) return false
     if (filters.lastCall === 'today' && lead.joursSansContact !== 0) return false
     if (filters.lastCall === 'older_3d' && (lead.joursSansContact === null || lead.joursSansContact < 3)) return false

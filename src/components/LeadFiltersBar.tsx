@@ -10,7 +10,6 @@ const STATUS_OPTIONS: Array<LeadStatus | 'all'> = [
   'a_rappeler',
   'pas_de_reponse',
   'pas_qualifie',
-  'rdv_pris',
   'rdv_honore',
   'signe',
   'perdu',
