@@ -191,11 +191,10 @@ function LeadsSetter() {
   const orderedColumns = useOrderedColumns(SETTER_COLUMNS, visibleColumns)
   // Côté setter, l'écran s'ouvre directement sur les nouveaux leads.
   // Le filtre global "Tous" n'est pas affiché aux setters.
-  // On hydrate tout le pool actif : les imports GHL massifs peuvent mettre à jour
-  // des leads déjà créés, et une limite partielle les faisait disparaître du tableau setter.
-  const baseLeadsState = useLeadsProgressive({ quickLimit: 100, fullLimit: 5000 })
+  // On reste dans la limite backend (/leads max 500) pour éviter les erreurs 400.
+  const baseLeadsState = useLeadsProgressive({ quickLimit: 100, fullLimit: 500 })
   const searchTerm = query.trim()
-  const searchLeadsState = useLeadsProgressive(searchTerm ? { quickLimit: 100, fullLimit: 10000, search: searchTerm } : null)
+  const searchLeadsState = useLeadsProgressive(searchTerm ? { quickLimit: 100, fullLimit: 500, search: searchTerm } : null)
   const data = searchTerm ? searchLeadsState.data : baseLeadsState.data
   const loading = searchTerm ? searchLeadsState.loading : baseLeadsState.loading
   const error = searchTerm ? searchLeadsState.error : baseLeadsState.error
@@ -362,7 +361,7 @@ function LeadsAdmin() {
   const [deletingLeadId, setDeletingLeadId] = useState<string | null>(null)
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([])
 
-  const { data: leadsData, loading, error, backgroundLoading, refetch } = useLeadsProgressive({ quickLimit: 100, fullLimit: 10000 })
+  const { data: leadsData, loading, error, backgroundLoading, refetch } = useLeadsProgressive({ quickLimit: 100, fullLimit: 500 })
   const { data: leadStats } = useLeadStats()
   const { data: users = [] } = useUsers()
   const leads = leadsData ?? []
