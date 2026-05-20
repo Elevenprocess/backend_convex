@@ -16,7 +16,7 @@ import {
   type UserResponse,
 } from '../lib/types'
 import { useCall, type CallState } from '../lib/call'
-import { useCallLogs, useRdvList, createCallLog, createRdv, updateLead, copyText, useGhlCalendarConfig, useGhlFreeSlots, createGhlAppointment } from '../lib/hooks'
+import { useCallLogs, useRdvList, createCallLog, createRdv, updateLead, copyText, useGhlCalendarConfig, useGhlFreeSlots, createGhlAppointment, syncLeadGhlCalendarEvents, type GhlCalendarEvent } from '../lib/hooks'
 import { notifyClipboardCopied } from '../lib/clipboardToast'
 
 type Tab = { id: string; label: string; icon?: IconName }
@@ -463,33 +463,187 @@ function AppelsTab({ leadId, userMap }: { leadId: string; userMap?: Map<string, 
 }
 
 function RdvTab({ lead, userMap }: { lead: LeadResponse; userMap?: Map<string, UserResponse> }) {
-  const { data, loading } = useRdvList({ leadId: lead.id, limit: 50 })
+  const { data, loading, refetch } = useRdvList({ leadId: lead.id, limit: 50 })
+  const [syncingGhl, setSyncingGhl] = useState(false)
+  const [syncTried, setSyncTried] = useState(false)
+  const [syncError, setSyncError] = useState<string | null>(null)
+  const [ghlEvents, setGhlEvents] = useState<GhlCalendarEvent[]>([])
+
+  const rdvs = data ?? []
+  const shouldSyncGhlRdv = Boolean(
+    lead.externalId
+    && !loading
+    && !syncTried
+    && (rdvs.length === 0 || rdvs.some((rdv) => !rdv.commercialId)),
+  )
+
+  useEffect(() => {
+    if (!shouldSyncGhlRdv) return
+    let cancelled = false
+    setSyncTried(true)
+    setSyncingGhl(true)
+    setSyncError(null)
+    syncLeadGhlCalendarEvents(lead.id)
+      .then((result) => {
+        if (cancelled) return
+        setGhlEvents(result.events ?? [])
+        if (result.matched > 0 || result.created > 0 || result.updated > 0) refetch()
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setSyncError(error instanceof Error ? error.message : 'Synchronisation GHL impossible')
+      })
+      .finally(() => {
+        if (!cancelled) setSyncingGhl(false)
+      })
+    return () => { cancelled = true }
+  }, [lead.id, shouldSyncGhlRdv, refetch])
+
   if (loading) return <LoadingBlock />
 
   const callbackCard = lead.nextCallbackAt ? <CallbackCard nextCallbackAt={lead.nextCallbackAt} /> : null
-  if (!data || data.length === 0) {
-    if (callbackCard) return <div className="space-y-3">{callbackCard}</div>
-    return <p className="text-faint">Aucun RDV pour ce lead.</p>
+  const matchedGhlEvents = findLeadGhlEvents(lead, ghlEvents)
+  if (rdvs.length === 0 && matchedGhlEvents.length === 0) {
+    return (
+      <div className="space-y-3">
+        {callbackCard}
+        {syncingGhl && <p className="text-xs text-muted">Recherche du RDV envoyé à GHL…</p>}
+        {syncError && <p className="text-xs text-rouille">GHL : {syncError}</p>}
+        {!callbackCard && !syncingGhl && <p className="text-faint">Aucun RDV pour ce lead.</p>}
+      </div>
+    )
   }
   return (
     <div className="space-y-3">
       {callbackCard}
-      {data.map((r) => (
-        <div key={r.id} className="bg-white/60 border border-line rounded-xl p-3">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] font-bold uppercase tracking-widest text-or">{r.status}</span>
-            <span className="text-[11px] text-faint">{formatDate(r.scheduledAt)}</span>
-          </div>
-          <div className="text-xs text-muted">
-            {r.locationType}
-            {r.commercialId && userMap?.get(r.commercialId)?.name ? ` · ${userMap.get(r.commercialId)?.name}` : ''}
-          </div>
-          {r.result && <div className="text-xs text-text mt-1">Résultat : <span className="font-semibold">{r.result}</span></div>}
-          {r.notes && <p className="text-sm mt-2 text-text whitespace-pre-line">{r.notes}</p>}
-        </div>
+      {syncingGhl && <p className="text-xs text-muted">Mise à jour GHL en cours…</p>}
+      {syncError && <p className="text-xs text-rouille">GHL : {syncError}</p>}
+      {rdvs.map((r) => {
+        const ghlEvent = findMatchingGhlEvent(lead, r, matchedGhlEvents)
+        const commercialName = rdvCommercialName(r, ghlEvent, userMap)
+        return <RdvInfoCard key={r.id} rdv={r} ghlEvent={ghlEvent} commercialName={commercialName} />
+      })}
+      {rdvs.length === 0 && matchedGhlEvents.map((event) => (
+        <GhlRdvInfoCard key={event.id} event={event} userMap={userMap} />
       ))}
     </div>
   )
+}
+
+function RdvInfoCard({ rdv, ghlEvent, commercialName }: { rdv: RdvResponse; ghlEvent?: GhlCalendarEvent; commercialName: string | null }) {
+  return (
+    <div className="bg-white/70 border border-line rounded-xl p-3 shadow-sm">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div>
+          <span className="text-[11px] font-bold uppercase tracking-widest text-or">RDV {rdv.status}</span>
+          <div className="text-sm font-semibold text-text mt-1">{formatRdvDate(rdv.scheduledAt)}</div>
+        </div>
+        {rdv.externalId && <span className="text-[10px] font-bold uppercase tracking-widest text-success bg-success-tint rounded-full px-2 py-1">GHL</span>}
+      </div>
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <MiniInfo label="Date" value={formatRdvDay(rdv.scheduledAt)} />
+        <MiniInfo label="Heure" value={formatRdvTime(rdv.scheduledAt)} />
+        <MiniInfo label="Commercial assigné" value={commercialName ?? 'Non attribué'} wide />
+        <MiniInfo label="Type" value={rdv.locationType} />
+        {ghlEvent?.sector && <MiniInfo label="Secteur GHL" value={ghlEvent.sector} />}
+      </div>
+      {rdv.result && <div className="text-xs text-text mt-3">Résultat : <span className="font-semibold">{rdv.result}</span></div>}
+      {rdv.notes && <p className="text-sm mt-3 text-text whitespace-pre-line">{rdv.notes}</p>}
+    </div>
+  )
+}
+
+function GhlRdvInfoCard({ event, userMap }: { event: GhlCalendarEvent; userMap?: Map<string, UserResponse> }) {
+  const commercialName = ghlCommercialName(event, userMap)
+  return (
+    <div className="bg-white/70 border border-success/25 rounded-xl p-3 shadow-sm">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div>
+          <span className="text-[11px] font-bold uppercase tracking-widest text-success">RDV GHL trouvé</span>
+          <div className="text-sm font-semibold text-text mt-1">{formatRdvDate(event.startTime)}</div>
+        </div>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-success bg-success-tint rounded-full px-2 py-1">GHL live</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <MiniInfo label="Date" value={formatRdvDay(event.startTime)} />
+        <MiniInfo label="Heure" value={formatRdvTime(event.startTime)} />
+        <MiniInfo label="Commercial assigné" value={commercialName ?? 'Non attribué'} wide />
+        {event.sector && <MiniInfo label="Secteur" value={event.sector} />}
+        {event.status && <MiniInfo label="Statut GHL" value={event.status} />}
+      </div>
+      {event.notes && <p className="text-sm mt-3 text-text whitespace-pre-line">{event.notes}</p>}
+    </div>
+  )
+}
+
+function MiniInfo({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
+  return (
+    <div className={wide ? 'col-span-2' : undefined}>
+      <div className="text-[10px] font-bold text-faint uppercase tracking-widest">{label}</div>
+      <div className="font-semibold text-text mt-0.5">{value || '—'}</div>
+    </div>
+  )
+}
+
+function findLeadGhlEvents(lead: LeadResponse, events: GhlCalendarEvent[]): GhlCalendarEvent[] {
+  if (events.length === 0) return []
+  const leadContact = cleanField(lead.externalId)
+  const leadPhone = normalizePhone(lead.phone)
+  const leadEmail = cleanField(lead.email)?.toLowerCase()
+  return events.filter((event) => {
+    if (leadContact && event.contactId === leadContact) return true
+    if (leadPhone && normalizePhone(event.contactPhone) === leadPhone) return true
+    if (leadEmail && event.contactEmail?.toLowerCase() === leadEmail) return true
+    return false
+  })
+}
+
+function findMatchingGhlEvent(lead: LeadResponse, rdv: RdvResponse, events: GhlCalendarEvent[]): GhlCalendarEvent | undefined {
+  if (events.length === 0) return undefined
+  if (rdv.externalId) {
+    const byId = events.find((event) => event.id === rdv.externalId)
+    if (byId) return byId
+  }
+  const rdvTs = new Date(rdv.scheduledAt).getTime()
+  return events.find((event) => {
+    if (lead.externalId && event.contactId === lead.externalId) return true
+    const eventTs = new Date(event.startTime).getTime()
+    return Number.isFinite(rdvTs) && Number.isFinite(eventTs) && Math.abs(rdvTs - eventTs) < 5 * 60 * 1000
+  })
+}
+
+function rdvCommercialName(rdv: RdvResponse, event: GhlCalendarEvent | undefined, userMap?: Map<string, UserResponse>): string | null {
+  if (rdv.commercialId && userMap?.get(rdv.commercialId)?.name) return userMap.get(rdv.commercialId)?.name ?? null
+  return event ? ghlCommercialName(event, userMap) : null
+}
+
+function ghlCommercialName(event: GhlCalendarEvent, userMap?: Map<string, UserResponse>): string | null {
+  if (event.commercialId && userMap?.get(event.commercialId)?.name) return userMap.get(event.commercialId)?.name ?? null
+  return cleanField(event.commercialName) ?? cleanField(event.assignedUserId)
+}
+
+function normalizePhone(value?: string | null): string | null {
+  const cleaned = cleanField(value)?.replace(/\D/g, '')
+  return cleaned && cleaned.length >= 6 ? cleaned : null
+}
+
+function formatRdvDate(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const day = d.toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Indian/Reunion' })
+  return `${day[0].toUpperCase()}${day.slice(1)} à ${formatRdvTime(iso)}`
+}
+
+function formatRdvDay(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Indian/Reunion' })
+}
+
+function formatRdvTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Indian/Reunion' })
 }
 
 function CallbackCard({ nextCallbackAt }: { nextCallbackAt: string }) {
