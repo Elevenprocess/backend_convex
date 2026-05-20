@@ -49,6 +49,22 @@ export function RdvCalendar() {
     return m
   }, [leads])
 
+  const leadByExternalId = useMemo(() => {
+    const m = new Map<string, LeadResponse>()
+    for (const l of leads ?? []) if (l.externalId) m.set(l.externalId, l)
+    return m
+  }, [leads])
+
+  const openCalendarItem = (item: CalendarItem) => {
+    if (item.source === 'local') {
+      navigate(`/rdv/${item.id}`)
+      return
+    }
+    const lead = item.event.contactId ? leadByExternalId.get(item.event.contactId) : undefined
+    const search = lead ? fullName(lead) : item.event.contactPhone || item.event.contactName || item.event.contactEmail || item.event.title || ''
+    if (search) navigate(`/leads?search=${encodeURIComponent(search)}`)
+  }
+
   const calendarItems = useMemo(() => {
     const localRdvs = rdvs ?? []
     const localExternalIds = new Set(localRdvs.map((r) => r.externalId).filter(Boolean))
@@ -162,7 +178,8 @@ export function RdvCalendar() {
               cursorDate={cursorDate}
               rdvByDay={rdvByDay}
               leadMap={leadMap}
-              onOpen={(rdvId) => navigate(`/rdv/${rdvId}`)}
+              leadByExternalId={leadByExternalId}
+              onOpen={openCalendarItem}
               onOpenDay={(date) => { setCursorDate(date); setView('day') }}
             />
           ) : (
@@ -171,7 +188,8 @@ export function RdvCalendar() {
               visibleHours={visibleHours}
               rdvByCell={rdvByHourCell}
               leadMap={leadMap}
-              onOpen={(rdvId) => navigate(`/rdv/${rdvId}`)}
+              leadByExternalId={leadByExternalId}
+              onOpen={openCalendarItem}
               onOpenDay={(date) => { setCursorDate(date); setView('day') }}
               onNeedMoreDays={() => setContinuousDays((days) => Math.min(days + 21, 365))}
             />
@@ -189,6 +207,7 @@ function TimeGridView({
   visibleHours,
   rdvByCell,
   leadMap,
+  leadByExternalId,
   onOpen,
   onOpenDay,
   onNeedMoreDays,
@@ -197,7 +216,8 @@ function TimeGridView({
   visibleHours: number[]
   rdvByCell: Map<string, CalendarItem[]>
   leadMap: Map<string, LeadResponse>
-  onOpen: (rdvId: string) => void
+  leadByExternalId: Map<string, LeadResponse>
+  onOpen: (item: CalendarItem) => void
   onOpenDay: (date: Date) => void
   onNeedMoreDays?: () => void
 }) {
@@ -230,7 +250,7 @@ function TimeGridView({
         </div>
         <div
           className="grid flex-grow overflow-y-auto"
-          style={{ gridTemplateColumns: gridColumns, gridAutoRows: 'minmax(76px, auto)' }}
+          style={{ gridTemplateColumns: gridColumns, gridAutoRows: 'minmax(96px, auto)' }}
         >
           {visibleHours.map((hour) => (
             <RowHour
@@ -239,6 +259,7 @@ function TimeGridView({
               days={days}
               rdvByCell={rdvByCell}
               leadMap={leadMap}
+              leadByExternalId={leadByExternalId}
               onOpen={onOpen}
             />
           ))}
@@ -253,23 +274,35 @@ function RowHour({
   days,
   rdvByCell,
   leadMap,
+  leadByExternalId,
   onOpen,
 }: {
   hour: number
   days: DayCell[]
   rdvByCell: Map<string, CalendarItem[]>
   leadMap: Map<string, LeadResponse>
-  onOpen: (rdvId: string) => void
+  leadByExternalId: Map<string, LeadResponse>
+  onOpen: (item: CalendarItem) => void
 }) {
   return (
     <>
       <div className="border-t border-line-soft text-xs text-faint text-right pr-2 pt-1 bg-white/50">{formatHour(hour)}</div>
       {days.map((d) => {
         const list = rdvByCell.get(`${d.key}:${hour}`) ?? []
+        const columns = tileColumns(list.length)
         return (
-          <div key={d.key} className={`border-l border-t border-line-soft p-1 relative ${d.today ? 'bg-cuivre-tint/20' : ''}`}>
+          <div
+            key={d.key}
+            className={`border-l border-t border-line-soft p-1 relative grid gap-1 content-start auto-rows-[minmax(42px,auto)] ${d.today ? 'bg-cuivre-tint/20' : ''}`}
+            style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+          >
             {list.map((item) => (
-              <RdvButton key={`${item.source}-${item.id}`} item={item} lead={item.source === 'local' ? leadMap.get(item.rdv.leadId) : undefined} onClick={() => item.source === 'local' && onOpen(item.id)} />
+              <RdvButton
+                key={`${item.source}-${item.id}`}
+                item={item}
+                lead={item.source === 'local' ? leadMap.get(item.rdv.leadId) : item.event.contactId ? leadByExternalId.get(item.event.contactId) : undefined}
+                onClick={() => onOpen(item)}
+              />
             ))}
           </div>
         )
@@ -283,6 +316,7 @@ function MonthView({
   cursorDate,
   rdvByDay,
   leadMap,
+  leadByExternalId,
   onOpen,
   onOpenDay,
 }: {
@@ -290,7 +324,8 @@ function MonthView({
   cursorDate: Date
   rdvByDay: Map<string, CalendarItem[]>
   leadMap: Map<string, LeadResponse>
-  onOpen: (rdvId: string) => void
+  leadByExternalId: Map<string, LeadResponse>
+  onOpen: (item: CalendarItem) => void
   onOpenDay: (date: Date) => void
 }) {
   return (
@@ -311,7 +346,13 @@ function MonthView({
               </button>
               <div className="mt-1 space-y-1 overflow-hidden">
                 {list.slice(0, 4).map((item) => (
-                  <RdvButton key={`${item.source}-${item.id}`} item={item} lead={item.source === 'local' ? leadMap.get(item.rdv.leadId) : undefined} compact onClick={() => item.source === 'local' && onOpen(item.id)} />
+                  <RdvButton
+                    key={`${item.source}-${item.id}`}
+                    item={item}
+                    lead={item.source === 'local' ? leadMap.get(item.rdv.leadId) : item.event.contactId ? leadByExternalId.get(item.event.contactId) : undefined}
+                    compact
+                    onClick={() => onOpen(item)}
+                  />
                 ))}
                 {list.length > 4 && (
                   <button onClick={() => onOpenDay(d.date)} className="text-[11px] font-semibold text-muted hover:text-or">+{list.length - 4} autres</button>
@@ -325,6 +366,12 @@ function MonthView({
   )
 }
 
+function tileColumns(count: number): number {
+  if (count <= 1) return 1
+  if (count <= 4) return 2
+  return 3
+}
+
 function RdvButton({ item, lead, compact = false, onClick }: { item: CalendarItem; lead?: LeadResponse; compact?: boolean; onClick: () => void }) {
   const isGhl = item.source === 'ghl'
   const label = isGhl ? ghlEventLabel(item.event) : (lead ? fullName(lead) : localRdvFallbackLabel(item.rdv))
@@ -334,12 +381,12 @@ function RdvButton({ item, lead, compact = false, onClick }: { item: CalendarIte
   return (
     <button
       onClick={onClick}
-      className={`rdv-block ${tone} w-full text-left font-semibold rounded-xl transition-transform ${isGhl ? 'cursor-default' : 'hover:scale-[1.01]'} ${compact ? 'text-[11px] px-2 py-1 truncate' : 'min-h-12 text-[11px] px-2 py-2 mb-1'}`}
+      className={`rdv-block ${tone} w-full h-full min-h-10 overflow-hidden text-left font-semibold rounded-lg transition-transform cursor-pointer hover:scale-[1.01] ${compact ? 'text-[11px] px-2 py-1 truncate' : 'text-[10px] px-2 py-1.5'}`}
       title={title}
     >
       <span className="block truncate">{formatTime(item.scheduledAt)} — {label}</span>
-      {!compact && detail && <span className="block text-[10px] opacity-75 truncate">{detail}</span>}
-      {!compact && isGhl && <span className="block text-[10px] opacity-75">GHL live{item.event.sector ? ` · ${item.event.sector}` : ''}</span>}
+      {!compact && detail && <span className="block text-[9px] opacity-75 truncate">{detail}</span>}
+      {!compact && isGhl && <span className="block text-[9px] opacity-75 truncate">GHL live{item.event.sector ? ` · ${item.event.sector}` : ''}</span>}
     </button>
   )
 }
