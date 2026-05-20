@@ -231,12 +231,17 @@ function LeadsSetter() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
+    const qPhone = normalizePhoneDigits(q)
     // Si une recherche est saisie, elle doit être globale sur toutes les catégories
     // setter, même si l’onglet actif est "Nouveaux", "À rappeler", etc.
     let list = q ? categoryLeads : filterSetterLeadsByStatus(categoryLeads, filter)
     if (missingFilter !== 'all') list = list.filter((l) => matchesMissingFilter(l, missingFilter))
     if (q) {
-      list = list.filter((l) => [fullName(l), l.phone, l.email, l.city].filter(Boolean).join(' ').toLowerCase().includes(q))
+      list = list.filter((l) => {
+        const textMatch = [fullName(l), l.phone, l.email, l.city].filter(Boolean).join(' ').toLowerCase().includes(q)
+        const phoneMatch = qPhone.length >= 4 && normalizePhoneDigits(l.phone ?? '').includes(qPhone)
+        return textMatch || phoneMatch
+      })
     }
     return list
   }, [categoryLeads, filter, missingFilter, query])
@@ -647,6 +652,10 @@ function matchesMissingFilter(lead: LeadResponse, filter: SetterMissingFilter): 
 
 function hasValue(value: string | null | undefined): boolean {
   return Boolean(cleanField(value))
+}
+
+function normalizePhoneDigits(value: string): string {
+  return value.replace(/\D/g, '')
 }
 
 function statusLabelForLead(lead: LeadResponse): string {
