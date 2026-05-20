@@ -735,7 +735,7 @@ function shortDate(iso: string): string {
 function renderSetterHeader(key: ColumnKey) {
   switch (key) {
     case 'nom': return <Th key={key} className="w-[240px] lead-sticky-head">NOM</Th>
-    case 'telephone': return <Th key={key} className="w-[260px]">TÉLÉPHONE DU PROSPECT</Th>
+    case 'telephone': return <Th key={key} className="w-[200px]">TÉLÉPHONE DU PROSPECT</Th>
     case 'dateArrivee': return <Th key={key} className="w-[180px]">DATE/HEURE D'ARRIVÉE</Th>
     case 'adresseComplete': return <Th key={key} className="w-[260px]">ADRESSE COMPLÈTE</Th>
     case 'setter': return <Th key={key} className="w-[210px]">SETTER ASSIGNÉ</Th>
@@ -768,7 +768,7 @@ function renderSetterCell(
           </div>
         </Td>
       )
-    case 'telephone': return <Td key={key} className="min-w-[260px]"><PhoneCell lead={lead} onStartCall={startCall} /></Td>
+    case 'telephone': return <Td key={key} className="min-w-[200px]"><PhoneCell lead={lead} onStartCall={startCall} /></Td>
     case 'dateArrivee': return <Td key={key} className="text-faint">{fullDateTime(leadArrivalDate(lead))}</Td>
     case 'adresseComplete': return <Td key={key} className="text-muted truncate" title={addressFull(lead)}>{addressFull(lead)}</Td>
     case 'setter': return <Td key={key}><SetterChips lead={lead} userMap={userMap} /></Td>
@@ -1200,7 +1200,7 @@ function PhoneCell({ lead, onStartCall }: { lead: LeadResponse; onStartCall: Ret
           alert(err instanceof Error ? err.message : 'Impossible de copier le numéro')
         })
       }}
-      className="inline-flex min-w-[220px] max-w-full items-center justify-start gap-2 rounded-xl border border-line bg-white px-3 py-1.5 text-xs font-bold text-text hover:border-or hover:text-or"
+      className="inline-flex min-w-[170px] max-w-full items-center justify-start gap-2 rounded-xl border border-line bg-white px-3 py-1.5 text-xs font-bold text-text hover:border-or hover:text-or"
       title="Copier le numéro pour appeler"
     >
       <Icon name="phone" size={13} />
