@@ -68,10 +68,12 @@ const EMPTY_COMMERCIAL_STATS: AnalyticsCommercialSummary = {
 
 const EMPTY_ADMIN_STATS: AnalyticsAdminSummary = {
   calls: 0,
+  loggedCalls: 0,
   classified: 0,
   qualified: 0,
   unclassified: 0,
   syntheticCalls: 0,
+  scheduledRdv: 0,
   rdvPris: 0,
   rdvRate: 0,
   qualificationRate: 0,
@@ -255,9 +257,9 @@ function AnalyticsAdmin() {
       </div>
       <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
         <div className="grid grid-cols-4 gap-6">
-          <BigStatCard label="APPELS CRM" value={fmtInt(stats.calls)} delta={`${stats.classified} traités`} sub="Appels et statuts suivis dans le CRM" />
-          <BigStatCard label="LEADS CLASSIFIÉS" value={fmtInt(stats.classified)} sub={`${stats.qualificationRate}% qualifiés`} />
-          <BigStatCard label="RDV PRIS" value={fmtInt(stats.rdvPris)} sub={`${stats.rdvRate}% / appels`} />
+          <BigStatCard label="APPELS TRAITÉS" value={fmtInt(stats.calls)} delta={`${stats.loggedCalls} réels`} sub={`${stats.syntheticCalls} déduits des statuts CRM`} />
+          <BigStatCard label="LEADS TRAITÉS" value={fmtInt(stats.classified)} sub={`${stats.qualificationRate}% deviennent qualifiés`} />
+          <BigStatCard label="RDV / QUALIFIÉS" value={fmtInt(stats.rdvPris)} delta={`${stats.scheduledRdv} calendrier`} sub={`${stats.rdvRate}% / appels traités`} />
           <BigStatCard label="CA SIGNÉ" value={fmtKEur(stats.ca)} delta={`${stats.signed} ventes signées`} sub={fmtFullEur(stats.ca)} />
         </div>
 
@@ -275,17 +277,17 @@ function AnalyticsAdmin() {
         <div className="grid grid-cols-12 gap-6">
           <div className="glass-card p-6 col-span-7">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold">Camembert OLAP — issues d'appel</h3>
-              <span className="eyebrow">requête backend agrégée</span>
+              <h3 className="font-bold">Camembert OLAP — issues d'appel & statuts</h3>
+              <span className="eyebrow">appels réels + statuts CRM</span>
             </div>
             <PieChart segments={stats.resultSegments} center={`${stats.calls}\nappels`} />
           </div>
           <div className="glass-card p-6 col-span-5">
             <h3 className="font-bold mb-4">ETL qualité data</h3>
             <div className="space-y-4">
-              <Goal label="Traçabilité appels" value={`${stats.calls} appels / ${stats.classified} classifs`} pct={pct(stats.calls, stats.classified)} color="#D4AF37" />
+              <Goal label="Couverture traitement" value={`${stats.classified} traités / ${stats.calls} appels`} pct={pct(stats.classified, stats.calls)} color="#D4AF37" />
               <Goal label="Qualification" value={`${stats.qualified} qualifiés`} pct={stats.qualificationRate} color="#3DA86A" />
-              <Goal label="RDV" value={`${stats.rdvPris} RDV`} pct={stats.rdvRate} color="#B87333" />
+              <Goal label="RDV / qualifiés" value={`${stats.rdvPris} opérationnels · ${stats.scheduledRdv} calendrier`} pct={stats.rdvRate} color="#B87333" />
               <Row label="Leads non traités" value={String(stats.unclassified)} />
             </div>
           </div>
@@ -340,7 +342,7 @@ function CommercialTrackingDashboard({ commercials, totalCa, totalSigned, totalH
         <div>
           <span className="eyebrow">DASHBOARD COMMERCIAUX</span>
           <h3 className="text-2xl font-extrabold mt-1">Suivi des commerciaux</h3>
-          <p className="text-sm text-muted mt-1">Vue admin depuis toujours : activité GHL/RDV, ventes, closing, panier moyen et CA par commercial.{loading && <AnalyticsInlineLoading />}</p>
+          <p className="text-sm text-muted mt-1">Vue admin sur la période sélectionnée : activité GHL/RDV, ventes, closing, panier moyen et CA par commercial.{loading && <AnalyticsInlineLoading />}</p>
         </div>
         <div className="rounded-2xl border border-or/15 bg-or-tint/50 px-4 py-3 text-sm">
           <div className="eyebrow mb-1">Leader CA</div>
@@ -350,11 +352,11 @@ function CommercialTrackingDashboard({ commercials, totalCa, totalSigned, totalH
       </div>
 
       <div className="grid grid-cols-2 xl:grid-cols-6 gap-3">
-        <CommercialMiniKpi label="Activités GHL/RDV" value={fmtInt(totalActivities)} detail="depuis toujours" />
+        <CommercialMiniKpi label="Activités GHL/RDV" value={fmtInt(totalActivities)} detail="sur la période" />
         <CommercialMiniKpi label="RDV honorés" value={fmtInt(totalHonored)} detail={`${fmtInt(totalPlanned)} planifiés`} />
         <CommercialMiniKpi label="Ventes" value={fmtInt(totalSigned)} detail="devis signés" tone="success" />
         <CommercialMiniKpi label="Closing moyen" value={`${averageClosing}%`} detail="moyenne équipe" tone={averageClosing >= 35 ? 'success' : averageClosing >= 20 ? 'warning' : 'danger'} />
-        <CommercialMiniKpi label="CA signé" value={fmtKEur(totalCa)} detail="historique complet" tone="gold" />
+        <CommercialMiniKpi label="CA signé" value={fmtKEur(totalCa)} detail="sur la période" tone="gold" />
         <CommercialMiniKpi label="Meilleur closing" value={bestClosing ? `${bestClosing.closing}%` : '0%'} detail={bestClosing?.name ?? '—'} />
       </div>
 
@@ -620,10 +622,12 @@ function commercialTableRows(stats: AnalyticsCommercialSummary) {
 
 function adminTableRows(stats: AnalyticsAdminSummary) {
   return [
-    ['Appels CRM enregistrés', fmtInt(stats.calls), 'Nombre d’appels suivis dans le CRM sur la période'],
-    ['Leads travaillés', fmtInt(stats.classified), 'Leads qui ont eu un vrai statut commercial : qualifié, relance, refus ou RDV'],
-    ['Leads qualifiés', fmtInt(stats.qualified), `${stats.qualificationRate}% des appels deviennent des opportunités qualifiées`],
-    ['RDV créés', fmtInt(stats.rdvPris), `${stats.rdvRate}% de transformation appel → RDV`],
+    ['Appels réels enregistrés', fmtInt(stats.loggedCalls), 'Appels réellement créés dans les logs sur la période'],
+    ['Appels traités total', fmtInt(stats.calls), `${stats.loggedCalls} réels + ${stats.syntheticCalls} déduits des statuts CRM`],
+    ['Leads traités', fmtInt(stats.classified), 'Leads qui ont eu un vrai statut : qualifié, relance, refus ou RDV'],
+    ['Leads qualifiés', fmtInt(stats.qualified), `${stats.qualificationRate}% des appels traités deviennent qualifiés`],
+    ['RDV calendrier', fmtInt(stats.scheduledRdv), 'RDV réellement présents dans le calendrier/CRM sur la période'],
+    ['RDV / qualifiés opérationnels', fmtInt(stats.rdvPris), `${stats.rdvRate}% appel → RDV ou qualification`],
     ['Ventes signées', fmtInt(stats.signed), 'Nombre de dossiers signés après RDV honoré'],
     ['Chiffre d’affaires signé', fmtKEur(stats.ca), stats.signed > 0 ? `Panier moyen estimé : ${fmtKEur(stats.ca / stats.signed)}` : 'Aucune vente signée sur cette période'],
     ['Leads à traiter', fmtInt(stats.unclassified), 'Leads encore sans qualification claire dans le CRM'],

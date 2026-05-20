@@ -237,10 +237,12 @@ export type AnalyticsCommercialPerf = {
 
 export type AnalyticsAdminSummary = {
   calls: number
+  loggedCalls: number
   classified: number
   qualified: number
   unclassified: number
   syntheticCalls: number
+  scheduledRdv: number
   rdvPris: number
   rdvRate: number
   qualificationRate: number
