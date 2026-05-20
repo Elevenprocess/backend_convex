@@ -33,8 +33,9 @@ export function Sidebar() {
   return (
     <aside className={`app-sidebar ${expanded ? 'expanded' : 'collapsed'}`}>
       <div className="sidebar-brand" title="Electro Concept OI">
-        <div className="sidebar-logo">E</div>
-        <span className="sidebar-brand-text">ECOI</span>
+        <div className="sidebar-logo" aria-label="Electro Concept OI">
+          <img src="/67ed1a46379294966df28f87.png" alt="Electro Concept OI" />
+        </div>
       </div>
 
       <button
