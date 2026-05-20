@@ -4,7 +4,7 @@ import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
 import { LoadingScreen } from '../../components/Spinner'
-import { useRdv, useLead, useUsers } from '../../lib/hooks'
+import { useRdv, useLead, useUsers, useCallLogs } from '../../lib/hooks'
 import {
   fullName,
   initials as leadInitials,
@@ -44,6 +44,7 @@ export function RdvDetail() {
 
   const { data: rdv, loading: rdvLoading, error: rdvError } = useRdv(id)
   const { data: lead } = useLead(rdv?.leadId)
+  const { data: callLogs } = useCallLogs(rdv?.leadId ? { leadId: rdv.leadId, limit: 200 } : null)
   const { data: users } = useUsers()
 
   if (rdvLoading) {
@@ -70,7 +71,14 @@ export function RdvDetail() {
   }
 
   const commercial = users?.find((u) => u.id === rdv.commercialId)
-  const setter = lead?.setterId ? users?.find((u) => u.id === lead.setterId) : undefined
+  const setterIds = Array.from(new Set([
+    lead?.setterId,
+    ...(lead?.assignedSetterIds ?? []),
+    ...(callLogs ?? []).map((log) => log.setterId),
+  ].filter(Boolean) as string[]))
+  const setters = setterIds
+    .map((setterId) => users?.find((u) => u.id === setterId))
+    .filter((setter): setter is NonNullable<typeof setter> => Boolean(setter))
 
   return (
     <AppShell>
@@ -110,8 +118,8 @@ export function RdvDetail() {
                   : <span className="text-faint">—</span>}
               </Field>
               <Field label="SETTER (RDV PRIS PAR)">
-                {setter
-                  ? <PersonChip name={setter.name} tint="bg-cuivre-tint" />
+                {setters.length
+                  ? <PersonChip name={setters.map((setter) => setter.name).join(', ')} tint="bg-cuivre-tint" />
                   : <span className="text-faint">—</span>}
               </Field>
             </div>
