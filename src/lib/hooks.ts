@@ -213,7 +213,7 @@ function useFetch<T>(
   return { data, loading, error, refetch: () => setTick((t) => t + 1) }
 }
 
-const LEADS_LIMIT_MAX = 10000
+const LEADS_LIMIT_MAX = 500
 const CALL_LOGS_LIMIT_MAX = 200
 const RDV_LIMIT_MAX = 200
 
@@ -785,7 +785,7 @@ export function useGhlOpportunities(filters?: {
   pipelineName?: string
   limit?: number
 }): Async<GhlOpportunitiesResponse> {
-  return useFetch<GhlOpportunitiesResponse>('/ghl-calendar/opportunities', { pipelineName: 'CRM Vente', limit: 5000, ...filters })
+  return useFetch<GhlOpportunitiesResponse>('/ghl-calendar/opportunities', { pipelineName: 'CRM Vente', limit: 300, ...filters })
 }
 
 export function syncGhlCalendarEvents(filters: { from: string; to: string; sector?: string; calendarId?: string }): Promise<{ configured: boolean; created: number; updated: number; skipped: number; events: GhlCalendarEvent[] }> {

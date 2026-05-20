@@ -13,7 +13,7 @@ const KEYS = ['1','2','3','4','5','6','7','8','9','+','0','⌫']
 export function Dialer() {
   const navigate = useNavigate()
   const startCall = useStartCall()
-  const { data: leads = [] } = useLeads({ limit: 1500 })
+  const { data: leads = [] } = useLeads({ limit: 500 })
   const [number, setNumber] = useState('')
   const [query, setQuery] = useState('')
   const [leadFilters, setLeadFilters] = useState<LeadListFilters>(DEFAULT_LEAD_FILTERS)

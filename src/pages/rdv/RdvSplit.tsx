@@ -31,7 +31,7 @@ const STATUS_BADGE: Record<RdvStatus, string> = {
 
 export function RdvSplit() {
   const { data: rdvs, loading, error } = useRdvList({ limit: 50 })
-  const { data: leads } = useLeads({ limit: 1500 })
+  const { data: leads } = useLeads({ limit: 500 })
   const { data: users } = useUsers()
   const [selectedRdvId, setSelectedRdvId] = useState<string | null>(null)
   const [leadFilters, setLeadFilters] = useState<LeadListFilters>(DEFAULT_LEAD_FILTERS)

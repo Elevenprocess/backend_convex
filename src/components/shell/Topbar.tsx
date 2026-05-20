@@ -45,7 +45,7 @@ export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) 
   const [openMenu, setOpenMenu] = useState<'search' | 'settings' | 'profile' | null>(null)
   const [search, setSearch] = useState('')
   const isCommercial = authUser?.role === 'commercial'
-  const leadNotificationFilters = isCommercial && authUser?.id ? { assignedToId: authUser.id, limit: 2000 } : { limit: 2000 }
+  const leadNotificationFilters = isCommercial && authUser?.id ? { assignedToId: authUser.id, limit: 250 } : { limit: 250 }
   const rdvNotificationFilters = isCommercial && authUser?.id ? { commercialId: authUser.id, limit: 200 } : { limit: 200 }
   const { data: leadsData } = useLeads(leadNotificationFilters)
   const { data: rdvsData } = useRdvList(rdvNotificationFilters)

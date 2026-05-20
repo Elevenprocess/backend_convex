@@ -39,7 +39,7 @@ export function RdvCalendar() {
     from: period.from.toISOString(),
     to: period.to.toISOString(),
   })
-  const { data: leads } = useLeads({ limit: 2000 })
+  const { data: leads } = useLeads({ limit: 500 })
 
   const leadMap = useMemo(() => {
     const m = new Map<string, LeadResponse>()

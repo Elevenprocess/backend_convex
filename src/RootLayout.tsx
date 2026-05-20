@@ -81,7 +81,7 @@ function useGlobalBrowserNotifications() {
   const status = useAuth((s) => s.status)
   const isCommercial = user?.role === 'commercial'
   const leadFilters = status === 'authed'
-    ? (isCommercial && user?.id ? { assignedToId: user.id, limit: 2000 } : { limit: 2000 })
+    ? (isCommercial && user?.id ? { assignedToId: user.id, limit: 250 } : { limit: 250 })
     : null
   const rdvFilters = status === 'authed'
     ? (isCommercial && user?.id ? { commercialId: user.id, limit: 200 } : { limit: 200 })
@@ -101,7 +101,7 @@ function SetterCallbackToastStack() {
   const user = useAuth((s) => s.user)
   const status = useAuth((s) => s.status)
   const isSetter = status === 'authed' && user?.role === 'setter'
-  const { data: leadsData } = useLeads(isSetter ? { limit: 2000 } : null)
+  const { data: leadsData } = useLeads(isSetter ? { limit: 250 } : null)
   const minuteTick = useMinuteTick()
   const [dismissedIds, setDismissedIds] = useStateSet('ecoi.dismissedCallbackToastIds')
 

@@ -30,9 +30,9 @@ export function Deliverability() {
   const me = useAuth((s) => s.user)
 
   const { data: rdvs, refetch: refetchRdvs } = useRdvList({ limit: 200 })
-  const { data: leads, refetch: refetchLeads } = useLeads({ limit: 2000 })
+  const { data: leads, refetch: refetchLeads } = useLeads({ limit: 500 })
   const { data: users } = useUsers()
-  const { data: ghlOpps, loading: ghlLoading, error: ghlError, refetch: refetchGhl } = useGhlOpportunities({ limit: 5000 })
+  const { data: ghlOpps, loading: ghlLoading, error: ghlError, refetch: refetchGhl } = useGhlOpportunities({ limit: 300 })
 
   // Drag-and-drop : `optimisticMoves[oppId] = targetStageId` permet à l'UI de
   // bouger la carte avant la réponse GHL. Cleared après refetch ou rollback.

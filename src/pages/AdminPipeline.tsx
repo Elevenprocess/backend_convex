@@ -123,7 +123,7 @@ function TrackingView() {
   const [filter, setFilter] = useState<TrackingFilter>('all')
   const [selectedCommercialId, setSelectedCommercialId] = useState<string>('all')
   const { data: rdvs, loading: rdvLoading, error: rdvError } = useRdvList({ limit: 200 })
-  const { data: leads, loading: leadsLoading, error: leadsError } = useLeads({ limit: 2000 })
+  const { data: leads, loading: leadsLoading, error: leadsError } = useLeads({ limit: 500 })
   const { data: users } = useUsers()
 
   const userMap = useMemo(() => {
@@ -471,9 +471,8 @@ function formatCompactCurrency(value: number): string {
 
 function KanbanView() {
   const { data, loading, error, refetch } = usePipelineDistribution()
-  // On charge tous les leads ouverts et on les groupe client-side par ghlStageName.
-  // Volume actuel ECOI : ~5000 leads avec ghl_stage_name → ~3MB JSON, OK pour admin.
-  const { data: leads } = useLeads({ limit: 5000 })
+  // On garde un échantillon récent côté UI ; les totaux viennent des agrégats backend.
+  const { data: leads } = useLeads({ limit: 500 })
   const { data: users } = useUsers()
 
   const userMap = useMemo(() => {

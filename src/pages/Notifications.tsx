@@ -27,7 +27,7 @@ type Notif = {
 export function Notifications() {
   const user = useAuth((s) => s.user)
   const isCommercial = user?.role === 'commercial'
-  const leadFilters = isCommercial && user?.id ? { assignedToId: user.id, limit: 2000 } : { limit: 2000 }
+  const leadFilters = isCommercial && user?.id ? { assignedToId: user.id, limit: 250 } : { limit: 250 }
   const rdvFilters = isCommercial && user?.id ? { commercialId: user.id, limit: 200 } : { limit: 200 }
   const { data: leadsData, loading: leadsLoading } = useLeads(leadFilters)
   const { data: rdvsData, loading: rdvLoading } = useRdvList(rdvFilters)
