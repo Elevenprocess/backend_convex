@@ -189,6 +189,10 @@ function LeadsSetter() {
   const [visibleColumns, setVisibleColumns] = useColumnVisibility('ecoi.leads.setter.columns.v4', SETTER_COLUMNS)
   const startCall = useStartCall()
   const orderedColumns = useOrderedColumns(SETTER_COLUMNS, visibleColumns)
+  const setterTableWidth = useMemo(
+    () => orderedColumns.reduce((total, column) => total + setterColumnWidth(column.key), 0),
+    [orderedColumns],
+  )
   // Côté setter, l'écran s'ouvre directement sur les nouveaux leads.
   // Le filtre global "Tous" n'est pas affiché aux setters.
   // On reste dans la limite backend (/leads max 500) pour éviter les erreurs 400.
@@ -302,7 +306,12 @@ function LeadsSetter() {
             ) : (
               <div className="glass-card !p-0 overflow-hidden flex-grow min-h-0">
                 <div ref={tableScrollRef} data-preserve-scroll="true" className="overflow-auto h-full">
-                <table className="min-w-[1640px] w-full text-sm table-fixed lead-table">
+                <table className="text-sm table-fixed lead-table" style={{ width: `${setterTableWidth}px` }}>
+                  <colgroup>
+                    {orderedColumns.map((column) => (
+                      <col key={column.key} style={{ width: `${setterColumnWidth(column.key)}px` }} />
+                    ))}
+                  </colgroup>
                   <thead className="text-left eyebrow sticky top-0 z-10 border-b border-white/60 bg-white/65 shadow-sm shadow-text/5 backdrop-blur-2xl">
                     <tr>
                       {orderedColumns.map((column) => renderSetterHeader(column.key))}
@@ -730,6 +739,24 @@ function shortDate(iso: string): string {
   const dd = String(d.getDate()).padStart(2, '0')
   const mm = String(d.getMonth() + 1).padStart(2, '0')
   return `${dd}/${mm}`
+}
+
+function setterColumnWidth(key: ColumnKey): number {
+  switch (key) {
+    case 'nom': return 240
+    case 'telephone': return 200
+    case 'dateArrivee': return 180
+    case 'adresseComplete': return 260
+    case 'setter': return 210
+    case 'jaugeAppels': return 160
+    case 'dernierAppel': return 170
+    case 'statut': return 160
+    case 'appelDate': return 190
+    case 'jauge': return 160
+    case 'logAppel': return 120
+    case 'appelsCommercial': return 220
+    default: return 160
+  }
 }
 
 function renderSetterHeader(key: ColumnKey) {
