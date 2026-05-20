@@ -81,11 +81,15 @@ function OverviewSetter() {
     const classified = ownLeads.filter(isClassifiedLead)
     const loggedCalls = calls ?? []
     const appels = Math.max(loggedCalls.length, classified.length)
+    // A lead is "connected" if we actually spoke to them — includes qualifie, pas_qualifie, rdv_*, signe, perdu.
+    // Status nouveau/relance/a_rappeler/pas_de_reponse = no contact yet.
+    const connectedStatuses: LeadStatus[] = ['qualifie', 'pas_qualifie', 'rdv_pris', 'rdv_honore', 'signe', 'perdu']
+    const qualifiedStatuses: LeadStatus[] = ['qualifie', 'rdv_pris', 'rdv_honore', 'signe']
     const connexions = Math.max(
       loggedCalls.filter((c) => c.result === 'joint' || c.result === 'rdv_pris').length,
-      classified.filter((l) => l.status === 'qualifie' || l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe').length,
+      classified.filter((l) => connectedStatuses.includes(l.status)).length,
     )
-    const qualifies = classified.filter((l) => l.status === 'qualifie' || l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe').length
+    const qualifies = classified.filter((l) => qualifiedStatuses.includes(l.status)).length
     const rdvPris = classified.filter((l) => l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe').length
     return {
       appels,
@@ -94,7 +98,7 @@ function OverviewSetter() {
       rdvPris,
       total: ownLeads.length,
       ownLeads,
-      qualifRate: ratePct(appels, qualifies),
+      qualifRate: ratePct(connexions, qualifies),
       connectionRate: ratePct(appels, connexions),
       activityToday: todayLogicalCallSeries(loggedCalls, classified),
       activityWeek: weekLogicalCallSeries(loggedCalls, classified),
@@ -490,7 +494,7 @@ function OverviewAdmin() {
     return {
       caMois: ca,
       ventes: signed,
-      closing: ratePct(Math.max(1, rdvPris), signed),
+      closing: ratePct(rdvPris, signed),
       leads: treatedLeadTotal,
       appels: calls,
       classified: treatedLeadTotal,
