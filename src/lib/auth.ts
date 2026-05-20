@@ -14,20 +14,29 @@ type AuthState = {
 // better-auth POST /api/auth/sign-in/email retourne { user, ... } et set le cookie session.
 type SignInResponse = { user?: { id: string }; redirect?: boolean }
 
-export const useAuth = create<AuthState>((set) => ({
+export const useAuth = create<AuthState>((set, get) => ({
   user: null,
   status: 'loading',
   error: null,
 
   hydrate: async () => {
     try {
+      // Passe par better-auth pour renouveler le cookie/expiry quand updateAge est atteint.
+      // On garde /users/me comme source du rôle et des infos utilisateur ECOI.
+      await api<unknown>('/api/auth/get-session').catch(() => undefined)
       const me = await api<UserResponse>('/users/me')
       set({ user: me, status: 'authed', error: null })
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         set({ user: null, status: 'guest', error: null })
       } else {
-        set({ user: null, status: 'guest', error: (e as Error).message })
+        const current = get()
+        const message = e instanceof Error ? e.message : 'Erreur de session'
+        if (current.status === 'authed' && current.user) {
+          set({ error: message })
+        } else {
+          set({ user: null, status: 'guest', error: message })
+        }
       }
     }
   },

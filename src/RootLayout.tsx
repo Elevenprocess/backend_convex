@@ -47,7 +47,8 @@ function useAuthSessionKeeper() {
       if (document.visibilityState === 'visible') void hydrate()
     }
 
-    const interval = window.setInterval(refreshSession, 60 * 60 * 1000)
+    refreshSession()
+    const interval = window.setInterval(refreshSession, 30 * 60 * 1000)
     window.addEventListener('focus', refreshSession)
     document.addEventListener('visibilitychange', refreshSession)
 
