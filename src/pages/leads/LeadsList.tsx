@@ -231,7 +231,7 @@ function LeadsSetter() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    const qPhone = normalizePhoneDigits(q)
+    const qPhoneVariants = phoneSearchVariants(q)
     // Si une recherche est saisie, elle doit être globale sur toutes les catégories
     // setter, même si l’onglet actif est "Nouveaux", "À rappeler", etc.
     let list = q ? categoryLeads : filterSetterLeadsByStatus(categoryLeads, filter)
@@ -239,7 +239,10 @@ function LeadsSetter() {
     if (q) {
       list = list.filter((l) => {
         const textMatch = [fullName(l), l.phone, l.email, l.city].filter(Boolean).join(' ').toLowerCase().includes(q)
-        const phoneMatch = qPhone.length >= 4 && normalizePhoneDigits(l.phone ?? '').includes(qPhone)
+        const leadPhoneVariants = phoneSearchVariants(l.phone ?? '')
+        const phoneMatch = qPhoneVariants.some((queryPhone) =>
+          leadPhoneVariants.some((leadPhone) => leadPhone.includes(queryPhone) || queryPhone.includes(leadPhone)),
+        )
         return textMatch || phoneMatch
       })
     }
@@ -656,6 +659,17 @@ function hasValue(value: string | null | undefined): boolean {
 
 function normalizePhoneDigits(value: string): string {
   return value.replace(/\D/g, '')
+}
+
+function phoneSearchVariants(value: string): string[] {
+  const digits = normalizePhoneDigits(value)
+  if (digits.length < 4) return []
+  const variants = new Set<string>([digits])
+  if (digits.startsWith('262') && digits.length > 3) variants.add(`0${digits.slice(3)}`)
+  if (digits.startsWith('33') && digits.length > 2) variants.add(`0${digits.slice(2)}`)
+  if (digits.length >= 8) variants.add(digits.slice(-8))
+  if (digits.length >= 9) variants.add(digits.slice(-9))
+  return Array.from(variants).filter((variant) => variant.length >= 4)
 }
 
 function statusLabelForLead(lead: LeadResponse): string {
