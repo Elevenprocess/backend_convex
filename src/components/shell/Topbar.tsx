@@ -8,6 +8,7 @@ import { useDisplayUser } from '../../lib/role'
 import { useAuth } from '../../lib/auth'
 import { useLeads, useRdvList } from '../../lib/hooks'
 import { useNetworkActivity } from '../../lib/networkActivity'
+import { useNavSidebar } from '../../lib/navSidebar'
 import { useTheme } from '../../lib/theme'
 
 type TopbarProps = {
@@ -30,6 +31,7 @@ export function Topbar({ eyebrow, title }: TopbarProps) {
   const isNotificationsPage = pathname.startsWith('/notifications')
   const inFlight = useNetworkActivity((s) => s.inFlight)
   const isLoading = inFlight > 0
+  const openMobileNav = useNavSidebar((s) => s.openMobile)
   const topbarRef = useRef<HTMLElement | null>(null)
   const [openMenu, setOpenMenu] = useState<'search' | 'settings' | 'profile' | null>(null)
   const [search, setSearch] = useState('')
@@ -86,7 +88,19 @@ export function Topbar({ eyebrow, title }: TopbarProps) {
 
   return (
     <header ref={topbarRef} className="app-topbar">
-      <div className="min-w-0 max-w-[320px] pr-4">
+      <div className="min-w-0 flex items-center gap-2 max-w-[320px] pr-4">
+        <button
+          type="button"
+          className="topbar-burger"
+          onClick={openMobileNav}
+          aria-label="Ouvrir le menu"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
         {(eyebrow || title) && (
           <div className="min-w-0">
             {eyebrow && <span className="eyebrow block">{eyebrow}</span>}

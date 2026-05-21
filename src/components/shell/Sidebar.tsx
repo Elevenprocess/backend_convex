@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { Icon, type IconName } from '../Icon'
 import { useRole, useDisplayUser, type Role } from '../../lib/role'
 import { useAuth } from '../../lib/auth'
+import { useNavSidebar } from '../../lib/navSidebar'
 import { useTheme } from '../../lib/theme'
 
 type Item = { to: string; icon: IconName; label: string; roles?: Role[] }
@@ -53,6 +54,21 @@ export function Sidebar() {
   const isDark = useTheme((s) => s.isDark)
   const toggleTheme = useTheme((s) => s.toggleTheme)
   const navigate = useNavigate()
+  const location = useLocation()
+  const mobileOpen = useNavSidebar((s) => s.mobileOpen)
+  const closeMobile = useNavSidebar((s) => s.closeMobile)
+
+  useEffect(() => {
+    closeMobile()
+  }, [location.pathname, closeMobile])
+
+  useEffect(() => {
+    if (!mobileOpen) return
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [mobileOpen])
 
   const [expanded, setExpanded] = useState(() => {
     if (typeof window === 'undefined') return true
@@ -100,7 +116,16 @@ export function Sidebar() {
   const goSearch = () => navigate('/leads')
 
   return (
-    <aside className={`app-sidebar sb ${expanded ? 'sb-expanded' : 'sb-collapsed'}`}>
+    <>
+      {mobileOpen && (
+        <button
+          type="button"
+          aria-label="Fermer le menu"
+          onClick={closeMobile}
+          className="sb-mobile-backdrop"
+        />
+      )}
+      <aside className={`app-sidebar sb ${expanded ? 'sb-expanded' : 'sb-collapsed'} ${mobileOpen ? 'sb-mobile-open' : ''}`}>
       <button
         type="button"
         className="sb-workspace"
@@ -219,5 +244,6 @@ export function Sidebar() {
         </button>
       </div>
     </aside>
+    </>
   )
 }

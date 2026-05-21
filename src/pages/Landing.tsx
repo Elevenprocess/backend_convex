@@ -15,6 +15,7 @@ export function Landing() {
           hue={344}
           forceHoverState={false}
           backgroundColor="#000000"
+          globalHover
         />
       </div>
 

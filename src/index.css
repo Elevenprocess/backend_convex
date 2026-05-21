@@ -2679,3 +2679,96 @@ body {
 [data-theme="dark"] .commercial-prospect-modal-close:hover {
   background: rgba(226, 235, 239, 0.10) !important;
 }
+
+/* ─── Responsive nav (mobile drawer) ─────────────────────────────────────── */
+
+/* Hamburger button — visible uniquement sur mobile (caché par défaut) */
+.topbar-burger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(42, 37, 32, 0.08);
+  background: rgba(255, 255, 255, 0.6);
+  color: #2A2520;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.14s ease, border-color 0.14s ease;
+}
+.topbar-burger:hover {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(42, 37, 32, 0.14);
+}
+.topbar-burger:active {
+  background: rgba(42, 37, 32, 0.05);
+}
+
+@media (max-width: 767px) {
+  .topbar-burger { display: inline-flex; }
+
+  /* La sidebar devient un drawer plein-hauteur en overlay */
+  .app-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 268px !important;
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    box-shadow: 0 18px 40px rgba(42, 37, 32, 0.18);
+  }
+  .app-sidebar.sb-mobile-open {
+    transform: translateX(0);
+  }
+  /* Sur mobile, on force le mode étendu — pas de collapse 64px */
+  .app-sidebar.sb-collapsed .sb-item-label,
+  .app-sidebar.sb-collapsed .sb-section-label,
+  .app-sidebar.sb-collapsed .sb-workspace-meta,
+  .app-sidebar.sb-collapsed .sb-search-label,
+  .app-sidebar.sb-collapsed .sb-kbd,
+  .app-sidebar.sb-collapsed .sb-user-meta {
+    display: revert;
+  }
+  /* Cacher le bouton "Réduire" en footer (drawer mobile = ouvert/fermé) */
+  .sb-footer .sb-collapse { display: none; }
+
+  /* Backdrop tap-to-close */
+  .sb-mobile-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 195;
+    background: rgba(42, 37, 32, 0.36);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border: 0;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    animation: sb-fadein 0.22s ease-out;
+  }
+
+  /* Topbar : compactage des éléments */
+  .app-topbar { padding-left: 12px; padding-right: 12px; gap: 8px; }
+  .main-nav-center { min-width: 0; }
+}
+
+@keyframes sb-fadein {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+[data-theme="dark"] .topbar-burger {
+  background: rgba(20, 26, 32, 0.7);
+  border-color: rgba(222, 233, 238, 0.12);
+  color: #E6EDF1;
+}
+[data-theme="dark"] .topbar-burger:hover {
+  background: rgba(34, 44, 52, 0.85);
+  border-color: rgba(222, 233, 238, 0.2);
+}
+[data-theme="dark"] .sb-mobile-backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}

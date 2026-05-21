@@ -8,6 +8,8 @@ type OrbProps = {
   rotateOnHover?: boolean
   forceHoverState?: boolean
   backgroundColor?: string
+  /** Listen for mousemove on window instead of the container — useful when foreground content (cards, headers) sits on top of the orb. */
+  globalHover?: boolean
 }
 
 export default function Orb({
@@ -16,6 +18,7 @@ export default function Orb({
   rotateOnHover = true,
   forceHoverState = false,
   backgroundColor = '#000000',
+  globalHover = false,
 }: OrbProps) {
   const ctnDom = useRef<HTMLDivElement | null>(null)
 
@@ -252,8 +255,13 @@ export default function Orb({
       targetHover = 0
     }
 
-    containerEl.addEventListener('mousemove', handleMouseMove)
-    containerEl.addEventListener('mouseleave', handleMouseLeave)
+    const hoverTarget: Window | HTMLDivElement = globalHover ? window : containerEl
+    hoverTarget.addEventListener('mousemove', handleMouseMove as EventListener)
+    if (globalHover) {
+      window.addEventListener('blur', handleMouseLeave)
+    } else {
+      containerEl.addEventListener('mouseleave', handleMouseLeave)
+    }
 
     let rafId = 0
     const update = (t: number) => {
@@ -280,12 +288,16 @@ export default function Orb({
     return () => {
       cancelAnimationFrame(rafId)
       window.removeEventListener('resize', resize)
-      containerEl.removeEventListener('mousemove', handleMouseMove)
-      containerEl.removeEventListener('mouseleave', handleMouseLeave)
+      hoverTarget.removeEventListener('mousemove', handleMouseMove as EventListener)
+      if (globalHover) {
+        window.removeEventListener('blur', handleMouseLeave)
+      } else {
+        containerEl.removeEventListener('mouseleave', handleMouseLeave)
+      }
       if (gl.canvas.parentNode === containerEl) containerEl.removeChild(gl.canvas)
       gl.getExtension('WEBGL_lose_context')?.loseContext()
     }
-  }, [backgroundColor, forceHoverState, frag, hoverIntensity, hue, rotateOnHover, vert])
+  }, [backgroundColor, forceHoverState, frag, globalHover, hoverIntensity, hue, rotateOnHover, vert])
 
   return <div ref={ctnDom} className="orb-container" />
 }
