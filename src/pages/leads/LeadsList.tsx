@@ -30,6 +30,7 @@ type ColumnChoice = {
 const SETTER_COLUMNS: ColumnChoice[] = [
   { key: 'nom', label: 'Nom' },
   { key: 'telephone', label: 'Téléphone du Prospect' },
+  { key: 'prochainRappel', label: 'Date/heure prochain rappel' },
   { key: 'dateArrivee', label: "Date/heure d'arrivée" },
   { key: 'adresseComplete', label: 'Adresse complète' },
   { key: 'setter', label: 'Setter assigné' },
@@ -186,7 +187,7 @@ function LeadsSetter() {
   const selectedId = useLeadSidebar((s) => s.selectedLeadId)
   const selectLead = useLeadSidebar((s) => s.selectLead)
   const [openComment, setOpenComment] = useState<{ leadName: string; comment: string } | null>(null)
-  const [visibleColumns, setVisibleColumns] = useColumnVisibility('ecoi.leads.setter.columns.v4', SETTER_COLUMNS)
+  const [visibleColumns, setVisibleColumns] = useColumnVisibility('ecoi.leads.setter.columns.v5', SETTER_COLUMNS)
   const startCall = useStartCall()
   const orderedColumns = useOrderedColumns(SETTER_COLUMNS, visibleColumns)
   const setterTableWidth = useMemo(
@@ -782,6 +783,7 @@ function setterColumnWidth(key: ColumnKey): number {
   switch (key) {
     case 'nom': return 240
     case 'telephone': return 200
+    case 'prochainRappel': return 200
     case 'dateArrivee': return 180
     case 'adresseComplete': return 260
     case 'setter': return 210
@@ -800,6 +802,7 @@ function renderSetterHeader(key: ColumnKey) {
   switch (key) {
     case 'nom': return <Th key={key} className="w-[240px] lead-sticky-head">NOM</Th>
     case 'telephone': return <Th key={key} className="w-[200px]">TÉLÉPHONE DU PROSPECT</Th>
+    case 'prochainRappel': return <Th key={key} className="w-[200px]">DATE/HEURE PROCHAIN RAPPEL</Th>
     case 'dateArrivee': return <Th key={key} className="w-[180px]">DATE/HEURE D'ARRIVÉE</Th>
     case 'adresseComplete': return <Th key={key} className="w-[260px]">ADRESSE COMPLÈTE</Th>
     case 'setter': return <Th key={key} className="w-[210px]">SETTER ASSIGNÉ</Th>
@@ -833,6 +836,7 @@ function renderSetterCell(
         </Td>
       )
     case 'telephone': return <Td key={key} className="min-w-[200px]"><PhoneCell lead={lead} onStartCall={startCall} /></Td>
+    case 'prochainRappel': return <Td key={key} className="text-faint">{lead.nextCallbackAt ? fullDateTime(lead.nextCallbackAt) : '—'}</Td>
     case 'dateArrivee': return <Td key={key} className="text-faint">{fullDateTime(leadArrivalDate(lead))}</Td>
     case 'adresseComplete': return <Td key={key} className="text-muted truncate" title={addressFull(lead)}>{addressFull(lead)}</Td>
     case 'setter': return <Td key={key}><SetterChips lead={lead} userMap={userMap} /></Td>
