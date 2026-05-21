@@ -121,7 +121,7 @@ function LeadsCommercial() {
   return (
     <AppShell>
       <Topbar eyebrow="LEADS / COMMERCIAL" title="Mes leads" />
-      <main className="p-8 flex-grow overflow-auto">
+      <main className="p-4 sm:p-6 md:p-8 flex-grow overflow-auto">
         {loading && leads.length === 0 ? (
           <LoadingBlock label="Chargement des leads…" />
         ) : error ? (
@@ -129,35 +129,72 @@ function LeadsCommercial() {
         ) : leads.length === 0 ? (
           <EmptyState icon="users" title="Aucun lead assigné" description="Aucun lead n'est rattaché à ton compte commercial pour le moment." />
         ) : (
-          <div className="glass-card !p-0 overflow-hidden">
-            <table className="w-full min-w-[980px] text-sm table-fixed lead-table">
-              <thead className="text-left eyebrow sticky top-0 z-10 border-b border-white/60 bg-white/65 shadow-sm shadow-text/5 backdrop-blur-2xl">
-                <tr>
-                  <Th className="w-[260px]">NOM</Th>
-                  <Th className="w-[170px]">STATUT</Th>
-                  <Th className="w-[210px]">TÉLÉPHONE</Th>
-                  <Th className="w-[260px]">ADRESSE</Th>
-                  <Th className="w-[180px]">RENDEZ-VOUS</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {leads.map((lead) => (
-                  <tr
-                    key={lead.id}
-                    className={`border-b border-line-soft last:border-0 cursor-pointer transition-colors ${selectedId === lead.id ? 'bg-or/20 shadow-[inset_4px_0_0_var(--color-or-dark)]' : 'hover:bg-white/40'}`}
-                    onClick={() => selectLead(lead.id)}
-                    title="Cliquer pour ouvrir le suivi commercial"
-                  >
-                    <Td><span className="font-semibold truncate" title={fullName(lead)}>{fullName(lead)}</span></Td>
-                    <Td><span className={`status-badge ${statusBadgeForLead(lead)}`}>{statusLabelForLead(lead)}</span></Td>
-                    <Td className="text-muted truncate" title={lead.phone ?? undefined}>{lead.phone ?? '—'}</Td>
-                    <Td className="text-muted truncate" title={addressFull(lead)}>{addressFull(lead)}</Td>
-                    <Td className="text-muted truncate" title={rdvLabel(lead)}>{rdvLabel(lead)}</Td>
+          <>
+            {/* Mobile : vue carte (md:hidden) */}
+            <div className="grid grid-cols-1 gap-3 md:hidden">
+              {leads.map((lead) => (
+                <button
+                  key={lead.id}
+                  type="button"
+                  onClick={() => selectLead(lead.id)}
+                  className={`glass-card !p-4 text-left transition-colors ${selectedId === lead.id ? 'ring-2 ring-or' : 'hover:bg-white/60'}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-black text-sm text-text truncate">{fullName(lead)}</p>
+                      <p className="mt-0.5 text-[11px] text-muted truncate">{lead.phone ?? '—'}</p>
+                    </div>
+                    <span className={`status-badge ${statusBadgeForLead(lead)} shrink-0`}>{statusLabelForLead(lead)}</span>
+                  </div>
+                  <div className="mt-2 space-y-1 text-[11px] text-muted">
+                    {addressFull(lead) !== '—' && (
+                      <div className="flex items-start gap-1.5">
+                        <Icon name="map-pin" size={12} className="mt-0.5 shrink-0 text-faint" />
+                        <span className="truncate">{addressFull(lead)}</span>
+                      </div>
+                    )}
+                    {rdvLabel(lead) !== '—' && (
+                      <div className="flex items-start gap-1.5">
+                        <Icon name="calendar" size={12} className="mt-0.5 shrink-0 text-faint" />
+                        <span className="truncate">{rdvLabel(lead)}</span>
+                      </div>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Desktop : tableau (md:block) */}
+            <div className="hidden md:block glass-card !p-0 overflow-x-auto">
+              <table className="w-full min-w-[980px] text-sm table-fixed lead-table">
+                <thead className="text-left eyebrow sticky top-0 z-10 border-b border-white/60 bg-white/65 shadow-sm shadow-text/5 backdrop-blur-2xl">
+                  <tr>
+                    <Th className="w-[260px]">NOM</Th>
+                    <Th className="w-[170px]">STATUT</Th>
+                    <Th className="w-[210px]">TÉLÉPHONE</Th>
+                    <Th className="w-[260px]">ADRESSE</Th>
+                    <Th className="w-[180px]">RENDEZ-VOUS</Th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {leads.map((lead) => (
+                    <tr
+                      key={lead.id}
+                      className={`border-b border-line-soft last:border-0 cursor-pointer transition-colors ${selectedId === lead.id ? 'bg-or/20 shadow-[inset_4px_0_0_var(--color-or-dark)]' : 'hover:bg-white/40'}`}
+                      onClick={() => selectLead(lead.id)}
+                      title="Cliquer pour ouvrir le débriefing commercial"
+                    >
+                      <Td><span className="font-semibold truncate" title={fullName(lead)}>{fullName(lead)}</span></Td>
+                      <Td><span className={`status-badge ${statusBadgeForLead(lead)}`}>{statusLabelForLead(lead)}</span></Td>
+                      <Td className="text-muted truncate" title={lead.phone ?? undefined}>{lead.phone ?? '—'}</Td>
+                      <Td className="text-muted truncate" title={addressFull(lead)}>{addressFull(lead)}</Td>
+                      <Td className="text-muted truncate" title={rdvLabel(lead)}>{rdvLabel(lead)}</Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </main>
     </AppShell>

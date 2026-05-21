@@ -338,6 +338,7 @@ export type UpdateRdvPayload = {
   financingType?: RdvResponse['financingType'] | null
   objections?: string | null
   nonSaleReason?: string | null
+  kits?: string | null
   notes?: string | null
   debriefFilledAt?: string | null
 }

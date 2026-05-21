@@ -329,7 +329,12 @@ export type AnalyticsSummaryResponse = {
 export type RdvStatus = 'planifie' | 'honore' | 'no_show' | 'reporte' | 'annule'
 export type RdvResult = 'signe' | 'reflexion' | 'perdu' | 'no_show' | 'reporte'
 export type RdvLocation = 'domicile' | 'agence' | 'visio'
-export type FinancingType = 'comptant' | 'financement'
+export type FinancingType =
+  | 'comptant'
+  | 'financement'
+  | 'financement_sans_apport'
+  | 'apport_financement'
+  | 'paiement_10x'
 
 export type RdvResponse = {
   id: string
@@ -345,6 +350,7 @@ export type RdvResponse = {
   financingType: FinancingType | null
   objections: string | null
   nonSaleReason: string | null
+  kits: string | null
   notes: string | null
   debriefFilledAt: string | null
   debriefDueAt: string | null

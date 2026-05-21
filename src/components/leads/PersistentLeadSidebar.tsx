@@ -1,6 +1,6 @@
 import { useLocation } from 'react-router-dom'
 import { SplitPanel } from '../SplitPanel'
-import { CommercialLeadTrackingSidebar } from './CommercialLeadTrackingSidebar'
+import { CommercialDebriefSidebar } from './CommercialDebriefSidebar'
 import { useLead, useLeads, useUsers } from '../../lib/hooks'
 import { useAuth } from '../../lib/auth'
 import { useLeadSidebar } from '../../lib/leadSidebar'
@@ -32,16 +32,24 @@ export function PersistentLeadSidebar() {
   if (!displayLead) {
     if (!loading) return null
     return (
-      <aside className="fixed top-0 right-0 bottom-0 z-[140] w-[460px] max-w-[92vw] border-l border-line bg-white/95 p-6 shadow-2xl">
-        <button type="button" onClick={closeSidebar} className="absolute right-4 top-4 text-xl text-muted hover:text-text">×</button>
-        <div className="eyebrow text-or">Lead</div>
-        <h2 className="mt-1 text-xl font-black">Ouverture du détail…</h2>
-        <div className="mt-6 space-y-3">
-          <div className="h-4 w-2/3 animate-pulse rounded bg-cream-darker" />
-          <div className="h-4 w-1/2 animate-pulse rounded bg-cream-darker" />
-          <div className="h-28 animate-pulse rounded-2xl bg-cream-darker" />
-        </div>
-      </aside>
+      <>
+        <button
+          type="button"
+          aria-label="Fermer"
+          onClick={closeSidebar}
+          className="fixed inset-0 z-[135] bg-text/40 backdrop-blur-sm md:hidden"
+        />
+        <aside className="fixed top-0 right-0 bottom-0 z-[140] w-full md:w-[460px] md:max-w-[92vw] border-l border-line bg-white/95 p-6 shadow-2xl">
+          <button type="button" onClick={closeSidebar} className="absolute right-4 top-4 text-xl text-muted hover:text-text">×</button>
+          <div className="eyebrow text-or">Lead</div>
+          <h2 className="mt-1 text-xl font-black">Ouverture du détail…</h2>
+          <div className="mt-6 space-y-3">
+            <div className="h-4 w-2/3 animate-pulse rounded bg-cream-darker" />
+            <div className="h-4 w-1/2 animate-pulse rounded bg-cream-darker" />
+            <div className="h-28 animate-pulse rounded-2xl bg-cream-darker" />
+          </div>
+        </aside>
+      </>
     )
   }
 
@@ -50,12 +58,20 @@ export function PersistentLeadSidebar() {
 
   if (role === 'commercial') {
     return (
-      <CommercialLeadTrackingSidebar
-        lead={displayLead}
-        onClose={closeSidebar}
-        onSaved={refetch}
-        className="fixed top-0 right-0 bottom-0 z-[140]"
-      />
+      <>
+        <button
+          type="button"
+          aria-label="Fermer le débriefing"
+          onClick={closeSidebar}
+          className="fixed inset-0 z-[135] bg-text/40 backdrop-blur-sm md:hidden"
+        />
+        <CommercialDebriefSidebar
+          lead={displayLead}
+          onClose={closeSidebar}
+          onSaved={refetch}
+          className="fixed top-0 right-0 bottom-0 z-[140]"
+        />
+      </>
     )
   }
 
