@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError } from './api'
 import { notifyClipboardCopied } from './clipboardToast'
 import { notifyRealtimeRefresh, REALTIME_REFRESH_EVENT, type RealtimeRefreshPayload } from './realtime'
+import { useNetworkActivity } from './networkActivity'
 import type {
   CallLogResponse,
   InvitationResponse,
@@ -179,6 +180,7 @@ function useFetch<T>(
     abortRef.current = ctrl
     setLoading(latestCachedData === undefined && !options?.silentInitialLoading)
     setError(null)
+    useNetworkActivity.getState().start()
     api<T>(path, { query, signal: ctrl.signal })
       .then((d) => {
         if (ctrl.signal.aborted) return
@@ -192,9 +194,12 @@ function useFetch<T>(
         if (latestCachedData === undefined) setData(null)
       })
       .finally(() => {
+        useNetworkActivity.getState().stop()
         if (!ctrl.signal.aborted) setLoading(false)
       })
-    return () => ctrl.abort()
+    return () => {
+      ctrl.abort()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, queryKey, tick])
 

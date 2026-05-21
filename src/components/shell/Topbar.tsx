@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { Grid } from 'ldrs/react'
+import 'ldrs/react/Grid.css'
 import { Icon } from '../Icon'
 import { useDisplayUser } from '../../lib/role'
 import { useAuth } from '../../lib/auth'
 import { useLeads, useRdvList } from '../../lib/hooks'
+import { useNetworkActivity } from '../../lib/networkActivity'
 import { useTheme } from '../../lib/theme'
 
 type TopbarProps = {
@@ -15,22 +18,7 @@ type TopbarProps = {
   onTabChange?: (id: string) => void
 }
 
-const MAIN_NAV_TABS = [
-  { id: 'overview', label: 'Overview', to: '/overview' },
-  { id: 'performance', label: 'Performance', to: '/analytics' },
-  { id: 'notifications', label: 'Notification', to: '/notifications' },
-  { id: 'leads', label: 'Leads', to: '/leads' },
-]
-
-function currentMainTab(pathname: string, activeTab?: string): string {
-  if (activeTab && MAIN_NAV_TABS.some((tab) => tab.id === activeTab)) return activeTab
-  if (pathname.startsWith('/leads')) return 'leads'
-  if (pathname.startsWith('/notifications')) return 'notifications'
-  if (pathname.startsWith('/analytics')) return 'performance'
-  return 'overview'
-}
-
-export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) {
+export function Topbar({ eyebrow, title }: TopbarProps) {
   const user = useDisplayUser()
   const authUser = useAuth((s) => s.user)
   const isAdmin = user.role === 'admin'
@@ -39,8 +27,9 @@ export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) 
   const toggleTheme = useTheme((s) => s.toggleTheme)
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const mainActiveTab = currentMainTab(pathname, activeTab)
   const isNotificationsPage = pathname.startsWith('/notifications')
+  const inFlight = useNetworkActivity((s) => s.inFlight)
+  const isLoading = inFlight > 0
   const topbarRef = useRef<HTMLElement | null>(null)
   const [openMenu, setOpenMenu] = useState<'search' | 'settings' | 'profile' | null>(null)
   const [search, setSearch] = useState('')
@@ -106,19 +95,8 @@ export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) 
         )}
       </div>
 
-      <div className="main-nav-center flex bg-or-tint p-1 rounded-full">
-        {MAIN_NAV_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            className={`pill-tab ${mainActiveTab === tab.id ? 'active' : ''}`}
-            onClick={() => {
-              onTabChange?.(tab.id)
-              navigate(tab.to)
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="main-nav-center flex items-center justify-center" aria-live="polite" aria-label={isLoading ? 'Chargement en cours' : 'Aucun chargement'}>
+        <PageLoader animated={isLoading} />
       </div>
 
       <div className="topbar-actions">
@@ -298,6 +276,48 @@ function activeCommercialNotificationIds(
 
 function readSeenNotificationIds(): Set<string> {
   try { return new Set(JSON.parse(localStorage.getItem('ecoi.seenNotificationIds') ?? '[]')) } catch { return new Set() }
+}
+
+// PageLoader : affiche un Grid de ldrs au centre de la Topbar.
+// Quand `animated` est vrai (une requête API est en vol), l'animation tourne.
+// Sinon, on rend une grille 4×4 statique aux mêmes dimensions/couleur — le loader
+// reste visible mais immobile (par demande utilisateur).
+function PageLoader({ animated }: { animated: boolean }) {
+  const size = 32
+  const color = 'var(--color-or-dark, #b9883f)'
+  if (animated) {
+    return <Grid size={size} speed={1.4} color={color} />
+  }
+  const dot = size * 0.1
+  const gap = size * 0.16
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        display: 'inline-grid',
+        gridTemplateColumns: `repeat(4, ${dot}px)`,
+        gridAutoRows: `${dot}px`,
+        gap: `${gap}px`,
+        width: size,
+        height: size * 0.8,
+        alignItems: 'center',
+        justifyContent: 'center',
+        opacity: 0.55,
+      }}
+    >
+      {Array.from({ length: 16 }).map((_, i) => (
+        <span
+          key={i}
+          style={{
+            width: dot,
+            height: dot,
+            borderRadius: '50%',
+            backgroundColor: color,
+          }}
+        />
+      ))}
+    </div>
+  )
 }
 
 function DropdownFrame({ children, className }: { children: ReactNode; className?: string }) {
