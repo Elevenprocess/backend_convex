@@ -89,6 +89,10 @@ export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, chi
     setActive('notes')
   }
 
+  const commercialName = lead.latestRdvCommercialId
+    ? userMap?.get(lead.latestRdvCommercialId)?.name ?? null
+    : null
+
   return (
     <aside className={`w-[420px] border-l border-line bg-white/65 backdrop-blur-md flex flex-col flex-shrink-0 overflow-hidden ${className ?? ''}`}>
       {/* Header */}
@@ -99,6 +103,18 @@ export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, chi
           <div className="text-xs text-faint truncate">{fieldOrDash(lead.phone)}</div>
           <div className="mt-1 flex items-center gap-2 flex-wrap">
             <span className={`status-badge ${STATUS_BADGE[lead.status]}`}>{STATUS_LABEL[lead.status]}</span>
+            {lead.latestRdvAt && (
+              <span className="status-badge bg-cream-darker text-text flex items-center gap-1">
+                <Icon name="calendar" size={11} />
+                {formatRdvDateTime(lead.latestRdvAt)}
+              </span>
+            )}
+            {commercialName && (
+              <span className="status-badge bg-cream-darker text-text flex items-center gap-1">
+                <Icon name="users" size={11} />
+                {commercialName}
+              </span>
+            )}
           </div>
         </div>
         <Link to={`/leads/${lead.id}`} className="text-xs font-semibold text-or hover:underline whitespace-nowrap">
@@ -1541,6 +1557,16 @@ function uniqueStrings(values: string[]): string[] {
 
 function normalizeSectorKey(value: string): string {
   return value.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+}
+
+function formatRdvDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Indian/Reunion',
+  })
 }
 
 function statusToSetterStatus(status: LeadResponse['status']): '' | 'non_qualifie' | 'a_rappeler' | 'pas_de_reponse' | 'qualifie' {
