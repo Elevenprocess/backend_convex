@@ -973,7 +973,7 @@ function NotesTab({
               <StatusChoice active={setterStatus === 'a_rappeler'} icon="clock" title="À rappeler" text="Date et heure du rappel" onClick={() => { setSetterStatus('a_rappeler'); setResult('rappel_planifie') }} />
               <StatusChoice active={setterStatus === 'pas_de_reponse'} icon="phone-off" title="Pas de réponse" text="Aucun champ requis" onClick={() => { setSetterStatus('pas_de_reponse'); setResult('non_joint') }} />
               <StatusChoice active={setterStatus === 'non_qualifie'} icon="x" title="Pas qualifié" text="Commentaire obligatoire" onClick={() => { setSetterStatus('non_qualifie'); setResult('refus') }} />
-              <StatusChoice active={setterStatus === 'qualifie_specialiste'} icon="target" title="Déjà qualifié par spécialiste" text="Commentaire obligatoire — pas d'envoi GHL" onClick={() => { setSetterStatus('qualifie_specialiste'); setResult('joint') }} />
+              <StatusChoice active={setterStatus === 'qualifie_specialiste'} icon="target" title="Déjà qualifié par spécialiste" text="Commentaire obligatoire — pas d’envoi GHL" onClick={() => { setSetterStatus('qualifie_specialiste'); setResult('joint') }} />
             </div>
             {setterStatus === 'a_rappeler' && (
               <div className="space-y-3">
