@@ -5,6 +5,7 @@ import { Spinner } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
 import { useAnalyticsSummary, prefetchAnalyticsSummary } from '../lib/hooks'
 import type { AnalyticsAdminSummary, AnalyticsCommercialPerf, AnalyticsCommercialSummary, AnalyticsDailyPoint, AnalyticsHourlyCallPoint, AnalyticsSegment, AnalyticsSetterSummary } from '../lib/types'
+import { DebriefAnalytics } from '../components/analytics/DebriefAnalytics'
 
 type Segment = AnalyticsSegment
 
@@ -197,6 +198,7 @@ function AnalyticsCommercial({ name }: { name: string }) {
   const range = buildPeriodRange(period)
   const { data, loading, error } = useAnalyticsSummary({ from: range.from, to: range.to })
   const stats = data?.commercial ?? EMPTY_COMMERCIAL_STATS
+  const me = useAuth((s) => s.user)
 
   return (
     <AppShell blobsKey="commercial">
@@ -234,6 +236,13 @@ function AnalyticsCommercial({ name }: { name: string }) {
             <PieChart segments={stats.financingSegments} center={fmtKEur(stats.ca)} />
           </div>
         </div>
+
+        <DebriefAnalytics
+          commercialId={me?.id}
+          fromDate={range.from}
+          toDate={range.to}
+          title="Analyse débriefs — mes RDV"
+        />
       </main>
     </AppShell>
   )
@@ -320,6 +329,12 @@ function AnalyticsAdmin() {
         </div>
 
         <CommercialTrackingDashboard commercials={commercialStats.commercials} totalCa={commercialStats.ca} totalSigned={commercialStats.signed} totalHonored={commercialStats.commercials.reduce((sum, c) => sum + c.honored, 0)} loading={loading} />
+
+        <DebriefAnalytics
+          fromDate={range.from}
+          toDate={range.to}
+          title="Analyse débriefs — équipe complète"
+        />
       </main>
     </AppShell>
   )

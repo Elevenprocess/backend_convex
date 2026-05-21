@@ -30,10 +30,24 @@ type NonSaleReason =
 
 type Objection = 'argent' | 'logistique' | 'partenaire' | 'peur' | 'ecran_de_fumee' | 'pas_objection'
 
+type AcceptanceFactor =
+  | 'prix_convenable'
+  | 'confiance_commercial'
+  | 'roi_rapide'
+  | 'garanties'
+  | 'recommandation'
+  | 'batterie_autonomie'
+  | 'financement_attractif'
+  | 'aides_etat'
+  | 'engagement_ecolo'
+  | 'autre'
+
 type FormState = {
   outcome: Outcome
   nonSaleReason: NonSaleReason | ''
+  nonSaleSubReason: string
   objection: Objection | ''
+  acceptanceFactors: AcceptanceFactor[]
   notes: string
   quoteAmount: string
   signedAt: string
@@ -41,22 +55,87 @@ type FormState = {
   paymentMethod: FinancingType | ''
 }
 
-const NON_SALE_REASONS: { value: NonSaleReason; label: string }[] = [
-  { value: 'suivi_prevu', label: 'Suivi prévu' },
-  { value: 'non_qualifie', label: 'Non qualifié' },
-  { value: 'no_show', label: 'No-show' },
-  { value: 'contact_annule', label: 'Contact annulé' },
-  { value: 'annulation_administrative', label: 'Annulation administrative' },
-  { value: 'pas_interesse', label: 'Pas intéressé' },
+const NON_SALE_REASONS: { value: NonSaleReason; label: string; hint: string }[] = [
+  { value: 'suivi_prevu', label: 'Suivi prévu', hint: 'Je veux faire un suivi' },
+  { value: 'non_qualifie', label: 'Non qualifié', hint: 'Le contact était faible' },
+  { value: 'no_show', label: 'No-show', hint: 'Ne s\'est pas présenté' },
+  { value: 'contact_annule', label: 'Contact annulé', hint: 'Le contact a annulé' },
+  { value: 'annulation_administrative', label: 'Annulation administrative', hint: 'Annulé de notre côté' },
+  { value: 'pas_interesse', label: 'Pas intéressé', hint: 'Pas envie de continuer' },
 ]
 
-const OBJECTIONS: { value: Objection; label: string }[] = [
-  { value: 'argent', label: 'Argent' },
-  { value: 'logistique', label: 'Logistique' },
-  { value: 'partenaire', label: 'Partenaire' },
-  { value: 'peur', label: 'Peur' },
-  { value: 'ecran_de_fumee', label: 'Écran de fumée' },
-  { value: 'pas_objection', label: "Pas d'objection" },
+// Sous-cas par raison de non-vente — affichés en chips conditionnels.
+const NON_SALE_SUB_REASONS: Record<NonSaleReason, string[]> = {
+  suivi_prevu: [
+    'Devis en réflexion',
+    'Attente accord conjoint / décideur',
+    'Comparaison concurrent en cours',
+    'Travaux préalables nécessaires',
+    'Attente déblocage budget',
+    'Autre',
+  ],
+  non_qualifie: [
+    'Locataire / pas propriétaire',
+    'Copropriété (refus AG)',
+    'Toit incompatible (orientation/ombrage)',
+    'Toit incompatible (matériau)',
+    'Budget trop faible',
+    'Pas le décideur',
+    'Déjà équipé en PV',
+    'Zone hors couverture',
+    'Autre',
+  ],
+  no_show: [
+    'Pas répondu au téléphone',
+    'Annulation dernière minute',
+    'Indisponible (maladie / urgence)',
+    'Oubli déclaré',
+    'Autre',
+  ],
+  contact_annule: [
+    'Plus intéressé entre-temps',
+    'A choisi un concurrent',
+    'Reporté sine die',
+    'Travaux annulés',
+    'Autre',
+  ],
+  annulation_administrative: [
+    'Erreur de planning ECOI',
+    'Commercial indisponible',
+    'Doublon RDV',
+    'Re-qualification nécessaire',
+    'Autre',
+  ],
+  pas_interesse: [
+    'Démarchage ressenti',
+    'Méfiance solaire',
+    'Pas de retour économique perçu',
+    'Mauvaise expérience passée',
+    'Pas le bon moment',
+    'Autre',
+  ],
+}
+
+const OBJECTIONS: { value: Objection; label: string; hint: string }[] = [
+  { value: 'argent', label: 'Argent', hint: "Je n'ai pas d'argent" },
+  { value: 'logistique', label: 'Logistique', hint: 'Il faut trouver la solution' },
+  { value: 'partenaire', label: 'Partenaire', hint: 'Je dois parler à mon partenaire' },
+  { value: 'peur', label: 'Peur', hint: 'Je ne sais pas si vous pouvez m\'aider' },
+  { value: 'ecran_de_fumee', label: 'Écran de fumée', hint: 'J\'ai poney demain…' },
+  { value: 'pas_objection', label: "Pas d'objection", hint: 'Aucune objection restante' },
+]
+
+const ACCEPTANCE_FACTORS: { value: AcceptanceFactor; label: string }[] = [
+  { value: 'prix_convenable', label: 'Prix convenable' },
+  { value: 'confiance_commercial', label: 'Confiance dans le commercial' },
+  { value: 'roi_rapide', label: 'ROI rapide démontré' },
+  { value: 'garanties', label: 'Garanties rassurantes' },
+  { value: 'recommandation', label: 'Recommandé par un proche' },
+  { value: 'batterie_autonomie', label: 'Solution batterie / autonomie' },
+  { value: 'financement_attractif', label: 'Financement attractif' },
+  { value: 'aides_etat', label: 'Aides d\'État / TVA' },
+  { value: 'engagement_ecolo', label: 'Engagement écologique' },
+  { value: 'autre', label: 'Autre' },
 ]
 
 const PAYMENT_METHODS: { value: FinancingType; label: string }[] = [
@@ -69,13 +148,18 @@ const PAYMENT_METHODS: { value: FinancingType; label: string }[] = [
 const EMPTY_FORM: FormState = {
   outcome: '',
   nonSaleReason: '',
+  nonSaleSubReason: '',
   objection: '',
+  acceptanceFactors: [],
   notes: '',
   quoteAmount: '',
   signedAt: '',
   kits: '',
   paymentMethod: '',
 }
+
+const NON_SALE_REASON_SEPARATOR = ' — '
+const ACCEPTANCE_PREFIX_RE = /^\[Acceptation:\s*([^\]]+)\]\s*\n?/
 
 export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '' }: Props) {
   const { data: rdvs, loading: rdvsLoading, refetch: refetchRdvs } = useRdvList({ leadId: lead.id })
@@ -99,6 +183,16 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
 
   const update = (patch: Partial<FormState>) => setForm((current) => ({ ...current, ...patch }))
 
+  const toggleAcceptance = (factor: AcceptanceFactor) =>
+    setForm((current) => ({
+      ...current,
+      acceptanceFactors: current.acceptanceFactors.includes(factor)
+        ? current.acceptanceFactors.filter((f) => f !== factor)
+        : [...current.acceptanceFactors, factor],
+    }))
+
+  const subReasonOptions = form.nonSaleReason ? NON_SALE_SUB_REASONS[form.nonSaleReason] : []
+
   const canSubmit =
     !!selectedRdv &&
     form.outcome !== '' &&
@@ -115,11 +209,16 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
       if (form.outcome === 'vente' && (amount == null || Number.isNaN(amount))) {
         throw new Error('Valeur du devis invalide')
       }
+      const composedNonSaleReason =
+        form.outcome === 'non_vente' && form.nonSaleReason
+          ? composeNonSaleReason(form.nonSaleReason, form.nonSaleSubReason)
+          : null
+      const composedNotes = composeNotes(form)
       await updateRdv(selectedRdv.id, {
         result: outcomeToResult(form.outcome, form.nonSaleReason),
-        nonSaleReason: form.outcome === 'non_vente' && form.nonSaleReason ? labelFromNonSaleReason(form.nonSaleReason) : null,
+        nonSaleReason: composedNonSaleReason,
         objections: form.objection ? labelFromObjection(form.objection) : null,
-        notes: form.notes.trim() || null,
+        notes: composedNotes,
         montantTotal: form.outcome === 'vente' ? amount : null,
         signatureAt: form.outcome === 'vente' && form.signedAt ? form.signedAt : null,
         kits: form.outcome === 'vente' ? form.kits.trim() || null : null,
@@ -175,14 +274,43 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
                 <FieldGroup label="Raison de la non-vente" required>
                   <div className="grid grid-cols-2 gap-1.5">
                     {NON_SALE_REASONS.map((r) => (
-                      <ChoiceChip key={r.value} active={form.nonSaleReason === r.value} label={r.label} onClick={() => update({ nonSaleReason: r.value })} />
+                      <ChoiceChip
+                        key={r.value}
+                        active={form.nonSaleReason === r.value}
+                        label={r.label}
+                        sublabel={r.hint}
+                        onClick={() => update({ nonSaleReason: r.value, nonSaleSubReason: '' })}
+                      />
                     ))}
                   </div>
                 </FieldGroup>
+
+                {subReasonOptions.length > 0 && (
+                  <FieldGroup label={`Précision — ${labelFromNonSaleReason(form.nonSaleReason as NonSaleReason)}`}>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {subReasonOptions.map((sub) => (
+                        <ChoiceChip
+                          key={sub}
+                          active={form.nonSaleSubReason === sub}
+                          label={sub}
+                          onClick={() => update({ nonSaleSubReason: form.nonSaleSubReason === sub ? '' : sub })}
+                        />
+                      ))}
+                    </div>
+                    <p className="mt-1 text-[10px] text-faint">Optionnel — aide les stats à identifier les vrais blocages.</p>
+                  </FieldGroup>
+                )}
+
                 <FieldGroup label="Objection non surmontée">
                   <div className="grid grid-cols-2 gap-1.5">
                     {OBJECTIONS.map((o) => (
-                      <ChoiceChip key={o.value} active={form.objection === o.value} label={o.label} onClick={() => update({ objection: o.value })} />
+                      <ChoiceChip
+                        key={o.value}
+                        active={form.objection === o.value}
+                        label={o.label}
+                        sublabel={o.hint}
+                        onClick={() => update({ objection: form.objection === o.value ? '' : o.value })}
+                      />
                     ))}
                   </div>
                 </FieldGroup>
@@ -191,10 +319,30 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
 
             {form.outcome === 'vente' && (
               <>
+                <FieldGroup label="Facteurs d'acceptation">
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {ACCEPTANCE_FACTORS.map((f) => (
+                      <ChoiceChip
+                        key={f.value}
+                        active={form.acceptanceFactors.includes(f.value)}
+                        label={f.label}
+                        onClick={() => toggleAcceptance(f.value)}
+                      />
+                    ))}
+                  </div>
+                  <p className="mt-1 text-[10px] text-faint">Sélection multiple — pourquoi le prospect a dit oui.</p>
+                </FieldGroup>
+
                 <FieldGroup label="Objection surmontée">
                   <div className="grid grid-cols-2 gap-1.5">
                     {OBJECTIONS.map((o) => (
-                      <ChoiceChip key={o.value} active={form.objection === o.value} label={o.label} onClick={() => update({ objection: o.value })} />
+                      <ChoiceChip
+                        key={o.value}
+                        active={form.objection === o.value}
+                        label={o.label}
+                        sublabel={o.hint}
+                        onClick={() => update({ objection: form.objection === o.value ? '' : o.value })}
+                      />
                     ))}
                   </div>
                 </FieldGroup>
@@ -247,7 +395,7 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
                 value={form.notes}
                 onChange={(e) => update({ notes: e.target.value })}
                 rows={3}
-                placeholder="Contexte, décision, prochaines étapes…"
+                placeholder={notesPlaceholder(form)}
                 className="w-full resize-none rounded-xl border border-line bg-cream px-3 py-2 text-sm text-text outline-none focus:border-or"
               />
             </FieldGroup>
@@ -362,16 +510,17 @@ function ChoicePill({ active, icon, label, tone, onClick }: { active: boolean; i
   )
 }
 
-function ChoiceChip({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+function ChoiceChip({ active, label, sublabel, onClick }: { active: boolean; label: string; sublabel?: string; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-xl border px-2.5 py-2 text-left text-[11px] font-bold transition ${
+      className={`rounded-xl border px-2.5 py-2 text-left transition ${
         active ? 'border-or bg-or-tint text-or-dark shadow-sm' : 'border-line bg-white text-muted hover:border-or/50'
       }`}
     >
-      {label}
+      <div className="text-[11px] font-bold leading-tight">{label}</div>
+      {sublabel && <div className="text-[9px] font-medium opacity-70 leading-tight mt-0.5">{sublabel}</div>}
     </button>
   )
 }
@@ -397,11 +546,15 @@ function sortRdvsForDebrief(rdvs: RdvResponse[]): RdvResponse[] {
 
 function rdvToForm(rdv: RdvResponse): FormState {
   const outcome: Outcome = rdv.result == null ? '' : rdv.result === 'signe' ? 'vente' : 'non_vente'
+  const { mainLabel, subLabel } = splitNonSaleReason(rdv.nonSaleReason)
+  const { acceptance, freeText } = splitNotes(rdv.notes)
   return {
     outcome,
-    nonSaleReason: nonSaleReasonFromLabel(rdv.nonSaleReason),
+    nonSaleReason: nonSaleReasonFromLabel(mainLabel),
+    nonSaleSubReason: subLabel,
     objection: objectionFromLabel(rdv.objections),
-    notes: rdv.notes ?? '',
+    acceptanceFactors: acceptance.map(acceptanceFactorFromLabel).filter((f): f is AcceptanceFactor => f !== ''),
+    notes: freeText,
     quoteAmount: rdv.montantTotal ?? '',
     signedAt: rdv.signatureAt ?? '',
     kits: rdv.kits ?? '',
@@ -428,7 +581,11 @@ function labelFromObjection(value: Objection): string {
   return OBJECTIONS.find((o) => o.value === value)?.label ?? value
 }
 
-function nonSaleReasonFromLabel(label: string | null): NonSaleReason | '' {
+function labelFromAcceptance(value: AcceptanceFactor): string {
+  return ACCEPTANCE_FACTORS.find((f) => f.value === value)?.label ?? value
+}
+
+function nonSaleReasonFromLabel(label: string): NonSaleReason | '' {
   if (!label) return ''
   return (NON_SALE_REASONS.find((r) => r.label === label)?.value ?? '') as NonSaleReason | ''
 }
@@ -436,6 +593,55 @@ function nonSaleReasonFromLabel(label: string | null): NonSaleReason | '' {
 function objectionFromLabel(label: string | null): Objection | '' {
   if (!label) return ''
   return (OBJECTIONS.find((o) => o.label === label)?.value ?? '') as Objection | ''
+}
+
+function acceptanceFactorFromLabel(label: string): AcceptanceFactor | '' {
+  return (ACCEPTANCE_FACTORS.find((f) => f.label === label)?.value ?? '') as AcceptanceFactor | ''
+}
+
+function composeNonSaleReason(reason: NonSaleReason, sub: string): string {
+  const main = labelFromNonSaleReason(reason)
+  if (!sub.trim()) return main
+  return `${main}${NON_SALE_REASON_SEPARATOR}${sub.trim()}`
+}
+
+function splitNonSaleReason(raw: string | null): { mainLabel: string; subLabel: string } {
+  if (!raw) return { mainLabel: '', subLabel: '' }
+  const idx = raw.indexOf(NON_SALE_REASON_SEPARATOR)
+  if (idx === -1) return { mainLabel: raw.trim(), subLabel: '' }
+  return { mainLabel: raw.slice(0, idx).trim(), subLabel: raw.slice(idx + NON_SALE_REASON_SEPARATOR.length).trim() }
+}
+
+function composeNotes(form: FormState): string | null {
+  const free = form.notes.trim()
+  if (form.outcome === 'vente' && form.acceptanceFactors.length > 0) {
+    const labels = form.acceptanceFactors.map(labelFromAcceptance).join(' | ')
+    const prefix = `[Acceptation: ${labels}]`
+    return free ? `${prefix}\n${free}` : prefix
+  }
+  return free || null
+}
+
+function splitNotes(raw: string | null): { acceptance: string[]; freeText: string } {
+  if (!raw) return { acceptance: [], freeText: '' }
+  const match = raw.match(ACCEPTANCE_PREFIX_RE)
+  if (!match) return { acceptance: [], freeText: raw }
+  const acceptance = match[1].split('|').map((s) => s.trim()).filter(Boolean)
+  const freeText = raw.replace(ACCEPTANCE_PREFIX_RE, '').trim()
+  return { acceptance, freeText }
+}
+
+function notesPlaceholder(form: FormState): string {
+  if (form.outcome === 'non_vente' && form.nonSaleReason === 'non_qualifie') {
+    return 'Pourquoi pas qualifié ? Contexte, détail du blocage…'
+  }
+  if (form.outcome === 'non_vente') {
+    return 'Contexte, prochaines étapes prévues, ressenti…'
+  }
+  if (form.outcome === 'vente') {
+    return 'Détail de la signature, prochaines étapes (installation, financement)…'
+  }
+  return 'Contexte, décision, prochaines étapes…'
 }
 
 function formatRdvLabel(rdv: RdvResponse): string {
