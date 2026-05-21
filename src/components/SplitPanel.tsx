@@ -690,7 +690,7 @@ function NotesTab({
   setNotes: (n: string) => void
   onSaved?: () => void
 }) {
-  type SetterStatus = '' | 'non_qualifie' | 'a_rappeler' | 'pas_de_reponse' | 'qualifie'
+  type SetterStatus = '' | 'non_qualifie' | 'a_rappeler' | 'pas_de_reponse' | 'qualifie' | 'qualifie_specialiste'
   type Step = 'eligibility' | 'qualification' | 'secteur' | 'rdv' | 'confirmation' | 'done'
 
   const [setterStatus, setSetterStatus] = useState<SetterStatus>(() => statusToSetterStatus(lead.status))
