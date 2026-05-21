@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
-import { Icon } from '../../components/Icon'
+import { Icon, type IconName } from '../../components/Icon'
 import { EmptyState } from '../../components/EmptyState'
 import { LeadFiltersBar } from '../../components/LeadFiltersBar'
 import { LoadingBlock } from '../../components/Spinner'
@@ -204,14 +204,23 @@ function LeadsCommercial() {
 type SetterFilter = 'nouveau' | 'sans_reponse' | 'rappel' | 'qualifie' | 'perdu' | 'relance_lt'
 type SetterMissingFilter = 'all' | 'any' | 'phone' | 'address' | 'postalCode' | 'email' | 'city'
 
-const SETTER_MISSING_FILTERS: { key: SetterMissingFilter; label: string }[] = [
-  { key: 'all', label: 'Toutes les données' },
-  { key: 'any', label: 'Donnée manquante' },
-  { key: 'phone', label: 'Sans numéro' },
-  { key: 'address', label: 'Sans adresse' },
-  { key: 'postalCode', label: 'Sans CP' },
-  { key: 'email', label: 'Sans email' },
-  { key: 'city', label: 'Sans ville' },
+const SETTER_MISSING_FILTERS: { key: SetterMissingFilter; label: string; icon: IconName }[] = [
+  { key: 'all', label: 'Toutes les données', icon: 'inbox' },
+  { key: 'any', label: 'Donnée manquante', icon: 'filter' },
+  { key: 'phone', label: 'Sans numéro', icon: 'phone-off' },
+  { key: 'address', label: 'Sans adresse', icon: 'map-pin' },
+  { key: 'postalCode', label: 'Sans CP', icon: 'tag' },
+  { key: 'email', label: 'Sans email', icon: 'mail' },
+  { key: 'city', label: 'Sans ville', icon: 'map-pin' },
+]
+
+const SETTER_STATUS_FILTERS: { key: SetterFilter; label: string; icon: IconName; countKey: 'nouveau' | 'sansReponse' | 'rappel' | 'qualifie' | 'perdu' | 'relanceLt' }[] = [
+  { key: 'nouveau', label: 'Nouveaux', icon: 'sparkles', countKey: 'nouveau' },
+  { key: 'sans_reponse', label: 'Sans réponse', icon: 'phone-off', countKey: 'sansReponse' },
+  { key: 'rappel', label: 'À rappeler', icon: 'phone', countKey: 'rappel' },
+  { key: 'qualifie', label: 'Qualifiés', icon: 'check', countKey: 'qualifie' },
+  { key: 'perdu', label: 'Non qualifiés', icon: 'x', countKey: 'perdu' },
+  { key: 'relance_lt', label: 'Relance long terme', icon: 'clock', countKey: 'relanceLt' },
 ]
 
 // ----- F5 Setter -----
@@ -301,9 +310,42 @@ function LeadsSetter() {
         title="Suivi leads"
       />
       <div className="flex flex-grow overflow-hidden">
+        <aside className="leads-rail hidden lg:flex">
+          <nav className="sb-section" aria-label="Statut">
+            <div className="sb-section-label">Statut</div>
+            {SETTER_STATUS_FILTERS.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setFilter(item.key)}
+                className={`sb-item leads-rail-item ${filter === item.key ? 'is-active' : ''}`}
+              >
+                <span className="sb-item-icon"><Icon name={item.icon} size={15} strokeWidth={1.75} /></span>
+                <span className="sb-item-label">{item.label}</span>
+                <span className="leads-rail-count">{counts[item.countKey]}</span>
+              </button>
+            ))}
+          </nav>
+          <nav className="sb-section" aria-label="Données">
+            <div className="sb-section-label">Données</div>
+            {SETTER_MISSING_FILTERS.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setMissingFilter(item.key)}
+                className={`sb-item leads-rail-item ${missingFilter === item.key ? 'is-active' : ''}`}
+              >
+                <span className="sb-item-icon"><Icon name={item.icon} size={15} strokeWidth={1.75} /></span>
+                <span className="sb-item-label">{item.label}</span>
+                <span className="leads-rail-count">{missingCounts[item.key]}</span>
+              </button>
+            ))}
+          </nav>
+        </aside>
+
         <div className="flex-grow flex flex-col min-w-0">
-          <div className="px-8 pt-4 flex items-center gap-3 flex-shrink-0">
-            <div className="relative flex-grow max-w-sm">
+          <div className="px-8 pt-4 flex items-center gap-3 flex-shrink-0 flex-wrap">
+            <div className="relative flex-grow max-w-sm min-w-[200px]">
               <Icon name="search" size={16} className="absolute left-3 top-2.5 text-faint" />
               <input
                 type="text"
@@ -313,10 +355,9 @@ function LeadsSetter() {
                 className="w-full bg-white border border-line rounded-[14px] pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-or"
               />
             </div>
-          </div>
 
-          <main className="p-8 pt-4 flex-grow flex flex-col min-h-0 overflow-hidden">
-            <div className="flex items-center gap-2 mb-4 flex-wrap flex-shrink-0 bg-cream-darker/95 backdrop-blur z-20 pb-2">
+            {/* Mobile/tablet fallback : pills + dropdown when rail is hidden */}
+            <div className="lg:hidden flex items-center gap-2 flex-wrap">
               <FilterPill active={filter === 'nouveau'} onClick={() => setFilter('nouveau')}>Nouveaux ({counts.nouveau})</FilterPill>
               <FilterPill active={filter === 'sans_reponse'} onClick={() => setFilter('sans_reponse')}>Sans réponse ({counts.sansReponse})</FilterPill>
               <FilterPill active={filter === 'rappel'} onClick={() => setFilter('rappel')}>À rappeler ({counts.rappel})</FilterPill>
@@ -333,10 +374,14 @@ function LeadsSetter() {
                   <option key={item.key} value={item.key}>{item.label} ({missingCounts[item.key]})</option>
                 ))}
               </select>
-              <span className="text-xs text-faint font-semibold">{filtered.length}/{categoryLeads.length}</span>
-              <ColumnVisibilityMenu columns={SETTER_COLUMNS} visible={visibleColumns} onChange={setVisibleColumns} />
-              {(loading || backgroundLoading) && mine.length > 0 && <span className="text-xs text-faint ml-auto">Actualisation…</span>}
             </div>
+
+            <span className="text-xs text-faint font-semibold ml-auto">{filtered.length}/{categoryLeads.length}</span>
+            <ColumnVisibilityMenu columns={SETTER_COLUMNS} visible={visibleColumns} onChange={setVisibleColumns} />
+            {(loading || backgroundLoading) && mine.length > 0 && <span className="text-xs text-faint">Actualisation…</span>}
+          </div>
+
+          <main className="p-8 pt-4 flex-grow flex flex-col min-h-0 overflow-hidden">
 
             {loading && mine.length === 0 ? (
               <LoadingBlock label="Chargement des leads…" />

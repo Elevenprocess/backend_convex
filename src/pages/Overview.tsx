@@ -169,7 +169,7 @@ function OverviewSetter() {
             <div className="overview-role-chart">
               <FuturisticLineChart
                 points={activityRange === 'today' ? stats.activityToday : stats.activityWeek}
-                color="#D4AF37"
+                color="#4A6FE3"
                 caption={activityRange === 'today' ? "Aujourd'hui" : '7 derniers jours'}
               />
             </div>
@@ -390,8 +390,8 @@ function OverviewCommercial() {
             <div className="overview-air-card overview-role-side">
               <CardHead title="Pipeline" icon="arrow-right" />
               <div className="space-y-3">
-                <PipelineRow label="RDV planifiés" count={stats.totalPlanifie} pct={100} color="#D4AF37" />
-                <PipelineRow label="Honorés" count={stats.totalHonored} pct={pct(stats.totalHonored, stats.totalPlanifie)} color="#B87333" />
+                <PipelineRow label="RDV planifiés" count={stats.totalPlanifie} pct={100} color="#4A6FE3" />
+                <PipelineRow label="Honorés" count={stats.totalHonored} pct={pct(stats.totalHonored, stats.totalPlanifie)} color="#5AB3FF" />
                 <PipelineRow label="Ventes" count={stats.signed} pct={pct(stats.signed, Math.max(stats.signed + stats.lost, stats.totalHonored))} color="#3DA86A" />
               </div>
             </div>
@@ -404,7 +404,7 @@ function OverviewCommercial() {
                 ) : stats.upcoming.slice(0, 6).map((r, i) => (
                   <RdvRow
                     key={r.id}
-                    color={['#D4AF37', '#B87333', '#B7410E', '#3DA86A'][i % 4]}
+                    color={['#4A6FE3', '#5AB3FF', '#3525A8', '#3DA86A'][i % 4]}
                     time={`${shortDateTime(r.scheduledAt)}`}
                     sub={r.locationType === 'visio' ? 'Visio' : r.locationType === 'agence' ? 'Agence' : 'Domicile'}
                   />
@@ -677,9 +677,9 @@ type LeadEvolutionPoint = { key: string; date: string; label: string; leads: num
 type LeadEvolutionSeriesKey = 'leads' | 'rdv' | 'signed'
 
 const LEAD_EVOLUTION_SERIES: { key: LeadEvolutionSeriesKey; label: string; color: string }[] = [
-  { key: 'leads', label: 'Leads', color: '#D4AF37' },
+  { key: 'leads', label: 'Leads', color: '#4A6FE3' },
   { key: 'rdv', label: 'RDV', color: '#3DA86A' },
-  { key: 'signed', label: 'Ventes', color: '#B87333' },
+  { key: 'signed', label: 'Ventes', color: '#5AB3FF' },
 ]
 
 const GRANULARITY_SUBTITLE: Record<EvolutionGranularity, string> = {
@@ -1056,7 +1056,7 @@ function hydrateMissingEvolutionTotals(points: LeadEvolutionPoint[], totals: { l
   } : point)
 }
 
-const PIE_COLORS = ['#D4AF37', '#3DA86A', '#B87333', '#6B7C8C', '#B7410E', '#7C6A46']
+const PIE_COLORS = ['#4A6FE3', '#3DA86A', '#5AB3FF', '#6B7C8C', '#3525A8', '#7C6A46']
 
 type LeadSegment = { label: string; value: number }
 
@@ -1203,16 +1203,16 @@ function formatShortDate(date: Date): string {
 }
 
 function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }) {
-  const contactedLeads = funnelContactedLeads(totals)
   const treatedLeads = funnelTreatedLeads(totals)
-  const responseRate = pct(totals.answered, contactedLeads)
+  const answeredCount = Math.max(0, treatedLeads - totals.noAnswer)
+  const responseRate = pct(answeredCount, treatedLeads)
   const treatedConversionRate = pct(totals.rdv, treatedLeads)
   return (
     <div className="flow-map col-span-12 mt-4 rounded-2xl border border-line-soft bg-white/65 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div>
           <div className="eyebrow">Flux leads CRM</div>
-          <div className="text-sm font-extrabold">Lecture minimaliste des leads traités jusqu’au RDV</div>
+          <div className="text-sm font-extrabold">Lecture minimaliste des appels jusqu’au RDV</div>
         </div>
         <div className="flow-pill flow-pill-success rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-extrabold text-emerald-700">
           {totals.rdv} RDV · {treatedConversionRate}% conv.
@@ -1220,17 +1220,17 @@ function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_auto_1fr_auto_1.35fr_auto_1fr] gap-2 items-stretch">
-        <MiniFlowStep title="Traités" value={treatedLeads} sub="leads" color="#6B7C8C" />
+        <MiniFlowStep title="Appels" value={totals.calls} sub={`${callsPerLead(totals.calls, treatedLeads)} / lead traité`} color="#4A6FE3" />
         <MiniArrow />
-        <MiniFlowStep title="Appels" value={totals.calls} sub={`${callsPerLead(totals.calls, treatedLeads)} / lead traité`} color="#D4AF37" />
+        <MiniFlowStep title="Traités" value={treatedLeads} sub="leads" color="#6B7C8C" />
         <MiniArrow />
         <div className="flow-response rounded-xl border border-line-soft bg-white/70 p-3">
           <div className="text-[10px] font-black uppercase text-faint">A répondu ?</div>
           <div className="mt-2 grid grid-cols-2 gap-2">
             <div className="flow-response-yes rounded-lg bg-emerald-50 px-2 py-1.5 text-emerald-800">
               <div className="text-[10px] font-bold">Oui</div>
-              <div className="text-lg font-black">{totals.answered}</div>
-              <div className="text-[10px]">{responseRate}% leads appelés</div>
+              <div className="text-lg font-black">{answeredCount}</div>
+              <div className="text-[10px]">{responseRate}% leads traités</div>
             </div>
             <div className="flow-response-no rounded-lg bg-amber-50 px-2 py-1.5 text-amber-800">
               <div className="text-[10px] font-bold">Non</div>
@@ -1240,14 +1240,10 @@ function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }
           </div>
         </div>
         <MiniArrow />
-        <div className="grid grid-cols-2 gap-2">
-          <MiniFlowStep title="Qualifiés" value={totals.qualified} sub={`${totals.qualificationRate}% réponses`} color="#D4AF37" />
-          <MiniFlowStep title="RDV" value={totals.rdv} sub={`${treatedConversionRate}% leads traités`} color="#3DA86A" />
-        </div>
+        <MiniFlowStep title="RDV" value={totals.rdv} sub={`${treatedConversionRate}% leads traités`} color="#3DA86A" />
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted">
-        <span className="flow-pill rounded-full bg-white/70 px-2 py-1 border border-line-soft">Pas qualifiés : <b>{totals.notQualified}</b> · {totals.notQualifiedRate}% réponses</span>
         <span className="flow-pill rounded-full bg-white/70 px-2 py-1 border border-line-soft">Formule : RDV / leads traités</span>
       </div>
     </div>
@@ -1484,12 +1480,12 @@ function RevenueEvolutionChart({ points, total }: { points: ActivityPoint[]; tot
           <small><i style={{ background: color }} />CA signé</small>
           <strong>{fmtKEur(total)}</strong>
         </button>
-        <button type="button" style={{ ['--series-color' as string]: '#D4AF37' }}>
-          <small><i style={{ background: '#D4AF37' }} />Pic mensuel</small>
+        <button type="button" style={{ ['--series-color' as string]: '#4A6FE3' }}>
+          <small><i style={{ background: '#4A6FE3' }} />Pic mensuel</small>
           <strong>{fmtKEur(peak.value)}</strong>
         </button>
-        <button type="button" style={{ ['--series-color' as string]: '#B87333' }}>
-          <small><i style={{ background: '#B87333' }} />Tendance</small>
+        <button type="button" style={{ ['--series-color' as string]: '#5AB3FF' }}>
+          <small><i style={{ background: '#5AB3FF' }} />Tendance</small>
           <strong className={delta >= 0 ? 'positive' : 'negative'}>{delta >= 0 ? '+' : ''}{fmtKEur(delta)}</strong>
         </button>
       </div>

@@ -116,8 +116,8 @@ export function ProfilSetter() {
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <BigStat color="#3DA86A" bg="bg-success-tint" value={String(callStats.joints)} label="JOINTS" />
                 <BigStat color="#6B7C8C" bg="bg-info-tint" value={String(callStats.injoignable + callStats.nonJoint)} label="INJOIGNABLES" />
-                <BigStat color="#B87333" bg="bg-cuivre-tint" value={String(callStats.rdvPris)} label="RDV PRIS" />
-                <BigStat color="#B7410E" bg="bg-rouille-tint" value={String(callStats.refus)} label="REFUS" />
+                <BigStat color="#5AB3FF" bg="bg-cuivre-tint" value={String(callStats.rdvPris)} label="RDV PRIS" />
+                <BigStat color="#3525A8" bg="bg-rouille-tint" value={String(callStats.refus)} label="REFUS" />
               </div>
             </section>
           </div>

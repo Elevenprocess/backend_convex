@@ -18,7 +18,7 @@ type ParsedDebrief = {
 }
 
 // Mêmes palette que Analytics.tsx pour cohérence visuelle.
-const PALETTE = ['#B7410E', '#B87333', '#D4AF37', '#6B7C8C', '#3DA86A', '#8C5A3A', '#C7913C', '#A03020', '#4C7A8C', '#5E6F7D']
+const PALETTE = ['#3525A8', '#5AB3FF', '#4A6FE3', '#6B7C8C', '#3DA86A', '#3D5DC8', '#7B96EB', '#2D1A8C', '#4C7A8C', '#5E6F7D']
 const ACCEPTANCE_COLOR = '#3DA86A'
 const NON_SALE_REASON_SEPARATOR = ' — '
 const ACCEPTANCE_PREFIX_RE = /^\[Acceptation:\s*([^\]]+)\]\s*\n?/
@@ -108,7 +108,7 @@ export function DebriefAnalytics({ commercialId, fromDate, toDate, title = 'Anal
           {(() => {
             const entry = nonValidation.find((e) => e.main === expandedReason)
             if (!entry) return null
-            return <BarList entries={entry.subs} total={entry.count} color="#B87333" />
+            return <BarList entries={entry.subs} total={entry.count} color="#5AB3FF" />
           })()}
         </div>
       )}
@@ -122,7 +122,7 @@ export function DebriefAnalytics({ commercialId, fromDate, toDate, title = 'Anal
           {objectionsOvercome.length === 0 ? (
             <EmptyChart message="Pas encore d'objection surmontée enregistrée." />
           ) : (
-            <BarList entries={objectionsOvercome} total={objectionsOvercome.reduce((s, e) => s + e.count, 0)} color="#D4AF37" />
+            <BarList entries={objectionsOvercome} total={objectionsOvercome.reduce((s, e) => s + e.count, 0)} color="#4A6FE3" />
           )}
         </div>
         <div className="glass-card p-6 col-span-12 xl:col-span-6">
@@ -133,7 +133,7 @@ export function DebriefAnalytics({ commercialId, fromDate, toDate, title = 'Anal
           {objectionsBlocking.length === 0 ? (
             <EmptyChart message="Pas encore d'objection bloquante enregistrée." />
           ) : (
-            <BarList entries={objectionsBlocking} total={objectionsBlocking.reduce((s, e) => s + e.count, 0)} color="#B7410E" />
+            <BarList entries={objectionsBlocking} total={objectionsBlocking.reduce((s, e) => s + e.count, 0)} color="#3525A8" />
           )}
         </div>
       </div>

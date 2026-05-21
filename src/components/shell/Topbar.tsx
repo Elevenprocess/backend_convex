@@ -298,7 +298,7 @@ function readSeenNotificationIds(): Set<string> {
 // reste visible mais immobile (par demande utilisateur).
 function PageLoader({ animated }: { animated: boolean }) {
   const size = 32
-  const color = 'var(--color-or-dark, #b9883f)'
+  const color = 'var(--color-or-dark, #2A4FC9)'
   if (animated) {
     return <Grid size={size} speed={1.4} color={color} />
   }
