@@ -167,30 +167,23 @@ export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) 
           )}
         </button>
 
-        <div className="relative">
-          <button
-            onClick={() => setOpenMenu(openMenu === 'settings' ? null : 'settings')}
-            title="Paramètres"
-            className={`topbar-action ${openMenu === 'settings' ? 'active' : ''}`}
-          >
-            <Icon name="settings" size={16} />
-          </button>
-          {openMenu === 'settings' && (
-            <DropdownFrame className="w-64 p-2">
-              {isAdmin && <MenuButton icon="settings" label="Paramètres" hint="Préférences du SaaS" onClick={() => { setOpenMenu(null); navigate('/settings') }} />}
-              <MenuButton icon="chart" label="Analytics" hint="Performance & pipeline" onClick={() => { setOpenMenu(null); navigate('/analytics') }} />
-              <ThemeMenuButton
-                isDark={isDark}
-                onClick={() => {
-                  toggleTheme()
-                  setOpenMenu(null)
-                }}
-              />
-              <div className="h-px bg-line-soft my-2 mx-2" />
-              <MenuButton icon="logout" label="Se déconnecter" danger onClick={handleSignOut} />
-            </DropdownFrame>
-          )}
-        </div>
+        {isAdmin && (
+          <div className="relative">
+            <button
+              onClick={() => setOpenMenu(openMenu === 'settings' ? null : 'settings')}
+              title="Paramètres"
+              className={`topbar-action ${openMenu === 'settings' ? 'active' : ''}`}
+            >
+              <Icon name="settings" size={16} />
+            </button>
+            {openMenu === 'settings' && (
+              <DropdownFrame className="w-56 p-1.5">
+                <SbMenuItem icon="settings" label="Paramètres SaaS" onClick={() => { setOpenMenu(null); navigate('/settings') }} />
+                <SbMenuItem icon="chart" label="Analytics" onClick={() => { setOpenMenu(null); navigate('/analytics') }} />
+              </DropdownFrame>
+            )}
+          </div>
+        )}
 
         <div className="relative">
           <button
@@ -204,20 +197,24 @@ export function Topbar({ eyebrow, title, activeTab, onTabChange }: TopbarProps) 
             <Icon name="chevron-down" size={13} className="text-faint" />
           </button>
           {openMenu === 'profile' && (
-            <DropdownFrame className="w-72 p-3">
+            <DropdownFrame className="w-64 p-1.5">
               <div className="profile-menu-head">
-                <div className={`w-11 h-11 ${user.tint} flex items-center justify-center rounded-2xl font-bold shadow-sm border border-white/80 overflow-hidden`}>
+                <div className={`w-10 h-10 ${user.tint} flex items-center justify-center rounded-xl font-bold text-sm shadow-sm border border-white/80 overflow-hidden`}>
                   {user.image ? <img src={user.image} alt="Profil" className="w-full h-full object-cover" /> : user.initials}
                 </div>
                 <div className="min-w-0">
-                  <div className="font-bold text-sm truncate">{user.name}</div>
-                  <div className="text-xs text-faint capitalize">{user.role}</div>
+                  <div className="font-semibold text-sm truncate">{user.name}</div>
+                  <div className="text-[11px] text-faint capitalize truncate">{user.role}</div>
                 </div>
               </div>
-              <MenuButton icon="home" label="Dashboard" hint="Vue d’ensemble" onClick={() => { setOpenMenu(null); navigate('/overview') }} />
-              <MenuButton icon="users" label="Voir mon profil" hint="Infos & photo" onClick={() => { setOpenMenu(null); navigate('/profile') }} />
-              <MenuButton icon="users" label="Tous les leads" hint="Liste complète" onClick={() => { setOpenMenu(null); navigate('/leads') }} />
-              {isAdmin && <MenuButton icon="settings" label="Compte & paramètres" hint="Profil utilisateur" onClick={() => { setOpenMenu(null); navigate('/settings') }} />}
+              <SbMenuItem icon="users" label="Mon profil" onClick={() => { setOpenMenu(null); navigate('/profile') }} />
+              <SbMenuItem
+                icon={isDark ? 'sun' : 'moon'}
+                label={isDark ? 'Thème clair' : 'Thème sombre'}
+                onClick={() => { toggleTheme() }}
+              />
+              <div className="sb-menu-sep" />
+              <SbMenuItem icon="logout" label="Se déconnecter" danger onClick={handleSignOut} />
             </DropdownFrame>
           )}
         </div>
@@ -312,32 +309,15 @@ function DropdownFrame({ children, className }: { children: ReactNode; className
   )
 }
 
-function ThemeMenuButton({ isDark, onClick }: { isDark: boolean; onClick: () => void }) {
-  return (
-    <button onClick={onClick} className="menu-button theme-menu-button" aria-pressed={isDark}>
-      <span className="menu-icon-badge"><Icon name={isDark ? 'moon' : 'sun'} size={15} /></span>
-      <span className="min-w-0 text-left flex-grow">
-        <span className="block truncate">Apparence</span>
-        <span className="block text-[11px] font-medium text-faint truncate">{isDark ? 'Mode sombre' : 'Mode clair'}</span>
-      </span>
-      <span className={`theme-switch ${isDark ? 'active' : ''}`} aria-hidden="true">
-        <span />
-      </span>
-    </button>
-  )
-}
-
-function MenuButton({ icon, label, hint, onClick, danger = false }: { icon: Parameters<typeof Icon>[0]['name']; label: string; hint?: string; onClick: () => void; danger?: boolean }) {
+function SbMenuItem({ icon, label, onClick, danger = false }: { icon: Parameters<typeof Icon>[0]['name']; label: string; onClick: () => void; danger?: boolean }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={`menu-button ${danger ? 'danger' : ''}`}
+      className={`sb-menu-item ${danger ? 'is-danger' : ''}`}
     >
-      <span className="menu-icon-badge"><Icon name={icon} size={15} /></span>
-      <span className="min-w-0 text-left">
-        <span className="block truncate">{label}</span>
-        {hint && <span className="block text-[11px] font-medium text-faint truncate">{hint}</span>}
-      </span>
+      <Icon name={icon} size={14} strokeWidth={1.75} />
+      <span className="truncate">{label}</span>
     </button>
   )
 }
