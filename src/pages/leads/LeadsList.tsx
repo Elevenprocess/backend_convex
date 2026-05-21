@@ -163,7 +163,7 @@ function LeadsCommercial() {
   )
 }
 
-type SetterFilter = 'nouveau' | 'rappel' | 'qualifie' | 'sans_reponse' | 'perdu'
+type SetterFilter = 'nouveau' | 'sans_reponse' | 'rappel' | 'qualifie' | 'perdu' | 'relance_lt'
 type SetterMissingFilter = 'all' | 'any' | 'phone' | 'address' | 'postalCode' | 'email' | 'city'
 
 const SETTER_MISSING_FILTERS: { key: SetterMissingFilter; label: string }[] = [
@@ -216,10 +216,11 @@ function LeadsSetter() {
   const counts = useMemo(() => ({
     all: categoryLeads.length,
     nouveau: categoryLeads.filter(isNouveauLead).length,
+    sansReponse: categoryLeads.filter(isShortTermSansReponseLead).length,
     rappel: categoryLeads.filter(isCallbackLead).length,
     qualifie: categoryLeads.filter(isQualifiedLeadStatus).length,
-    sansReponse: categoryLeads.filter((l) => l.status === 'pas_de_reponse').length,
     perdu: categoryLeads.filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie').length,
+    relanceLt: categoryLeads.filter(isLongTermRelanceLead).length,
   }), [categoryLeads])
 
   const missingCounts = useMemo(() => {
@@ -279,10 +280,11 @@ function LeadsSetter() {
           <main className="p-8 pt-4 flex-grow flex flex-col min-h-0 overflow-hidden">
             <div className="flex items-center gap-2 mb-4 flex-wrap flex-shrink-0 bg-cream-darker/95 backdrop-blur z-20 pb-2">
               <FilterPill active={filter === 'nouveau'} onClick={() => setFilter('nouveau')}>Nouveaux ({counts.nouveau})</FilterPill>
+              <FilterPill active={filter === 'sans_reponse'} onClick={() => setFilter('sans_reponse')}>Sans réponse ({counts.sansReponse})</FilterPill>
               <FilterPill active={filter === 'rappel'} onClick={() => setFilter('rappel')}>À rappeler ({counts.rappel})</FilterPill>
               <FilterPill active={filter === 'qualifie'} onClick={() => setFilter('qualifie')}>Qualifiés ({counts.qualifie})</FilterPill>
-              <FilterPill active={filter === 'sans_reponse'} onClick={() => setFilter('sans_reponse')}>Sans réponse ({counts.sansReponse})</FilterPill>
               <FilterPill active={filter === 'perdu'} onClick={() => setFilter('perdu')}>Non qualifiés ({counts.perdu})</FilterPill>
+              <FilterPill active={filter === 'relance_lt'} onClick={() => setFilter('relance_lt')}>Relance long terme ({counts.relanceLt})</FilterPill>
               <select
                 value={missingFilter}
                 onChange={(event) => setMissingFilter(event.target.value as SetterMissingFilter)}
@@ -619,18 +621,30 @@ function isQualifiedLeadStatus(lead: LeadResponse): boolean {
   return lead.status === 'qualifie' || lead.status === 'rdv_pris'
 }
 
+const RELANCE_LONG_TERM_THRESHOLD = 11
+
+function isLongTermRelanceLead(lead: LeadResponse): boolean {
+  return lead.status === 'pas_de_reponse' && (lead.joursRelance ?? 0) >= RELANCE_LONG_TERM_THRESHOLD
+}
+
+function isShortTermSansReponseLead(lead: LeadResponse): boolean {
+  return lead.status === 'pas_de_reponse' && (lead.joursRelance ?? 0) < RELANCE_LONG_TERM_THRESHOLD
+}
+
 function filterSetterLeadsByStatus(leads: LeadResponse[], filter: SetterFilter): LeadResponse[] {
   switch (filter) {
     case 'nouveau':
       return leads.filter(isNouveauLead)
+    case 'sans_reponse':
+      return leads.filter(isShortTermSansReponseLead)
     case 'rappel':
       return leads.filter(isCallbackLead)
     case 'qualifie':
       return leads.filter(isQualifiedLeadStatus)
-    case 'sans_reponse':
-      return leads.filter((lead) => lead.status === 'pas_de_reponse')
     case 'perdu':
       return leads.filter((lead) => lead.status === 'perdu' || lead.status === 'pas_qualifie')
+    case 'relance_lt':
+      return leads.filter(isLongTermRelanceLead)
   }
 }
 
