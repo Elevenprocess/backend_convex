@@ -991,6 +991,15 @@ function NotesTab({
                 autoFocus={isActiveCall}
               />
             )}
+            {setterStatus === 'qualifie_specialiste' && (
+              <textarea
+                value={commentaire}
+                onChange={(e) => setCommentaire(e.target.value)}
+                placeholder="Le lead dit avoir déjà eu un RDV avec un spécialiste. Précise lequel / quand si possible."
+                className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full h-24 resize-none"
+                autoFocus={isActiveCall}
+              />
+            )}
             {(setterStatus === 'a_rappeler' || setterStatus === 'pas_de_reponse' || setterStatus === 'non_qualifie') && (
               <button
                 type="button"
