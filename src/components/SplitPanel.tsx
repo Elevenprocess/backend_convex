@@ -105,13 +105,13 @@ export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, chi
             <span className={`status-badge ${STATUS_BADGE[lead.status]}`}>{STATUS_LABEL[lead.status]}</span>
             {lead.latestRdvAt && (
               <span className="status-badge bg-cream-darker text-text flex items-center gap-1">
-                <Icon name="calendar" size={11} />
+                <Icon name="calendar" size={12} />
                 {formatRdvDateTime(lead.latestRdvAt)}
               </span>
             )}
             {commercialName && (
               <span className="status-badge bg-cream-darker text-text flex items-center gap-1">
-                <Icon name="users" size={11} />
+                <Icon name="users" size={12} />
                 {commercialName}
               </span>
             )}
