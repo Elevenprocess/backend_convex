@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type TextareaHTMLAttributes } from 'react'
 import { Icon } from '../Icon'
 import {
   STATUS_BADGE,
@@ -391,12 +391,13 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
             )}
 
             <FieldGroup label="Notes supplémentaires">
-              <textarea
+              <AutoGrowTextarea
                 value={form.notes}
                 onChange={(e) => update({ notes: e.target.value })}
-                rows={3}
+                minRows={4}
+                maxRows={20}
                 placeholder={notesPlaceholder(form)}
-                className="w-full resize-none rounded-xl border border-line bg-cream px-3 py-2 text-sm text-text outline-none focus:border-or"
+                className="w-full rounded-xl border border-line bg-cream px-3 py-2 text-sm leading-relaxed text-text outline-none focus:border-or"
               />
             </FieldGroup>
 
@@ -507,6 +508,35 @@ function ChoicePill({ active, icon, label, tone, onClick }: { active: boolean; i
       <Icon name={icon} size={14} />
       {label}
     </button>
+  )
+}
+
+type AutoGrowTextareaProps = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'rows'> & {
+  minRows?: number
+  maxRows?: number
+}
+
+function AutoGrowTextarea({ minRows = 3, maxRows = 20, value, className = '', style, ...rest }: AutoGrowTextareaProps) {
+  const ref = useRef<HTMLTextAreaElement | null>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 20
+    const min = lineHeight * minRows
+    const max = lineHeight * maxRows
+    el.style.height = `${Math.min(max, Math.max(min, el.scrollHeight))}px`
+    el.style.overflowY = el.scrollHeight > max ? 'auto' : 'hidden'
+  }, [value, minRows, maxRows])
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      rows={minRows}
+      className={`resize-none ${className}`}
+      style={style}
+      {...rest}
+    />
   )
 }
 
