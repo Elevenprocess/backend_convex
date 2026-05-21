@@ -840,6 +840,13 @@ function NotesTab({
         setResult('')
         setSuccess('Rappel planifié et lead passé en À rappeler.')
         setStep('done')
+      } else if (kind === 'qualifie_specialiste') {
+        if (!commentaire.trim()) throw new Error('Ajoute un commentaire expliquant que le lead a déjà été qualifié par un spécialiste.')
+        await createCallLog({ leadId: lead.id, result: 'joint', notes: noteFinale })
+        await updateLead(lead.id, { status: 'qualifie' })
+        setResult('')
+        setSuccess('Lead marqué qualifié (RDV déjà géré par un spécialiste sur GHL).')
+        setStep('done')
       } else {
         if (!commentaire.trim()) throw new Error('Ajoute un commentaire principal.')
         setResult('')
