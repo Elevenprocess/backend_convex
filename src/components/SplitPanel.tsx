@@ -1000,7 +1000,7 @@ function NotesTab({
                 autoFocus={isActiveCall}
               />
             )}
-            {(setterStatus === 'a_rappeler' || setterStatus === 'pas_de_reponse' || setterStatus === 'non_qualifie') && (
+            {(setterStatus === 'a_rappeler' || setterStatus === 'pas_de_reponse' || setterStatus === 'non_qualifie' || setterStatus === 'qualifie_specialiste') && (
               <button
                 type="button"
                 onClick={() => saveCallAndLead(setterStatus)}
