@@ -6,9 +6,9 @@ services:
     staticPublishPath: ./dist
     envVars:
       - key: VITE_API_URL
-        sync: false
+        value: https://api.electroconceptoi.com
       - key: VITE_REALTIME_URL
-        sync: false
+        value: https://api.electroconceptoi.com
     routes:
       - type: rewrite
         source: /*
