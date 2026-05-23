@@ -135,7 +135,7 @@ function AnalyticsSetter({ name }: { name: string }) {
         <PeriodSelector value={period} onChange={setPeriod} />
       </div>
       <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
-        <div className="grid grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
           <BigStatCard label="NOUVEAUX LEADS" value={fmtInt(stats.newLeads)} sub="Entrées du système sur la période" />
           <BigStatCard label="APPELS EFFECTUÉS" value={fmtInt(stats.calls)} delta={`${stats.callsPerDay}/j`} sub={`${stats.syntheticCalls} déduits des statuts`} />
           <BigStatCard label="LEADS AYANT RÉPONDU" value={fmtInt(stats.answered)} delta={`${stats.responseRate}%`} sub="Taux réponse = répondu / nouveaux leads" />
@@ -153,14 +153,14 @@ function AnalyticsSetter({ name }: { name: string }) {
         </div>
 
         <div className="grid grid-cols-12 gap-6">
-          <div className="glass-card p-6 col-span-7">
+          <div className="glass-card p-6 col-span-12 xl:col-span-7">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold">Pipeline setter — nouveau lead → RDV</h3>
               <span className="eyebrow">backend live</span>
             </div>
             <PipelineFlow stats={stats} />
           </div>
-          <div className="glass-card p-6 col-span-5">
+          <div className="glass-card p-6 col-span-12 xl:col-span-5">
             <h3 className="font-bold mb-4">Taux de conversion</h3>
             <div className="space-y-4">
               <Goal label="Taux de réponse" value={`${stats.answered} / ${Math.max(1, stats.newLeads)} · ${stats.responseRate}%`} pct={stats.responseRate} color="#1F7857" />
@@ -174,14 +174,14 @@ function AnalyticsSetter({ name }: { name: string }) {
         </div>
 
         <div className="grid grid-cols-12 gap-6">
-          <div className="glass-card p-6 col-span-7">
+          <div className="glass-card p-6 col-span-12 xl:col-span-7">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold">Issues d'appel</h3>
               <span className="eyebrow">répondu / relance / refus</span>
             </div>
             <PieChart segments={stats.resultSegments} center={`${stats.calls}\nappels`} />
           </div>
-          <div className="glass-card p-6 col-span-5">
+          <div className="glass-card p-6 col-span-12 xl:col-span-5">
             <h3 className="font-bold mb-4">Série — appels par jour</h3>
             <Heatline values={stats.dailyCalls} color="#1F7857" />
           </div>
@@ -208,7 +208,7 @@ function AnalyticsCommercial({ name }: { name: string }) {
         <PeriodSelector value={period} onChange={setPeriod} />
       </div>
       <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
-        <div className="grid grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
           <BigStatCard label="CA SIGNÉ" value={fmtKEur(stats.ca)} delta={`${stats.signed} ventes signées`} sub={fmtFullEur(stats.ca)} />
           <BigStatCard label="CLOSING RATE" value={`${stats.closing}%`} sub={`${commercialOutcomeCount(stats)} résultats RDV`} />
           <BigStatCard label="PANIER MOYEN" value={fmtKEur(stats.panier)} />
@@ -226,7 +226,7 @@ function AnalyticsCommercial({ name }: { name: string }) {
           ]} />
         </div>
 
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="glass-card p-6">
             <h3 className="font-bold mb-4">Camembert des résultats RDV</h3>
             <PieChart segments={stats.resultSegments} center={`${stats.closing}%\nclosing`} />
@@ -265,7 +265,7 @@ function AnalyticsAdmin() {
         <PeriodSelector value={period} onChange={setPeriod} />
       </div>
       <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
-        <div className="grid grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
           <BigStatCard label="APPELS TRAITÉS" value={fmtInt(stats.calls)} delta={`${stats.loggedCalls} réels`} sub={`${stats.syntheticCalls} déduits des statuts CRM`} />
           <BigStatCard label="LEADS TRAITÉS" value={fmtInt(stats.classified)} sub={`${stats.qualificationRate}% deviennent qualifiés`} />
           <BigStatCard label="RDV / QUALIFIÉS" value={fmtInt(stats.rdvPris)} delta={`${stats.scheduledRdv} calendrier`} sub={`${stats.rdvRate}% / appels traités`} />
@@ -284,14 +284,14 @@ function AnalyticsAdmin() {
         </div>
 
         <div className="grid grid-cols-12 gap-6">
-          <div className="glass-card p-6 col-span-7">
+          <div className="glass-card p-6 col-span-12 xl:col-span-7">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold">Camembert OLAP — issues d'appel & statuts</h3>
               <span className="eyebrow">appels réels + statuts CRM</span>
             </div>
             <PieChart segments={stats.resultSegments} center={`${stats.calls}\nappels`} />
           </div>
-          <div className="glass-card p-6 col-span-5">
+          <div className="glass-card p-6 col-span-12 xl:col-span-5">
             <h3 className="font-bold mb-4">ETL qualité data</h3>
             <div className="space-y-4">
               <Goal label="Couverture traitement" value={`${stats.classified} traités / ${stats.calls} appels`} pct={pct(stats.classified, stats.calls)} color="#1F7857" />
@@ -684,7 +684,7 @@ function PipelineFlow({ stats }: { stats: AnalyticsSetterSummary }) {
   ]
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-5 gap-3 items-stretch">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 items-stretch">
         {nodes.map((n, i) => (
           <div key={n.label} className="relative rounded-2xl bg-white/60 border border-line-soft p-4 min-h-[112px] overflow-hidden flat-target">
             <div className="absolute -right-8 -top-8 w-20 h-20 rounded-full opacity-20 decor-bubble" style={{ background: n.color }} />
@@ -697,7 +697,7 @@ function PipelineFlow({ stats }: { stats: AnalyticsSetterSummary }) {
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-3 gap-3 text-sm">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
         <div className="rounded-2xl bg-cuivre-tint/60 border border-line-soft p-4 flat-target">
           <div className="eyebrow mb-1">Non répondu → relance</div>
           <div className="text-2xl font-extrabold text-cuivre">{stats.relance}</div>
@@ -721,7 +721,7 @@ function PipelineFlow({ stats }: { stats: AnalyticsSetterSummary }) {
 function PieChart({ segments, center }: { segments: Segment[]; center: string }) {
   const total = segments.reduce((sum, s) => sum + s.value, 0)
   return (
-    <div className="grid grid-cols-[180px_1fr] gap-6 items-center">
+    <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-6 md:items-center">
       <div className="w-[180px] h-[180px] rounded-[28px] bg-white border border-line flex items-center justify-center text-center shadow-sm">
         <div>
           {center.split('\n').map((line) => <div key={line} className="font-extrabold text-xl leading-tight">{line}</div>)}

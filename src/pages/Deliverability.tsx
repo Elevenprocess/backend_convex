@@ -149,8 +149,8 @@ export function Deliverability() {
     <AppShell flat>
       <Topbar eyebrow="ADMIN — DEIVRABILITÉ" title="Processus commerciaux" />
 
-      <main className="commercial-prospect-page px-8 pt-4 pb-8 flex flex-col gap-3 overflow-y-auto flex-grow">
-        <section className="grid grid-cols-4 gap-3 flex-shrink-0">
+      <main className="commercial-prospect-page px-4 sm:px-8 pt-4 pb-8 flex flex-col gap-3 overflow-y-auto flex-grow">
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 flex-shrink-0">
           <Metric label="Total RDV" value={`${totals.total}`} hint={`${totals.planned} planifiés · ${totals.honored} honorés`} />
           <Metric label="Commerciaux" value={`${totals.commercials}`} hint={`${totals.withCommercial} RDV assignés`} />
           <Metric label="CA signé" value={formatCurrency(totals.ca)} hint={`${totals.signed} ventes signées`} />
@@ -158,7 +158,7 @@ export function Deliverability() {
         </section>
 
         <section className="grid grid-cols-12 gap-3 flex-shrink-0">
-          <div className="commercial-pipeline-board glass-card col-span-8 px-4 py-3 bg-white border border-line-soft">
+          <div className="commercial-pipeline-board glass-card col-span-12 xl:col-span-8 px-4 py-3 bg-white border border-line-soft">
             <div className="flex items-center justify-between gap-3 mb-2">
               <div>
                 <span className="eyebrow text-[10px]">DÉLIVRABILITÉ / COMMERCIAL</span>
@@ -166,7 +166,7 @@ export function Deliverability() {
               </div>
               <span className="rounded-full border border-line-soft bg-info-tint px-2.5 py-1 text-[11px] font-bold text-info whitespace-nowrap">{cards.length} RDV chargés</span>
             </div>
-            <div className="grid grid-cols-4 gap-2 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
               <MiniStat label="À venir" value={`${totals.upcoming}`} />
               <MiniStat label="No-show" value={`${totals.noShow}`} />
               <MiniStat label="En attente" value={`${totals.pendingQuote}`} />
@@ -174,7 +174,7 @@ export function Deliverability() {
             </div>
           </div>
 
-          <div className="commercial-pipeline-board glass-card col-span-4 px-4 py-3 bg-white border border-line-soft overflow-hidden">
+          <div className="commercial-pipeline-board glass-card col-span-12 xl:col-span-4 px-4 py-3 bg-white border border-line-soft overflow-hidden">
             <div className="flex items-center justify-between mb-2">
               <span className="eyebrow text-[10px]">RÉPARTITION</span>
               <span className="text-[11px] text-faint">Top commerciaux</span>

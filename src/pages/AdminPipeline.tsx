@@ -334,7 +334,7 @@ function CommercialTrackingCard({
               </span>
             )}
           </div>
-          <div className="grid grid-cols-4 gap-2 mt-3 text-center">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 text-center">
             <MiniStat label="RDV" value={commercial.rdvs.length} />
             <MiniStat label="Prospects" value={commercial.prospects} />
             <MiniStat label="Signés" value={commercial.signed} />

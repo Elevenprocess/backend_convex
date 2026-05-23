@@ -725,8 +725,8 @@ function LeadsAdmin() {
             </div>
           </div>
 
-      <main className="p-8 pt-3 flex-grow flex flex-col min-h-0 overflow-hidden">
-        <div className="grid grid-cols-4 gap-3 mb-3 flex-shrink-0">
+      <main className="p-4 sm:p-8 pt-3 flex-grow flex flex-col min-h-0 overflow-hidden">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3 flex-shrink-0">
           <StatCard label="TOTAL IMPORTÉ" value={stats.total.toLocaleString('fr-FR')} />
           <StatCard label="IMPORT DIRECT GHL" value={stats.directGhl.toLocaleString('fr-FR')} />
           <StatCard label="QUALIFIÉS" value={stats.qualifies.toLocaleString('fr-FR')} />

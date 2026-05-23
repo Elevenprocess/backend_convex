@@ -128,8 +128,8 @@ function SettingsAdmin() {
         </button>
       </div>
 
-      <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
-        <div className="grid grid-cols-4 gap-6">
+      <main className="p-4 sm:p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
           <CountCard value={counts.total.toString()} label="UTILISATEURS" highlight />
           <CountCard value={counts.setters.toString()} label="SETTERS" />
           <CountCard value={counts.commerciaux.toString()} label="COMMERCIAUX" />
@@ -169,7 +169,7 @@ function SettingsAdmin() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="glass-card p-6 relative">
             <MockSubBanner />
             <h3 className="font-bold mb-4">Intégrations</h3>
