@@ -374,11 +374,13 @@ function OverviewCommercial() {
         </section>
 
         <section className="overview-air-grid overview-commercial-grid">
-          <AirKpi icon="inbox" label="Nouveaux aujourd'hui" value={fmtCompact(stats.leadsToday)} sub="leads arrivés" />
-          <AirKpi icon="trophy" label="CA signé" value={fmtKEur(stats.ca)} sub={`${fmtCompact(stats.signed)} ventes`} />
-          <AirKpi icon="target" label="Closing" value={`${stats.closing}%`} sub={`${fmtCompact(stats.lost)} perdus`} />
-          <AirKpi icon="chart" label="Panier moyen" value={fmtKEur(stats.panier)} sub="sur ventes signées" />
-          <AirKpi icon="users" label="RDV suivis" value={fmtCompact(stats.totalRdv)} sub={`${fmtCompact(stats.totalHonored)} honorés`} />
+          <div className="overview-commercial-kpis">
+            <AirKpi icon="inbox" label="Nouveaux aujourd'hui" value={fmtCompact(stats.leadsToday)} sub="leads arrivés" />
+            <AirKpi icon="trophy" label="CA signé" value={fmtKEur(stats.ca)} sub={`${fmtCompact(stats.signed)} ventes`} />
+            <AirKpi icon="target" label="Closing" value={`${stats.closing}%`} sub={`${fmtCompact(stats.lost)} perdus`} />
+            <AirKpi icon="chart" label="Panier moyen" value={fmtKEur(stats.panier)} sub="sur ventes signées" />
+            <AirKpi icon="users" label="RDV suivis" value={fmtCompact(stats.totalRdv)} sub={`${fmtCompact(stats.totalHonored)} honorés`} />
+          </div>
 
           <div className="overview-air-card overview-role-wide overview-revenue-evolution-card">
             <RevenueEvolutionChart points={rdvRevenueSeries(rdvs ?? [])} total={stats.ca} />
