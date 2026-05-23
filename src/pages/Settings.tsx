@@ -149,7 +149,6 @@ function SettingsAdmin() {
               <thead className="bg-or-tint">
                 <tr className="text-left eyebrow">
                   <Th>NOM</Th>
-                  <Th>EMAIL</Th>
                   <Th>RÔLE</Th>
                   <Th>STATUT</Th>
                   <Th>GHL</Th>
@@ -359,7 +358,6 @@ function UserRow({ user, ghlUsers, onMapped, onEdit, compact = false }: { user: 
           <span className="font-semibold">{user.name}</span>
         </div>
       </td>
-      <td className="px-3 py-3 text-muted">{user.email}</td>
       {!compact && <td className="px-3 py-3"><span className={`status-badge ${ROLE_BADGE[user.role]}`}>{ROLE_LABEL[user.role]}</span></td>}
       <td className="px-3 py-3"><span className={`status-badge ${user.active ? 'bg-success-tint text-success' : 'bg-rouille-tint text-rouille'}`}>{user.active ? 'Actif' : 'Inactif'}</span></td>
       {!compact && (
