@@ -292,46 +292,12 @@ function readSeenNotificationIds(): Set<string> {
   try { return new Set(JSON.parse(localStorage.getItem('ecoi.seenNotificationIds') ?? '[]')) } catch { return new Set() }
 }
 
-// PageLoader : affiche un Grid de ldrs au centre de la Topbar.
-// Quand `animated` est vrai (une requête API est en vol), l'animation tourne.
-// Sinon, on rend une grille 4×4 statique aux mêmes dimensions/couleur — le loader
-// reste visible mais immobile (par demande utilisateur).
-function PageLoader({ animated }: { animated: boolean }) {
+// PageLoader : Grid de ldrs animé en continu au centre de la Topbar.
+// Aucun état d'arrêt — l'animation tourne en boucle indépendamment des requêtes.
+function PageLoader(_props: { animated: boolean }) {
   const size = 32
-  const color = 'var(--color-or-dark, #2A4FC9)'
-  if (animated) {
-    return <Grid size={size} speed={1.4} color={color} />
-  }
-  const dot = size * 0.1
-  const gap = size * 0.16
-  return (
-    <div
-      aria-hidden="true"
-      style={{
-        display: 'inline-grid',
-        gridTemplateColumns: `repeat(4, ${dot}px)`,
-        gridAutoRows: `${dot}px`,
-        gap: `${gap}px`,
-        width: size,
-        height: size * 0.8,
-        alignItems: 'center',
-        justifyContent: 'center',
-        opacity: 0.55,
-      }}
-    >
-      {Array.from({ length: 16 }).map((_, i) => (
-        <span
-          key={i}
-          style={{
-            width: dot,
-            height: dot,
-            borderRadius: '50%',
-            backgroundColor: color,
-          }}
-        />
-      ))}
-    </div>
-  )
+  const color = 'var(--color-or-dark, #1F7857)'
+  return <Grid size={size} speed={1.4} color={color} />
 }
 
 function DropdownFrame({ children, className }: { children: ReactNode; className?: string }) {

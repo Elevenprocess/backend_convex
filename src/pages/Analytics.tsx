@@ -147,8 +147,8 @@ function AnalyticsSetter({ name }: { name: string }) {
             <AnalyticsStatsTable title="Tableau statistiques setter" rows={setterTableRows(stats)} />
           </div>
           <EvolutionChart title="Courbes d'évolution setter" data={stats.dailyEvolution} hourlyCalls={stats.hourlyCalls} series={[
-            { key: 'calls', label: 'Appels', color: '#4A6FE3' },
-            { key: 'rdv', label: 'RDV', color: '#5AB3FF' },
+            { key: 'calls', label: 'Appels', color: '#1F7857' },
+            { key: 'rdv', label: 'RDV', color: '#3E9A6F' },
           ]} />
         </div>
 
@@ -163,9 +163,9 @@ function AnalyticsSetter({ name }: { name: string }) {
           <div className="glass-card p-6 col-span-5">
             <h3 className="font-bold mb-4">Taux de conversion</h3>
             <div className="space-y-4">
-              <Goal label="Taux de réponse" value={`${stats.answered} / ${Math.max(1, stats.newLeads)} · ${stats.responseRate}%`} pct={stats.responseRate} color="#4A6FE3" />
+              <Goal label="Taux de réponse" value={`${stats.answered} / ${Math.max(1, stats.newLeads)} · ${stats.responseRate}%`} pct={stats.responseRate} color="#1F7857" />
               <Goal label="RDV après réponse" value={`${stats.rdvPris} / ${Math.max(1, stats.answered)} · ${stats.rdvAfterAnswerRate}%`} pct={stats.rdvAfterAnswerRate} color="#3DA86A" />
-              <Goal label="Taux global RDV" value={`${stats.rdvPris} / ${Math.max(1, stats.newLeads)} · ${stats.globalRdvRate}%`} pct={stats.globalRdvRate} color="#5AB3FF" />
+              <Goal label="Taux global RDV" value={`${stats.rdvPris} / ${Math.max(1, stats.newLeads)} · ${stats.globalRdvRate}%`} pct={stats.globalRdvRate} color="#3E9A6F" />
               <Row label="Leads en relance" value={String(stats.relance)} />
               <Row label="Pas qualifiés" value={String(stats.notQualified)} />
               <Row label="Qualifiés" value={String(stats.qualified)} highlight />
@@ -183,7 +183,7 @@ function AnalyticsSetter({ name }: { name: string }) {
           </div>
           <div className="glass-card p-6 col-span-5">
             <h3 className="font-bold mb-4">Série — appels par jour</h3>
-            <Heatline values={stats.dailyCalls} color="#4A6FE3" />
+            <Heatline values={stats.dailyCalls} color="#1F7857" />
           </div>
         </div>
       </main>
@@ -220,9 +220,9 @@ function AnalyticsCommercial({ name }: { name: string }) {
             <AnalyticsStatsTable title="Tableau statistiques commercial" rows={commercialTableRows(stats)} />
           </div>
           <EvolutionChart title="Courbes d'évolution commercial" data={stats.dailyEvolution} series={[
-            { key: 'rdv', label: 'RDV', color: '#4A6FE3' },
+            { key: 'rdv', label: 'RDV', color: '#1F7857' },
             { key: 'signed', label: 'Ventes', color: '#3DA86A' },
-            { key: 'ca', label: 'CA', color: '#5AB3FF' },
+            { key: 'ca', label: 'CA', color: '#3E9A6F' },
           ]} />
         </div>
 
@@ -277,8 +277,8 @@ function AnalyticsAdmin() {
             <AnalyticsStatsTable title="Tableau statistiques global" rows={adminTableRows(stats)} />
           </div>
           <EvolutionChart title="Courbes d'évolution globales" data={stats.dailyEvolution} hourlyCalls={stats.hourlyCalls} series={[
-            { key: 'calls', label: 'Appels', color: '#4A6FE3' },
-            { key: 'rdv', label: 'RDV', color: '#5AB3FF' },
+            { key: 'calls', label: 'Appels', color: '#1F7857' },
+            { key: 'rdv', label: 'RDV', color: '#3E9A6F' },
             { key: 'signed', label: 'Ventes', color: '#3DA86A' },
           ]} />
         </div>
@@ -294,9 +294,9 @@ function AnalyticsAdmin() {
           <div className="glass-card p-6 col-span-5">
             <h3 className="font-bold mb-4">ETL qualité data</h3>
             <div className="space-y-4">
-              <Goal label="Couverture traitement" value={`${stats.classified} traités / ${stats.calls} appels`} pct={pct(stats.classified, stats.calls)} color="#4A6FE3" />
+              <Goal label="Couverture traitement" value={`${stats.classified} traités / ${stats.calls} appels`} pct={pct(stats.classified, stats.calls)} color="#1F7857" />
               <Goal label="Qualification" value={`${stats.qualified} qualifiés`} pct={stats.qualificationRate} color="#3DA86A" />
-              <Goal label="RDV / qualifiés" value={`${stats.rdvPris} opérationnels · ${stats.scheduledRdv} calendrier`} pct={stats.rdvRate} color="#5AB3FF" />
+              <Goal label="RDV / qualifiés" value={`${stats.rdvPris} opérationnels · ${stats.scheduledRdv} calendrier`} pct={stats.rdvRate} color="#3E9A6F" />
               <Row label="Leads non traités" value={String(stats.unclassified)} />
             </div>
           </div>
@@ -663,13 +663,13 @@ function AnalyticsInlineLoading() {
 
 function BigStatCard({ label, value, delta, sub }: { label: string; value: string; delta?: string; sub?: string }) {
   return (
-    <div className="glass-card p-6">
-      <span className="eyebrow">{label}</span>
-      <div className="flex items-end justify-between mt-2 gap-2">
-        <span className="text-[36px] font-bold leading-none">{value}</span>
-        {delta && <span className="delta-badge delta-success">{delta}</span>}
+    <div className="glass-card p-3">
+      <span className="eyebrow text-[10px]">{label}</span>
+      <div className="flex items-end justify-between mt-1 gap-2">
+        <span className="text-[22px] font-bold leading-none">{value}</span>
+        {delta && <span className="delta-badge delta-success text-[11px]">{delta}</span>}
       </div>
-      {sub && <div className="text-xs text-faint mt-2">{sub}</div>}
+      {sub && <div className="text-[11px] text-faint mt-1">{sub}</div>}
     </div>
   )
 }
@@ -677,10 +677,10 @@ function BigStatCard({ label, value, delta, sub }: { label: string; value: strin
 function PipelineFlow({ stats }: { stats: AnalyticsSetterSummary }) {
   const nodes = [
     { label: 'Nouveau lead', value: stats.newLeads, color: '#6B7C8C', sub: 'entrées' },
-    { label: 'Appel setter', value: stats.calls, color: '#4A6FE3', sub: 'actions' },
+    { label: 'Appel setter', value: stats.calls, color: '#1F7857', sub: 'actions' },
     { label: 'A répondu', value: stats.answered, color: '#3DA86A', sub: `${stats.responseRate}% réponse` },
-    { label: 'Qualifié', value: stats.qualified, color: '#5AB3FF', sub: `${stats.notQualified} pas qualifiés` },
-    { label: 'Prise de RDV', value: stats.rdvPris, color: '#3525A8', sub: `${stats.globalRdvRate}% global` },
+    { label: 'Qualifié', value: stats.qualified, color: '#3E9A6F', sub: `${stats.notQualified} pas qualifiés` },
+    { label: 'Prise de RDV', value: stats.rdvPris, color: '#145A41', sub: `${stats.globalRdvRate}% global` },
   ]
   return (
     <div className="space-y-5">

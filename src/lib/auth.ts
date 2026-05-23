@@ -2,13 +2,20 @@ import { create } from 'zustand'
 import { api, ApiError } from './api'
 import type { UserResponse, Role } from './types'
 
+const VIEW_AS_KEY = 'ecoi.viewAsUserId'
+
 type AuthState = {
+  // user = perceived user (viewAsUser ?? realUser). Tout le code app lit s.user.
   user: UserResponse | null
+  realUser: UserResponse | null
+  viewAsUser: UserResponse | null
   status: 'loading' | 'authed' | 'guest'
   error: string | null
   hydrate: () => Promise<void>
   signIn: (email: string, password: string) => Promise<UserResponse>
   signOut: () => Promise<void>
+  viewAs: (user: UserResponse) => void
+  exitViewAs: () => void
 }
 
 // better-auth POST /api/auth/sign-in/email retourne { user, ... } et set le cookie session.
@@ -16,26 +23,63 @@ type SignInResponse = { user?: { id: string }; redirect?: boolean }
 
 export const useAuth = create<AuthState>((set, get) => ({
   user: null,
+  realUser: null,
+  viewAsUser: null,
   status: 'loading',
   error: null,
 
   hydrate: async () => {
     try {
-      // Passe par better-auth pour renouveler le cookie/expiry quand updateAge est atteint.
-      // On garde /users/me comme source du rôle et des infos utilisateur ECOI.
       await api<unknown>('/api/auth/get-session').catch(() => undefined)
+      // Avant de fetch /users/me, on retire temporairement le header viewAs
+      // pour récupérer le VRAI user (sinon la requête revient avec l'overlay).
+      const persistedViewAsId = typeof window !== 'undefined' ? window.localStorage.getItem(VIEW_AS_KEY) : null
+      if (persistedViewAsId && typeof window !== 'undefined') window.localStorage.removeItem(VIEW_AS_KEY)
       const me = await api<UserResponse>('/users/me')
-      set({ user: me, status: 'authed', error: null })
+      if (persistedViewAsId && typeof window !== 'undefined') window.localStorage.setItem(VIEW_AS_KEY, persistedViewAsId)
+
+      let overlay: UserResponse | null = null
+      if (persistedViewAsId && persistedViewAsId !== me.id) {
+        try {
+          // Re-retire le header le temps de récupérer la cible (sinon le back
+          // résoudrait /users/<id> avec l'overlay = boucle infinie).
+          if (typeof window !== 'undefined') window.localStorage.removeItem(VIEW_AS_KEY)
+          const target = await api<UserResponse>(`/users/${persistedViewAsId}`)
+          if (typeof window !== 'undefined') window.localStorage.setItem(VIEW_AS_KEY, persistedViewAsId)
+
+          // Règles : admin → n'importe qui ; commercial → setter (read-only).
+          const allowed =
+            me.role === 'admin' ||
+            (me.role === 'commercial' && target.role === 'setter')
+          if (allowed) {
+            overlay = target
+          } else if (typeof window !== 'undefined') {
+            window.localStorage.removeItem(VIEW_AS_KEY)
+          }
+        } catch {
+          if (typeof window !== 'undefined') window.localStorage.removeItem(VIEW_AS_KEY)
+        }
+      } else if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(VIEW_AS_KEY)
+      }
+
+      set({
+        realUser: me,
+        viewAsUser: overlay,
+        user: overlay ?? me,
+        status: 'authed',
+        error: null,
+      })
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
-        set({ user: null, status: 'guest', error: null })
+        set({ user: null, realUser: null, viewAsUser: null, status: 'guest', error: null })
       } else {
         const current = get()
         const message = e instanceof Error ? e.message : 'Erreur de session'
-        if (current.status === 'authed' && current.user) {
+        if (current.status === 'authed' && current.realUser) {
           set({ error: message })
         } else {
-          set({ user: null, status: 'guest', error: message })
+          set({ user: null, realUser: null, viewAsUser: null, status: 'guest', error: message })
         }
       }
     }
@@ -48,7 +92,8 @@ export const useAuth = create<AuthState>((set, get) => ({
       body: { email, password },
     })
     const me = await api<UserResponse>('/users/me')
-    set({ user: me, status: 'authed', error: null })
+    if (typeof window !== 'undefined') window.localStorage.removeItem(VIEW_AS_KEY)
+    set({ user: me, realUser: me, viewAsUser: null, status: 'authed', error: null })
     return me
   },
 
@@ -58,18 +103,51 @@ export const useAuth = create<AuthState>((set, get) => ({
     } catch {
       // on ignore — on déconnecte en local quoi qu'il arrive
     }
-    set({ user: null, status: 'guest', error: null })
+    if (typeof window !== 'undefined') window.localStorage.removeItem(VIEW_AS_KEY)
+    set({ user: null, realUser: null, viewAsUser: null, status: 'guest', error: null })
+  },
+
+  viewAs: (target) => {
+    const me = get().realUser
+    if (!me || target.id === me.id) return
+    // admin = tout user ; commercial = setter (lecture seule garantie back-side).
+    const allowed = me.role === 'admin' || (me.role === 'commercial' && target.role === 'setter')
+    if (!allowed) return
+    if (typeof window !== 'undefined') window.localStorage.setItem(VIEW_AS_KEY, target.id)
+    set({ viewAsUser: target, user: target })
+  },
+
+  exitViewAs: () => {
+    if (typeof window !== 'undefined') window.localStorage.removeItem(VIEW_AS_KEY)
+    const real = get().realUser
+    set({ viewAsUser: null, user: real })
   },
 }))
 
-// Hook pratique pour récupérer le rôle (équivalent à l'ancien useRole((s) => s.role)).
+// Rôle perçu (override par viewAs si actif).
 export function useRole(): Role | null {
   return useAuth((s) => s.user?.role ?? null)
 }
 
-// Récupère le user courant (lance une erreur si non hydraté — utile dans pages protégées).
+// User perçu (overlay si admin impersonne, sinon user réel).
 export function useCurrentUser(): UserResponse {
   const u = useAuth((s) => s.user)
   if (!u) throw new Error('useCurrentUser appelé sans session — wrap la page dans <RequireAuth>')
   return u
+}
+
+// User réellement connecté (auth session), ignore l'overlay viewAs.
+export function useRealUser(): UserResponse | null {
+  return useAuth((s) => s.realUser)
+}
+
+// True si l'utilisateur est en mode "impersonation lecture seule" (commercial
+// regardant un setter). En admin viewAs n'importe quel autre rôle reste WRITE.
+export function useIsReadOnlyImpersonation(): boolean {
+  return useAuth((s) => {
+    const real = s.realUser
+    const overlay = s.viewAsUser
+    if (!real || !overlay || real.id === overlay.id) return false
+    return real.role === 'commercial' && overlay.role === 'setter'
+  })
 }

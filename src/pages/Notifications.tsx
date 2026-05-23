@@ -134,9 +134,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         id: `callback-late-${lead.id}`,
         group: 'RAPPELS EN RETARD',
         icon: 'clock',
-        iconBg: 'bg-rouille-tint',
-        iconColor: 'text-rouille',
-        borderColor: 'border-l-rouille',
+        ...NOTIF_COLOR.late,
         title: 'Appel à rappeler maintenant',
         body: <><strong>{name}</strong>{lead.phone ? ` · ${lead.phone}` : ''}</>,
         time: formatDateTime(lead.nextCallbackAt!),
@@ -150,9 +148,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         id: `callback-soon-${lead.id}`,
         group: 'DANS 10 MIN',
         icon: 'phone',
-        iconBg: 'bg-cuivre-tint',
-        iconColor: 'text-cuivre',
-        borderColor: 'border-l-cuivre',
+        ...NOTIF_COLOR.imminent,
         title: 'Rappel téléphonique imminent',
         body: <><strong>{name}</strong>{lead.phone ? ` · ${lead.phone}` : ''}</>,
         time: formatDateTime(lead.nextCallbackAt!),
@@ -161,14 +157,13 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         to: leadLink,
         reminderKey: reminderKey(lead),
       })
-    } else if (callbackAt && lead.status === 'a_rappeler') {
+    } else if (callbackAt && lead.status === 'a_rappeler' && callbackAt <= now + 7 * 24 * 60 * 60 * 1000) {
+      // On ne notifie pas les rappels planifiés à plus de 7 jours — ils encombrent le feed.
       notifications.push({
         id: `callback-planned-${lead.id}`,
         group: 'RAPPELS PROGRAMMÉS',
         icon: 'clock',
-        iconBg: 'bg-or-tint',
-        iconColor: 'text-or-dark',
-        borderColor: 'border-l-or',
+        ...NOTIF_COLOR.planned,
         title: 'Client à rappeler',
         body: <><strong>{name}</strong>{lead.phone ? ` · ${lead.phone}` : ''}</>,
         time: formatDateTime(lead.nextCallbackAt!),
@@ -184,9 +179,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         id: `new-lead-${lead.id}`,
         group: 'NOUVEAUX LEADS',
         icon: 'users',
-        iconBg: 'bg-success-tint',
-        iconColor: 'text-success',
-        borderColor: 'border-l-success',
+        ...NOTIF_COLOR.newLead,
         title: 'Nouveau lead arrivé',
         body: <><strong>{name}</strong>{lead.city ? ` · ${lead.city}` : ''}{lead.phone ? ` · ${lead.phone}` : ''}</>,
         time: relativeTime(lead.createdAt),
@@ -205,9 +198,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         id: `rdv-soon-${rdv.id}`,
         group: 'DANS 10 MIN',
         icon: 'calendar',
-        iconBg: 'bg-or-tint',
-        iconColor: 'text-or-dark',
-        borderColor: 'border-l-or',
+        ...NOTIF_COLOR.rdvImminent,
         title: 'RDV dans moins de 10 minutes',
         body: <>Prépare le RDV {rdv.locationType} prévu à {formatDateTime(rdv.scheduledAt)}.</>,
         time: formatDateTime(rdv.scheduledAt),
@@ -243,9 +234,7 @@ export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvRes
         id: `commercial-rdv-soon-${rdv.id}`,
         group: 'DANS 10 MIN',
         icon: 'calendar',
-        iconBg: 'bg-or-tint',
-        iconColor: 'text-or-dark',
-        borderColor: 'border-l-or',
+        ...NOTIF_COLOR.rdvImminent,
         title: 'RDV Planifié imminent',
         body: <><strong>{name}</strong>{details}</>,
         time: formatDateTime(rdv.scheduledAt),
@@ -258,9 +247,7 @@ export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvRes
         id: `commercial-rdv-upcoming-${rdv.id}`,
         group: 'RDV À VENIR',
         icon: 'calendar',
-        iconBg: 'bg-or-tint',
-        iconColor: 'text-or-dark',
-        borderColor: 'border-l-or',
+        ...NOTIF_COLOR.rdvUpcoming,
         title: 'RDV Planifié',
         body: <><strong>{name}</strong>{details}</>,
         time: formatDateTime(rdv.scheduledAt),
@@ -275,9 +262,7 @@ export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvRes
         id: `commercial-rdv-new-${rdv.id}`,
         group: 'NOUVEAUX RDV COMMERCIAL',
         icon: 'calendar',
-        iconBg: 'bg-success-tint',
-        iconColor: 'text-success',
-        borderColor: 'border-l-success',
+        ...NOTIF_COLOR.rdvNew,
         title: 'Nouveau RDV attribué',
         body: <><strong>{name}</strong>{details}</>,
         time: relativeTime(rdv.createdAt),
@@ -290,9 +275,7 @@ export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvRes
         id: `commercial-pipeline-${rdv.id}`,
         group: 'PIPELINE COMMERCIAL',
         icon: 'chart',
-        iconBg: pipelineIconBg(stage),
-        iconColor: pipelineIconColor(stage),
-        borderColor: pipelineBorder(stage),
+        ...pipelineColors(stage),
         title: stage,
         body: <><strong>{name}</strong>{details}</>,
         time: relativeTime(rdv.updatedAt),
@@ -327,22 +310,88 @@ function commercialStageLabel(rdv: RdvResponse, lead?: LeadResponse): string {
   return 'RDV Planifié'
 }
 
-function pipelineIconBg(stage: string): string {
-  if (stage.includes('Signé')) return 'bg-success-tint'
-  if (stage.includes('Perdu') || stage.includes('Annulé') || stage.includes('No-Show')) return 'bg-cuivre-tint'
-  return 'bg-or-tint'
-}
+// Palette de couleurs par type de notification — toutes différentes pour scan visuel rapide.
+const NOTIF_COLOR = {
+  // Rappel en retard → ROUGE alarmant
+  late: {
+    iconBg: 'bg-[#FEE2E2]',
+    iconColor: 'text-[#DC2626]',
+    borderColor: 'border-l-[#DC2626]',
+  },
+  // Rappel dans 10 min → AMBRE urgent
+  imminent: {
+    iconBg: 'bg-[#FEF3C7]',
+    iconColor: 'text-[#D97706]',
+    borderColor: 'border-l-[#D97706]',
+  },
+  // Rappel programmé → BLEU CIEL info
+  planned: {
+    iconBg: 'bg-[#E0F2FE]',
+    iconColor: 'text-[#0284C7]',
+    borderColor: 'border-l-[#0284C7]',
+  },
+  // Nouveau lead → ÉMERAUDE positif
+  newLead: {
+    iconBg: 'bg-[#D1FAE5]',
+    iconColor: 'text-[#059669]',
+    borderColor: 'border-l-[#059669]',
+  },
+  // RDV imminent (<10 min) → VIOLET attention
+  rdvImminent: {
+    iconBg: 'bg-[#EDE9FE]',
+    iconColor: 'text-[#7C3AED]',
+    borderColor: 'border-l-[#7C3AED]',
+  },
+  // RDV à venir (<24h) → INDIGO calme
+  rdvUpcoming: {
+    iconBg: 'bg-[#E0E7FF]',
+    iconColor: 'text-[#4F46E5]',
+    borderColor: 'border-l-[#4F46E5]',
+  },
+  // Nouveau RDV attribué → TEAL nouveau positif
+  rdvNew: {
+    iconBg: 'bg-[#CCFBF1]',
+    iconColor: 'text-[#0D9488]',
+    borderColor: 'border-l-[#0D9488]',
+  },
+  // Pipeline mouvement neutre (par défaut) → INDIGO doux
+  pipelineNeutral: {
+    iconBg: 'bg-[#E0E7FF]',
+    iconColor: 'text-[#4F46E5]',
+    borderColor: 'border-l-[#4F46E5]',
+  },
+  // Pipeline → Signé / vente conclue → ÉMERAUDE foncé win
+  pipelineWin: {
+    iconBg: 'bg-[#D1FAE5]',
+    iconColor: 'text-[#047857]',
+    borderColor: 'border-l-[#047857]',
+  },
+  // Pipeline → Perdu / Annulé / No-Show → ROUGE perte
+  pipelineLoss: {
+    iconBg: 'bg-[#FEE2E2]',
+    iconColor: 'text-[#DC2626]',
+    borderColor: 'border-l-[#DC2626]',
+  },
+  // Pipeline → Reprogrammé → AMBRE attention
+  pipelineReschedule: {
+    iconBg: 'bg-[#FEF3C7]',
+    iconColor: 'text-[#D97706]',
+    borderColor: 'border-l-[#D97706]',
+  },
+  // Pipeline → Pas qualifié → ROSE déception
+  pipelineUnqualified: {
+    iconBg: 'bg-[#FFE4E6]',
+    iconColor: 'text-[#E11D48]',
+    borderColor: 'border-l-[#E11D48]',
+  },
+} as const
 
-function pipelineIconColor(stage: string): string {
-  if (stage.includes('Signé')) return 'text-success'
-  if (stage.includes('Perdu') || stage.includes('Annulé') || stage.includes('No-Show')) return 'text-cuivre'
-  return 'text-or-dark'
-}
-
-function pipelineBorder(stage: string): string {
-  if (stage.includes('Signé')) return 'border-l-success'
-  if (stage.includes('Perdu') || stage.includes('Annulé') || stage.includes('No-Show')) return 'border-l-cuivre'
-  return 'border-l-or'
+function pipelineColors(stage: string): { iconBg: string; iconColor: string; borderColor: string } {
+  if (stage.includes('Signé')) return NOTIF_COLOR.pipelineWin
+  if (stage.includes('Perdu') || stage.includes('Annulé') || stage.includes('No-Show')) return NOTIF_COLOR.pipelineLoss
+  if (stage.includes('Reprogrammé')) return NOTIF_COLOR.pipelineReschedule
+  if (stage.includes('Pas Qualifié')) return NOTIF_COLOR.pipelineUnqualified
+  return NOTIF_COLOR.pipelineNeutral
 }
 
 function dedupeNotifications(notifs: Notif[]): Notif[] {
@@ -450,30 +499,23 @@ function reminderKey(lead: LeadResponse): string {
   return `${lead.id}:${lead.nextCallbackAt ?? ''}`
 }
 
+// Feed chronologique (style Facebook) : tri par événement le plus récent en premier,
+// indépendamment du groupe. Les notifs urgentes (now/soon) gardent une légère priorité
+// pour ne pas se faire enterrer par des arrivées récentes moins critiques.
 function notificationFeedRank(a: Notif, b: Notif): number {
-  const aGroup = notificationGroupRank(a.group)
-  const bGroup = notificationGroupRank(b.group)
-  if (aGroup !== bGroup) return aGroup - bGroup
-
+  const aPrio = urgencyPriority(a.urgency)
+  const bPrio = urgencyPriority(b.urgency)
+  if (aPrio !== bPrio) return aPrio - bPrio
   const aTime = a.sortAt ?? 0
   const bTime = b.sortAt ?? 0
-  if (aTime !== bTime) {
-    if (a.group === 'DANS 10 MIN' || a.group === 'RAPPELS PROGRAMMÉS' || a.group === 'RDV À VENIR') return aTime - bTime
-    if (a.group === 'RAPPELS EN RETARD') return bTime - aTime
-    return bTime - aTime
-  }
+  if (aTime !== bTime) return bTime - aTime
   return a.title.localeCompare(b.title, 'fr')
 }
 
-function notificationGroupRank(group: string): number {
-  if (group === 'DANS 10 MIN') return 0
-  if (group === 'RAPPELS PROGRAMMÉS') return 1
-  if (group === 'RAPPELS EN RETARD') return 2
-  if (group === 'RDV À VENIR') return 3
-  if (group === 'NOUVEAUX RDV COMMERCIAL') return 4
-  if (group === 'PIPELINE COMMERCIAL') return 5
-  if (group === 'NOUVEAUX LEADS') return 6
-  return 7
+function urgencyPriority(urgency: Notif['urgency']): number {
+  if (urgency === 'now') return 0
+  if (urgency === 'soon') return 1
+  return 2
 }
 
 function supportsBrowserNotifications(): boolean {

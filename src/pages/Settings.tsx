@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import type { FormEvent } from 'react'
-import { Navigate } from 'react-router-dom'
+import type { FormEvent, MouseEvent } from 'react'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Icon } from '../components/Icon'
@@ -42,9 +42,55 @@ const TEAM_BY_ROLE: Record<Role, NonNullable<Team>> = {
 export function Settings() {
   const role = useAuth((s) => s.user?.role)
 
-  if (role !== 'admin') return <Navigate to="/overview" replace />
+  if (role === 'admin') return <SettingsAdmin />
+  if (role === 'commercial') return <SettingsCommercial />
+  return <Navigate to="/overview" replace />
+}
 
-  return <SettingsAdmin />
+function SettingsCommercial() {
+  const { data: users, loading, error, refetch: refetchUsers } = useUsers()
+  const setters = (users ?? []).filter((u) => u.role === 'setter')
+
+  return (
+    <AppShell blobsKey="admin">
+      <Topbar eyebrow="ÉQUIPE" title="Setters de l'équipe" />
+      <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
+        <div className="glass-card p-6">
+          <h3 className="font-bold mb-4">Setters</h3>
+          {loading ? (
+            <LoadingBlock label="Chargement…" />
+          ) : error ? (
+            <div className="py-8 text-center text-rouille text-sm">Erreur : {error}</div>
+          ) : setters.length === 0 ? (
+            <div className="py-8 text-center text-faint text-sm">Aucun setter.</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-or-tint">
+                <tr className="text-left eyebrow">
+                  <Th>NOM</Th>
+                  <Th>EMAIL</Th>
+                  <Th>STATUT</Th>
+                  <Th className="text-right">ACTIONS</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {setters.map((m) => (
+                  <UserRow
+                    key={m.id}
+                    user={m}
+                    ghlUsers={[]}
+                    onMapped={refetchUsers}
+                    onEdit={() => {}}
+                    compact
+                  />
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </main>
+    </AppShell>
+  )
 }
 
 function SettingsAdmin() {
@@ -258,9 +304,27 @@ function Field({ label, value, onChange, type = 'text', required = false }: { la
   )
 }
 
-function UserRow({ user, ghlUsers, onMapped, onEdit }: { user: UserResponse; ghlUsers: Array<{ id: string; name: string; email: string | null }>; onMapped: () => void; onEdit: (user: UserResponse) => void }) {
+function UserRow({ user, ghlUsers, onMapped, onEdit, compact = false }: { user: UserResponse; ghlUsers: Array<{ id: string; name: string; email: string | null }>; onMapped: () => void; onEdit: (user: UserResponse) => void; compact?: boolean }) {
   const inits = userInitials(user.name)
   const [savingGhl, setSavingGhl] = useState(false)
+  const navigate = useNavigate()
+  const realUser = useAuth((s) => s.realUser)
+  const viewAs = useAuth((s) => s.viewAs)
+
+  const profileHref = user.role === 'commercial'
+    ? `/team/commerciaux/${user.id}`
+    : user.role === 'setter'
+      ? `/team/setters/${user.id}`
+      : null
+
+  // Impersonation : admin → tout user ; commercial → setter (en lecture seule).
+  // Le back rejette les écritures (POST/PATCH/DELETE) en mode commercial→setter
+  // via l'AuthGuard, donc même si l'UI affichait un bouton edit par erreur,
+  // l'écriture serait bloquée 403 côté serveur.
+  const canImpersonate = !!realUser
+    && realUser.id !== user.id
+    && user.active
+    && (realUser.role === 'admin' || (realUser.role === 'commercial' && user.role === 'setter'))
 
   async function saveGhlUser(ghlUserId: string) {
     setSavingGhl(true)
@@ -272,29 +336,76 @@ function UserRow({ user, ghlUsers, onMapped, onEdit }: { user: UserResponse; ghl
     }
   }
 
+  function stop(e: MouseEvent) {
+    e.stopPropagation()
+  }
+
+  function openProfile() {
+    if (profileHref) navigate(profileHref)
+  }
+
   return (
-    <tr className="border-b border-line-soft last:border-0 hover:bg-white/40">
-      <td className="px-3 py-3"><div className="flex items-center gap-3"><div className={`w-7 h-7 rounded-full ${ROLE_TINT[user.role]} flex items-center justify-center text-[10px] font-bold`}>{inits}</div><span className="font-semibold">{user.name}</span></div></td>
-      <td className="px-3 py-3 text-muted">{user.email}</td>
-      <td className="px-3 py-3"><span className={`status-badge ${ROLE_BADGE[user.role]}`}>{ROLE_LABEL[user.role]}</span></td>
-      <td className="px-3 py-3"><span className={`status-badge ${user.active ? 'bg-success-tint text-success' : 'bg-rouille-tint text-rouille'}`}>{user.active ? 'Actif' : 'Inactif'}</span></td>
+    <tr
+      className={`border-b border-line-soft last:border-0 hover:bg-white/40 ${profileHref ? 'cursor-pointer' : ''}`}
+      onClick={profileHref ? openProfile : undefined}
+    >
       <td className="px-3 py-3">
-        {user.role === 'commercial' ? (
-          <div className="flex items-center gap-2">
-            <select
-              value={user.ghlUserId ?? ''}
-              disabled={savingGhl}
-              onChange={(e) => void saveGhlUser(e.target.value)}
-              className="max-w-[220px] rounded-xl border border-line bg-white/70 px-3 py-2 text-xs outline-none focus:border-or disabled:opacity-60"
-            >
-              <option value="">Non relié</option>
-              {ghlUsers.map((g) => <option key={g.id} value={g.id}>{g.name}{g.email ? ` · ${g.email}` : ''}</option>)}
-            </select>
-            <span className={`status-badge ${user.ghlUserId ? 'bg-success-tint text-success' : 'bg-muted/10 text-muted'}`}>{user.ghlUserId ? 'Relié' : 'À relier'}</span>
-          </div>
-        ) : <span className="text-xs text-faint">—</span>}
+        <div className="flex items-center gap-3">
+          {user.image ? (
+            <img src={user.image} alt={user.name} className="w-7 h-7 rounded-full object-cover border border-line-soft" />
+          ) : (
+            <div className={`w-7 h-7 rounded-full ${ROLE_TINT[user.role]} flex items-center justify-center text-[10px] font-bold`}>{inits}</div>
+          )}
+          <span className="font-semibold">{user.name}</span>
+        </div>
       </td>
-      <td className="px-3 py-3 text-right"><button onClick={() => onEdit(user)} className="text-xs text-muted hover:text-text font-semibold">Modifier</button></td>
+      <td className="px-3 py-3 text-muted">{user.email}</td>
+      {!compact && <td className="px-3 py-3"><span className={`status-badge ${ROLE_BADGE[user.role]}`}>{ROLE_LABEL[user.role]}</span></td>}
+      <td className="px-3 py-3"><span className={`status-badge ${user.active ? 'bg-success-tint text-success' : 'bg-rouille-tint text-rouille'}`}>{user.active ? 'Actif' : 'Inactif'}</span></td>
+      {!compact && (
+        <td className="px-3 py-3" onClick={stop}>
+          {user.role === 'commercial' ? (
+            <div className="flex items-center gap-2">
+              <select
+                value={user.ghlUserId ?? ''}
+                disabled={savingGhl}
+                onChange={(e) => void saveGhlUser(e.target.value)}
+                className="max-w-[220px] rounded-xl border border-line bg-white/70 px-3 py-2 text-xs outline-none focus:border-or disabled:opacity-60"
+              >
+                <option value="">Non relié</option>
+                {ghlUsers.map((g) => <option key={g.id} value={g.id}>{g.name}{g.email ? ` · ${g.email}` : ''}</option>)}
+              </select>
+              <span className={`status-badge ${user.ghlUserId ? 'bg-success-tint text-success' : 'bg-muted/10 text-muted'}`}>{user.ghlUserId ? 'Relié' : 'À relier'}</span>
+            </div>
+          ) : <span className="text-xs text-faint">—</span>}
+        </td>
+      )}
+      <td className="px-3 py-3" onClick={stop}>
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={canImpersonate ? () => { viewAs(user); navigate('/overview') } : undefined}
+            disabled={!canImpersonate}
+            className="inline-flex items-center justify-center w-[88px] h-8 rounded-lg border border-or/30 text-xs font-semibold text-or hover:bg-or-tint hover:border-or transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          >
+            Explorer
+          </button>
+          <button
+            onClick={profileHref ? openProfile : undefined}
+            disabled={!profileHref}
+            className="inline-flex items-center justify-center w-[88px] h-8 rounded-lg border border-line text-xs font-semibold text-muted hover:text-text hover:border-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-muted disabled:hover:border-line"
+          >
+            Voir profil
+          </button>
+          {!compact && (
+            <button
+              onClick={() => onEdit(user)}
+              className="inline-flex items-center justify-center w-[88px] h-8 rounded-lg border border-line text-xs font-semibold text-muted hover:text-text hover:border-muted transition-colors"
+            >
+              Modifier
+            </button>
+          )}
+        </div>
+      </td>
     </tr>
   )
 }
@@ -317,7 +428,7 @@ function userInitials(name: string): string {
 }
 
 function CountCard({ value, label, highlight = false }: { value: string; label: string; highlight?: boolean }) {
-  return <div className="glass-card p-6 flex flex-col items-center text-center"><div className={`text-[32px] font-bold ${highlight ? 'text-or' : ''}`}>{value}</div><div className="eyebrow mt-1">{label}</div></div>
+  return <div className="glass-card p-3 flex flex-col items-center text-center"><div className={`text-[20px] font-bold ${highlight ? 'text-or' : ''}`}>{value}</div><div className="eyebrow text-[10px] mt-0.5">{label}</div></div>
 }
 
 function Th({ children, className = '' }: { children: React.ReactNode; className?: string }) {

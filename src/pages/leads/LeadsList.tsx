@@ -4,12 +4,12 @@ import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon, type IconName } from '../../components/Icon'
 import { EmptyState } from '../../components/EmptyState'
-import { LeadFiltersBar } from '../../components/LeadFiltersBar'
 import { LoadingBlock } from '../../components/Spinner'
 import { useAuth } from '../../lib/auth'
 import { deleteLead, useLeadStats, useLeads, useLeadsProgressive, useUsers, useStartCall } from '../../lib/hooks'
 import { useLeadSidebar } from '../../lib/leadSidebar'
-import { DEFAULT_LEAD_FILTERS, applyLeadFilters, type LeadListFilters } from '../../lib/leadFilters'
+import { emitLeadDeselect, emitLeadSelect, useLeadLocks, type LeadLockInfo } from '../../lib/realtime'
+import { DEFAULT_LEAD_FILTERS, applyLeadFilters, leadFiltersActive, type LeadLastCallFilter, type LeadListFilters } from '../../lib/leadFilters'
 import {
   STATUS_BADGE,
   STATUS_LABEL,
@@ -17,6 +17,8 @@ import {
   fullName,
   initials,
   type LeadResponse,
+  type LeadStatus,
+  type Role,
   type UserResponse,
 } from '../../lib/types'
 
@@ -110,24 +112,56 @@ export function LeadsList() {
   return <LeadsSetter />
 }
 
+type CommercialFilter = 'all' | 'en_attente' | 'signe' | 'non_qualifie'
+
+const COMMERCIAL_STATUS_FILTERS: Array<{ key: CommercialFilter; label: string; icon: IconName }> = [
+  { key: 'all', label: 'Tous mes leads', icon: 'inbox' },
+  { key: 'en_attente', label: 'En attente', icon: 'clock' },
+  { key: 'signe', label: 'Signés', icon: 'check' },
+  { key: 'non_qualifie', label: 'Non qualifiés', icon: 'x' },
+]
+
 // ----- F3 Commercial -----
 function LeadsCommercial() {
   const me = useAuth((s) => s.user)
   const selectedId = useLeadSidebar((s) => s.selectedLeadId)
   const selectLead = useLeadSidebar((s) => s.selectLead)
   const { data, loading, error } = useLeads(me?.id ? { assignedToId: me.id, limit: 250 } : { limit: 250 })
-  const leads = data ?? []
+  const allLeads = data ?? []
+  const [filter, setFilter] = useState<CommercialFilter>('all')
+
+  const counts = useMemo(() => ({
+    all: allLeads.length,
+    en_attente: allLeads.filter((l) => commercialBucketForLead(l) === 'en_attente').length,
+    signe: allLeads.filter((l) => commercialBucketForLead(l) === 'signe').length,
+    non_qualifie: allLeads.filter((l) => commercialBucketForLead(l) === 'non_qualifie').length,
+  }), [allLeads])
+
+  const leads = useMemo(() => {
+    if (filter === 'all') return allLeads
+    return allLeads.filter((l) => commercialBucketForLead(l) === filter)
+  }, [allLeads, filter])
 
   return (
     <AppShell>
       <Topbar eyebrow="LEADS / COMMERCIAL" title="Mes leads" />
-      <main className="p-4 sm:p-6 md:p-8 flex-grow overflow-auto">
+      <div className="flex flex-grow overflow-hidden">
+        <CommercialRail filter={filter} onFilter={setFilter} counts={counts} />
+        <main className="p-4 sm:p-6 md:p-8 flex-grow overflow-auto">
+          {/* Mobile fallback : pills filter when rail is hidden */}
+          <div className="lg:hidden flex items-center gap-2 flex-wrap mb-4">
+            {COMMERCIAL_STATUS_FILTERS.map((item) => (
+              <FilterPill key={item.key} active={filter === item.key} onClick={() => setFilter(item.key)}>
+                {item.label} ({counts[item.key]})
+              </FilterPill>
+            ))}
+          </div>
         {loading && leads.length === 0 ? (
           <LoadingBlock label="Chargement des leads…" />
         ) : error ? (
           <div className="py-16 text-center text-rouille text-sm">Erreur : {error}</div>
         ) : leads.length === 0 ? (
-          <EmptyState icon="users" title="Aucun lead assigné" description="Aucun lead n'est rattaché à ton compte commercial pour le moment." />
+          <EmptyState icon="users" title={allLeads.length === 0 ? 'Aucun lead assigné' : 'Aucun lead pour ce filtre'} description={allLeads.length === 0 ? "Aucun lead n'est rattaché à ton compte commercial pour le moment." : 'Essaie un autre filtre de statut.'} />
         ) : (
           <>
             {/* Mobile : vue carte (md:hidden) */}
@@ -144,7 +178,7 @@ function LeadsCommercial() {
                       <p className="font-black text-sm text-text truncate">{fullName(lead)}</p>
                       <p className="mt-0.5 text-[11px] text-muted truncate">{lead.phone ?? '—'}</p>
                     </div>
-                    <span className={`status-badge ${statusBadgeForLead(lead)} shrink-0`}>{statusLabelForLead(lead)}</span>
+                    <span className={`status-badge ${statusBadgeForLead(lead, 'commercial')} shrink-0`}>{statusLabelForLead(lead, 'commercial')}</span>
                   </div>
                   <div className="mt-2 space-y-1 text-[11px] text-muted">
                     {addressFull(lead) !== '—' && (
@@ -185,7 +219,7 @@ function LeadsCommercial() {
                       title="Cliquer pour ouvrir le débriefing commercial"
                     >
                       <Td><span className="font-semibold truncate" title={fullName(lead)}>{fullName(lead)}</span></Td>
-                      <Td><span className={`status-badge ${statusBadgeForLead(lead)}`}>{statusLabelForLead(lead)}</span></Td>
+                      <Td><span className={`status-badge ${statusBadgeForLead(lead, 'commercial')}`}>{statusLabelForLead(lead, 'commercial')}</span></Td>
                       <Td className="text-muted truncate" title={lead.phone ?? undefined}>{lead.phone ?? '—'}</Td>
                       <Td className="text-muted truncate" title={addressFull(lead)}>{addressFull(lead)}</Td>
                       <Td className="text-muted truncate" title={rdvLabel(lead)}>{rdvLabel(lead)}</Td>
@@ -196,8 +230,79 @@ function LeadsCommercial() {
             </div>
           </>
         )}
-      </main>
+        </main>
+      </div>
     </AppShell>
+  )
+}
+
+const COMMERCIAL_RAIL_COLLAPSED_KEY = 'ecoi.leads.commercial.rail.collapsed'
+
+function CommercialRail({ filter, onFilter, counts }: { filter: CommercialFilter; onFilter: (f: CommercialFilter) => void; counts: Record<CommercialFilter, number> }) {
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem(COMMERCIAL_RAIL_COLLAPSED_KEY) === '1'
+  })
+
+  function toggle() {
+    setCollapsed((prev) => {
+      const next = !prev
+      try { window.localStorage.setItem(COMMERCIAL_RAIL_COLLAPSED_KEY, next ? '1' : '0') } catch { /* ignore */ }
+      return next
+    })
+  }
+
+  return (
+    <aside className={`leads-rail hidden lg:flex ${collapsed ? 'is-collapsed' : ''}`}>
+      <div className="leads-rail-toggle-row">
+        <button
+          type="button"
+          onClick={toggle}
+          className="leads-rail-toggle"
+          title={collapsed ? 'Étendre les filtres' : 'Réduire les filtres'}
+          aria-label={collapsed ? 'Étendre les filtres' : 'Réduire les filtres'}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            {collapsed ? <polyline points="9 6 15 12 9 18" /> : <polyline points="15 6 9 12 15 18" />}
+          </svg>
+        </button>
+      </div>
+
+      {collapsed ? (
+        <div className="leads-rail-collapsed-group">
+          {COMMERCIAL_STATUS_FILTERS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => onFilter(item.key)}
+              className={`leads-rail-mini ${filter === item.key ? 'is-active' : ''}`}
+              title={`${item.label} (${counts[item.key]})`}
+              aria-label={item.label}
+            >
+              <Icon name={item.icon} size={16} strokeWidth={1.75} />
+              {counts[item.key] > 0 && (
+                <span className="leads-rail-mini-dot">{counts[item.key] > 99 ? '99+' : counts[item.key]}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <CollapsibleSection storageKey="ecoi.leads.commercial.section.statut" label="Statut">
+          {COMMERCIAL_STATUS_FILTERS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => onFilter(item.key)}
+              className={`sb-item leads-rail-item ${filter === item.key ? 'is-active' : ''}`}
+            >
+              <span className="sb-item-icon"><Icon name={item.icon} size={15} strokeWidth={1.75} /></span>
+              <span className="sb-item-label">{item.label}</span>
+              <span className="leads-rail-count">{counts[item.key]}</span>
+            </button>
+          ))}
+        </CollapsibleSection>
+      )}
+    </aside>
   )
 }
 
@@ -226,12 +331,24 @@ const SETTER_STATUS_FILTERS: { key: SetterFilter; label: string; icon: IconName;
 // ----- F5 Setter -----
 
 function LeadsSetter() {
+  const me = useAuth((s) => s.user)
   const [filter, setFilter] = useState<SetterFilter>('nouveau')
   const [missingFilter, setMissingFilter] = useState<SetterMissingFilter>('all')
   const [searchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('search') ?? '')
   const selectedId = useLeadSidebar((s) => s.selectedLeadId)
   const selectLead = useLeadSidebar((s) => s.selectLead)
+  const leadLocks = useLeadLocks()
+
+  // Émet "lead:select" quand un lead devient sélectionné, "lead:deselect"
+  // quand on passe à un autre / quitte / unmount. Permet aux autres setters
+  // de voir une marque grisée sur le lead en cours.
+  useEffect(() => {
+    if (!selectedId || !me?.id) return
+    const setterName = me.name || me.email || 'Setter'
+    emitLeadSelect(selectedId, me.id, setterName)
+    return () => emitLeadDeselect(selectedId)
+  }, [selectedId, me?.id, me?.name, me?.email])
   const [openComment, setOpenComment] = useState<{ leadName: string; comment: string } | null>(null)
   const [visibleColumns, setVisibleColumns] = useColumnVisibility('ecoi.leads.setter.columns.v5', SETTER_COLUMNS)
   const startCall = useStartCall()
@@ -310,38 +427,16 @@ function LeadsSetter() {
         title="Suivi leads"
       />
       <div className="flex flex-grow overflow-hidden">
-        <aside className="leads-rail hidden lg:flex">
-          <nav className="sb-section" aria-label="Statut">
-            <div className="sb-section-label">Statut</div>
-            {SETTER_STATUS_FILTERS.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => setFilter(item.key)}
-                className={`sb-item leads-rail-item ${filter === item.key ? 'is-active' : ''}`}
-              >
-                <span className="sb-item-icon"><Icon name={item.icon} size={15} strokeWidth={1.75} /></span>
-                <span className="sb-item-label">{item.label}</span>
-                <span className="leads-rail-count">{counts[item.countKey]}</span>
-              </button>
-            ))}
-          </nav>
-          <nav className="sb-section" aria-label="Données">
-            <div className="sb-section-label">Données</div>
-            {SETTER_MISSING_FILTERS.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => setMissingFilter(item.key)}
-                className={`sb-item leads-rail-item ${missingFilter === item.key ? 'is-active' : ''}`}
-              >
-                <span className="sb-item-icon"><Icon name={item.icon} size={15} strokeWidth={1.75} /></span>
-                <span className="sb-item-label">{item.label}</span>
-                <span className="leads-rail-count">{missingCounts[item.key]}</span>
-              </button>
-            ))}
-          </nav>
-        </aside>
+        <LeadsRail
+          statusFilters={SETTER_STATUS_FILTERS}
+          missingFilters={SETTER_MISSING_FILTERS}
+          filter={filter}
+          missingFilter={missingFilter}
+          onFilter={setFilter}
+          onMissingFilter={setMissingFilter}
+          counts={counts}
+          missingCounts={missingCounts}
+        />
 
         <div className="flex-grow flex flex-col min-w-0">
           <div className="px-8 pt-4 flex items-center gap-3 flex-shrink-0 flex-wrap">
@@ -411,18 +506,24 @@ function LeadsSetter() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((l) => (
-                      <tr
-                        key={l.id}
-                        data-lead-id={l.id}
-                        className={`border-b border-line-soft last:border-0 cursor-pointer transition-colors ${
-                          selected?.id === l.id ? 'bg-or/20 shadow-[inset_4px_0_0_var(--color-or-dark)] !text-text' : 'hover:bg-white/40'
-                        }`}
-                        onClick={() => selectLead(l.id)}
-                      >
-                        {orderedColumns.map((column) => renderSetterCell(column.key, l, userMap, startCall, setOpenComment))}
-                      </tr>
-                    ))}
+                    {filtered.map((l) => {
+                      const lockedBy = leadLocks.get(l.id)
+                      const lockedByOther = lockedBy && lockedBy.setterId !== me?.id
+                      return (
+                        <tr
+                          key={l.id}
+                          data-lead-id={l.id}
+                          className={`border-b border-line-soft last:border-0 cursor-pointer transition-colors ${
+                            selected?.id === l.id ? 'bg-or/20 shadow-[inset_4px_0_0_var(--color-or-dark)] !text-text' :
+                            lockedByOther ? 'bg-line-soft/40 opacity-60' : 'hover:bg-white/40'
+                          }`}
+                          title={lockedByOther ? `${lockedBy!.setterName} est en train de bosser sur ce lead` : undefined}
+                          onClick={() => selectLead(l.id)}
+                        >
+                          {orderedColumns.map((column) => renderSetterCell(column.key, l, userMap, startCall, setOpenComment, lockedByOther ? lockedBy : null))}
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
                 </div>
@@ -581,45 +682,48 @@ function LeadsAdmin() {
         eyebrow="LEADS / ADMIN — TOUTE L'ÉQUIPE"
         title="Tous les leads"
       />
-      <div className="px-8 pt-4 flex items-center gap-3 flex-shrink-0">
-        <select
-          value={setterFilter}
-          onChange={(e) => setSetterFilter(e.target.value)}
-          className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm"
-        >
-          <option value="all">Tous les setters</option>
-          {setters.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
-        <select
-          value={commercialFilter}
-          onChange={(e) => setCommercialFilter(e.target.value)}
-          className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm"
-        >
-          <option value="all">Tous les commerciaux</option>
-          {commerciaux.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-        <LeadFiltersBar filters={leadFilters} onChange={setLeadFilters} total={(leads ?? []).length} filtered={filtered.length} />
-        <ColumnVisibilityMenu columns={ADMIN_COLUMNS} visible={visibleColumns} onChange={setVisibleColumns} />
-        {(loading || backgroundLoading) && leads.length > 0 && <span className="text-xs text-faint">{backgroundLoading ? `100 premiers affichés, hydratation du reste (${leads.length.toLocaleString('fr-FR')} visibles)…` : 'Actualisation…'}</span>}
-        <div className="ml-auto flex items-center gap-2">
-          {selectedFilteredIds.length > 0 && (
-            <button
-              type="button"
-              onClick={handleDeleteSelectedLeads}
-              disabled={Boolean(deletingLeadId)}
-              className="inline-flex items-center gap-2 rounded-[14px] border border-rouille/30 bg-rouille-tint px-4 py-2 text-sm font-bold text-rouille hover:bg-rouille hover:text-white disabled:opacity-60"
-            >
-              <Icon name="trash" size={14} />
-              {deletingLeadId === 'bulk' ? 'Suppression…' : `Supprimer (${selectedFilteredIds.length})`}
-            </button>
-          )}
-          <button onClick={() => exportCsv(filtered)} className="btn-primary px-4 py-2 rounded-[14px] text-sm">Exporter CSV</button>
-        </div>
-      </div>
+      <div className="flex flex-grow overflow-hidden">
+        <AdminLeadsRail
+          leads={leads}
+          leadFilters={leadFilters}
+          setLeadFilters={setLeadFilters}
+          setterFilter={setterFilter}
+          setSetterFilter={setSetterFilter}
+          commercialFilter={commercialFilter}
+          setCommercialFilter={setCommercialFilter}
+          setters={setters}
+          commerciaux={commerciaux}
+        />
+
+        <div className="flex-grow flex flex-col min-w-0">
+          <div className="px-8 pt-4 flex items-center gap-3 flex-shrink-0 flex-wrap">
+            <span className="text-xs text-faint font-semibold">{filtered.length}/{(leads ?? []).length}</span>
+            {leadFiltersActive(leadFilters) || setterFilter !== 'all' || commercialFilter !== 'all' ? (
+              <button
+                type="button"
+                onClick={() => { setLeadFilters(DEFAULT_LEAD_FILTERS); setSetterFilter('all'); setCommercialFilter('all') }}
+                className="text-xs font-bold text-muted underline underline-offset-4"
+              >
+                Réinitialiser les filtres
+              </button>
+            ) : null}
+            <ColumnVisibilityMenu columns={ADMIN_COLUMNS} visible={visibleColumns} onChange={setVisibleColumns} />
+            {(loading || backgroundLoading) && leads.length > 0 && <span className="text-xs text-faint">{backgroundLoading ? `100 premiers affichés, hydratation du reste (${leads.length.toLocaleString('fr-FR')} visibles)…` : 'Actualisation…'}</span>}
+            <div className="ml-auto flex items-center gap-2">
+              {selectedFilteredIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleDeleteSelectedLeads}
+                  disabled={Boolean(deletingLeadId)}
+                  className="inline-flex items-center gap-2 rounded-[14px] border border-rouille/30 bg-rouille-tint px-4 py-2 text-sm font-bold text-rouille hover:bg-rouille hover:text-white disabled:opacity-60"
+                >
+                  <Icon name="trash" size={14} />
+                  {deletingLeadId === 'bulk' ? 'Suppression…' : `Supprimer (${selectedFilteredIds.length})`}
+                </button>
+              )}
+              <button onClick={() => exportCsv(filtered)} className="btn-primary px-4 py-2 rounded-[14px] text-sm">Exporter CSV</button>
+            </div>
+          </div>
 
       <main className="p-8 pt-3 flex-grow flex flex-col min-h-0 overflow-hidden">
         <div className="grid grid-cols-4 gap-3 mb-3 flex-shrink-0">
@@ -685,6 +789,8 @@ function LeadsAdmin() {
           </div>
         )}
       </main>
+        </div>
+      </div>
       <CommentModal data={openComment} onClose={() => setOpenComment(null)} />
     </AppShell>
   )
@@ -769,12 +875,51 @@ function phoneSearchVariants(value: string): string[] {
   return Array.from(variants).filter((variant) => variant.length >= 4)
 }
 
-function statusLabelForLead(lead: LeadResponse): string {
+// Statut côté setter = 3 buckets visibles :
+//   "Qualifié" (job du setter terminé)
+//   "Non qualifié" (lead clôturé en perte)
+//   "En attente" (pas encore qualifié — nouveau, relance, à rappeler, pas de réponse)
+function setterBucketForLead(lead: LeadResponse): 'qualifie' | 'non_qualifie' | 'en_attente' {
+  if (lead.status === 'perdu' || lead.status === 'pas_qualifie') return 'non_qualifie'
+  if (lead.status === 'qualifie' || lead.status === 'rdv_pris' || lead.status === 'rdv_honore' || lead.status === 'signe') return 'qualifie'
+  return 'en_attente'
+}
+
+// Statut côté commercial = 3 buckets visibles :
+//   "Signé" (vente conclue)
+//   "Non qualifié" (RDV finalement perdu)
+//   "En attente" (RDV passé au commercial mais pas encore signé)
+function commercialBucketForLead(lead: LeadResponse): 'signe' | 'non_qualifie' | 'en_attente' {
+  if (lead.status === 'signe') return 'signe'
+  if (lead.status === 'perdu' || lead.status === 'pas_qualifie') return 'non_qualifie'
+  return 'en_attente'
+}
+
+const BUCKET_LABEL: Record<'qualifie' | 'signe' | 'non_qualifie' | 'en_attente', string> = {
+  qualifie: 'Qualifié',
+  signe: 'Signé',
+  non_qualifie: 'Non qualifié',
+  en_attente: 'En attente',
+}
+
+const BUCKET_BADGE: Record<'qualifie' | 'signe' | 'non_qualifie' | 'en_attente', string> = {
+  qualifie: 'bg-success-tint text-success',
+  signe: 'bg-success-tint text-success',
+  non_qualifie: 'bg-rouille-tint text-rouille',
+  en_attente: 'bg-cuivre-tint text-cuivre',
+}
+
+function statusLabelForLead(lead: LeadResponse, role?: Role | null): string {
+  if (role === 'setter') return BUCKET_LABEL[setterBucketForLead(lead)]
+  if (role === 'commercial') return BUCKET_LABEL[commercialBucketForLead(lead)]
+  // admin (et défaut) : labels granulaires, juste perdu/pas_qualifie coalescés
   if (lead.status === 'perdu' || lead.status === 'pas_qualifie') return 'Non qualifié'
   return STATUS_LABEL[lead.status]
 }
 
-function statusBadgeForLead(lead: LeadResponse): string {
+function statusBadgeForLead(lead: LeadResponse, role?: Role | null): string {
+  if (role === 'setter') return BUCKET_BADGE[setterBucketForLead(lead)]
+  if (role === 'commercial') return BUCKET_BADGE[commercialBucketForLead(lead)]
   if (lead.status === 'perdu' || lead.status === 'pas_qualifie') return 'bg-rouille-tint text-rouille'
   return STATUS_BADGE[lead.status]
 }
@@ -905,6 +1050,7 @@ function renderSetterCell(
   userMap: Map<string, UserResponse>,
   startCall: ReturnType<typeof useStartCall>,
   setOpenComment: (data: { leadName: string; comment: string }) => void,
+  lockedBy?: LeadLockInfo | null,
 ) {
   switch (key) {
     case 'nom':
@@ -912,8 +1058,21 @@ function renderSetterCell(
         <Td key={key} className="lead-sticky-cell">
           <div className="flex items-center gap-3 min-w-0">
             <LeadCommentButton comment={lead.latestCallComment} leadName={fullName(lead)} onOpen={setOpenComment} />
-            <div className="w-8 h-8 rounded-full bg-cuivre-tint flex flex-shrink-0 items-center justify-center text-xs font-bold">{initials(lead)}</div>
-            <span className="font-semibold truncate" title={fullName(lead)}>{fullName(lead)}</span>
+            <div className="lead-avatar" data-shade={leadAvatarShade(lead.id)}>{initials(lead)}</div>
+            <div className="min-w-0 flex flex-col leading-tight">
+              <span className="lead-name-text" title={fullName(lead)}>{fullName(lead)}</span>
+              {lockedBy ? (
+                <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-cuivre flex items-center gap-1" title={`${lockedBy.setterName} est en cours sur ce lead`}>
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cuivre opacity-60" />
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-cuivre" />
+                  </span>
+                  {lockedBy.setterName} en cours
+                </span>
+              ) : lead.city && (
+                <span className="lead-name-sub" title={lead.city}>{lead.city}</span>
+              )}
+            </div>
           </div>
         </Td>
       )
@@ -924,7 +1083,7 @@ function renderSetterCell(
     case 'setter': return <Td key={key}><SetterChips lead={lead} userMap={userMap} /></Td>
     case 'jaugeAppels': return <Td key={key}><DailyCallGauge count={lead.callsToday ?? 0} /></Td>
     case 'dernierAppel': return <Td key={key} className="text-faint">{lastCallDateTime(lead.latestCallAt ?? lead.lastContactAt)}</Td>
-    case 'statut': return <Td key={key}><span className={`status-badge ${statusBadgeForLead(lead)}`}>{statusLabelForLead(lead)}</span></Td>
+    case 'statut': return <Td key={key}><span className={`status-badge ${statusBadgeForLead(lead, 'setter')}`}>{statusLabelForLead(lead, 'setter')}</span></Td>
     case 'appelDate': return <Td key={key} className="text-faint">{lastCallDateTime(lead.latestCallAt ?? lead.lastContactAt)}</Td>
     case 'jauge': return <Td key={key}><ElevenDayGauge jours={lead.joursRelance} /></Td>
     case 'logAppel': return <Td key={key}><LeadCommentButton comment={lead.latestCallComment} leadName={fullName(lead)} onOpen={setOpenComment} /></Td>
@@ -1056,6 +1215,13 @@ function renderAdminCell(
 
 // ===== Atoms =====
 
+// Index 0–5 stable dérivé de l'id pour varier les nuances d'avatar lead (look Linear/Notion).
+function leadAvatarShade(id: string): number {
+  let hash = 0
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0
+  return Math.abs(hash) % 6
+}
+
 function FilterPill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
@@ -1064,6 +1230,378 @@ function FilterPill({ active, onClick, children }: { active: boolean; onClick: (
     >
       {children}
     </button>
+  )
+}
+
+const LEADS_RAIL_COLLAPSED_KEY = 'ecoi.leads.setter.rail.collapsed'
+
+function LeadsRail({
+  statusFilters,
+  missingFilters,
+  filter,
+  missingFilter,
+  onFilter,
+  onMissingFilter,
+  counts,
+  missingCounts,
+}: {
+  statusFilters: typeof SETTER_STATUS_FILTERS
+  missingFilters: typeof SETTER_MISSING_FILTERS
+  filter: SetterFilter
+  missingFilter: SetterMissingFilter
+  onFilter: (f: SetterFilter) => void
+  onMissingFilter: (f: SetterMissingFilter) => void
+  counts: Record<string, number>
+  missingCounts: Record<SetterMissingFilter, number>
+}) {
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem(LEADS_RAIL_COLLAPSED_KEY) === '1'
+  })
+
+  function toggle() {
+    setCollapsed((prev) => {
+      const next = !prev
+      try { window.localStorage.setItem(LEADS_RAIL_COLLAPSED_KEY, next ? '1' : '0') } catch { /* ignore */ }
+      return next
+    })
+  }
+
+  return (
+    <aside className={`leads-rail hidden lg:flex ${collapsed ? 'is-collapsed' : ''}`}>
+      <div className="leads-rail-toggle-row">
+        <button
+          type="button"
+          onClick={toggle}
+          className="leads-rail-toggle"
+          title={collapsed ? 'Étendre les filtres' : 'Réduire les filtres'}
+          aria-label={collapsed ? 'Étendre les filtres' : 'Réduire les filtres'}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            {collapsed ? <polyline points="9 6 15 12 9 18" /> : <polyline points="15 6 9 12 15 18" />}
+          </svg>
+        </button>
+      </div>
+
+      {collapsed ? (
+        <>
+          <div className="leads-rail-collapsed-group">
+            {statusFilters.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => onFilter(item.key)}
+                className={`leads-rail-mini ${filter === item.key ? 'is-active' : ''}`}
+                title={`${item.label} (${counts[item.countKey]})`}
+                aria-label={item.label}
+              >
+                <Icon name={item.icon} size={16} strokeWidth={1.75} />
+                {counts[item.countKey] > 0 && (
+                  <span className="leads-rail-mini-dot">{counts[item.countKey] > 99 ? '99+' : counts[item.countKey]}</span>
+                )}
+              </button>
+            ))}
+          </div>
+          <div className="leads-rail-collapsed-sep" />
+          <div className="leads-rail-collapsed-group">
+            {missingFilters.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => onMissingFilter(item.key)}
+                className={`leads-rail-mini ${missingFilter === item.key ? 'is-active' : ''}`}
+                title={`${item.label} (${missingCounts[item.key]})`}
+                aria-label={item.label}
+              >
+                <Icon name={item.icon} size={16} strokeWidth={1.75} />
+                {missingCounts[item.key] > 0 && (
+                  <span className="leads-rail-mini-dot">{missingCounts[item.key] > 99 ? '99+' : missingCounts[item.key]}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          <CollapsibleSection storageKey="ecoi.leads.setter.section.statut" label="Statut">
+            {statusFilters.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => onFilter(item.key)}
+                className={`sb-item leads-rail-item ${filter === item.key ? 'is-active' : ''}`}
+              >
+                <span className="sb-item-icon"><Icon name={item.icon} size={15} strokeWidth={1.75} /></span>
+                <span className="sb-item-label">{item.label}</span>
+                <span className="leads-rail-count">{counts[item.countKey]}</span>
+              </button>
+            ))}
+          </CollapsibleSection>
+          <CollapsibleSection storageKey="ecoi.leads.setter.section.donnees" label="Données">
+            {missingFilters.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => onMissingFilter(item.key)}
+                className={`sb-item leads-rail-item ${missingFilter === item.key ? 'is-active' : ''}`}
+              >
+                <span className="sb-item-icon"><Icon name={item.icon} size={15} strokeWidth={1.75} /></span>
+                <span className="sb-item-label">{item.label}</span>
+                <span className="leads-rail-count">{missingCounts[item.key]}</span>
+              </button>
+            ))}
+          </CollapsibleSection>
+        </>
+      )}
+    </aside>
+  )
+}
+
+const ADMIN_RAIL_COLLAPSED_KEY = 'ecoi.leads.admin.rail.collapsed'
+
+const ADMIN_STATUS_FILTERS: Array<{ key: 'all' | LeadStatus; label: string; icon: IconName }> = [
+  { key: 'all', label: 'Tous statuts', icon: 'inbox' },
+  { key: 'nouveau', label: 'Nouveau', icon: 'sparkles' },
+  { key: 'qualifie', label: 'Qualifié', icon: 'check' },
+  { key: 'a_rappeler', label: 'À rappeler', icon: 'phone' },
+  { key: 'pas_de_reponse', label: 'Sans réponse', icon: 'phone-off' },
+  { key: 'pas_qualifie', label: 'Non qualifié', icon: 'x' },
+  { key: 'rdv_honore', label: 'RDV honoré', icon: 'calendar' },
+  { key: 'signe', label: 'Signé', icon: 'check' },
+  { key: 'perdu', label: 'Perdu', icon: 'x' },
+  { key: 'relance', label: 'Relance', icon: 'clock' },
+]
+
+const ADMIN_LAST_CALL_FILTERS: Array<{ key: LeadLastCallFilter; label: string; icon: IconName }> = [
+  { key: 'all', label: 'Tous', icon: 'inbox' },
+  { key: 'never', label: 'Jamais appelé', icon: 'phone-off' },
+  { key: 'today', label: "Aujourd'hui", icon: 'phone' },
+  { key: 'older_3d', label: '≥ 3 jours sans appel', icon: 'clock' },
+  { key: 'older_7d', label: '≥ 7 jours sans appel', icon: 'clock' },
+]
+
+function AdminLeadsRail({
+  leads,
+  leadFilters,
+  setLeadFilters,
+  setterFilter,
+  setSetterFilter,
+  commercialFilter,
+  setCommercialFilter,
+  setters,
+  commerciaux,
+}: {
+  leads: LeadResponse[]
+  leadFilters: LeadListFilters
+  setLeadFilters: (f: LeadListFilters) => void
+  setterFilter: string
+  setSetterFilter: (id: string) => void
+  commercialFilter: string
+  setCommercialFilter: (id: string) => void
+  setters: UserResponse[]
+  commerciaux: UserResponse[]
+}) {
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem(ADMIN_RAIL_COLLAPSED_KEY) === '1'
+  })
+
+  function toggle() {
+    setCollapsed((prev) => {
+      const next = !prev
+      try { window.localStorage.setItem(ADMIN_RAIL_COLLAPSED_KEY, next ? '1' : '0') } catch { /* ignore */ }
+      return next
+    })
+  }
+
+  const statusCounts = useMemo(() => {
+    const c: Record<string, number> = { all: leads.length }
+    for (const lead of leads) c[lead.status] = (c[lead.status] ?? 0) + 1
+    return c
+  }, [leads])
+
+  const lastCallCounts = useMemo(() => ({
+    all: leads.length,
+    never: leads.filter((l) => l.joursSansContact === null).length,
+    today: leads.filter((l) => l.joursSansContact === 0).length,
+    older_3d: leads.filter((l) => l.joursSansContact !== null && l.joursSansContact >= 3).length,
+    older_7d: leads.filter((l) => l.joursSansContact !== null && l.joursSansContact >= 7).length,
+  } as Record<LeadLastCallFilter, number>), [leads])
+
+  const setterCounts = useMemo(() => {
+    const c: Record<string, number> = { all: leads.length }
+    for (const lead of leads) if (lead.setterId) c[lead.setterId] = (c[lead.setterId] ?? 0) + 1
+    return c
+  }, [leads])
+
+  const commercialCounts = useMemo(() => {
+    const c: Record<string, number> = { all: leads.length }
+    for (const lead of leads) if (lead.assignedToId) c[lead.assignedToId] = (c[lead.assignedToId] ?? 0) + 1
+    return c
+  }, [leads])
+
+  if (collapsed) {
+    return (
+      <aside className="leads-rail hidden lg:flex is-collapsed">
+        <div className="leads-rail-toggle-row">
+          <button type="button" onClick={toggle} className="leads-rail-toggle" title="Étendre les filtres" aria-label="Étendre">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 6 15 12 9 18" /></svg>
+          </button>
+        </div>
+        <div className="leads-rail-collapsed-group">
+          <button type="button" onClick={() => setLeadFilters({ ...leadFilters, onlyNew: !leadFilters.onlyNew })} className={`leads-rail-mini ${leadFilters.onlyNew ? 'is-active' : ''}`} title="Nouveaux uniquement">
+            <Icon name="sparkles" size={16} strokeWidth={1.75} />
+          </button>
+        </div>
+        <div className="leads-rail-collapsed-sep" />
+        <div className="leads-rail-collapsed-group">
+          {ADMIN_STATUS_FILTERS.slice(0, 6).map((item) => (
+            <button key={item.key} type="button" onClick={() => setLeadFilters({ ...leadFilters, status: item.key })} className={`leads-rail-mini ${leadFilters.status === item.key ? 'is-active' : ''}`} title={`${item.label} (${statusCounts[item.key] ?? 0})`} aria-label={item.label}>
+              <Icon name={item.icon} size={16} strokeWidth={1.75} />
+              {(statusCounts[item.key] ?? 0) > 0 && <span className="leads-rail-mini-dot">{(statusCounts[item.key] ?? 0) > 99 ? '99+' : (statusCounts[item.key] ?? 0)}</span>}
+            </button>
+          ))}
+        </div>
+      </aside>
+    )
+  }
+
+  return (
+    <aside className="leads-rail hidden lg:flex">
+      <div className="leads-rail-toggle-row">
+        <button type="button" onClick={toggle} className="leads-rail-toggle" title="Réduire les filtres" aria-label="Réduire">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 6 9 12 15 18" /></svg>
+        </button>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setLeadFilters({ ...leadFilters, onlyNew: !leadFilters.onlyNew })}
+        className={`sb-item leads-rail-item ${leadFilters.onlyNew ? 'is-active' : ''}`}
+      >
+        <span className="sb-item-icon"><Icon name="sparkles" size={15} strokeWidth={1.75} /></span>
+        <span className="sb-item-label">Nouveaux uniquement</span>
+        <span className="leads-rail-count">{leads.filter((l) => l.status === 'nouveau').length}</span>
+      </button>
+
+      <CollapsibleSection storageKey="ecoi.leads.admin.section.statut" label="Statut">
+        {ADMIN_STATUS_FILTERS.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => setLeadFilters({ ...leadFilters, status: item.key })}
+            className={`sb-item leads-rail-item ${leadFilters.status === item.key ? 'is-active' : ''}`}
+          >
+            <span className="sb-item-icon"><Icon name={item.icon} size={15} strokeWidth={1.75} /></span>
+            <span className="sb-item-label">{item.label}</span>
+            <span className="leads-rail-count">{statusCounts[item.key] ?? 0}</span>
+          </button>
+        ))}
+      </CollapsibleSection>
+
+      <CollapsibleSection storageKey="ecoi.leads.admin.section.derniercall" label="Dernier appel">
+        {ADMIN_LAST_CALL_FILTERS.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => setLeadFilters({ ...leadFilters, lastCall: item.key })}
+            className={`sb-item leads-rail-item ${leadFilters.lastCall === item.key ? 'is-active' : ''}`}
+          >
+            <span className="sb-item-icon"><Icon name={item.icon} size={15} strokeWidth={1.75} /></span>
+            <span className="sb-item-label">{item.label}</span>
+            <span className="leads-rail-count">{lastCallCounts[item.key] ?? 0}</span>
+          </button>
+        ))}
+      </CollapsibleSection>
+
+      <CollapsibleSection storageKey="ecoi.leads.admin.section.setter" label="Setter">
+        <button
+          type="button"
+          onClick={() => setSetterFilter('all')}
+          className={`sb-item leads-rail-item ${setterFilter === 'all' ? 'is-active' : ''}`}
+        >
+          <span className="sb-item-icon"><Icon name="users" size={15} strokeWidth={1.75} /></span>
+          <span className="sb-item-label">Tous</span>
+          <span className="leads-rail-count">{setterCounts.all ?? 0}</span>
+        </button>
+        {setters.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => setSetterFilter(s.id)}
+            className={`sb-item leads-rail-item ${setterFilter === s.id ? 'is-active' : ''}`}
+          >
+            <span className="sb-item-icon"><Icon name="users" size={15} strokeWidth={1.75} /></span>
+            <span className="sb-item-label">{s.name}</span>
+            <span className="leads-rail-count">{setterCounts[s.id] ?? 0}</span>
+          </button>
+        ))}
+      </CollapsibleSection>
+
+      <CollapsibleSection storageKey="ecoi.leads.admin.section.commercial" label="Commercial">
+        <button
+          type="button"
+          onClick={() => setCommercialFilter('all')}
+          className={`sb-item leads-rail-item ${commercialFilter === 'all' ? 'is-active' : ''}`}
+        >
+          <span className="sb-item-icon"><Icon name="users" size={15} strokeWidth={1.75} /></span>
+          <span className="sb-item-label">Tous</span>
+          <span className="leads-rail-count">{commercialCounts.all ?? 0}</span>
+        </button>
+        {commerciaux.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => setCommercialFilter(c.id)}
+            className={`sb-item leads-rail-item ${commercialFilter === c.id ? 'is-active' : ''}`}
+          >
+            <span className="sb-item-icon"><Icon name="users" size={15} strokeWidth={1.75} /></span>
+            <span className="sb-item-label">{c.name}</span>
+            <span className="leads-rail-count">{commercialCounts[c.id] ?? 0}</span>
+          </button>
+        ))}
+      </CollapsibleSection>
+    </aside>
+  )
+}
+
+function CollapsibleSection({
+  storageKey,
+  label,
+  children,
+}: {
+  storageKey: string
+  label: string
+  children: React.ReactNode
+}) {
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem(storageKey) === '1'
+  })
+
+  function toggle() {
+    setCollapsed((prev) => {
+      const next = !prev
+      try { window.localStorage.setItem(storageKey, next ? '1' : '0') } catch { /* ignore */ }
+      return next
+    })
+  }
+
+  return (
+    <nav className={`sb-section sb-section-collapsible ${collapsed ? 'is-collapsed' : ''}`} aria-label={label}>
+      <button
+        type="button"
+        onClick={toggle}
+        className="sb-section-header"
+        aria-expanded={!collapsed}
+      >
+        <span className="sb-section-label">{label}</span>
+        <svg className="sb-section-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      {!collapsed && <div className="sb-section-body">{children}</div>}
+    </nav>
   )
 }
 
@@ -1126,23 +1664,42 @@ function useRememberedLeadTableScroll(
 function useColumnVisibility(storageKey: string, columns: ColumnChoice[], defaultVisibleKeys?: ColumnKey[]) {
   const allKeys = columns.map((c) => c.key)
   const defaultKeys = (defaultVisibleKeys?.filter((key) => allKeys.includes(key)) ?? allKeys)
-  const [visible, setVisible] = useState<ColumnKey[]>(() => {
-    if (typeof window === 'undefined') return defaultKeys
-    const raw = window.localStorage.getItem(storageKey)
-    if (!raw) return defaultKeys
+  // Scope par user-id pour que chaque utilisateur garde SES propres prefs colonnes,
+  // même si plusieurs comptes utilisent le même navigateur.
+  const userId = useAuth((s) => s.user?.id ?? '')
+  const scopedKey = userId ? `${storageKey}:${userId}` : storageKey
+
+  const readStored = (key: string): ColumnKey[] | null => {
+    if (typeof window === 'undefined') return null
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return null
     try {
       const parsed = JSON.parse(raw)
-      if (!Array.isArray(parsed)) return defaultKeys
-      const valid = parsed.filter((key): key is string => allKeys.includes(String(key)))
-      return valid.length ? valid : defaultKeys
+      if (!Array.isArray(parsed)) return null
+      const valid = parsed.filter((k): k is string => allKeys.includes(String(k)))
+      return valid.length ? valid : null
     } catch {
-      return defaultKeys
+      return null
     }
+  }
+
+  const [visible, setVisible] = useState<ColumnKey[]>(() => {
+    // 1) Essaye la clé scopée user, 2) fallback ancien storage non-scopé (one-shot migration)
+    return readStored(scopedKey) ?? readStored(storageKey) ?? defaultKeys
   })
 
+  // Si l'utilisateur change (login d'un autre compte, sortie de view-as), recharger ses prefs.
   useEffect(() => {
-    window.localStorage.setItem(storageKey, JSON.stringify(visible))
-  }, [storageKey, visible])
+    const stored = readStored(scopedKey)
+    if (stored) setVisible(stored)
+    else if (userId) setVisible(defaultKeys)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopedKey])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(scopedKey, JSON.stringify(visible))
+  }, [scopedKey, visible])
 
   return [visible, setVisible] as const
 }
@@ -1200,8 +1757,8 @@ function ColumnVisibilityMenu({
         Colonnes
         <span className="rounded-full bg-or-tint px-2 py-0.5 text-[11px] text-or-dark">{visible.length}/{columns.length}</span>
       </summary>
-      <div className="absolute right-0 mt-3 w-[340px] max-h-[520px] overflow-hidden rounded-[22px] border border-white/70 bg-white/70 shadow-2xl shadow-text/10 backdrop-blur-2xl z-40">
-        <div className="border-b border-white/50 bg-white/35 p-4">
+      <div className="absolute right-0 mt-3 w-[340px] max-h-[min(80vh,640px)] flex flex-col overflow-hidden rounded-[22px] border border-white/70 bg-white/70 shadow-2xl shadow-text/10 backdrop-blur-2xl z-40">
+        <div className="shrink-0 border-b border-white/50 bg-white/35 p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="eyebrow">Vue du tableau</p>
@@ -1224,7 +1781,7 @@ function ColumnVisibilityMenu({
             <button type="button" className="rounded-full border border-line px-3 py-1.5 text-xs font-bold text-muted hover:text-text" onClick={showEssentials}>Essentiel</button>
           </div>
         </div>
-        <div className="max-h-[330px] overflow-auto bg-white/20 p-2 backdrop-blur-xl">
+        <div className="flex-1 min-h-0 overflow-y-auto bg-white/20 p-2 pb-3 backdrop-blur-xl">
           {filteredColumns.map((column) => {
             const checked = visible.includes(column.key)
             const locked = lockedKeys.has(column.key)

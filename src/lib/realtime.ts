@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import { io, type Socket } from 'socket.io-client'
 import { API_BASE } from './api'
 
@@ -7,6 +7,51 @@ export const REALTIME_REFRESH_EVENT = 'ecoi:realtime-refresh'
 export type RealtimeRefreshPayload = {
   paths: string[]
   event: string
+}
+
+export type LeadLockInfo = {
+  leadId: string
+  setterId: string
+  setterName: string
+  since: string
+}
+
+// Store globale (singleton) des verrous "un setter regarde ce lead". Le socket
+// alimente cette map et un useSyncExternalStore expose la valeur aux composants.
+const leadLocksStore = new Map<string, LeadLockInfo>()
+const leadLockSubscribers = new Set<() => void>()
+let leadLocksSnapshot: ReadonlyMap<string, LeadLockInfo> = leadLocksStore
+
+function notifyLeadLockChange() {
+  // Crée une nouvelle référence pour que React re-rend (useSyncExternalStore
+  // compare par identité).
+  leadLocksSnapshot = new Map(leadLocksStore)
+  leadLockSubscribers.forEach((fn) => fn())
+}
+
+export function useLeadLocks(): ReadonlyMap<string, LeadLockInfo> {
+  return useSyncExternalStore(
+    (listener) => {
+      leadLockSubscribers.add(listener)
+      return () => leadLockSubscribers.delete(listener)
+    },
+    () => leadLocksSnapshot,
+    () => leadLocksSnapshot,
+  )
+}
+
+let activeSocket: Socket | null = null
+
+// Émet le verrou côté setter : on s'auto-déclare comme "je regarde ce lead".
+export function emitLeadSelect(leadId: string, setterId: string, setterName: string) {
+  if (!leadId || !setterId) return
+  activeSocket?.emit('lead:select', { leadId, setterId, setterName })
+}
+
+// Libère le verrou : on a quitté ce lead (close drawer, change lead, navigate).
+export function emitLeadDeselect(leadId: string) {
+  if (!leadId) return
+  activeSocket?.emit('lead:deselect', { leadId })
 }
 
 function realtimeBaseUrl(): string {
@@ -34,6 +79,7 @@ export function useRealtimeSocket() {
       withCredentials: true,
       transports: ['websocket', 'polling'],
     })
+    activeSocket = socket
 
     socket.on('lead:new', () => notifyRealtimeRefresh({ event: 'lead:new', paths: ['/leads', '/analytics/summary', '/analytics/funnel'] }))
     socket.on('lead:updated', () => notifyRealtimeRefresh({ event: 'lead:updated', paths: ['/leads', '/analytics/summary', '/analytics/funnel'] }))
@@ -50,8 +96,27 @@ export function useRealtimeSocket() {
       }
     })
 
+    // Presence locks setter — un autre setter regarde ce lead
+    socket.on('lead:locks-snapshot', (locks: LeadLockInfo[]) => {
+      leadLocksStore.clear()
+      for (const l of locks) leadLocksStore.set(l.leadId, l)
+      notifyLeadLockChange()
+    })
+    socket.on('lead:locked', (lock: LeadLockInfo) => {
+      leadLocksStore.set(lock.leadId, lock)
+      notifyLeadLockChange()
+    })
+    socket.on('lead:unlocked', (payload: { leadId: string }) => {
+      if (leadLocksStore.delete(payload.leadId)) notifyLeadLockChange()
+    })
+
     return () => {
       socket.disconnect()
+      activeSocket = null
+      if (leadLocksStore.size > 0) {
+        leadLocksStore.clear()
+        notifyLeadLockChange()
+      }
     }
   }, [])
 }

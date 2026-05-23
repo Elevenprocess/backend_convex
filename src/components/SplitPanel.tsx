@@ -16,8 +16,7 @@ import {
   type UserResponse,
 } from '../lib/types'
 import { useCall, type CallState } from '../lib/call'
-import { useCallLogs, useRdvList, createCallLog, createRdv, updateLead, copyText, useGhlCalendarConfig, useGhlFreeSlots, createGhlAppointment, syncLeadGhlCalendarEvents, type GhlCalendarEvent } from '../lib/hooks'
-import { notifyClipboardCopied } from '../lib/clipboardToast'
+import { useCallLogs, useRdvList, createCallLog, createRdv, updateLead, useGhlCalendarConfig, useGhlFreeSlots, createGhlAppointment, syncLeadGhlCalendarEvents, type GhlCalendarEvent } from '../lib/hooks'
 
 type Tab = { id: string; label: string; icon?: IconName }
 
@@ -81,14 +80,6 @@ export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, chi
   const callState = useCall()
   const isActiveCallForThisLead = callState.active && callState.leadId === lead.id
 
-  const cleanPhone = cleanField(lead.phone)
-  async function copyPhoneOnly() {
-    if (!cleanPhone) return
-    await copyText(cleanPhone)
-    notifyClipboardCopied()
-    setActive('notes')
-  }
-
   const commercialName = lead.latestRdvCommercialId
     ? userMap?.get(lead.latestRdvCommercialId)?.name ?? null
     : null
@@ -131,17 +122,6 @@ export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, chi
         )}
       </div>
 
-      {/* Action bar */}
-      <div className="p-4 border-b border-line-soft flex gap-2">
-        <ActionBtn
-          icon="phone"
-          onClick={() => { copyPhoneOnly().catch((err) => alert(err instanceof Error ? err.message : 'Impossible de copier le numéro')) }}
-          primary
-          disabled={!cleanPhone}
-        />
-        <ActionBtn icon="calendar" onClick={() => setActive('rdv')} />
-        <ActionBtn icon="edit" onClick={() => setActive('notes')} />
-      </div>
       {/* Tabs */}
       <div className="flex items-center justify-center gap-2 px-5 py-3 bg-or-tint border-b border-line-soft overflow-x-auto">
         {tabs.map((t) => (
@@ -186,20 +166,6 @@ function iconForTab(id: string): IconName {
     case 'notes': return 'edit'
     default: return 'grid'
   }
-}
-
-function ActionBtn({ icon, onClick, primary = false, disabled = false }: { icon: IconName; onClick?: () => void; primary?: boolean; disabled?: boolean }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-        primary ? 'bg-or text-white hover:opacity-90' : 'bg-or-tint text-text hover:bg-cream'
-      }`}
-    >
-      <Icon name={icon} size={16} />
-    </button>
-  )
 }
 
 function DefaultPanelContent({

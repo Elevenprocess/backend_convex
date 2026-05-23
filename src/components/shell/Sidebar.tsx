@@ -33,6 +33,7 @@ const SECTIONS: Section[] = [
     id: 'admin',
     label: 'Administration',
     items: [
+      { to: '/settings', icon: 'users', label: 'Équipe', roles: ['commercial'] },
       { to: '/settings', icon: 'shield', label: 'Paramètres', roles: ['admin'] },
     ],
   },
@@ -133,7 +134,7 @@ export function Sidebar() {
         title="Electro Concept OI"
       >
         <span className="sb-workspace-logo">
-          <img src="/67ed1a46379294966df28f87.png" alt="" />
+          <img src="/favicon.png" alt="" />
         </span>
         <span className="sb-workspace-meta">
           <span className="sb-workspace-name">Electro Concept</span>

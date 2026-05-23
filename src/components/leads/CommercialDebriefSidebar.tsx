@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type TextareaHTMLAttributes } from 'react'
 import { Icon } from '../Icon'
+import { useIsReadOnlyImpersonation } from '../../lib/auth'
 import {
   STATUS_BADGE,
   STATUS_LABEL,
@@ -46,6 +47,7 @@ type FormState = {
   outcome: Outcome
   nonSaleReason: NonSaleReason | ''
   nonSaleSubReason: string
+  nonSaleComment: string
   objection: Objection | ''
   acceptanceFactors: AcceptanceFactor[]
   notes: string
@@ -53,6 +55,20 @@ type FormState = {
   signedAt: string
   kits: string
   paymentMethod: FinancingType | ''
+}
+
+type DebriefStatus = 'en_attente' | 'signe' | 'non_qualifie'
+
+const DEBRIEF_STATUS_META: Record<DebriefStatus, { label: string; badgeClass: string; dotClass: string }> = {
+  en_attente: { label: 'En attente', badgeClass: 'bg-cream text-muted border-line', dotClass: 'bg-muted/50' },
+  signe: { label: 'Signé', badgeClass: 'bg-success-tint text-success border-success/30', dotClass: 'bg-success' },
+  non_qualifie: { label: 'Non qualifié', badgeClass: 'bg-rouille-tint text-rouille border-rouille/30', dotClass: 'bg-rouille' },
+}
+
+function resolveDebriefStatus(result: RdvResult | null | undefined): DebriefStatus {
+  if (!result) return 'en_attente'
+  if (result === 'signe') return 'signe'
+  return 'non_qualifie'
 }
 
 const NON_SALE_REASONS: { value: NonSaleReason; label: string; hint: string }[] = [
@@ -149,6 +165,7 @@ const EMPTY_FORM: FormState = {
   outcome: '',
   nonSaleReason: '',
   nonSaleSubReason: '',
+  nonSaleComment: '',
   objection: '',
   acceptanceFactors: [],
   notes: '',
@@ -160,6 +177,7 @@ const EMPTY_FORM: FormState = {
 
 const NON_SALE_REASON_SEPARATOR = ' — '
 const ACCEPTANCE_PREFIX_RE = /^\[Acceptation:\s*([^\]]+)\]\s*\n?/
+const PRECISION_PREFIX_RE = /^\[Précision:\s*([\s\S]*?)\]\s*(?:\n|$)/
 
 export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '' }: Props) {
   const { data: rdvs, loading: rdvsLoading, refetch: refetchRdvs } = useRdvList({ leadId: lead.id })
@@ -170,6 +188,7 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<string | null>(null)
+  const readOnly = useIsReadOnlyImpersonation()
 
   useEffect(() => {
     if (!selectedRdvId && sortedRdvs[0]) setSelectedRdvId(sortedRdvs[0].id)
@@ -245,6 +264,15 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
         <h2 className="mt-1 pr-8 text-base font-black text-text">{fullName(lead)}</h2>
         <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
           <span className={`status-badge ${STATUS_BADGE[lead.status] ?? 'bg-cream text-muted'}`}>{STATUS_LABEL[lead.status] ?? lead.status}</span>
+          {selectedRdv && (() => {
+            const meta = DEBRIEF_STATUS_META[resolveDebriefStatus(selectedRdv.result)]
+            return (
+              <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 font-black uppercase tracking-[0.08em] ${meta.badgeClass}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${meta.dotClass}`} />
+                {meta.label}
+              </span>
+            )
+          })()}
           {lead.phone && <span className="rounded-full bg-cream px-2 py-1 font-bold text-muted">{lead.phone}</span>}
         </div>
       </header>
@@ -298,6 +326,20 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
                       ))}
                     </div>
                     <p className="mt-1 text-[10px] text-faint">Optionnel — aide les stats à identifier les vrais blocages.</p>
+                  </FieldGroup>
+                )}
+
+                {form.nonSaleReason && (
+                  <FieldGroup label={`Commentaire — pourquoi ${labelFromNonSaleReason(form.nonSaleReason as NonSaleReason).toLowerCase()} ?`}>
+                    <AutoGrowTextarea
+                      value={form.nonSaleComment}
+                      onChange={(e) => update({ nonSaleComment: e.target.value })}
+                      minRows={2}
+                      maxRows={8}
+                      placeholder={nonSaleCommentPlaceholder(form.nonSaleReason as NonSaleReason)}
+                      className="w-full rounded-xl border border-line bg-cream px-3 py-2 text-sm leading-relaxed text-text outline-none focus:border-or"
+                    />
+                    <p className="mt-1 text-[10px] text-faint">Facultatif mais enregistré — explique le contexte de ton choix.</p>
                   </FieldGroup>
                 )}
 
@@ -417,7 +459,7 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
         <footer className="sticky bottom-0 z-10 border-t border-line bg-white/95 px-5 py-3 backdrop-blur-2xl">
           <button
             type="button"
-            disabled={!canSubmit || saving}
+            disabled={!canSubmit || saving || readOnly}
             onClick={handleSubmit}
             className={`w-full rounded-2xl px-4 py-3 text-sm font-black tracking-wide transition ${
               canSubmit && !saving
@@ -425,7 +467,7 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
                 : 'bg-cream-darker text-faint cursor-not-allowed'
             }`}
           >
-            {saving ? 'Enregistrement…' : 'Enregistrer le débrief'}
+            {saving ? 'Enregistrement…' : readOnly ? 'Lecture seule — impersonation' : 'Enregistrer le débrief'}
           </button>
           {!canSubmit && form.outcome === '' && (
             <p className="mt-2 text-center text-[11px] text-faint">Choisis un résultat pour activer l'enregistrement</p>
@@ -577,11 +619,12 @@ function sortRdvsForDebrief(rdvs: RdvResponse[]): RdvResponse[] {
 function rdvToForm(rdv: RdvResponse): FormState {
   const outcome: Outcome = rdv.result == null ? '' : rdv.result === 'signe' ? 'vente' : 'non_vente'
   const { mainLabel, subLabel } = splitNonSaleReason(rdv.nonSaleReason)
-  const { acceptance, freeText } = splitNotes(rdv.notes)
+  const { acceptance, precision, freeText } = splitNotes(rdv.notes)
   return {
     outcome,
     nonSaleReason: nonSaleReasonFromLabel(mainLabel),
     nonSaleSubReason: subLabel,
+    nonSaleComment: precision,
     objection: objectionFromLabel(rdv.objections),
     acceptanceFactors: acceptance.map(acceptanceFactorFromLabel).filter((f): f is AcceptanceFactor => f !== ''),
     notes: freeText,
@@ -643,22 +686,50 @@ function splitNonSaleReason(raw: string | null): { mainLabel: string; subLabel: 
 }
 
 function composeNotes(form: FormState): string | null {
-  const free = form.notes.trim()
+  const parts: string[] = []
   if (form.outcome === 'vente' && form.acceptanceFactors.length > 0) {
     const labels = form.acceptanceFactors.map(labelFromAcceptance).join(' | ')
-    const prefix = `[Acceptation: ${labels}]`
-    return free ? `${prefix}\n${free}` : prefix
+    parts.push(`[Acceptation: ${labels}]`)
   }
-  return free || null
+  if (form.outcome === 'non_vente') {
+    const comment = form.nonSaleComment.trim()
+    if (comment) parts.push(`[Précision: ${comment}]`)
+  }
+  const free = form.notes.trim()
+  if (free) parts.push(free)
+  return parts.length ? parts.join('\n') : null
 }
 
-function splitNotes(raw: string | null): { acceptance: string[]; freeText: string } {
-  if (!raw) return { acceptance: [], freeText: '' }
-  const match = raw.match(ACCEPTANCE_PREFIX_RE)
-  if (!match) return { acceptance: [], freeText: raw }
-  const acceptance = match[1].split('|').map((s) => s.trim()).filter(Boolean)
-  const freeText = raw.replace(ACCEPTANCE_PREFIX_RE, '').trim()
-  return { acceptance, freeText }
+function splitNotes(raw: string | null): { acceptance: string[]; precision: string; freeText: string } {
+  if (!raw) return { acceptance: [], precision: '', freeText: '' }
+  let rest = raw
+  let acceptance: string[] = []
+  let precision = ''
+
+  const accMatch = rest.match(ACCEPTANCE_PREFIX_RE)
+  if (accMatch) {
+    acceptance = accMatch[1].split('|').map((s) => s.trim()).filter(Boolean)
+    rest = rest.replace(ACCEPTANCE_PREFIX_RE, '')
+  }
+  const precMatch = rest.match(PRECISION_PREFIX_RE)
+  if (precMatch) {
+    precision = precMatch[1].trim()
+    rest = rest.replace(PRECISION_PREFIX_RE, '')
+  }
+
+  return { acceptance, precision, freeText: rest.trim() }
+}
+
+function nonSaleCommentPlaceholder(reason: NonSaleReason): string {
+  switch (reason) {
+    case 'suivi_prevu': return 'Pourquoi le prospect veut un suivi ? Contexte, date, décideur attendu…'
+    case 'non_qualifie': return 'Qu\'est-ce qui rend ce contact non qualifié ? Budget, toit, décideur, statut…'
+    case 'no_show': return 'Contexte du no-show, raison invoquée si connue, prochain contact prévu…'
+    case 'contact_annule': return 'Motif d\'annulation par le contact, suite prévue ou non…'
+    case 'annulation_administrative': return 'Détail de l\'annulation côté ECOI, impact, action de récup prévue…'
+    case 'pas_interesse': return 'Pourquoi le prospect n\'est pas intéressé ? Objection principale, ressenti…'
+    default: return 'Contexte, décision, prochaines étapes…'
+  }
 }
 
 function notesPlaceholder(form: FormState): string {

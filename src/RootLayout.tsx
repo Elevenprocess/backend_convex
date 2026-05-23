@@ -25,6 +25,7 @@ export function RootLayout() {
   return (
     <>
       <ScrollReset />
+      <ViewAsBanner />
       <Outlet />
       <PersistentLeadSidebar />
       <PersistentCallSidebar />
@@ -33,6 +34,60 @@ export function RootLayout() {
       <SetterCallbackToastStack />
       <ClipboardToast />
     </>
+  )
+}
+
+function ViewAsBanner() {
+  const viewAsUser = useAuth((s) => s.viewAsUser)
+  const realUser = useAuth((s) => s.realUser)
+  const exitViewAs = useAuth((s) => s.exitViewAs)
+  if (!viewAsUser || !realUser) return null
+  const readOnly = realUser.role === 'commercial' && viewAsUser.role === 'setter'
+
+  const initials = viewAsUser.name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0])
+    .join('')
+    .toUpperCase()
+
+  const roleLabel = viewAsUser.role.charAt(0).toUpperCase() + viewAsUser.role.slice(1)
+
+  return (
+    <div className="viewas-strip">
+      <div className="viewas-strip-inner">
+        <div className="viewas-left">
+          <span className="viewas-dot" aria-hidden="true" />
+          <span className="viewas-eyebrow">{readOnly ? 'Vue impersonnée · lecture seule' : 'Vue impersonnée'}</span>
+        </div>
+
+        <div className="viewas-center">
+          <div className="viewas-avatar">
+            {viewAsUser.image
+              ? <img src={viewAsUser.image} alt={viewAsUser.name} />
+              : <span>{initials}</span>}
+          </div>
+          <div className="viewas-meta">
+            <span className="viewas-name">{viewAsUser.name}</span>
+            <span className="viewas-role">{roleLabel}</span>
+          </div>
+        </div>
+
+        <div className="viewas-right">
+          <span className="viewas-admin-note">
+            Connecté en tant que <strong>{realUser.name.split(' ')[0]}</strong>
+          </span>
+          <button onClick={exitViewAs} className="viewas-exit" type="button">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="6" y1="6" x2="18" y2="18" />
+              <line x1="18" y1="6" x2="6" y2="18" />
+            </svg>
+            Quitter la vue
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -109,6 +164,7 @@ function SetterCallbackToastStack() {
   const callbacks = useMemo(() => {
     if (!isSetter) return []
     const now = Date.now()
+    const horizon = now + 24 * 60 * 60 * 1000 // ne toast que les rappels en retard ou dans les prochaines 24h
     return (leadsData ?? [])
       .filter((lead) => {
         if (!lead.nextCallbackAt) return false
@@ -116,7 +172,7 @@ function SetterCallbackToastStack() {
         return lead.status === 'a_rappeler' || lead.status === 'relance'
       })
       .map((lead) => ({ lead, callbackAt: new Date(lead.nextCallbackAt!).getTime() }))
-      .filter(({ callbackAt }) => Number.isFinite(callbackAt))
+      .filter(({ callbackAt }) => Number.isFinite(callbackAt) && callbackAt <= horizon)
       .sort((a, b) => callbackToastRank(a.callbackAt, b.callbackAt, now))
       .slice(0, 8)
   }, [dismissedIds, isSetter, leadsData, minuteTick])
@@ -237,6 +293,11 @@ function formatDuration(ms: number): string {
   const minutes = totalMinutes % 60
   if (hours < 24) return minutes ? `${hours}h ${minutes}min` : `${hours}h`
   const days = Math.floor(hours / 24)
+  // Au-delà de 7 jours, l'écart est trop grand pour parler de "dans Xj" — on rend la date directement.
+  if (days >= 7) {
+    const target = new Date(Date.now() + ms)
+    return `le ${target.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}`
+  }
   const remainingHours = hours % 24
   return remainingHours ? `${days}j ${remainingHours}h` : `${days}j`
 }

@@ -53,6 +53,15 @@ export async function api<T>(path: string, opts: FetchOpts = {}): Promise<T> {
     init.body = JSON.stringify(body)
     ;(init.headers as Record<string, string>)['Content-Type'] = 'application/json'
   }
+  // Impersonation : si un viewAsUserId est mémorisé (admin → quiconque,
+  // commercial → setter en lecture seule), on l'envoie en header pour que
+  // le back applique les permissions de l'overlay sur les GET.
+  if (typeof window !== 'undefined') {
+    const viewAsId = window.localStorage.getItem('ecoi.viewAsUserId')
+    if (viewAsId) {
+      ;(init.headers as Record<string, string>)['X-View-As-User-Id'] = viewAsId
+    }
+  }
 
   const res = await fetch(url.toString(), init)
   const text = await res.text()

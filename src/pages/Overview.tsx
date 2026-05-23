@@ -91,11 +91,13 @@ function OverviewSetter() {
     )
     const qualifies = classified.filter((l) => qualifiedStatuses.includes(l.status)).length
     const rdvPris = classified.filter((l) => l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe').length
+    const leadsToday = ownLeads.filter((l) => isCreatedToday(l.createdAt)).length
     return {
       appels,
       connexions,
       qualifies,
       rdvPris,
+      leadsToday,
       total: ownLeads.length,
       ownLeads,
       qualifRate: ratePct(connexions, qualifies),
@@ -141,7 +143,7 @@ function OverviewSetter() {
           </div>
         </div>
 
-        <section className="overview-air-grid">
+        <section className="overview-air-grid overview-setter-grid">
           <div className="overview-profile-panel">
             <div className="overview-profile-large">
               {me?.image ? <img src={me.image} alt={me.name ?? 'Profil'} /> : <span>{userInitials(me?.name ?? display.firstName)}</span>}
@@ -152,7 +154,8 @@ function OverviewSetter() {
               <p>{fmtCompact(callbacks.length)} rappels sur le créneau sélectionné</p>
             </div>
           </div>
-          <AirKpi icon="phone" label="Appels passés" value={fmtCompact(stats.appels)} sub={`${stats.connectionRate}% connexion`} />
+          <AirKpi icon="inbox" label="Nouveaux aujourd'hui" value={fmtCompact(stats.leadsToday)} sub="leads arrivés" />
+          <AirKpi icon="phone" label="Appels" value={fmtCompact(stats.appels)} sub={`${stats.connectionRate}% connexion`} />
           <AirKpi icon="users" label="Connexions" value={fmtCompact(stats.connexions)} sub="contacts joints" />
           <AirKpi icon="target" label="Qualifiés" value={fmtCompact(stats.qualifies)} sub={`${stats.qualifRate}% qualification`} />
           <AirKpi icon="trophy" label="RDV pris" value={fmtCompact(stats.rdvPris)} sub="issus de tes leads" />
@@ -169,7 +172,7 @@ function OverviewSetter() {
             <div className="overview-role-chart">
               <FuturisticLineChart
                 points={activityRange === 'today' ? stats.activityToday : stats.activityWeek}
-                color="#4A6FE3"
+                color="#1F7857"
                 caption={activityRange === 'today' ? "Aujourd'hui" : '7 derniers jours'}
               />
             </div>
@@ -233,10 +236,12 @@ function OverviewCommercial() {
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), [])
   const { data: rdvs = [] } = useRdvList({ commercialId: me?.id, fromDate: commercialRange.from, toDate: commercialRange.to, limit: 200 })
   const { data: commercialSummary } = useAnalyticsSummary({ from: commercialRange.from, to: commercialRange.to })
+  const { data: allLeads = [] } = useLeads({ limit: 500 })
 
   const stats = useMemo(() => {
     const list = rdvs ?? []
     const analytics = commercialSummary?.commercial
+    const leadsToday = (allLeads ?? []).filter((l) => isCreatedToday(l.createdAt)).length
     const honored = list.filter((r) => r.status === 'honore')
     const signed = list.filter((r) => r.result === 'signe')
     const lost = list.filter((r) => r.result === 'perdu')
@@ -262,8 +267,9 @@ function OverviewCommercial() {
       totalRdv,
       lost: analytics?.resultSegments.find((segment) => segment.label === 'Perdu')?.value ?? lost.length,
       reflexion: analytics?.resultSegments.find((segment) => segment.label === 'Réflexion')?.value ?? reflexion.length,
+      leadsToday,
     }
-  }, [rdvs, todayIso, commercialSummary])
+  }, [rdvs, todayIso, commercialSummary, allLeads])
 
   return (
     <AppShell blobsKey="commercial" flat>
@@ -292,7 +298,7 @@ function OverviewCommercial() {
           </div>
           <div className="overview-commercial-toolbar">
             <div className="overview-range-switch" aria-label="Période tableau de bord commercial">
-              {FUNNEL_PERIOD_OPTIONS.filter((period) => period.id === 'today' || period.id === 'this_week' || period.id === 'this_month' || period.id === 'this_year').map((period) => (
+              {FUNNEL_PERIOD_OPTIONS.filter((period) => period.id === 'today' || period.id === 'yesterday' || period.id === 'this_week' || period.id === 'this_month' || period.id === 'this_year').map((period) => (
                 <button
                   key={period.id}
                   type="button"
@@ -368,6 +374,7 @@ function OverviewCommercial() {
         </section>
 
         <section className="overview-air-grid overview-commercial-grid">
+          <AirKpi icon="inbox" label="Nouveaux aujourd'hui" value={fmtCompact(stats.leadsToday)} sub="leads arrivés" />
           <AirKpi icon="trophy" label="CA signé" value={fmtKEur(stats.ca)} sub={`${fmtCompact(stats.signed)} ventes`} />
           <AirKpi icon="target" label="Closing" value={`${stats.closing}%`} sub={`${fmtCompact(stats.lost)} perdus`} />
           <AirKpi icon="chart" label="Panier moyen" value={fmtKEur(stats.panier)} sub="sur ventes signées" />
@@ -390,8 +397,8 @@ function OverviewCommercial() {
             <div className="overview-air-card overview-role-side">
               <CardHead title="Pipeline" icon="arrow-right" />
               <div className="space-y-3">
-                <PipelineRow label="RDV planifiés" count={stats.totalPlanifie} pct={100} color="#4A6FE3" />
-                <PipelineRow label="Honorés" count={stats.totalHonored} pct={pct(stats.totalHonored, stats.totalPlanifie)} color="#5AB3FF" />
+                <PipelineRow label="RDV planifiés" count={stats.totalPlanifie} pct={100} color="#1F7857" />
+                <PipelineRow label="Honorés" count={stats.totalHonored} pct={pct(stats.totalHonored, stats.totalPlanifie)} color="#3E9A6F" />
                 <PipelineRow label="Ventes" count={stats.signed} pct={pct(stats.signed, Math.max(stats.signed + stats.lost, stats.totalHonored))} color="#3DA86A" />
               </div>
             </div>
@@ -404,7 +411,7 @@ function OverviewCommercial() {
                 ) : stats.upcoming.slice(0, 6).map((r, i) => (
                   <RdvRow
                     key={r.id}
-                    color={['#4A6FE3', '#5AB3FF', '#3525A8', '#3DA86A'][i % 4]}
+                    color={['#1F7857', '#3E9A6F', '#145A41', '#3DA86A'][i % 4]}
                     time={`${shortDateTime(r.scheduledAt)}`}
                     sub={r.locationType === 'visio' ? 'Visio' : r.locationType === 'agence' ? 'Agence' : 'Domicile'}
                   />
@@ -467,6 +474,7 @@ function OverviewAdmin() {
     to: funnelRange.to,
   })
   const { data: usersList = [] } = useUsers()
+  const { data: allLeads = [] } = useLeads({ limit: 500 })
 
   const adminSummary = summary?.admin ?? null
   const funnelTotals = funnel?.totals ?? EMPTY_FUNNEL_TOTALS
@@ -491,6 +499,7 @@ function OverviewAdmin() {
     const signed = adminSummary?.signed ?? 0
     const ca = adminSummary?.ca ?? 0
     const team = (usersList ?? []).filter((u) => u.active)
+    const leadsToday = (allLeads ?? []).filter((l) => isCreatedToday(l.createdAt)).length
     return {
       caMois: ca,
       ventes: signed,
@@ -504,8 +513,9 @@ function OverviewAdmin() {
       teamActive: team.length,
       teamTotal: (usersList ?? []).length,
       rdvPris,
+      leadsToday,
     }
-  }, [adminSummary, funnelTotals, treatedLeadTotal, usersList])
+  }, [adminSummary, funnelTotals, treatedLeadTotal, usersList, allLeads])
   const funnelNoAnswer = Math.min(funnelTotals.noAnswer, stats.leads)
   const funnelAnswered = Math.max(
     funnelTotals.answered,
@@ -528,8 +538,6 @@ function OverviewAdmin() {
   return (
     <AppShell blobsKey="admin" flat>
       <Topbar
-        eyebrow="ADMIN — TABLEAU DE BORD"
-        title="Performance équipe"
         tabs={[
           { id: 'overview', label: 'Overview' },
           { id: 'setters', label: 'Setters' },
@@ -588,7 +596,7 @@ function OverviewAdmin() {
             </div>
           </div>
 
-          <AirKpi icon="trophy" label="CA total" value={fmtKEur(stats.caMois)} sub={`${stats.ventes} ventes signées`} />
+          <AirKpi icon="inbox" label="Nouveaux aujourd'hui" value={fmtCompact(stats.leadsToday)} sub="leads arrivés" />
           <AirKpi icon="target" label="Closing" value={`${stats.closing}%`} sub={`${fmtCompact(stats.rdvPris)} RDV suivis`} />
           <AirKpi icon="phone" label="Appels" value={fmtCompact(stats.appels)} sub={`${fmtCompact(stats.classified)} leads traités`} />
           <AirKpi icon="users" label="Leads traités" value={fmtCompact(stats.leads)} sub={`${fmtCompact(stats.qualified)} qualifiés`} />
@@ -643,7 +651,7 @@ function OverviewAdmin() {
 
 // ===== Helpers =====
 
-type ShotIcon = 'trophy' | 'users' | 'target' | 'arrow-right' | 'chart' | 'phone' | 'check'
+type ShotIcon = 'trophy' | 'users' | 'target' | 'arrow-right' | 'chart' | 'phone' | 'check' | 'inbox'
 
 function userInitials(name: string | null | undefined): string {
   const clean = (name ?? '').trim()
@@ -677,9 +685,9 @@ type LeadEvolutionPoint = { key: string; date: string; label: string; leads: num
 type LeadEvolutionSeriesKey = 'leads' | 'rdv' | 'signed'
 
 const LEAD_EVOLUTION_SERIES: { key: LeadEvolutionSeriesKey; label: string; color: string }[] = [
-  { key: 'leads', label: 'Leads', color: '#4A6FE3' },
+  { key: 'leads', label: 'Leads', color: '#1F7857' },
   { key: 'rdv', label: 'RDV', color: '#3DA86A' },
-  { key: 'signed', label: 'Ventes', color: '#5AB3FF' },
+  { key: 'signed', label: 'Ventes', color: '#3E9A6F' },
 ]
 
 const GRANULARITY_SUBTITLE: Record<EvolutionGranularity, string> = {
@@ -1056,7 +1064,7 @@ function hydrateMissingEvolutionTotals(points: LeadEvolutionPoint[], totals: { l
   } : point)
 }
 
-const PIE_COLORS = ['#4A6FE3', '#3DA86A', '#5AB3FF', '#6B7C8C', '#3525A8', '#7C6A46']
+const PIE_COLORS = ['#1F7857', '#3DA86A', '#3E9A6F', '#6B7C8C', '#145A41', '#7C6A46']
 
 type LeadSegment = { label: string; value: number }
 
@@ -1220,7 +1228,7 @@ function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_auto_1fr_auto_1.35fr_auto_1fr] gap-2 items-stretch">
-        <MiniFlowStep title="Appels" value={totals.calls} sub={`${callsPerLead(totals.calls, treatedLeads)} / lead traité`} color="#4A6FE3" />
+        <MiniFlowStep title="Appels" value={totals.calls} sub={`${callsPerLead(totals.calls, treatedLeads)} / lead traité`} color="#1F7857" />
         <MiniArrow />
         <MiniFlowStep title="Traités" value={treatedLeads} sub="leads" color="#6B7C8C" />
         <MiniArrow />
@@ -1295,6 +1303,16 @@ function callsPerLead(calls: number, leads: number): string {
 
 function isClassifiedLead(lead: LeadResponse): boolean {
   return lead.status !== 'nouveau'
+}
+
+function isCreatedToday(createdAt: string | null | undefined): boolean {
+  if (!createdAt) return false
+  const created = new Date(createdAt)
+  if (Number.isNaN(created.getTime())) return false
+  const now = new Date()
+  return created.getFullYear() === now.getFullYear()
+    && created.getMonth() === now.getMonth()
+    && created.getDate() === now.getDate()
 }
 
 function belongsToSetter(lead: LeadResponse, setterId: string | undefined): boolean {
@@ -1430,12 +1448,6 @@ function monthLabel(month: string): string {
 
 // ===== Atoms =====
 
-function chartPoints(values: number[], width = 300, height = 150): string {
-  const max = Math.max(1, ...values)
-  const step = values.length <= 1 ? width : width / (values.length - 1)
-  return values.map((v, i) => `${Math.round(i * step)},${Math.round(height - (v / max) * (height - 18) - 9)}`).join(' ')
-}
-
 function RevenueEvolutionChart({ points, total }: { points: ActivityPoint[]; total: number }) {
   const color = '#3DA86A'
   const safePoints = points.length ? points : [{ label: 'Live', value: 0 }]
@@ -1480,12 +1492,12 @@ function RevenueEvolutionChart({ points, total }: { points: ActivityPoint[]; tot
           <small><i style={{ background: color }} />CA signé</small>
           <strong>{fmtKEur(total)}</strong>
         </button>
-        <button type="button" style={{ ['--series-color' as string]: '#4A6FE3' }}>
-          <small><i style={{ background: '#4A6FE3' }} />Pic mensuel</small>
+        <button type="button" style={{ ['--series-color' as string]: '#1F7857' }}>
+          <small><i style={{ background: '#1F7857' }} />Pic mensuel</small>
           <strong>{fmtKEur(peak.value)}</strong>
         </button>
-        <button type="button" style={{ ['--series-color' as string]: '#5AB3FF' }}>
-          <small><i style={{ background: '#5AB3FF' }} />Tendance</small>
+        <button type="button" style={{ ['--series-color' as string]: '#3E9A6F' }}>
+          <small><i style={{ background: '#3E9A6F' }} />Tendance</small>
           <strong className={delta >= 0 ? 'positive' : 'negative'}>{delta >= 0 ? '+' : ''}{fmtKEur(delta)}</strong>
         </button>
       </div>
@@ -1553,40 +1565,69 @@ function RevenueEvolutionChart({ points, total }: { points: ActivityPoint[]; tot
 
 function FuturisticLineChart({ points, color, caption }: { points: ActivityPoint[]; color: string; caption: string }) {
   const values = points.map((p) => p.value)
-  const linePoints = chartPoints(values, 300, 92)
   const total = values.reduce((a, b) => a + b, 0)
   const peak = Math.max(0, ...values)
+  const peakIndex = values.findIndex((v) => v === peak)
+  const width = 520
+  const height = 150
+  const padX = 18
+  const padTop = 10
+  const padBottom = 26
+  const chartWidth = width - padX * 2
+  const chartHeight = height - padTop - padBottom
+  const safeMax = Math.max(1, peak)
+  const barGap = points.length > 8 ? 3 : 5
+  const barWidth = (chartWidth - (points.length - 1) * barGap) / Math.max(1, points.length)
+  const showEvery = points.length > 8 ? 3 : 1
+
   return (
-    <div className="h-full flat-target">
-      <div className="flex items-end justify-between border-b border-line-soft pb-3">
+    <div className="setter-chart">
+      <div className="setter-chart-head">
         <div>
-          <div className="text-3xl font-extrabold leading-none">{total}</div>
-          <div className="text-[11px] font-semibold text-faint mt-1">{caption}</div>
+          <div className="setter-chart-total">{total}</div>
+          <div className="setter-chart-caption">{caption}</div>
         </div>
-        <div className="text-right">
-          <div className="text-sm font-extrabold text-muted">{peak}</div>
-          <div className="text-[10px] uppercase tracking-[0.18em] text-faint">pic</div>
-        </div>
-      </div>
-      <div className="pt-4">
-        <svg viewBox="0 0 300 92" className="w-full h-[92px]" preserveAspectRatio="none">
-          <line x1="0" x2="300" y1="82" y2="82" stroke="#E5E1DA" strokeWidth="1" />
-          <polyline points={linePoints} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${points.length}, minmax(0, 1fr))` }}>
-          {points.map((p, i) => (
-            <div key={`${p.label}-${i}`} className="min-w-0">
-              <div className="h-1 rounded-full bg-line-soft overflow-hidden">
-                <div className="h-full rounded-full bg-or" style={{ width: `${peak ? Math.max(8, (p.value / peak) * 100) : 0}%` }} />
-              </div>
-              <div className="mt-1 flex items-center justify-between gap-1 text-[9px] text-faint">
-                <span className="truncate uppercase tracking-[0.08em]">{p.label}</span>
-                <span className="font-bold text-muted">{p.value}</span>
-              </div>
-            </div>
-          ))}
+        <div className="setter-chart-peak">
+          <span>{peak}</span>
+          <small>pic</small>
         </div>
       </div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="setter-chart-svg" preserveAspectRatio="none">
+        <line x1={padX} x2={width - padX} y1={height - padBottom} y2={height - padBottom} stroke="#E5E1DA" strokeWidth="1" />
+        {points.map((p, i) => {
+          const x = padX + i * (barWidth + barGap)
+          const barHeight = peak ? (p.value / safeMax) * chartHeight : 0
+          const y = height - padBottom - Math.max(2, barHeight)
+          const isPeak = i === peakIndex && peak > 0
+          const showLabel = i % showEvery === 0 || i === points.length - 1
+          return (
+            <g key={`${p.label}-${i}`}>
+              <rect
+                x={x}
+                y={y}
+                width={barWidth}
+                height={Math.max(2, barHeight)}
+                rx="2"
+                fill={isPeak ? color : peak ? color : '#E5E1DA'}
+                opacity={isPeak ? 1 : peak ? 0.55 : 0.5}
+              />
+              {showLabel ? (
+                <text
+                  x={x + barWidth / 2}
+                  y={height - 8}
+                  textAnchor="middle"
+                  fontSize="9"
+                  fontWeight="600"
+                  fill={isPeak ? color : '#9CA3AF'}
+                  fontFamily="inherit"
+                >
+                  {p.label}
+                </text>
+              ) : null}
+            </g>
+          )
+        })}
+      </svg>
     </div>
   )
 }
