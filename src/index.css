@@ -441,6 +441,41 @@ body {
 }
 .overview-admin-main-grid { min-width: 0; }
 .overview-admin-main-grid .overview-lead-evolution-card { grid-column: span 8; }
+
+/* Admin header strip — profil + 4 KPIs alignés.
+   Wide : profil à gauche (1.4fr) + 4 KPIs en ligne (3.6fr)
+   ≤ 1080px : stack (profil pleine largeur, 4 KPIs en dessous)
+   ≤ 540px : KPIs en 2+2 (au lieu de 4×1 trop écrasé) */
+.overview-admin-summary {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(240px, 1.4fr) minmax(0, 3.6fr);
+  gap: 12px;
+  align-items: stretch;
+}
+.overview-admin-summary > .overview-profile-panel { grid-column: auto; }
+.overview-admin-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+.overview-admin-kpis > .overview-air-kpi {
+  grid-column: auto;
+  min-height: 100px;
+  padding: 14px;
+  gap: 8px;
+}
+.overview-admin-kpis > .overview-air-kpi > span { width: 26px; height: 26px; border-radius: 6px; }
+.overview-admin-kpis > .overview-air-kpi small { font-size: 9px; letter-spacing: 0.13em; }
+.overview-admin-kpis > .overview-air-kpi strong { font-size: clamp(22px, 2.1vw, 26px); line-height: 1; letter-spacing: -0.024em; margin-top: 5px; }
+.overview-admin-kpis > .overview-air-kpi p { margin-top: 5px; font-size: 11px; }
+@media (max-width: 1080px) {
+  .overview-admin-summary { grid-template-columns: 1fr; }
+}
+@media (max-width: 540px) {
+  .overview-admin-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .overview-admin-side-rail {
   position: sticky;
   top: 18px;
@@ -886,6 +921,37 @@ body {
 
 /* ===== Setter overview : grille compactée + chart en barres ===== */
 .overview-setter-grid { gap: 10px; }
+
+/* Setter header strip — profil + 5 KPIs.
+   Wide : profil 1.4fr + 5 KPIs en ligne (3.6fr)
+   ≤ 1080px : stack (profil pleine largeur, KPIs en dessous)
+   ≤ 720px : KPIs auto-fit (jamais d'orphelin à 1/12 de largeur)
+   ≤ 540px : 2 cols (2+2+1, l'orphelin prend toute la rangée) */
+.overview-setter-summary {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(0, 3.6fr);
+  gap: 10px;
+  align-items: stretch;
+}
+.overview-setter-summary > .overview-profile-panel { grid-column: auto; }
+.overview-setter-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+.overview-setter-kpis > .overview-air-kpi { grid-column: auto; }
+@media (max-width: 1080px) {
+  .overview-setter-summary { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .overview-setter-kpis { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+}
+@media (max-width: 540px) {
+  .overview-setter-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 .overview-setter-grid .overview-profile-panel {
   grid-column: span 4;
   min-height: 92px;

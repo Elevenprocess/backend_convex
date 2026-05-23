@@ -144,21 +144,25 @@ function OverviewSetter() {
         </div>
 
         <section className="overview-air-grid overview-setter-grid">
-          <div className="overview-profile-panel">
-            <div className="overview-profile-large">
-              {me?.image ? <img src={me.image} alt={me.name ?? 'Profil'} /> : <span>{userInitials(me?.name ?? display.firstName)}</span>}
+          <div className="overview-setter-summary">
+            <div className="overview-profile-panel">
+              <div className="overview-profile-large">
+                {me?.image ? <img src={me.image} alt={me.name ?? 'Profil'} /> : <span>{userInitials(me?.name ?? display.firstName)}</span>}
+              </div>
+              <div>
+                <span className="shot-eyebrow">Portefeuille</span>
+                <h2>{fmtCompact(stats.total)} leads</h2>
+                <p>{fmtCompact(callbacks.length)} rappels sur le créneau sélectionné</p>
+              </div>
             </div>
-            <div>
-              <span className="shot-eyebrow">Portefeuille</span>
-              <h2>{fmtCompact(stats.total)} leads</h2>
-              <p>{fmtCompact(callbacks.length)} rappels sur le créneau sélectionné</p>
+            <div className="overview-setter-kpis">
+              <AirKpi icon="inbox" label="Nouveaux aujourd'hui" value={fmtCompact(stats.leadsToday)} sub="leads arrivés" />
+              <AirKpi icon="phone" label="Appels" value={fmtCompact(stats.appels)} sub={`${stats.connectionRate}% connexion`} />
+              <AirKpi icon="users" label="Connexions" value={fmtCompact(stats.connexions)} sub="contacts joints" />
+              <AirKpi icon="target" label="Qualifiés" value={fmtCompact(stats.qualifies)} sub={`${stats.qualifRate}% qualification`} />
+              <AirKpi icon="trophy" label="RDV pris" value={fmtCompact(stats.rdvPris)} sub="issus de tes leads" />
             </div>
           </div>
-          <AirKpi icon="inbox" label="Nouveaux aujourd'hui" value={fmtCompact(stats.leadsToday)} sub="leads arrivés" />
-          <AirKpi icon="phone" label="Appels" value={fmtCompact(stats.appels)} sub={`${stats.connectionRate}% connexion`} />
-          <AirKpi icon="users" label="Connexions" value={fmtCompact(stats.connexions)} sub="contacts joints" />
-          <AirKpi icon="target" label="Qualifiés" value={fmtCompact(stats.qualifies)} sub={`${stats.qualifRate}% qualification`} />
-          <AirKpi icon="trophy" label="RDV pris" value={fmtCompact(stats.rdvPris)} sub="issus de tes leads" />
 
           <div className="overview-air-card overview-role-wide">
             <div className="shot-card-head">
@@ -587,21 +591,24 @@ function OverviewAdmin() {
 
         <div className="overview-admin-layout">
           <section className="overview-air-grid overview-admin-main-grid">
-          <div className="overview-profile-panel">
-            <div className="overview-profile-large">
-              {me?.image ? <img src={me.image} alt={me.name} /> : <span>{userInitials(me?.name)}</span>}
+          <div className="overview-admin-summary">
+            <div className="overview-profile-panel">
+              <div className="overview-profile-large">
+                {me?.image ? <img src={me.image} alt={me.name} /> : <span>{userInitials(me?.name)}</span>}
+              </div>
+              <div>
+                <span className="shot-eyebrow">Profil connecté</span>
+                <h2>{me?.name}</h2>
+                <p>{me?.role ?? 'admin'} · {stats.teamActive}/{stats.teamTotal} actifs</p>
+              </div>
             </div>
-            <div>
-              <span className="shot-eyebrow">Profil connecté</span>
-              <h2>{me?.name}</h2>
-              <p>{me?.role ?? 'admin'} · {stats.teamActive}/{stats.teamTotal} actifs</p>
+            <div className="overview-admin-kpis">
+              <AirKpi icon="inbox" label="Nouveaux aujourd'hui" value={fmtCompact(stats.leadsToday)} sub="leads arrivés" />
+              <AirKpi icon="target" label="Closing" value={`${stats.closing}%`} sub={`${fmtCompact(stats.rdvPris)} RDV suivis`} />
+              <AirKpi icon="phone" label="Appels" value={fmtCompact(stats.appels)} sub={`${fmtCompact(stats.classified)} leads traités`} />
+              <AirKpi icon="users" label="Leads traités" value={fmtCompact(stats.leads)} sub={`${fmtCompact(stats.qualified)} qualifiés`} />
             </div>
           </div>
-
-          <AirKpi icon="inbox" label="Nouveaux aujourd'hui" value={fmtCompact(stats.leadsToday)} sub="leads arrivés" />
-          <AirKpi icon="target" label="Closing" value={`${stats.closing}%`} sub={`${fmtCompact(stats.rdvPris)} RDV suivis`} />
-          <AirKpi icon="phone" label="Appels" value={fmtCompact(stats.appels)} sub={`${fmtCompact(stats.classified)} leads traités`} />
-          <AirKpi icon="users" label="Leads traités" value={fmtCompact(stats.leads)} sub={`${fmtCompact(stats.qualified)} qualifiés`} />
 
           <div className="overview-air-card overview-air-chart overview-lead-evolution-card">
             <LeadEvolutionChart
