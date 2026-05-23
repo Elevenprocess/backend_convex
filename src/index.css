@@ -963,7 +963,7 @@ body {
 .overview-setter-grid .overview-profile-panel h2 { font-size: 18px; margin: 2px 0; }
 .overview-setter-grid .overview-profile-panel p { font-size: 11px; }
 .overview-setter-grid .overview-air-kpi {
-  grid-column: span 2;
+  grid-column: auto;
   min-height: 92px;
   padding: 11px 12px 10px;
   gap: 4px;
@@ -974,9 +974,17 @@ body {
 .overview-setter-grid .overview-air-kpi small { font-size: 8.5px; letter-spacing: 0.11em; }
 .overview-setter-grid .overview-air-kpi strong { margin-top: 3px; font-size: clamp(20px, 1.9vw, 24px); }
 .overview-setter-grid .overview-air-kpi p { margin-top: 2px; font-size: 10.5px; }
-.overview-setter-grid .overview-role-wide { grid-column: span 10; min-height: 220px; }
-.overview-setter-grid .overview-role-side { grid-column: span 4; min-height: 220px; }
+/* Layout setter en-dessous du summary : 2 rangées de 2 cards.
+   Wide : chart 8/12 + pie 4/12 ; à-rappeler 6/12 + progression 6/12
+   ≤ 980px : tout en pleine largeur stack */
+.overview-setter-grid .overview-role-wide { grid-column: span 8; min-height: 220px; }
 .overview-setter-grid .overview-air-pie { grid-column: span 4; min-height: 220px; }
+.overview-setter-grid .overview-role-side { grid-column: span 6; min-height: 220px; }
+@media (max-width: 980px) {
+  .overview-setter-grid .overview-role-wide,
+  .overview-setter-grid .overview-air-pie,
+  .overview-setter-grid .overview-role-side { grid-column: 1 / -1; }
+}
 .overview-setter-grid .overview-air-card { padding: 14px; }
 .overview-setter-grid .overview-role-chart { height: 158px; padding-top: 4px; }
 .overview-setter-grid .overview-role-list { max-height: 140px; gap: 4px; }
