@@ -922,19 +922,18 @@ body {
 /* ===== Setter overview : grille compactée + chart en barres ===== */
 .overview-setter-grid { gap: 10px; }
 
-/* Setter header strip — profil + 5 KPIs.
-   Wide : profil 1.4fr + 5 KPIs en ligne (3.6fr)
-   ≤ 1080px : stack (profil pleine largeur, KPIs en dessous)
-   ≤ 720px : KPIs auto-fit (jamais d'orphelin à 1/12 de largeur)
-   ≤ 540px : 2 cols (2+2+1, l'orphelin prend toute la rangée) */
+/* Setter header strip — profile en banner full-width compact +
+   5 KPIs sur grille pleine largeur en dessous.
+   La sidebar consomme ~248px à gauche, donc même à 1280px le content
+   area = ~1032px ; un side-by-side profile+KPIs écraserait les KPIs à
+   ~150px (labels coupés). On stack toujours. */
 .overview-setter-summary {
   grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: minmax(220px, 1.4fr) minmax(0, 3.6fr);
+  display: flex;
+  flex-direction: column;
   gap: 10px;
-  align-items: stretch;
 }
-.overview-setter-summary > .overview-profile-panel { grid-column: auto; }
+.overview-setter-summary > .overview-profile-panel { grid-column: auto; width: 100%; }
 .overview-setter-kpis {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -942,10 +941,7 @@ body {
   align-items: stretch;
 }
 .overview-setter-kpis > .overview-air-kpi { grid-column: auto; }
-@media (max-width: 1080px) {
-  .overview-setter-summary { grid-template-columns: 1fr; }
-}
-@media (max-width: 720px) {
+@media (max-width: 880px) {
   .overview-setter-kpis { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 }
 @media (max-width: 540px) {
