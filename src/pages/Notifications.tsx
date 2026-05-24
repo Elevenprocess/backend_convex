@@ -6,7 +6,7 @@ import { Icon, type IconName } from '../components/Icon'
 import { LoadingBlock, Spinner } from '../components/Spinner'
 import { useLeads, useRdvList } from '../lib/hooks'
 import { useAuth } from '../lib/auth'
-import { fullName, type LeadResponse, type RdvResponse } from '../lib/types'
+import { fullName, type LeadResponse, type LeadStatus, type RdvResponse } from '../lib/types'
 
 type Notif = {
   id: string
@@ -129,7 +129,9 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
     const leadLink = `/leads?search=${encodeURIComponent(name)}`
     const callbackAt = lead.nextCallbackAt ? new Date(lead.nextCallbackAt).getTime() : null
 
-    if (callbackAt && callbackAt <= now && (lead.status === 'a_rappeler' || lead.status === 'relance' || lead.nextCallbackAt)) {
+    const callbackResolved = isCallbackResolved(lead, callbackAt)
+
+    if (callbackAt && callbackAt <= now && (lead.status === 'a_rappeler' || lead.status === 'relance' || lead.nextCallbackAt) && !callbackResolved) {
       notifications.push({
         id: `callback-late-${lead.id}`,
         group: 'RAPPELS EN RETARD',
@@ -143,7 +145,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         to: leadLink,
         reminderKey: reminderKey(lead),
       })
-    } else if (callbackAt && callbackAt <= in10Min && callbackAt > now) {
+    } else if (callbackAt && callbackAt <= in10Min && callbackAt > now && !callbackResolved) {
       notifications.push({
         id: `callback-soon-${lead.id}`,
         group: 'DANS 10 MIN',
@@ -157,7 +159,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         to: leadLink,
         reminderKey: reminderKey(lead),
       })
-    } else if (callbackAt && lead.status === 'a_rappeler' && callbackAt <= now + 7 * 24 * 60 * 60 * 1000) {
+    } else if (callbackAt && lead.status === 'a_rappeler' && callbackAt <= now + 7 * 24 * 60 * 60 * 1000 && !callbackResolved) {
       // Sort par "quand le rappel a été planifié" (lead.updatedAt) et non par la date future
       // du rappel, sinon un rappel planifié pour demain remonte au-dessus d'un lead arrivé
       // il y a 5 min — ce qui casse la logique "feed chronologique".
@@ -499,6 +501,22 @@ function writeCalledReminderKeys(ids: Set<string>) {
 
 function reminderKey(lead: LeadResponse): string {
   return `${lead.id}:${lead.nextCallbackAt ?? ''}`
+}
+
+// Détection auto "rappel déjà traité" — évite que le commercial doive cliquer
+// "Barrer comme appelé" sur 50 leads qu'il a clairement déjà appelés.
+//
+// Conditions :
+// - le lead a été appelé APRÈS l'heure du rappel (latestCallAt >= nextCallbackAt)
+// - OU le statut a évolué hors de la file d'attente d'appels (qualifié, RDV, signé, perdu, pas qualifié)
+function isCallbackResolved(lead: LeadResponse, callbackAt: number | null): boolean {
+  const resolvedStatuses: LeadStatus[] = ['qualifie', 'rdv_pris', 'rdv_honore', 'signe', 'perdu', 'pas_qualifie']
+  if (resolvedStatuses.includes(lead.status)) return true
+  if (callbackAt && lead.latestCallAt) {
+    const latestCall = new Date(lead.latestCallAt).getTime()
+    if (Number.isFinite(latestCall) && latestCall >= callbackAt) return true
+  }
+  return false
 }
 
 // Feed chronologique style Facebook : tri pur par date d'apparition, plus récent en haut,
