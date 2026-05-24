@@ -245,7 +245,7 @@ function OverviewCommercial() {
   const stats = useMemo(() => {
     const list = rdvs ?? []
     const analytics = commercialSummary?.commercial
-    const leadsToday = (allLeads ?? []).filter((l) => isCreatedToday(l.createdAt)).length
+    const leadsToday = (allLeads ?? []).filter((l) => isCreatedInRange(l.createdAt, commercialRange.from, commercialRange.to)).length
     const honored = list.filter((r) => r.status === 'honore')
     const signed = list.filter((r) => r.result === 'signe')
     const lost = list.filter((r) => r.result === 'perdu')
@@ -273,7 +273,7 @@ function OverviewCommercial() {
       reflexion: analytics?.resultSegments.find((segment) => segment.label === 'Réflexion')?.value ?? reflexion.length,
       leadsToday,
     }
-  }, [rdvs, todayIso, commercialSummary, allLeads])
+  }, [rdvs, todayIso, commercialSummary, allLeads, commercialRange.from, commercialRange.to])
 
   return (
     <AppShell blobsKey="commercial" flat>
@@ -379,7 +379,7 @@ function OverviewCommercial() {
 
         <section className="overview-air-grid overview-commercial-grid">
           <div className="overview-commercial-kpis">
-            <AirKpi icon="inbox" label="Nouveaux aujourd'hui" value={fmtCompact(stats.leadsToday)} sub="leads arrivés" />
+            <AirKpi icon="inbox" label={leadsKpiLabelFor(commercialPeriod.mode)} value={fmtCompact(stats.leadsToday)} sub="leads arrivés" />
             <AirKpi icon="trophy" label="CA signé" value={fmtKEur(stats.ca)} sub={`${fmtCompact(stats.signed)} ventes`} />
             <AirKpi icon="target" label="Closing" value={`${stats.closing}%`} sub={`${fmtCompact(stats.lost)} perdus`} />
             <AirKpi icon="chart" label="Panier moyen" value={fmtKEur(stats.panier)} sub="sur ventes signées" />
@@ -505,7 +505,7 @@ function OverviewAdmin() {
     const signed = adminSummary?.signed ?? 0
     const ca = adminSummary?.ca ?? 0
     const team = (usersList ?? []).filter((u) => u.active)
-    const leadsToday = (allLeads ?? []).filter((l) => isCreatedToday(l.createdAt)).length
+    const leadsToday = (allLeads ?? []).filter((l) => isCreatedInRange(l.createdAt, funnelRange.from, funnelRange.to)).length
     return {
       caMois: ca,
       ventes: signed,
@@ -521,7 +521,7 @@ function OverviewAdmin() {
       rdvPris,
       leadsToday,
     }
-  }, [adminSummary, funnelTotals, treatedLeadTotal, usersList, allLeads])
+  }, [adminSummary, funnelTotals, treatedLeadTotal, usersList, allLeads, funnelRange.from, funnelRange.to])
   const funnelNoAnswer = Math.min(funnelTotals.noAnswer, stats.leads)
   const funnelAnswered = Math.max(
     funnelTotals.answered,
@@ -603,7 +603,7 @@ function OverviewAdmin() {
               </div>
             </div>
             <div className="overview-admin-kpis">
-              <AirKpi icon="inbox" label="Nouveaux aujourd'hui" value={fmtCompact(stats.leadsToday)} sub="leads arrivés" />
+              <AirKpi icon="inbox" label={leadsKpiLabelFor(funnelPeriod.mode)} value={fmtCompact(stats.leadsToday)} sub="leads arrivés" />
               <AirKpi icon="target" label="Closing" value={`${stats.closing}%`} sub={`${fmtCompact(stats.rdvPris)} RDV suivis`} />
               <AirKpi icon="phone" label="Appels" value={fmtCompact(stats.appels)} sub={`${fmtCompact(stats.classified)} leads traités`} />
               <AirKpi icon="users" label="Leads traités" value={fmtCompact(stats.leads)} sub={`${fmtCompact(stats.qualified)} qualifiés`} />
@@ -1322,6 +1322,28 @@ function isCreatedToday(createdAt: string | null | undefined): boolean {
   return created.getFullYear() === now.getFullYear()
     && created.getMonth() === now.getMonth()
     && created.getDate() === now.getDate()
+}
+
+function isCreatedInRange(createdAt: string | null | undefined, fromIso: string, toIso: string): boolean {
+  if (!createdAt) return false
+  const t = new Date(createdAt).getTime()
+  if (Number.isNaN(t)) return false
+  return t >= new Date(fromIso).getTime() && t <= new Date(toIso).getTime()
+}
+
+function leadsKpiLabelFor(mode: FunnelPeriodMode): string {
+  switch (mode) {
+    case 'today': return "Nouveaux aujourd'hui"
+    case 'yesterday': return 'Nouveaux hier'
+    case 'this_week': return 'Nouveaux cette semaine'
+    case 'last_week': return 'Nouveaux semaine dernière'
+    case 'this_month': return 'Nouveaux ce mois-ci'
+    case 'last_month': return 'Nouveaux mois dernier'
+    case 'this_year': return 'Nouveaux cette année'
+    case 'last_year': return 'Nouveaux année dernière'
+    case 'custom': return 'Nouveaux sur la période'
+    default: return "Nouveaux aujourd'hui"
+  }
 }
 
 function belongsToSetter(lead: LeadResponse, setterId: string | undefined): boolean {
