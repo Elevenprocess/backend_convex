@@ -158,7 +158,9 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         reminderKey: reminderKey(lead),
       })
     } else if (callbackAt && lead.status === 'a_rappeler' && callbackAt <= now + 7 * 24 * 60 * 60 * 1000) {
-      // On ne notifie pas les rappels planifiés à plus de 7 jours — ils encombrent le feed.
+      // Sort par "quand le rappel a été planifié" (lead.updatedAt) et non par la date future
+      // du rappel, sinon un rappel planifié pour demain remonte au-dessus d'un lead arrivé
+      // il y a 5 min — ce qui casse la logique "feed chronologique".
       notifications.push({
         id: `callback-planned-${lead.id}`,
         group: 'RAPPELS PROGRAMMÉS',
@@ -167,7 +169,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         title: 'Client à rappeler',
         body: <><strong>{name}</strong>{lead.phone ? ` · ${lead.phone}` : ''}</>,
         time: formatDateTime(lead.nextCallbackAt!),
-        sortAt: callbackAt,
+        sortAt: new Date(lead.updatedAt).getTime(),
         urgency: 'info',
         to: leadLink,
         reminderKey: reminderKey(lead),
@@ -202,7 +204,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         title: 'RDV dans moins de 10 minutes',
         body: <>Prépare le RDV {rdv.locationType} prévu à {formatDateTime(rdv.scheduledAt)}.</>,
         time: formatDateTime(rdv.scheduledAt),
-        sortAt: scheduled,
+        sortAt: new Date(rdv.updatedAt).getTime(),
         urgency: 'soon',
         to: '/rdv',
       })
@@ -238,7 +240,7 @@ export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvRes
         title: 'RDV Planifié imminent',
         body: <><strong>{name}</strong>{details}</>,
         time: formatDateTime(rdv.scheduledAt),
-        sortAt: scheduled,
+        sortAt: updated,
         urgency: 'soon',
         to: '/leads',
       })
@@ -251,7 +253,7 @@ export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvRes
         title: 'RDV Planifié',
         body: <><strong>{name}</strong>{details}</>,
         time: formatDateTime(rdv.scheduledAt),
-        sortAt: scheduled,
+        sortAt: created,
         urgency: 'info',
         to: '/leads',
       })
@@ -500,12 +502,12 @@ function reminderKey(lead: LeadResponse): string {
 }
 
 // Feed chronologique style Facebook : tri pur par date d'apparition, plus récent en haut,
-// tous types confondus. Pour les événements futurs (RDV imminent, rappel planifié) on
-// plafonne à `now` pour qu'ils ne s'auto-propulsent pas au-dessus des arrivages récents.
+// tous types confondus. Chaque builder ci-dessus définit sortAt comme "quand la notif
+// est entrée dans le feed" (createdAt du lead/rdv, updatedAt si plan modifié, callbackAt
+// au moment où ça devient overdue) — jamais comme la date future d'un événement à venir.
 function notificationFeedRank(a: Notif, b: Notif): number {
-  const now = Date.now()
-  const aTime = Math.min(a.sortAt ?? 0, now)
-  const bTime = Math.min(b.sortAt ?? 0, now)
+  const aTime = a.sortAt ?? 0
+  const bTime = b.sortAt ?? 0
   if (aTime !== bTime) return bTime - aTime
   return a.title.localeCompare(b.title, 'fr')
 }
