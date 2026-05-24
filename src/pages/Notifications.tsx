@@ -499,23 +499,15 @@ function reminderKey(lead: LeadResponse): string {
   return `${lead.id}:${lead.nextCallbackAt ?? ''}`
 }
 
-// Feed chronologique (style Facebook) : tri par événement le plus récent en premier,
-// indépendamment du groupe. Les notifs urgentes (now/soon) gardent une légère priorité
-// pour ne pas se faire enterrer par des arrivées récentes moins critiques.
+// Feed chronologique style Facebook : tri pur par date d'apparition, plus récent en haut,
+// tous types confondus. Pour les événements futurs (RDV imminent, rappel planifié) on
+// plafonne à `now` pour qu'ils ne s'auto-propulsent pas au-dessus des arrivages récents.
 function notificationFeedRank(a: Notif, b: Notif): number {
-  const aPrio = urgencyPriority(a.urgency)
-  const bPrio = urgencyPriority(b.urgency)
-  if (aPrio !== bPrio) return aPrio - bPrio
-  const aTime = a.sortAt ?? 0
-  const bTime = b.sortAt ?? 0
+  const now = Date.now()
+  const aTime = Math.min(a.sortAt ?? 0, now)
+  const bTime = Math.min(b.sortAt ?? 0, now)
   if (aTime !== bTime) return bTime - aTime
   return a.title.localeCompare(b.title, 'fr')
-}
-
-function urgencyPriority(urgency: Notif['urgency']): number {
-  if (urgency === 'now') return 0
-  if (urgency === 'soon') return 1
-  return 2
 }
 
 function supportsBrowserNotifications(): boolean {
