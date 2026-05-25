@@ -830,7 +830,6 @@ function NotesTab({
         setSuccess('Lead marqué qualifié (RDV déjà géré par un spécialiste sur GHL).')
         setStep('done')
       } else {
-        if (!commentaire.trim()) throw new Error('Ajoute un commentaire principal.')
         setResult('')
         setSuccess(null)
         setStep('secteur')
@@ -1080,7 +1079,7 @@ function NotesTab({
           <div>
             <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-2">Statut setter</div>
             <div className="grid grid-cols-1 gap-2">
-              <StatusChoice active={setterStatus === 'qualifie'} icon="check" title="Qualifié" text="Commentaire principal, secteur et RDV" onClick={() => { setSetterStatus('qualifie'); setResult('joint') }} />
+              <StatusChoice active={setterStatus === 'qualifie'} icon="check" title="Qualifié" text="Secteur et RDV" onClick={() => { setSetterStatus('qualifie'); setResult('joint') }} />
             </div>
           </div>
 
@@ -1089,7 +1088,7 @@ function NotesTab({
               <textarea
                 value={commentaire}
                 onChange={(e) => setCommentaire(e.target.value)}
-                placeholder="Commentaire obligatoire : besoins, contexte, objections…"
+                placeholder="Commentaire (facultatif) : besoins, contexte, objections…"
                 className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full h-24 resize-none"
                 autoFocus={isActiveCall}
               />
