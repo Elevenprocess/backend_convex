@@ -71,9 +71,9 @@ export function Suivi() {
       <main className="suivi-page flex-grow overflow-y-auto px-4 sm:px-8 pt-4 pb-8">
         <header className="suivi-hero">
           <div>
-            <span className="eyebrow">Pipeline post-signature</span>
-            <h1>Suivi des installations</h1>
-            <p>Vue d&apos;ensemble des dossiers signés et de leur avancement workflow.</p>
+            <span className="eyebrow">Pipeline Délivrabilité</span>
+            <h1>Prospects signés à suivre</h1>
+            <p>Chaque card ouvre la fiche complète du prospect avec les données setter, commercial et le workflow associé.</p>
           </div>
           <div className="suivi-hero-actions">
             <div className="suivi-period" role="group" aria-label="Période">

@@ -1,6 +1,7 @@
+import type { ReactNode } from 'react'
 import type { Dossier } from '../../lib/suivi'
 import { formatCurrency, formatDate } from '../../lib/suivi'
-import { fullName, initials } from '../../lib/types'
+import { STATUS_LABEL, fieldOrDash, fullName, initials } from '../../lib/types'
 
 type Props = {
   dossier: Dossier
@@ -23,13 +24,39 @@ export function DossierSidebar({ dossier }: Props) {
       </header>
 
       <dl className="suivi-side-list">
-        {tel && (<><dt>Téléphone</dt><dd><a href={`tel:${tel}`}>{tel}</a></dd></>)}
-        {mail && (<><dt>Email</dt><dd><a href={`mailto:${mail}`}>{mail}</a></dd></>)}
-        <dt>Montant</dt><dd>{formatCurrency(dossier.amount)}</dd>
-        <dt>Financement</dt><dd>{dossier.state.payMode === 'financement' ? 'Financement' : 'Comptant'}</dd>
-        <dt>Signé le</dt><dd>{formatDate(dossier.signedAt)}</dd>
-        {dossier.commercial && (<><dt>Commercial</dt><dd>{dossier.commercial.name}</dd></>)}
+        <Info label="Statut" value={STATUS_LABEL[dossier.lead.status]} />
+        <Info label="Téléphone" value={tel ? <a href={`tel:${tel}`}>{tel}</a> : '—'} />
+        <Info label="Email" value={mail ? <a href={`mailto:${mail}`}>{mail}</a> : '—'} />
+        <Info label="Adresse" value={fieldOrDash(dossier.lead.addressLine)} />
+        <Info label="Code postal" value={fieldOrDash(dossier.lead.postalCode)} />
+        <Info label="Ville" value={fieldOrDash(dossier.lead.city)} />
+        <Info label="Logement" value={fieldOrDash(dossier.lead.typeLogement)} />
+        <Info label="Revenu fiscal" value={dossier.lead.revenuFiscal ? `${dossier.lead.revenuFiscal.toLocaleString('fr-FR')} €` : '—'} />
+        <Info label="Source" value={fieldOrDash(dossier.lead.source)} />
+        <Info label="Canal" value={fieldOrDash(dossier.lead.canalAcquisition)} />
+        <Info label="Campagne" value={fieldOrDash(dossier.lead.campaign)} />
+        <Info label="Setter" value={dossier.setter?.name ?? fieldOrDash(dossier.lead.setterId)} />
+        <Info label="Commercial" value={dossier.commercial?.name ?? fieldOrDash(dossier.lead.assignedToId)} />
+        <Info label="Dernier appel" value={dossier.lead.latestCallAt ? formatDate(dossier.lead.latestCallAt) : '—'} />
+        <Info label="Note setter" value={fieldOrDash(dossier.lead.latestCallComment)} />
+        <Info label="RDV" value={dossier.rdv?.scheduledAt ? formatDate(dossier.rdv.scheduledAt) : fieldOrDash(dossier.lead.latestRdvAt)} />
+        <Info label="Montant" value={formatCurrency(dossier.amount)} />
+        <Info label="Financement" value={dossier.rdv?.financingType ?? (dossier.state.payMode === 'financement' ? 'Financement' : 'Comptant')} />
+        <Info label="Signé le" value={dossier.rdv?.signatureAt ? formatDate(dossier.rdv.signatureAt) : '—'} />
+        <Info label="Objections" value={fieldOrDash(dossier.rdv?.objections)} />
+        <Info label="Debrief commercial" value={fieldOrDash(dossier.rdv?.notes)} />
       </dl>
+
+      {dossier.lead.customFields?.length ? (
+        <section className="suivi-side-section">
+          <h3>Données formulaire / setter</h3>
+          <dl className="suivi-side-list">
+            {dossier.lead.customFields.map((field) => (
+              <Info key={`${field.fieldKey}-${field.fieldName}`} label={field.fieldName || field.fieldKey} value={fieldOrDash(field.value)} />
+            ))}
+          </dl>
+        </section>
+      ) : null}
 
       <div className="suivi-side-progress" aria-label={`Avancement global ${dossier.progress} pour cent`}>
         <div className="suivi-side-progress-head">
@@ -44,6 +71,7 @@ export function DossierSidebar({ dossier }: Props) {
       <div className="suivi-side-actions">
         {tel && <a className="suivi-side-cta" href={`tel:${tel}`}>Appeler</a>}
         {mail && <a className="suivi-side-cta" href={`mailto:${mail}`}>Email</a>}
+        <a className="suivi-side-cta secondary" href="#workflow">Aller au workflow</a>
         {ghlId && (
           <a
             className="suivi-side-cta secondary"
@@ -56,5 +84,14 @@ export function DossierSidebar({ dossier }: Props) {
         )}
       </div>
     </aside>
+  )
+}
+
+function Info({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </>
   )
 }

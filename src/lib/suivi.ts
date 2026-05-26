@@ -45,6 +45,7 @@ export type Dossier = {
   lead: LeadResponse
   rdv?: RdvResponse
   commercial?: UserResponse
+  setter?: UserResponse
   amount: number
   signedAt: string
   state: SuiviState
@@ -113,26 +114,39 @@ export function buildDossiers(
   users: UserResponse[],
   states: Record<string, SuiviState>,
 ): Dossier[] {
-  const leadMap = new Map(leads.map((l) => [l.id, l]))
   const userMap = new Map(users.map((u) => [u.id, u]))
-  const signedRdv = rdvs.filter((r) => r.result === 'signe' || Boolean(r.signatureAt))
-  const rows = signedRdv.map((rdv) => {
-    const lead = leadMap.get(rdv.leadId)
-    if (!lead) return null
-    return buildDossier(lead, rdv, rdv.commercialId ? userMap.get(rdv.commercialId) : undefined, states[lead.id] ?? readWorkflowState(lead.id))
-  }).filter(Boolean) as Dossier[]
-  for (const lead of leads.filter((l) => l.status === 'signe')) {
-    if (!rows.some((r) => r.id === lead.id)) {
-      rows.push(buildDossier(lead, undefined, lead.assignedToId ? userMap.get(lead.assignedToId) : undefined, states[lead.id] ?? readWorkflowState(lead.id)))
-    }
+  const rdvsByLead = new Map<string, RdvResponse[]>()
+  for (const rdv of rdvs) {
+    const list = rdvsByLead.get(rdv.leadId) ?? []
+    list.push(rdv)
+    rdvsByLead.set(rdv.leadId, list)
   }
+  for (const list of rdvsByLead.values()) {
+    list.sort((a, b) => new Date(b.signatureAt ?? b.scheduledAt ?? b.updatedAt).getTime() - new Date(a.signatureAt ?? a.scheduledAt ?? a.updatedAt).getTime())
+  }
+
+  const rows = leads
+    .filter((lead) => isQualifiedForSuivi(lead, rdvsByLead.get(lead.id)))
+    .map((lead) => {
+      const rdv = rdvsByLead.get(lead.id)?.[0]
+      const commercialId = rdv?.commercialId ?? lead.latestRdvCommercialId ?? lead.assignedToId
+      const setter = lead.setterId ? userMap.get(lead.setterId) : undefined
+      return buildDossier(lead, rdv, commercialId ? userMap.get(commercialId) : undefined, setter, states[lead.id] ?? readWorkflowState(lead.id))
+    })
+
   return rows.sort((a, b) => new Date(b.signedAt).getTime() - new Date(a.signedAt).getTime())
+}
+
+function isQualifiedForSuivi(lead: LeadResponse, rdvs: RdvResponse[] | undefined): boolean {
+  if (lead.status === 'signe') return true
+  return Boolean(rdvs?.some((rdv) => rdv.result === 'signe' || Boolean(rdv.signatureAt)))
 }
 
 export function buildDossier(
   lead: LeadResponse,
   rdv: RdvResponse | undefined,
   commercial: UserResponse | undefined,
+  setter: UserResponse | undefined,
   state: SuiviState,
 ): Dossier {
   const activeStep = inferActiveStep(state)
@@ -141,8 +155,9 @@ export function buildDossier(
     lead,
     rdv,
     commercial,
+    setter,
     amount: Number(rdv?.montantTotal ?? lead.monetaryValue ?? 0) || 0,
-    signedAt: rdv?.signatureAt ?? lead.lastStageChangeAt ?? lead.updatedAt,
+    signedAt: rdv?.signatureAt ?? lead.latestRdvAt ?? lead.lastStageChangeAt ?? lead.updatedAt,
     state,
     activeStep,
     progress: Math.round((WORKFLOW.filter((s) => (state.statuses[s.id] ?? statusForId(activeStep, s.id)) === 'done').length / WORKFLOW.length) * 100),

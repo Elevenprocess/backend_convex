@@ -45,7 +45,7 @@ export function SuiviDetail() {
         ) : (
           <div className="suivi-split">
             <DossierSidebar dossier={dossier} />
-            <section className="suivi-timeline-wrap glass-card">
+            <section id="workflow" className="suivi-timeline-wrap glass-card">
               <header className="suivi-timeline-head">
                 <h2>Workflow installation</h2>
                 <p>Cliquez une étape pour éditer son avancement. Sauvegarde automatique.</p>
