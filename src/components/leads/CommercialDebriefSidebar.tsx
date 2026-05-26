@@ -539,6 +539,162 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
   )
 }
 
+// ─── Wizard step components ─────────────────────────────────────────
+
+type StepProps = {
+  form: FormState
+  update: (patch: Partial<FormState>) => void
+}
+
+export function Step1Result({ form, update }: StepProps) {
+  return (
+    <FieldGroup label="Résultat de l'appel" required>
+      <div className="grid grid-cols-2 gap-2">
+        <ChoicePill active={form.outcome === 'vente'} icon="check" label="Vente réalisée" tone="success" onClick={() => update({ outcome: 'vente' })} />
+        <ChoicePill active={form.outcome === 'non_vente'} icon="x" label="Vente non réalisée" tone="rouille" onClick={() => update({ outcome: 'non_vente' })} />
+      </div>
+    </FieldGroup>
+  )
+}
+
+export function Step2VObjection({ form, update }: StepProps) {
+  return (
+    <FieldGroup label="Quelle objection avez-vous surmontée ?">
+      <div className="grid grid-cols-2 gap-1.5">
+        {OBJECTIONS.map((o) => (
+          <ChoiceChip
+            key={o.value}
+            active={form.objection === o.value}
+            label={o.label}
+            sublabel={o.hint}
+            onClick={() => update({ objection: form.objection === o.value ? '' : o.value })}
+          />
+        ))}
+      </div>
+    </FieldGroup>
+  )
+}
+
+type Step3VProps = StepProps & {
+  toggleAcceptance: (factor: AcceptanceFactor) => void
+}
+
+export function Step3VAcceptance({ form, toggleAcceptance }: Step3VProps) {
+  return (
+    <FieldGroup label="Facteurs d'acceptation">
+      <div className="grid grid-cols-2 gap-1.5">
+        {ACCEPTANCE_FACTORS.map((f) => (
+          <ChoiceChip
+            key={f.value}
+            active={form.acceptanceFactors.includes(f.value)}
+            label={f.label}
+            onClick={() => toggleAcceptance(f.value)}
+          />
+        ))}
+      </div>
+      <p className="mt-1 text-[10px] text-faint">Sélection multiple — pourquoi le prospect a dit oui.</p>
+    </FieldGroup>
+  )
+}
+
+export function Step4VDetails({ form, update }: StepProps) {
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <FieldGroup label="Valeur du devis signé (€)" required>
+          <input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="0.01"
+            value={form.quoteAmount}
+            onChange={(e) => update({ quoteAmount: e.target.value })}
+            placeholder="0,00"
+            className="w-full rounded-xl border border-line bg-cream px-3 py-2 text-sm font-bold text-text outline-none focus:border-or"
+          />
+        </FieldGroup>
+        <FieldGroup label="Date signature devis" required>
+          <input
+            type="date"
+            value={form.signedAt}
+            onChange={(e) => update({ signedAt: e.target.value })}
+            className="w-full rounded-xl border border-line bg-cream px-3 py-2 text-sm font-bold text-text outline-none focus:border-or"
+          />
+        </FieldGroup>
+      </div>
+
+      <FieldGroup label="Kits vendus" required>
+        <input
+          type="text"
+          value={form.kits}
+          onChange={(e) => update({ kits: e.target.value })}
+          placeholder="Ex. : 8 PV + 1 onduleur + 1 batterie 5 kWh"
+          className="w-full rounded-xl border border-line bg-cream px-3 py-2 text-sm text-text outline-none focus:border-or"
+        />
+      </FieldGroup>
+
+      <FieldGroup label="Type de paiement" required>
+        <div className="grid grid-cols-2 gap-1.5">
+          {PAYMENT_METHODS.map((p) => (
+            <ChoiceChip key={p.value} active={form.paymentMethod === p.value} label={p.label} onClick={() => update({ paymentMethod: p.value })} />
+          ))}
+        </div>
+      </FieldGroup>
+    </div>
+  )
+}
+
+export function Step2NVReason({ form, update }: StepProps) {
+  return (
+    <FieldGroup label="Raison de la non-vente" required>
+      <div className="grid grid-cols-2 gap-1.5">
+        {NON_SALE_REASONS.map((r) => (
+          <ChoiceChip
+            key={r.value}
+            active={form.nonSaleReason === r.value}
+            label={r.label}
+            sublabel={r.hint}
+            onClick={() => update({ nonSaleReason: r.value })}
+          />
+        ))}
+      </div>
+    </FieldGroup>
+  )
+}
+
+export function Step3NVObjection({ form, update }: StepProps) {
+  return (
+    <FieldGroup label="Quelle objection n'avez-vous pas pu surmonter ?">
+      <div className="grid grid-cols-2 gap-1.5">
+        {OBJECTIONS.map((o) => (
+          <ChoiceChip
+            key={o.value}
+            active={form.objection === o.value}
+            label={o.label}
+            sublabel={o.hint}
+            onClick={() => update({ objection: form.objection === o.value ? '' : o.value })}
+          />
+        ))}
+      </div>
+    </FieldGroup>
+  )
+}
+
+export function StepFinalNotes({ form, update }: StepProps) {
+  return (
+    <FieldGroup label="Notes supplémentaires">
+      <AutoGrowTextarea
+        value={form.notes}
+        onChange={(e) => update({ notes: e.target.value })}
+        minRows={4}
+        maxRows={20}
+        placeholder={notesPlaceholder(form)}
+        className="w-full rounded-xl border border-line bg-cream px-3 py-2 text-sm leading-relaxed text-text outline-none focus:border-or"
+      />
+    </FieldGroup>
+  )
+}
+
 function EmptyDebrief() {
   return (
     <div className="rounded-2xl border border-dashed border-line bg-cream/40 px-5 py-8 text-center">
