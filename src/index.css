@@ -4095,6 +4095,115 @@ body {
 .suivi-v2-step-done .suivi-v2-step-cta:hover { background: var(--color-or-tint); }
 .suivi-v2-step-saved { font-size: 11px; color: var(--color-or-dark); font-weight: 700; opacity: .8; }
 
+/* === Suivi v2 — dark mode === */
+[data-theme="dark"] .suivi-v2-page {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(62, 154, 111, .18), transparent 36%),
+    #08110c;
+  color: rgba(255, 255, 255, .92);
+}
+
+[data-theme="dark"] .suivi-v2-period,
+[data-theme="dark"] .suivi-v2-card,
+[data-theme="dark"] .suivi-v2-empty,
+[data-theme="dark"] .suivi-v2-side,
+[data-theme="dark"] .suivi-v2-timeline-wrap {
+  background: rgba(8, 17, 12, .92);
+  border-color: rgba(255, 255, 255, .09);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .32);
+}
+
+[data-theme="dark"] .suivi-v2-card:hover {
+  border-color: rgba(62, 154, 111, .46);
+  box-shadow: 0 22px 48px rgba(0, 0, 0, .32);
+}
+
+[data-theme="dark"] .suivi-v2-hero h1,
+[data-theme="dark"] .suivi-v2-card-id strong,
+[data-theme="dark"] .suivi-v2-card-step,
+[data-theme="dark"] .suivi-v2-side-head strong,
+[data-theme="dark"] .suivi-v2-side-list dd,
+[data-theme="dark"] .suivi-v2-timeline-head h2,
+[data-theme="dark"] .suivi-v2-step-head strong {
+  color: rgba(255, 255, 255, .95);
+}
+
+[data-theme="dark"] .suivi-v2-hero p,
+[data-theme="dark"] .suivi-v2-period button,
+[data-theme="dark"] .suivi-v2-card-id span,
+[data-theme="dark"] .suivi-v2-card-foot,
+[data-theme="dark"] .suivi-v2-side-head span,
+[data-theme="dark"] .suivi-v2-side-progress-head,
+[data-theme="dark"] .suivi-v2-timeline-head p,
+[data-theme="dark"] .suivi-v2-step-head span,
+[data-theme="dark"] .suivi-v2-step-detail {
+  color: rgba(255, 255, 255, .58);
+}
+
+[data-theme="dark"] .suivi-v2-card-time,
+[data-theme="dark"] .suivi-v2-side-list dt,
+[data-theme="dark"] .suivi-v2-step-fields label {
+  color: rgba(255, 255, 255, .38);
+}
+
+[data-theme="dark"] .suivi-v2-avatar,
+[data-theme="dark"] .suivi-v2-side-avatar,
+[data-theme="dark"] .suivi-v2-step.is-expanded .suivi-v2-step-body {
+  background: rgba(62, 154, 111, .16);
+  color: #9be4bd;
+}
+
+[data-theme="dark"] .suivi-v2-search,
+[data-theme="dark"] .suivi-v2-step-fields input,
+[data-theme="dark"] .suivi-v2-step-fields textarea {
+  background: rgba(3, 9, 6, .72);
+  border-color: rgba(255, 255, 255, .09);
+  color: rgba(255, 255, 255, .92);
+}
+
+[data-theme="dark"] .suivi-v2-search:focus,
+[data-theme="dark"] .suivi-v2-step-fields input:focus,
+[data-theme="dark"] .suivi-v2-step-fields textarea:focus {
+  background: rgba(3, 9, 6, .94);
+  border-color: rgba(62, 154, 111, .52);
+}
+
+[data-theme="dark"] .suivi-v2-card-progress-track,
+[data-theme="dark"] .suivi-v2-side-progress-track,
+[data-theme="dark"] .suivi-v2-timeline::before,
+[data-theme="dark"] .suivi-v2-step-circle {
+  background: rgba(255, 255, 255, .08);
+  border-color: rgba(255, 255, 255, .1);
+}
+
+[data-theme="dark"] .suivi-v2-step-circle {
+  color: rgba(255, 255, 255, .56);
+}
+
+[data-theme="dark"] .suivi-v2-step-active .suivi-v2-step-circle {
+  color: #9be4bd;
+  box-shadow: 0 0 0 6px rgba(62, 154, 111, .16);
+}
+
+[data-theme="dark"] .suivi-v2-side-list a,
+[data-theme="dark"] .suivi-v2-side-progress-head strong,
+[data-theme="dark"] .suivi-v2-card-progress > span,
+[data-theme="dark"] .suivi-v2-step-done .suivi-v2-step-cta,
+[data-theme="dark"] .suivi-v2-step-saved {
+  color: #9be4bd;
+}
+
+[data-theme="dark"] .suivi-v2-side-cta.secondary,
+[data-theme="dark"] .suivi-v2-step-done .suivi-v2-step-cta {
+  border-color: rgba(255, 255, 255, .12);
+  background: transparent;
+}
+
+[data-theme="dark"] .suivi-v2-side-cta.secondary:hover,
+[data-theme="dark"] .suivi-v2-step-done .suivi-v2-step-cta:hover {
+  background: rgba(62, 154, 111, .13);
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
   .suivi-v2-split { grid-template-columns: 320px minmax(0, 1fr); }
