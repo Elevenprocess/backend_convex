@@ -181,6 +181,10 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const [currentStep, setCurrentStep] = useState<number>(0)
   const [transitionDirection, setTransitionDirection] = useState<'forward' | 'backward'>('forward')
+  const [rescheduleDate, setRescheduleDate] = useState('')
+  const [rescheduleTime, setRescheduleTime] = useState('')
+  const [rescheduling, setRescheduling] = useState(false)
+  const [rescheduleSavedAt, setRescheduleSavedAt] = useState<string | null>(null)
   const readOnly = useIsReadOnlyImpersonation()
 
   useEffect(() => {
@@ -190,10 +194,14 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
   useEffect(() => {
     setError(null)
     setSavedAt(null)
+    setRescheduleSavedAt(null)
     setForm(selectedRdv ? rdvToForm(selectedRdv) : EMPTY_FORM)
+    const initialSlot = selectedRdv ? dateTimeInputsFromIso(selectedRdv.scheduledAt) : { date: '', time: '' }
+    setRescheduleDate(initialSlot.date)
+    setRescheduleTime(initialSlot.time)
     setCurrentStep(0)
     setTransitionDirection('forward')
-  }, [selectedRdv?.id])
+  }, [selectedRdv?.id, selectedRdv?.scheduledAt])
 
   const update = (patch: Partial<FormState>) => {
     setForm((current) => {
@@ -253,6 +261,28 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
     (form.outcome === 'vente'
       ? form.quoteAmount.trim() !== '' && form.signedAt !== '' && form.kits.trim() !== '' && form.paymentMethod !== ''
       : form.nonSaleReason !== '')
+
+  const canReschedule = Boolean(selectedRdv && rescheduleDate && rescheduleTime && !rescheduling && !readOnly)
+
+  async function handleReschedule() {
+    if (!selectedRdv || !rescheduleDate || !rescheduleTime || rescheduling || readOnly) return
+    setRescheduling(true)
+    setError(null)
+    try {
+      await updateRdv(selectedRdv.id, {
+        scheduledAt: rdvAtToReunionIso(rescheduleDate, rescheduleTime),
+        status: 'reporte',
+        result: 'reporte',
+      })
+      setRescheduleSavedAt(new Date().toISOString())
+      refetchRdvs()
+      onSaved?.()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur lors du report du RDV')
+    } finally {
+      setRescheduling(false)
+    }
+  }
 
   async function handleSubmit() {
     if (!selectedRdv || !canSubmit) return
@@ -332,6 +362,19 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
         ) : (
           <>
             <RdvSelector rdvs={sortedRdvs} selectedId={selectedRdv?.id ?? null} onSelect={setSelectedRdvId} />
+
+            {selectedRdv && (
+              <RescheduleCard
+                date={rescheduleDate}
+                time={rescheduleTime}
+                saving={rescheduling}
+                savedAt={rescheduleSavedAt}
+                disabled={!canReschedule}
+                onDateChange={setRescheduleDate}
+                onTimeChange={setRescheduleTime}
+                onSubmit={handleReschedule}
+              />
+            )}
 
             <ProgressDots total={stepSequence.length} currentIndex={Math.min(currentStep, stepSequence.length - 1)} />
 
@@ -449,21 +492,33 @@ type Step3VProps = StepProps & {
   toggleAcceptance: (factor: AcceptanceFactor) => void
 }
 
-function Step3VAcceptance({ form, toggleAcceptance }: Step3VProps) {
+function Step3VAcceptance({ form, update, toggleAcceptance }: Step3VProps) {
   return (
-    <FieldGroup label="Facteurs d'acceptation">
-      <div className="grid grid-cols-2 gap-1.5">
-        {ACCEPTANCE_FACTORS.map((f) => (
-          <ChoiceChip
-            key={f.value}
-            active={form.acceptanceFactors.includes(f.value)}
-            label={f.label}
-            onClick={() => toggleAcceptance(f.value)}
-          />
-        ))}
-      </div>
-      <p className="mt-1 text-[10px] text-faint">Sélection multiple — pourquoi le prospect a dit oui.</p>
-    </FieldGroup>
+    <div className="space-y-4">
+      <FieldGroup label="Facteurs d'acceptation">
+        <div className="grid grid-cols-2 gap-1.5">
+          {ACCEPTANCE_FACTORS.map((f) => (
+            <ChoiceChip
+              key={f.value}
+              active={form.acceptanceFactors.includes(f.value)}
+              label={f.label}
+              onClick={() => toggleAcceptance(f.value)}
+            />
+          ))}
+        </div>
+        <p className="mt-1 text-[10px] text-faint">Sélection multiple — pourquoi le prospect a dit oui.</p>
+      </FieldGroup>
+      <FieldGroup label="Commentaire de validation">
+        <AutoGrowTextarea
+          value={form.notes}
+          onChange={(e) => update({ notes: e.target.value })}
+          minRows={3}
+          maxRows={10}
+          placeholder="Pourquoi le prospect valide ? Conditions, contexte, point fort décisif…"
+          className="w-full rounded-xl border border-line bg-cream px-3 py-2 text-sm leading-relaxed text-text outline-none focus:border-or"
+        />
+      </FieldGroup>
+    </div>
   )
 }
 
@@ -516,19 +571,31 @@ function Step4VDetails({ form, update }: StepProps) {
 
 function Step2NVReason({ form, update }: StepProps) {
   return (
-    <FieldGroup label="Raison de la non-vente" required>
-      <div className="grid grid-cols-2 gap-1.5">
-        {NON_SALE_REASONS.map((r) => (
-          <ChoiceChip
-            key={r.value}
-            active={form.nonSaleReason === r.value}
-            label={r.label}
-            sublabel={r.hint}
-            onClick={() => update({ nonSaleReason: r.value })}
-          />
-        ))}
-      </div>
-    </FieldGroup>
+    <div className="space-y-4">
+      <FieldGroup label="Raison de la non-vente" required>
+        <div className="grid grid-cols-2 gap-1.5">
+          {NON_SALE_REASONS.map((r) => (
+            <ChoiceChip
+              key={r.value}
+              active={form.nonSaleReason === r.value}
+              label={r.label}
+              sublabel={r.hint}
+              onClick={() => update({ nonSaleReason: r.value })}
+            />
+          ))}
+        </div>
+      </FieldGroup>
+      <FieldGroup label="Commentaire sur la cause">
+        <AutoGrowTextarea
+          value={form.notes}
+          onChange={(e) => update({ notes: e.target.value })}
+          minRows={3}
+          maxRows={10}
+          placeholder="Détaille la cause : objection réelle, contexte, prochaine action possible…"
+          className="w-full rounded-xl border border-line bg-cream px-3 py-2 text-sm leading-relaxed text-text outline-none focus:border-or"
+        />
+      </FieldGroup>
+    </div>
   )
 }
 
@@ -596,6 +663,83 @@ function DebriefSummaryCards({ form }: { form: FormState }) {
         ))}
       </div>
     </div>
+  )
+}
+
+function RescheduleCard({
+  date,
+  time,
+  saving,
+  savedAt,
+  disabled,
+  onDateChange,
+  onTimeChange,
+  onSubmit,
+}: {
+  date: string
+  time: string
+  saving: boolean
+  savedAt: string | null
+  disabled: boolean
+  onDateChange: (value: string) => void
+  onTimeChange: (value: string) => void
+  onSubmit: () => void
+}) {
+  return (
+    <section className="rounded-3xl border border-line bg-white p-3 shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.14em] text-or-dark">
+            <span className="flex h-7 w-7 items-center justify-center rounded-2xl bg-or-tint text-or-dark">
+              <Icon name="calendar" size={14} />
+            </span>
+            RDV à reporter
+          </div>
+          <p className="mt-1 text-xs leading-relaxed text-muted">Choisis la nouvelle date et l’heure avant de continuer le débrief.</p>
+        </div>
+        <div className="rounded-2xl border border-line bg-cream px-3 py-2 text-right sm:min-w-[118px]">
+          <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-faint">Jour</div>
+          <div className="text-sm font-black text-text">{date ? formatDayLabel(date) : '—'}</div>
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_0.8fr]">
+        <label className="rounded-2xl border border-line bg-cream px-3 py-2">
+          <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.12em] text-faint">Date</span>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => onDateChange(e.target.value)}
+            className="w-full bg-transparent text-sm font-bold text-text outline-none"
+          />
+        </label>
+        <label className="rounded-2xl border border-line bg-cream px-3 py-2">
+          <span className="mb-1 flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-faint"><Icon name="clock" size={10} /> Heure</span>
+          <input
+            type="time"
+            value={time}
+            onChange={(e) => onTimeChange(e.target.value)}
+            className="w-full bg-transparent text-sm font-bold text-text outline-none"
+          />
+        </label>
+      </div>
+
+      <button
+        type="button"
+        onClick={onSubmit}
+        disabled={disabled}
+        className={`mt-3 w-full rounded-2xl px-3 py-2.5 text-xs font-black transition ${
+          disabled ? 'cursor-not-allowed bg-cream-darker text-faint' : 'bg-text text-white hover:bg-text/90'
+        }`}
+      >
+        {saving ? 'Report en cours…' : 'Valider le report du RDV'}
+      </button>
+      {savedAt && (
+        <p className="mt-2 rounded-xl border border-success/30 bg-success-tint px-3 py-2 text-[11px] font-bold text-success">
+          RDV reporté · {formatTime(savedAt)}
+        </p>
+      )}
+    </section>
   )
 }
 
@@ -895,14 +1039,43 @@ function notesPlaceholder(form: FormState): string {
   return 'Contexte, décision, prochaines étapes…'
 }
 
+function dateTimeInputsFromIso(iso: string): { date: string; time: string } {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return { date: '', time: '' }
+  const parts = new Intl.DateTimeFormat('fr-FR', {
+    timeZone: 'Indian/Reunion',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(d)
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? ''
+  return {
+    date: `${get('year')}-${get('month')}-${get('day')}`,
+    time: `${get('hour')}:${get('minute')}`,
+  }
+}
+
+function rdvAtToReunionIso(date: string, time: string): string {
+  return `${date}T${time}:00+04:00`
+}
+
+function formatDayLabel(date: string): string {
+  const d = new Date(`${date}T12:00:00+04:00`)
+  if (Number.isNaN(d.getTime())) return '—'
+  return new Intl.DateTimeFormat('fr-FR', { weekday: 'long', timeZone: 'Indian/Reunion' }).format(d)
+}
+
 function formatRdvLabel(rdv: RdvResponse): string {
   const d = new Date(rdv.scheduledAt)
-  const date = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
-  const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  const date = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', timeZone: 'Indian/Reunion' })
+  const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Indian/Reunion' })
   const status = rdv.status === 'honore' ? '· honoré' : rdv.status === 'no_show' ? '· no-show' : rdv.status === 'reporte' ? '· reporté' : ''
   return `${date} ${time} ${status}`.trim()
 }
 
 function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Indian/Reunion' })
 }
