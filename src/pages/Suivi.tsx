@@ -11,6 +11,9 @@ import { fullName, initials, type LeadResponse, type RdvResponse, type UserRespo
 type NodeStatus = 'todo' | 'active' | 'done' | 'blocked' | 'lost'
 type PayMode = 'comptant' | 'financement'
 type PrimeMode = 'revente_edf' | 'region'
+type SuiviPeriodMode = 'today' | 'this_week' | 'this_month' | 'this_year' | 'custom'
+type SuiviPeriodState = { mode: SuiviPeriodMode; customFrom: string; customTo: string }
+type SuiviPeriodRange = { from: Date; to: Date; label: string }
 type StepId =
   | 'signed'
   | 'prime'
@@ -55,6 +58,14 @@ type Dossier = {
 }
 
 const STORAGE_PREFIX = 'ecoi.suivi.workflow.v1:'
+const suiviTodayInput = toDateInputValue(new Date())
+const DEFAULT_SUIVI_PERIOD: SuiviPeriodState = { mode: 'this_month', customFrom: suiviTodayInput, customTo: suiviTodayInput }
+const SUIVI_PERIOD_OPTIONS: { id: SuiviPeriodMode; label: string }[] = [
+  { id: 'today', label: "Aujourd'hui" },
+  { id: 'this_week', label: 'Cette semaine' },
+  { id: 'this_month', label: 'Ce mois-ci' },
+  { id: 'this_year', label: 'Cette année' },
+]
 
 const WORKFLOW: WorkflowStep[] = [
   { id: 'signed', label: 'Devis signé', short: 'START', detail: 'Dossier commercial validé, suivi livraison ouvert.', owner: 'Commercial', icon: 'trophy' },
@@ -89,8 +100,12 @@ export function Suivi() {
   const [pulseKey, setPulseKey] = useState(0)
   const [states, setStates] = useState<Record<string, SuiviState>>({})
   const [focusStep, setFocusStep] = useState<StepId>('prime')
+  const [modalStep, setModalStep] = useState<StepId | null>(null)
+  const [period, setPeriod] = useState<SuiviPeriodState>(DEFAULT_SUIVI_PERIOD)
+  const periodRange = useMemo(() => buildSuiviPeriodRange(period), [period])
 
-  const signedDossiers = useMemo(() => buildDossiers(leads ?? [], rdvs ?? [], users ?? [], states), [leads, rdvs, users, states])
+  const allSignedDossiers = useMemo(() => buildDossiers(leads ?? [], rdvs ?? [], users ?? [], states), [leads, rdvs, users, states])
+  const signedDossiers = useMemo(() => allSignedDossiers.filter((d) => isDateInRange(d.signedAt, periodRange.from, periodRange.to)), [allSignedDossiers, periodRange])
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return signedDossiers
@@ -131,6 +146,8 @@ export function Suivi() {
 
   const selectedStep = WORKFLOW.find((s) => s.id === focusStep) ?? WORKFLOW[0]
   const selectedStatus = selected?.state.statuses[focusStep] ?? statusForStep(selected, focusStep)
+  const popupStep = modalStep ? WORKFLOW.find((s) => s.id === modalStep) ?? null : null
+  const popupStatus = selected && modalStep ? selected.state.statuses[modalStep] ?? statusForStep(selected, modalStep) : 'todo'
 
   return (
     <AppShell flat>
@@ -138,14 +155,38 @@ export function Suivi() {
       <main className="suivi-page flex-grow overflow-y-auto px-4 sm:px-8 pt-4 pb-8">
         <section className="suivi-hero">
           <div>
-            <span className="eyebrow">Jenkins pipeline × nodes n8n</span>
-            <h1>Un prospect sélectionné, un point de position animé.</h1>
-            <p>Chaque module est éditable : statut, date, notes, type de prime et paiement. Les modifications sont gardées localement jusqu’au branchement backend Lot 2.</p>
+            <span className="eyebrow">Pipeline Jenkins · popup n8n</span>
+            <h1>Suivi des dossiers signés</h1>
+            <p>Choisis une période, clique un module du workflow, puis modifie son avancement dans le popup.</p>
           </div>
           <div className="suivi-hero-kpis">
             <SuiviKpi label="Dossiers signés" value={signedDossiers.length} />
             <SuiviKpi label="En retard / bloqués" value={signedDossiers.filter((d) => d.state.statuses[d.activeStep] === 'blocked').length} />
             <SuiviKpi label="Progression moy." value={`${Math.round(avg(signedDossiers.map((d) => d.progress)))}%`} />
+          </div>
+        </section>
+
+        <section className="suivi-period-card">
+          <div>
+            <span className="eyebrow">Période</span>
+            <strong>{periodRange.label}</strong>
+          </div>
+          <div className="suivi-period-actions">
+            <div className="suivi-period-switch" aria-label="Période de suivi">
+              {SUIVI_PERIOD_OPTIONS.map((option) => (
+                <button key={option.id} type="button" className={period.mode === option.id ? 'active' : ''} onClick={() => setPeriod((current) => ({ ...current, mode: option.id }))}>
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <label>
+              Du
+              <input type="date" value={toDateInputValue(periodRange.from)} onChange={(e) => setPeriod((current) => ({ ...current, mode: 'custom', customFrom: e.target.value, customTo: current.mode === 'custom' ? current.customTo : toDateInputValue(periodRange.to) }))} />
+            </label>
+            <label>
+              Au
+              <input type="date" value={toDateInputValue(periodRange.to)} onChange={(e) => setPeriod((current) => ({ ...current, mode: 'custom', customFrom: current.mode === 'custom' ? current.customFrom : toDateInputValue(periodRange.from), customTo: e.target.value }))} />
+            </label>
           </div>
         </section>
 
@@ -189,7 +230,10 @@ export function Suivi() {
                     <button
                       key={step.id}
                       type="button"
-                      onClick={() => setFocusStep(step.id)}
+                      onClick={() => {
+                        setFocusStep(step.id)
+                        setModalStep(step.id)
+                      }}
                       className={`suivi-node is-${status} ${focused ? 'is-focused' : ''} ${passed ? 'is-passed' : ''}`}
                     >
                       <span className="suivi-node-dot"><Icon name={step.icon} size={15} /></span>
@@ -203,35 +247,10 @@ export function Suivi() {
                 <span className="suivi-position" style={{ left: `${workflowLeft(selected.activeStep)}%` }} />
               </div>
 
-              <div className="suivi-node-editor">
-                <div className={`suivi-editor-card is-${selectedStatus}`}>
-                  <div className="suivi-editor-icon"><Icon name={selectedStep.icon} size={20} /></div>
-                  <div className="min-w-0">
-                    <span className="eyebrow">Node éditable · {selectedStep.owner}</span>
-                    <h3>{selectedStep.label}</h3>
-                    <p>{nodeDetail(selectedStep, selected.state)}</p>
-                  </div>
-                </div>
-                <div className="suivi-editor-fields">
-                  <label>
-                    Statut
-                    <select value={selectedStatus} onChange={(e) => updateSelected((s) => ({ ...s, statuses: { ...s.statuses, [focusStep]: e.target.value as NodeStatus } }))}>
-                      <option value="todo">À faire</option>
-                      <option value="active">En cours</option>
-                      <option value="done">Fait</option>
-                      <option value="blocked">Bloqué</option>
-                      <option value="lost">Devis perdu</option>
-                    </select>
-                  </label>
-                  <label>
-                    Date prévue / réalisée
-                    <input type="date" value={selected.state.dates[focusStep] ?? ''} onChange={(e) => updateSelected((s) => ({ ...s, dates: { ...s.dates, [focusStep]: e.target.value } }))} />
-                  </label>
-                  <label className="suivi-note-field">
-                    Notes internes
-                    <textarea value={selected.state.notes[focusStep] ?? ''} onChange={(e) => updateSelected((s) => ({ ...s, notes: { ...s.notes, [focusStep]: e.target.value } }))} placeholder="Point WhatsApp, blocage mairie, technicien attribué…" />
-                  </label>
-                </div>
+              <div className="suivi-selected-node">
+                <span className={`suivi-mini-dot is-${selectedStatus}`}><Icon name={selectedStep.icon} size={14} /></span>
+                <span><strong>{selectedStep.label}</strong><small>{nodeDetail(selectedStep, selected.state)}</small></span>
+                <button type="button" onClick={() => setModalStep(focusStep)}>Modifier ce module</button>
               </div>
             </>
           ) : (
@@ -260,9 +279,107 @@ export function Suivi() {
             {filtered.length === 0 && <div className="py-10 text-center text-sm text-muted">Aucun dossier pour cette recherche.</div>}
           </div>
         </section>
+
+        {selected && popupStep && modalStep && (
+          <div className="suivi-node-modal-backdrop" role="presentation" onMouseDown={() => setModalStep(null)}>
+            <section className="suivi-node-modal" role="dialog" aria-modal="true" aria-labelledby="suivi-node-modal-title" onMouseDown={(event) => event.stopPropagation()}>
+              <button type="button" className="suivi-node-modal-close" onClick={() => setModalStep(null)} aria-label="Fermer le module">×</button>
+              <div className="suivi-node-modal-head">
+                <span className={`suivi-modal-icon is-${popupStatus}`}><Icon name={popupStep.icon} size={18} /></span>
+                <div>
+                  <span className="eyebrow">Module workflow · {popupStep.owner}</span>
+                  <h3 id="suivi-node-modal-title">{popupStep.label}</h3>
+                  <p>{nodeDetail(popupStep, selected.state)}</p>
+                </div>
+              </div>
+
+              <div className="suivi-node-modal-client">
+                <strong>{fullName(selected.lead) || selected.lead.phone || 'Prospect signé'}</strong>
+                <span>{selected.lead.city ?? 'Ville inconnue'} · {formatCurrency(selected.amount)} · {selected.commercial?.name ?? 'Commercial non assigné'}</span>
+              </div>
+
+              <div className="suivi-editor-fields suivi-modal-fields">
+                <label>
+                  Statut
+                  <select value={popupStatus} onChange={(e) => updateSelected((s) => ({ ...s, statuses: { ...s.statuses, [modalStep]: e.target.value as NodeStatus } }))}>
+                    <option value="todo">À faire</option>
+                    <option value="active">En cours</option>
+                    <option value="done">Fait</option>
+                    <option value="blocked">Bloqué</option>
+                    <option value="lost">Devis perdu</option>
+                  </select>
+                </label>
+                <label>
+                  Date prévue / réalisée
+                  <input type="date" value={selected.state.dates[modalStep] ?? ''} onChange={(e) => updateSelected((s) => ({ ...s, dates: { ...s.dates, [modalStep]: e.target.value } }))} />
+                </label>
+                <label className="suivi-note-field">
+                  Notes internes
+                  <textarea value={selected.state.notes[modalStep] ?? ''} onChange={(e) => updateSelected((s) => ({ ...s, notes: { ...s.notes, [modalStep]: e.target.value } }))} placeholder="Point WhatsApp, blocage mairie, technicien attribué…" />
+                </label>
+              </div>
+            </section>
+          </div>
+        )}
       </main>
     </AppShell>
   )
+}
+
+function buildSuiviPeriodRange(period: SuiviPeriodState): SuiviPeriodRange {
+  const today = startOfDay(new Date())
+  let from = today
+  let to = endOfDay(today)
+  if (period.mode === 'this_week') {
+    from = startOfWeek(today)
+  } else if (period.mode === 'this_month') {
+    from = new Date(today.getFullYear(), today.getMonth(), 1)
+  } else if (period.mode === 'this_year') {
+    from = new Date(today.getFullYear(), 0, 1)
+  } else if (period.mode === 'custom') {
+    from = parseDateInput(period.customFrom)
+    to = endOfDay(parseDateInput(period.customTo))
+    if (from > to) [from, to] = [startOfDay(to), endOfDay(from)]
+  }
+  const label = `${formatDate(from.toISOString())} → ${formatDate(to.toISOString())}`
+  return { from: startOfDay(from), to: endOfDay(to), label }
+}
+
+function isDateInRange(value: string, from: Date, to: Date): boolean {
+  const date = new Date(value)
+  return date >= from && date <= to
+}
+
+function parseDateInput(value: string): Date {
+  if (!value) return startOfDay(new Date())
+  const [year, month, day] = value.split('-').map(Number)
+  return startOfDay(new Date(year, (month || 1) - 1, day || 1))
+}
+
+function toDateInputValue(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function startOfDay(date: Date): Date {
+  const next = new Date(date)
+  next.setHours(0, 0, 0, 0)
+  return next
+}
+
+function endOfDay(date: Date): Date {
+  const next = new Date(date)
+  next.setHours(23, 59, 59, 999)
+  return next
+}
+
+function startOfWeek(date: Date): Date {
+  const next = startOfDay(date)
+  const day = next.getDay() || 7
+  next.setDate(next.getDate() - day + 1)
+  return next
 }
 
 function buildDossiers(leads: LeadResponse[], rdvs: RdvResponse[], users: UserResponse[], states: Record<string, SuiviState>): Dossier[] {
