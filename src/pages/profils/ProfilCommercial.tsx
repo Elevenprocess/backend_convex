@@ -101,6 +101,13 @@ export function ProfilCommercial() {
   }, [users])
 
   const rdvList = rdvs ?? []
+  const leadsWithReporteHistory = useMemo(() => {
+    const set = new Set<string>()
+    for (const r of rdvList) {
+      if (r.status === 'reporte' || r.result === 'reporte') set.add(r.leadId)
+    }
+    return set
+  }, [rdvList])
   const liveGhlEvents = useMemo(() => (ghlEventsData?.events ?? []).filter((event) => event.commercialId === profileId || event.assignedUserId === member?.ghlUserId), [ghlEventsData?.events, member?.ghlUserId, profileId])
   const ghlStageNames = useMemo(() => new Map((ghlOpps?.stages ?? []).map((stage) => [stage.id, stage.name])), [ghlOpps?.stages])
   const localRdvContactIds = useMemo(() => {
@@ -296,6 +303,7 @@ export function ProfilCommercial() {
                     <ProspectRdvRow
                       key={card.id}
                       card={card}
+                      hasReporteHistory={leadsWithReporteHistory.has(card.rdv.leadId)}
                       moving={movingId === card.id}
                       onOpen={() => setSelectedCard(card)}
                       onStageChange={(stageId) => handleStageChange(card, stageId)}
@@ -326,7 +334,8 @@ function resolveStageId(rdv: RdvResponse, lead?: LeadResponse): PipelineStageId 
   if (lead?.status === 'pas_qualifie') return 'rdv_pas_qualifie'
   if (rdv.status === 'annule') return 'rdv_annule'
   if (rdv.status === 'no_show' || rdv.result === 'no_show') return 'no_show_bis'
-  if (rdv.status === 'reporte' || rdv.result === 'reporte') return 'rdv_reprogramme'
+  if (rdv.status === 'reporte') return 'rdv_reprogramme'
+  if (rdv.result === 'reporte' && rdv.status !== 'honore') return 'rdv_reprogramme'
   if (lead?.status === 'relance') return 'relance_long_terme'
   if (rdv.result === 'reflexion') return 'devis_en_attente'
   if (rdv.status === 'honore' || lead?.status === 'rdv_honore') return 'devis_en_attente'
@@ -537,11 +546,12 @@ function normalizeText(value: string): string {
   return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim()
 }
 
-function ProspectRdvRow({ card, moving, onOpen, onStageChange }: { card: ProspectCard; moving: boolean; onOpen: () => void; onStageChange: (stageId: PipelineStageId) => void }) {
+function ProspectRdvRow({ card, hasReporteHistory, moving, onOpen, onStageChange }: { card: ProspectCard; hasReporteHistory: boolean; moving: boolean; onOpen: () => void; onStageChange: (stageId: PipelineStageId) => void }) {
   const { rdv, lead } = card
   const name = lead ? fullName(lead) || lead.email || lead.phone || 'Prospect' : 'Prospect lié'
   const value = rdv.montantTotal ? Number(rdv.montantTotal) : null
   const debriefCount = countDebriefs(rdv.notes)
+  const showReporteBadge = card.stageId === 'devis_en_attente' && hasReporteHistory
   return (
     <div
       role="button"
@@ -564,6 +574,12 @@ function ProspectRdvRow({ card, moving, onOpen, onStageChange }: { card: Prospec
         <div className="flex flex-wrap items-center gap-1.5 min-w-0">
           {rdv.externalId && <span className="rounded-full bg-success-tint px-2 py-0.5 text-[10px] font-bold text-success">GHL</span>}
           {lead?.status && <span className="rounded-full bg-cream-darker px-2 py-0.5 text-[10px] font-bold text-muted">{lead.status}</span>}
+          {showReporteBadge && (
+            <span className="rounded-full bg-rouille-tint px-2 py-0.5 text-[10px] font-bold text-rouille inline-flex items-center gap-1" title="RDV initialement reporté avant d'être honoré">
+              <Icon name="clock" size={10} />
+              RDV reporté
+            </span>
+          )}
           <span className="rounded-full bg-white border border-line-soft px-2 py-0.5 text-[10px] font-bold text-muted">{debriefCount} débrief.</span>
           <span className={`text-xs font-black ${value ? 'text-text' : 'text-faint'}`}>{value ? formatCurrency(value) : '—'}</span>
         </div>
