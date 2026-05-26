@@ -262,7 +262,7 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
       }
       const composedNonSaleReason =
         form.outcome === 'non_vente' && form.nonSaleReason
-          ? composeNonSaleReason(form.nonSaleReason, form.nonSaleSubReason)
+          ? composeNonSaleReason(form.nonSaleReason)
           : null
       const composedNotes = composeNotes(form)
       await updateRdv(selectedRdv.id, {
@@ -771,10 +771,8 @@ function acceptanceFactorFromLabel(label: string): AcceptanceFactor | '' {
   return (ACCEPTANCE_FACTORS.find((f) => f.label === label)?.value ?? '') as AcceptanceFactor | ''
 }
 
-function composeNonSaleReason(reason: NonSaleReason, sub: string): string {
-  const main = labelFromNonSaleReason(reason)
-  if (!sub.trim()) return main
-  return `${main}${NON_SALE_REASON_SEPARATOR}${sub.trim()}`
+function composeNonSaleReason(reason: NonSaleReason): string {
+  return labelFromNonSaleReason(reason)
 }
 
 function splitNonSaleReason(raw: string | null): { mainLabel: string; subLabel: string } {
