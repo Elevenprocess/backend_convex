@@ -190,7 +190,32 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
     setCurrentStep(0)
   }, [selectedRdv?.id])
 
-  const update = (patch: Partial<FormState>) => setForm((current) => ({ ...current, ...patch }))
+  const update = (patch: Partial<FormState>) => {
+    setForm((current) => {
+      const next = { ...current, ...patch }
+
+      // Reset cascade si outcome change
+      if ('outcome' in patch && patch.outcome !== current.outcome) {
+        next.nonSaleReason = ''
+        next.objection = ''
+        next.acceptanceFactors = []
+        next.quoteAmount = ''
+        next.signedAt = ''
+        next.kits = ''
+        next.paymentMethod = ''
+        // notes préservées (saisie commune)
+      }
+
+      // Reset objection si on quitte la branche Suivi prévu
+      if ('nonSaleReason' in patch && patch.nonSaleReason !== current.nonSaleReason) {
+        if (patch.nonSaleReason !== 'suivi_prevu') {
+          next.objection = ''
+        }
+      }
+
+      return next
+    })
+  }
 
   const stepSequence = useMemo(() => getStepSequence(form), [form.outcome, form.nonSaleReason])
   const currentStepId = stepSequence[Math.min(currentStep, stepSequence.length - 1)]
@@ -292,7 +317,7 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
           <>
             <RdvSelector rdvs={sortedRdvs} selectedId={selectedRdv?.id ?? null} onSelect={setSelectedRdvId} />
 
-            <ProgressDots total={stepSequence.length} currentIndex={currentStep} />
+            <ProgressDots total={stepSequence.length} currentIndex={Math.min(currentStep, stepSequence.length - 1)} />
 
             {currentStepId === 'result' && <Step1Result form={form} update={update} />}
             {currentStepId === 'objection_v' && <Step2VObjection form={form} update={update} />}
