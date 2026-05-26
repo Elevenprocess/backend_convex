@@ -215,9 +215,14 @@ export function buildSuiviPeriodRange(period: SuiviPeriodState): SuiviPeriodRang
     const last = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999)
     return { from: first, to: last, label: 'Cette année' }
   }
-  const from = new Date(period.customFrom + 'T00:00:00')
-  const to = new Date(period.customTo + 'T23:59:59')
-  return { from, to, label: `${period.customFrom} → ${period.customTo}` }
+  let from = new Date(period.customFrom + 'T00:00:00')
+  let to = new Date(period.customTo + 'T23:59:59')
+  if (from > to) {
+    const swapped = from
+    from = new Date(to); from.setHours(0, 0, 0, 0)
+    to = new Date(swapped); to.setHours(23, 59, 59, 999)
+  }
+  return { from, to, label: `${formatDate(from.toISOString())} → ${formatDate(to.toISOString())}` }
 }
 
 export function isDateInRange(value: string, from: Date, to: Date): boolean {
