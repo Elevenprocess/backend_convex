@@ -184,6 +184,16 @@ const COMMERCIAL_STATUS_FILTERS: Array<{ key: CommercialFilter; label: string; i
 ]
 
 // ----- F3 Commercial -----
+type CommercialSortKey = 'nom' | 'statut' | 'phone' | 'address' | 'rdv' | 'transfert'
+type CommercialSortDir = 'asc' | 'desc'
+
+function compareNullableDates(a: string | null, b: string | null, dirMul: number): number {
+  if (!a && !b) return 0
+  if (!a) return 1
+  if (!b) return -1
+  return (new Date(a).getTime() - new Date(b).getTime()) * dirMul
+}
+
 function LeadsCommercial() {
   const me = useAuth((s) => s.user)
   const selectedId = useLeadSidebar((s) => s.selectedLeadId)
@@ -191,6 +201,8 @@ function LeadsCommercial() {
   const { data, loading, error } = useLeads(me?.id ? { assignedToId: me.id, limit: 250 } : { limit: 250 })
   const allLeads = data ?? []
   const [filter, setFilter] = useState<CommercialFilter>('all')
+  const [sortKey, setSortKey] = useState<CommercialSortKey | null>(null)
+  const [sortDir, setSortDir] = useState<CommercialSortDir>('desc')
 
   const counts = useMemo(() => ({
     all: allLeads.length,
@@ -200,9 +212,35 @@ function LeadsCommercial() {
   }), [allLeads])
 
   const leads = useMemo(() => {
-    if (filter === 'all') return allLeads
-    return allLeads.filter((l) => commercialBucketForLead(l) === filter)
-  }, [allLeads, filter])
+    const base = filter === 'all' ? allLeads : allLeads.filter((l) => commercialBucketForLead(l) === filter)
+    if (!sortKey) return base
+    const dirMul = sortDir === 'asc' ? 1 : -1
+    const cmp = (a: LeadResponse, b: LeadResponse): number => {
+      switch (sortKey) {
+        case 'nom': return fullName(a).localeCompare(fullName(b), 'fr', { sensitivity: 'base' }) * dirMul
+        case 'statut': return statusLabelForLead(a, 'commercial').localeCompare(statusLabelForLead(b, 'commercial'), 'fr') * dirMul
+        case 'phone': return (a.phone ?? '').localeCompare(b.phone ?? '') * dirMul
+        case 'address': return addressFull(a).localeCompare(addressFull(b), 'fr', { sensitivity: 'base' }) * dirMul
+        case 'rdv': return compareNullableDates(a.latestRdvAt, b.latestRdvAt, dirMul)
+        case 'transfert': return compareNullableDates(a.transferredAt, b.transferredAt, dirMul)
+      }
+    }
+    return [...base].sort(cmp)
+  }, [allLeads, filter, sortKey, sortDir])
+
+  function toggleSort(key: CommercialSortKey, defaultDir: CommercialSortDir) {
+    if (sortKey !== key) {
+      setSortKey(key)
+      setSortDir(defaultDir)
+    } else {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    }
+  }
+
+  function sortIndicator(key: CommercialSortKey): string {
+    if (sortKey !== key) return '↕'
+    return sortDir === 'asc' ? '▲' : '▼'
+  }
 
   return (
     <AppShell>
@@ -210,14 +248,6 @@ function LeadsCommercial() {
       <div className="flex flex-grow overflow-hidden">
         <CommercialRail filter={filter} onFilter={setFilter} counts={counts} />
         <main className="p-4 sm:p-6 md:p-8 flex-grow overflow-auto">
-          {/* Mobile fallback : pills filter when rail is hidden */}
-          <div className="lg:hidden flex items-center gap-2 flex-wrap mb-4">
-            {COMMERCIAL_STATUS_FILTERS.map((item) => (
-              <FilterPill key={item.key} active={filter === item.key} onClick={() => setFilter(item.key)}>
-                {item.label} ({counts[item.key]})
-              </FilterPill>
-            ))}
-          </div>
         {loading && leads.length === 0 ? (
           <LoadingBlock label="Chargement des leads…" />
         ) : error ? (
@@ -255,6 +285,12 @@ function LeadsCommercial() {
                         <span className="truncate">{rdvLabel(lead)}</span>
                       </div>
                     )}
+                    {lead.transferredAt && (
+                      <div className="flex items-start gap-1.5">
+                        <Icon name="clock" size={12} className="mt-0.5 shrink-0 text-faint" />
+                        <span className="truncate">Transféré le {fullDateTime(lead.transferredAt)}</span>
+                      </div>
+                    )}
                   </div>
                 </button>
               ))}
@@ -262,14 +298,15 @@ function LeadsCommercial() {
 
             {/* Desktop : tableau (md:block) */}
             <div className="hidden md:block glass-card !p-0 overflow-x-auto">
-              <table className="w-full min-w-[980px] text-sm table-fixed lead-table">
+              <table className="w-full min-w-[1160px] text-sm table-fixed lead-table">
                 <thead className="text-left eyebrow sticky top-0 z-10 border-b border-white/60 bg-white/65 shadow-sm shadow-text/5 backdrop-blur-2xl">
                   <tr>
-                    <Th className="w-[260px]">NOM</Th>
-                    <Th className="w-[170px]">STATUT</Th>
-                    <Th className="w-[210px]">TÉLÉPHONE</Th>
-                    <Th className="w-[260px]">ADRESSE</Th>
-                    <Th className="w-[180px]">RENDEZ-VOUS</Th>
+                    <Th className="w-[260px]"><button type="button" onClick={() => toggleSort('nom', 'asc')} className={`inline-flex items-center gap-1 ${sortKey === 'nom' ? 'text-or-dark' : ''}`}>NOM <span className="text-[9px] opacity-60">{sortIndicator('nom')}</span></button></Th>
+                    <Th className="w-[170px]"><button type="button" onClick={() => toggleSort('statut', 'asc')} className={`inline-flex items-center gap-1 ${sortKey === 'statut' ? 'text-or-dark' : ''}`}>STATUT <span className="text-[9px] opacity-60">{sortIndicator('statut')}</span></button></Th>
+                    <Th className="w-[210px]"><button type="button" onClick={() => toggleSort('phone', 'asc')} className={`inline-flex items-center gap-1 ${sortKey === 'phone' ? 'text-or-dark' : ''}`}>TÉLÉPHONE <span className="text-[9px] opacity-60">{sortIndicator('phone')}</span></button></Th>
+                    <Th className="w-[260px]"><button type="button" onClick={() => toggleSort('address', 'asc')} className={`inline-flex items-center gap-1 ${sortKey === 'address' ? 'text-or-dark' : ''}`}>ADRESSE <span className="text-[9px] opacity-60">{sortIndicator('address')}</span></button></Th>
+                    <Th className="w-[180px]"><button type="button" onClick={() => toggleSort('rdv', 'desc')} className={`inline-flex items-center gap-1 ${sortKey === 'rdv' ? 'text-or-dark' : ''}`}>RENDEZ-VOUS <span className="text-[9px] opacity-60">{sortIndicator('rdv')}</span></button></Th>
+                    <Th className="w-[180px]"><button type="button" onClick={() => toggleSort('transfert', 'desc')} className={`inline-flex items-center gap-1 ${sortKey === 'transfert' ? 'text-or-dark' : ''}`}>TRANSFERT <span className="text-[9px] opacity-60">{sortIndicator('transfert')}</span></button></Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -285,6 +322,7 @@ function LeadsCommercial() {
                       <Td className="text-muted truncate" title={lead.phone ?? undefined}>{lead.phone ?? '—'}</Td>
                       <Td className="text-muted truncate" title={addressFull(lead)}>{addressFull(lead)}</Td>
                       <Td className="text-muted truncate" title={rdvLabel(lead)}>{rdvLabel(lead)}</Td>
+                      <Td className="text-muted truncate" title={lead.transferredAt ? fullDateTime(lead.transferredAt) : undefined}>{lead.transferredAt ? fullDateTime(lead.transferredAt) : '—'}</Td>
                     </tr>
                   ))}
                 </tbody>
@@ -511,26 +549,6 @@ function LeadsSetter() {
                 onChange={(e) => setQuery(e.target.value)}
                 className="w-full bg-white border border-line rounded-[14px] pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-or"
               />
-            </div>
-
-            {/* Mobile/tablet fallback : pills + dropdown when rail is hidden */}
-            <div className="lg:hidden flex items-center gap-2 flex-wrap">
-              <FilterPill active={filter === 'nouveau'} onClick={() => setFilter('nouveau')}>Nouveaux ({counts.nouveau})</FilterPill>
-              <FilterPill active={filter === 'sans_reponse'} onClick={() => setFilter('sans_reponse')}>Sans réponse ({counts.sansReponse})</FilterPill>
-              <FilterPill active={filter === 'rappel'} onClick={() => setFilter('rappel')}>À rappeler ({counts.rappel})</FilterPill>
-              <FilterPill active={filter === 'qualifie'} onClick={() => setFilter('qualifie')}>Qualifiés ({counts.qualifie})</FilterPill>
-              <FilterPill active={filter === 'perdu'} onClick={() => setFilter('perdu')}>Non qualifiés ({counts.perdu})</FilterPill>
-              <FilterPill active={filter === 'relance_lt'} onClick={() => setFilter('relance_lt')}>Relance long terme ({counts.relanceLt})</FilterPill>
-              <select
-                value={missingFilter}
-                onChange={(event) => setMissingFilter(event.target.value as SetterMissingFilter)}
-                className="rounded-full border border-line bg-white px-3 py-2 text-xs font-bold text-muted outline-none transition focus:border-or focus:text-text"
-                title="Filtrer les leads avec des informations manquantes"
-              >
-                {SETTER_MISSING_FILTERS.map((item) => (
-                  <option key={item.key} value={item.key}>{item.label} ({missingCounts[item.key]})</option>
-                ))}
-              </select>
             </div>
 
             <span className="text-xs text-faint font-semibold ml-auto">{filtered.length}/{categoryLeads.length}</span>
@@ -1284,7 +1302,7 @@ function leadAvatarShade(id: string): number {
   return Math.abs(hash) % 6
 }
 
-function FilterPill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+export function FilterPill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       onClick={onClick}
