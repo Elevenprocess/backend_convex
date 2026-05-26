@@ -718,12 +718,12 @@ function sortRdvsForDebrief(rdvs: RdvResponse[]): RdvResponse[] {
 function rdvToForm(rdv: RdvResponse): FormState {
   const outcome: Outcome = rdv.result == null ? '' : rdv.result === 'signe' ? 'vente' : 'non_vente'
   const { mainLabel, subLabel } = splitNonSaleReason(rdv.nonSaleReason)
-  const { acceptance, precision, freeText } = splitNotes(rdv.notes)
+  const { acceptance, freeText } = splitNotes(rdv.notes)
   return {
     outcome,
     nonSaleReason: nonSaleReasonFromLabel(mainLabel),
     nonSaleSubReason: subLabel,
-    nonSaleComment: precision,
+    nonSaleComment: '',
     objection: objectionFromLabel(rdv.objections),
     acceptanceFactors: acceptance.map(acceptanceFactorFromLabel).filter((f): f is AcceptanceFactor => f !== ''),
     notes: freeText,
@@ -790,33 +790,33 @@ function composeNotes(form: FormState): string | null {
     const labels = form.acceptanceFactors.map(labelFromAcceptance).join(' | ')
     parts.push(`[Acceptation: ${labels}]`)
   }
-  if (form.outcome === 'non_vente') {
-    const comment = form.nonSaleComment.trim()
-    if (comment) parts.push(`[Précision: ${comment}]`)
-  }
+  // Plus de [Précision: ...] — supprimé avec le commentaire libre par raison
   const free = form.notes.trim()
   if (free) parts.push(free)
   return parts.length ? parts.join('\n') : null
 }
 
-function splitNotes(raw: string | null): { acceptance: string[]; precision: string; freeText: string } {
-  if (!raw) return { acceptance: [], precision: '', freeText: '' }
+function splitNotes(raw: string | null): { acceptance: string[]; freeText: string } {
+  if (!raw) return { acceptance: [], freeText: '' }
   let rest = raw
   let acceptance: string[] = []
-  let precision = ''
 
   const accMatch = rest.match(ACCEPTANCE_PREFIX_RE)
   if (accMatch) {
     acceptance = accMatch[1].split('|').map((s) => s.trim()).filter(Boolean)
     rest = rest.replace(ACCEPTANCE_PREFIX_RE, '')
   }
+
+  // Backward compat : si [Précision: ...] existe (ancien format), le merger dans freeText
+  // avec préfixe visible "Précision : ..." pour que le commercial le voie et puisse l'éditer.
   const precMatch = rest.match(PRECISION_PREFIX_RE)
   if (precMatch) {
-    precision = precMatch[1].trim()
+    const precision = precMatch[1].trim()
     rest = rest.replace(PRECISION_PREFIX_RE, '')
+    rest = precision ? `Précision : ${precision}\n\n${rest.trim()}`.trim() : rest
   }
 
-  return { acceptance, precision, freeText: rest.trim() }
+  return { acceptance, freeText: rest.trim() }
 }
 
 function notesPlaceholder(form: FormState): string {
