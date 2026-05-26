@@ -108,7 +108,7 @@ const DEBRIEF_STATUS_META: Record<DebriefStatus, { label: string; badgeClass: st
 }
 
 function resolveDebriefStatus(result: RdvResult | null | undefined): DebriefStatus {
-  if (!result) return 'en_attente'
+  if (!result || result === 'reporte' || result === 'reflexion') return 'en_attente'
   if (result === 'signe') return 'signe'
   return 'non_qualifie'
 }
@@ -339,9 +339,9 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
                   {meta.label}
                 </span>
                 {debriefStatus === 'en_attente' && hasReporteHistory && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-rouille/30 bg-rouille-tint px-2 py-1 font-black uppercase tracking-[0.08em] text-rouille" title="RDV initialement reporté avant d'être honoré">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-rouille/30 bg-rouille-tint px-2 py-1 font-black uppercase tracking-[0.08em] text-rouille" title="RDV à reporter : le prospect reste en attente du nouveau débrief">
                     <Icon name="clock" size={10} />
-                    RDV reporté
+                    À reporter
                   </span>
                 )}
               </>
@@ -906,7 +906,7 @@ function sortRdvsForDebrief(rdvs: RdvResponse[]): RdvResponse[] {
 }
 
 function rdvToForm(rdv: RdvResponse): FormState {
-  const outcome: Outcome = rdv.result == null ? '' : rdv.result === 'signe' ? 'vente' : 'non_vente'
+  const outcome: Outcome = rdv.result === 'signe' ? 'vente' : rdv.result === 'perdu' || rdv.result === 'no_show' ? 'non_vente' : ''
   const { mainLabel, subLabel } = splitNonSaleReason(rdv.nonSaleReason)
   const { acceptance, freeText } = splitNotes(rdv.notes)
   return {
