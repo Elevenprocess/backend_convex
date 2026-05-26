@@ -172,6 +172,7 @@ const PRECISION_PREFIX_RE = /^\[Précision:\s*([\s\S]*?)\]\s*(?:\n|$)/
 export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '' }: Props) {
   const { data: rdvs, loading: rdvsLoading, refetch: refetchRdvs } = useRdvList({ leadId: lead.id })
   const sortedRdvs = useMemo(() => sortRdvsForDebrief(rdvs ?? []), [rdvs])
+  const hasReporteHistory = useMemo(() => sortedRdvs.some((r) => r.status === 'reporte' || r.result === 'reporte'), [sortedRdvs])
   const [selectedRdvId, setSelectedRdvId] = useState<string | null>(sortedRdvs[0]?.id ?? null)
   const selectedRdv = useMemo(() => sortedRdvs.find((r) => r.id === selectedRdvId) ?? sortedRdvs[0] ?? null, [sortedRdvs, selectedRdvId])
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
@@ -299,12 +300,21 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
         <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
           <span className={`status-badge ${STATUS_BADGE[lead.status] ?? 'bg-cream text-muted'}`}>{STATUS_LABEL[lead.status] ?? lead.status}</span>
           {selectedRdv && (() => {
-            const meta = DEBRIEF_STATUS_META[resolveDebriefStatus(selectedRdv.result)]
+            const debriefStatus = resolveDebriefStatus(selectedRdv.result)
+            const meta = DEBRIEF_STATUS_META[debriefStatus]
             return (
-              <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 font-black uppercase tracking-[0.08em] ${meta.badgeClass}`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${meta.dotClass}`} />
-                {meta.label}
-              </span>
+              <>
+                <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 font-black uppercase tracking-[0.08em] ${meta.badgeClass}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${meta.dotClass}`} />
+                  {meta.label}
+                </span>
+                {debriefStatus === 'en_attente' && hasReporteHistory && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-rouille/30 bg-rouille-tint px-2 py-1 font-black uppercase tracking-[0.08em] text-rouille" title="RDV initialement reporté avant d'être honoré">
+                    <Icon name="clock" size={10} />
+                    RDV reporté
+                  </span>
+                )}
+              </>
             )
           })()}
           {lead.phone && <span className="rounded-full bg-cream px-2 py-1 font-bold text-muted">{lead.phone}</span>}
