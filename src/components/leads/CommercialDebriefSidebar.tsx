@@ -67,7 +67,7 @@ type WizardStepId =
   | 'objection_nv'  // Step 3NV-A — objection non surmontée (Non-vente / Suivi prévu uniquement)
   | 'notes'         // Step final (toutes branches)
 
-export function getStepSequence(form: FormState): WizardStepId[] {
+function getStepSequence(form: FormState): WizardStepId[] {
   if (form.outcome === '') return ['result']
   if (form.outcome === 'vente') {
     return ['result', 'objection_v', 'acceptance_v', 'details_v', 'notes']
@@ -81,7 +81,7 @@ export function getStepSequence(form: FormState): WizardStepId[] {
   return ['result', 'reason_nv', 'notes']
 }
 
-export function canAdvanceStep(stepId: WizardStepId, form: FormState): boolean {
+function canAdvanceStep(stepId: WizardStepId, form: FormState): boolean {
   switch (stepId) {
     case 'result': return form.outcome !== ''
     case 'objection_v': return true // optionnel
@@ -228,6 +228,7 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<string | null>(null)
+  const [currentStep, setCurrentStep] = useState<number>(0)
   const readOnly = useIsReadOnlyImpersonation()
 
   useEffect(() => {
@@ -238,9 +239,29 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
     setError(null)
     setSavedAt(null)
     setForm(selectedRdv ? rdvToForm(selectedRdv) : EMPTY_FORM)
+    setCurrentStep(0)
   }, [selectedRdv?.id])
 
   const update = (patch: Partial<FormState>) => setForm((current) => ({ ...current, ...patch }))
+
+  const stepSequence = useMemo(() => getStepSequence(form), [form.outcome, form.nonSaleReason])
+  const currentStepId = stepSequence[Math.min(currentStep, stepSequence.length - 1)]
+  const isFirstStep = currentStep === 0
+  const isLastStep = currentStep >= stepSequence.length - 1
+
+  function goNext() {
+    if (!canAdvanceStep(currentStepId, form)) return
+    if (isLastStep) return
+    setCurrentStep((s) => s + 1)
+  }
+
+  function goBack() {
+    if (isFirstStep) return
+    setCurrentStep((s) => Math.max(0, s - 1))
+  }
+  // goNext/goBack wired in next task — void refs prevent noUnusedLocals until then
+  void goNext
+  void goBack
 
   const toggleAcceptance = (factor: AcceptanceFactor) =>
     setForm((current) => ({
