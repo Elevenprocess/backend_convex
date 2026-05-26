@@ -335,8 +335,8 @@ function OverviewCommercial() {
       reflexion: analytics?.resultSegments.find((segment) => segment.label === 'Réflexion')?.value ?? reflexion.length,
       leadsToday,
       qualifiedProspects: commercialQualifiedProspects(list, leadList, me?.id),
-      qualifiedDebriefSegments: commercialQualifiedDebriefSegments(list, leadList, me?.id),
-      nonSaleDebriefSegments: commercialNonSaleDebriefSegments(list, leadList, me?.id),
+      qualifiedDebriefSegments: commercialQualifiedDebriefSegments(list, leadList, me?.id, commercialRange),
+      nonSaleDebriefSegments: commercialNonSaleDebriefSegments(list, leadList, me?.id, commercialRange),
     }
   }, [rdvs, todayIso, commercialSummary, allLeads, me?.id, commercialRange.from, commercialRange.to])
 
@@ -1632,8 +1632,10 @@ const NON_SALE_DEBRIEF_LABELS: Array<{ label: string; description: string; match
   { label: 'Pas intéressé', description: 'Pas envie de continuer', match: ({ rdv, lead }) => rdv?.result === 'perdu' || lead?.status === 'perdu' || textIncludes(rdv?.nonSaleReason, ['pas intéressé', 'pas interesse', 'pas envie', 'refus']) || textIncludes(lead?.lostReason, ['pas intéressé', 'pas interesse', 'pas envie', 'refus']) },
 ]
 
-function commercialQualifiedDebriefSegments(rdvs: RdvResponse[], leads: LeadResponse[], commercialId: string | undefined): LeadSegment[] {
-  const sources = commercialDebriefSources(rdvs, leads, commercialId).filter(isQualifiedDebriefSource)
+function commercialQualifiedDebriefSegments(rdvs: RdvResponse[], leads: LeadResponse[], commercialId: string | undefined, range: FunnelPeriodRange): LeadSegment[] {
+  const sources = commercialDebriefSources(rdvs, leads, commercialId)
+    .filter((source) => commercialDebriefSourceInRange(source, range))
+    .filter(isQualifiedDebriefSource)
   const matchedIds = new Set<string>()
   return QUALIFIED_OBJECTION_LABELS.map(({ label, description, match }) => {
     const matching = sources.filter((source) => !matchedIds.has(source.id) && match(source))
@@ -1642,8 +1644,10 @@ function commercialQualifiedDebriefSegments(rdvs: RdvResponse[], leads: LeadResp
   })
 }
 
-function commercialNonSaleDebriefSegments(rdvs: RdvResponse[], leads: LeadResponse[], commercialId: string | undefined): LeadSegment[] {
-  const sources = commercialDebriefSources(rdvs, leads, commercialId).filter(isNonSaleDebriefSource)
+function commercialNonSaleDebriefSegments(rdvs: RdvResponse[], leads: LeadResponse[], commercialId: string | undefined, range: FunnelPeriodRange): LeadSegment[] {
+  const sources = commercialDebriefSources(rdvs, leads, commercialId)
+    .filter((source) => commercialDebriefSourceInRange(source, range))
+    .filter(isNonSaleDebriefSource)
   const matchedIds = new Set<string>()
   return NON_SALE_DEBRIEF_LABELS.map(({ label, description, match }) => {
     const matching = sources.filter((source) => !matchedIds.has(source.id) && match(source))
@@ -1671,6 +1675,20 @@ function commercialDebriefSources(rdvs: RdvResponse[], leads: LeadResponse[], co
     })
 
   return Array.from(sourceById.values())
+}
+
+function commercialDebriefSourceInRange(source: CommercialDebriefSource, range: FunnelPeriodRange): boolean {
+  const rdv = source.rdv
+  const lead = source.lead
+  const date = rdv?.debriefFilledAt
+    ?? rdv?.updatedAt
+    ?? rdv?.scheduledAt
+    ?? lead?.lastStageChangeAt
+    ?? lead?.latestRdvAt
+    ?? lead?.updatedAt
+    ?? lead?.createdAt
+    ?? null
+  return isCreatedInRange(date, range.from, range.to)
 }
 
 function isNonSaleDebriefSource({ rdv, lead }: CommercialDebriefSource): boolean {
