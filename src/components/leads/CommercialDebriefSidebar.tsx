@@ -177,6 +177,7 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
   const [error, setError] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const [currentStep, setCurrentStep] = useState<number>(0)
+  const [transitionDirection, setTransitionDirection] = useState<'forward' | 'backward'>('forward')
   const readOnly = useIsReadOnlyImpersonation()
 
   useEffect(() => {
@@ -225,11 +226,13 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
   function goNext() {
     if (!canAdvanceStep(currentStepId, form)) return
     if (isLastStep) return
+    setTransitionDirection('forward')
     setCurrentStep((s) => s + 1)
   }
 
   function goBack() {
     if (isFirstStep) return
+    setTransitionDirection('backward')
     setCurrentStep((s) => Math.max(0, s - 1))
   }
   const toggleAcceptance = (factor: AcceptanceFactor) =>
@@ -319,13 +322,18 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
 
             <ProgressDots total={stepSequence.length} currentIndex={Math.min(currentStep, stepSequence.length - 1)} />
 
-            {currentStepId === 'result' && <Step1Result form={form} update={update} />}
-            {currentStepId === 'objection_v' && <Step2VObjection form={form} update={update} />}
-            {currentStepId === 'acceptance_v' && <Step3VAcceptance form={form} update={update} toggleAcceptance={toggleAcceptance} />}
-            {currentStepId === 'details_v' && <Step4VDetails form={form} update={update} />}
-            {currentStepId === 'reason_nv' && <Step2NVReason form={form} update={update} />}
-            {currentStepId === 'objection_nv' && <Step3NVObjection form={form} update={update} />}
-            {currentStepId === 'notes' && <StepFinalNotes form={form} update={update} />}
+            <div
+              key={currentStepId}
+              className={`animate-slide-${transitionDirection}`}
+            >
+              {currentStepId === 'result' && <Step1Result form={form} update={update} />}
+              {currentStepId === 'objection_v' && <Step2VObjection form={form} update={update} />}
+              {currentStepId === 'acceptance_v' && <Step3VAcceptance form={form} update={update} toggleAcceptance={toggleAcceptance} />}
+              {currentStepId === 'details_v' && <Step4VDetails form={form} update={update} />}
+              {currentStepId === 'reason_nv' && <Step2NVReason form={form} update={update} />}
+              {currentStepId === 'objection_nv' && <Step3NVObjection form={form} update={update} />}
+              {currentStepId === 'notes' && <StepFinalNotes form={form} update={update} />}
+            </div>
 
             {error && (
               <div className="rounded-xl border border-rouille/40 bg-rouille-tint px-3 py-2 text-xs font-bold text-rouille">{error}</div>

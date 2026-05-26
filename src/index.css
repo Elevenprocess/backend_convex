@@ -3438,3 +3438,21 @@ body {
 [data-theme="dark"] .sb-mobile-backdrop {
   background: rgba(0, 0, 0, 0.55);
 }
+
+@keyframes slide-forward {
+  from { transform: translateX(16px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slide-backward {
+  from { transform: translateX(-16px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.animate-slide-forward {
+  animation: slide-forward 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.animate-slide-backward {
+  animation: slide-backward 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
