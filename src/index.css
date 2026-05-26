@@ -717,6 +717,94 @@ body {
 }
 .overview-commercial-rdv-actions .overview-role-wide,
 .overview-commercial-rdv-actions .overview-role-side { grid-column: auto; min-height: 206px; }
+.overview-commercial-qualified-list {
+  grid-column: span 7;
+  min-height: 330px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.overview-commercial-debrief-grid {
+  grid-column: span 5;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+.commercial-qualified-list-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  padding-right: 2px;
+}
+.commercial-qualified-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(42, 37, 32, 0.07);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.55);
+  padding: 9px 10px;
+}
+.commercial-qualified-row strong,
+.commercial-qualified-row small,
+.commercial-qualified-meta span,
+.commercial-qualified-meta small { display: block; }
+.commercial-qualified-row strong {
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+.commercial-qualified-row small {
+  margin-top: 3px;
+  color: var(--color-muted);
+  font-size: 10.5px;
+  font-weight: 650;
+}
+.commercial-qualified-meta { text-align: right; min-width: 92px; }
+.commercial-qualified-meta span {
+  color: var(--color-success);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.commercial-debrief-card {
+  min-height: 330px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.commercial-debrief-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  gap: 12px;
+}
+.commercial-debrief-pie {
+  width: 132px;
+  height: 132px;
+  margin: 0 auto;
+}
+.commercial-debrief-pie strong { font-size: 20px; }
+.commercial-debrief-legend { gap: 7px; }
+.commercial-debrief-legend div {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 7px;
+  padding: 7px 0;
+}
+.commercial-debrief-legend span small {
+  display: block;
+  margin-top: 2px;
+  color: var(--color-faint);
+  font-size: 9.5px;
+  font-weight: 650;
+  line-height: 1.15;
+}
 .overview-air-kpi {
   grid-column: span 2;
   min-height: 116px;
@@ -1410,8 +1498,13 @@ body {
 [data-theme="dark"] .overview-range-switch button:hover { background: rgba(255, 255, 255, 0.06); color: rgba(255, 255, 255, 0.95); }
 [data-theme="dark"] .overview-range-switch button.active { background: #FFFFFF; color: #121212; }
 [data-theme="dark"] .overview-shot-page .flow-map { background: rgba(255, 255, 255, 0.03) !important; border-color: rgba(255, 255, 255, 0.08) !important; }
-[data-theme="dark"] .overview-role-row { background: rgba(255, 255, 255, 0.03); border-color: rgba(255, 255, 255, 0.08); }
-[data-theme="dark"] .overview-role-row:hover { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.16); }
+[data-theme="dark"] .overview-role-row,
+[data-theme="dark"] .commercial-qualified-row { background: rgba(255, 255, 255, 0.03); border-color: rgba(255, 255, 255, 0.08); }
+[data-theme="dark"] .overview-role-row:hover,
+[data-theme="dark"] .commercial-qualified-row:hover { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.16); }
+[data-theme="dark"] .commercial-qualified-row strong { color: rgba(255, 255, 255, 0.95); }
+[data-theme="dark"] .commercial-qualified-row small,
+[data-theme="dark"] .commercial-debrief-legend span small { color: rgba(255, 255, 255, 0.45); }
 [data-theme="dark"] .overview-role-row button,
 [data-theme="dark"] .overview-role-action { background: #FFFFFF; color: #121212; }
 [data-theme="dark"] .overview-role-row button:hover,
@@ -1435,10 +1528,13 @@ body {
   .overview-role-wide, .overview-role-side { grid-column: span 6; }
   .overview-profile-panel, .overview-air-kpi { grid-column: span 4; }
   .overview-air-chart, .overview-air-pie, .overview-air-pipeline { grid-column: span 6; }
+  .overview-commercial-qualified-list,
+  .overview-commercial-debrief-grid { grid-column: 1 / -1; }
 }
 @media (max-width: 980px) {
   .overview-admin-main-grid .overview-lead-evolution-card { grid-column: span 12; }
-  .overview-profile-panel, .overview-air-kpi, .overview-air-chart, .overview-air-pie, .overview-air-pipeline, .overview-air-funnel, .overview-role-wide, .overview-role-side { grid-column: span 12; }
+  .overview-profile-panel, .overview-air-kpi, .overview-air-chart, .overview-air-pie, .overview-air-pipeline, .overview-air-funnel, .overview-role-wide, .overview-role-side, .overview-commercial-qualified-list, .overview-commercial-debrief-grid { grid-column: span 12; }
+  .overview-commercial-debrief-grid { grid-template-columns: 1fr; }
   .overview-role-list-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 680px) {

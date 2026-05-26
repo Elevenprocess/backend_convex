@@ -244,8 +244,9 @@ function OverviewCommercial() {
 
   const stats = useMemo(() => {
     const list = rdvs ?? []
+    const leadList = allLeads ?? []
     const analytics = commercialSummary?.commercial
-    const leadsToday = (allLeads ?? []).filter((l) => isCreatedInRange(l.createdAt, commercialRange.from, commercialRange.to)).length
+    const leadsToday = leadList.filter((l) => isCreatedInRange(l.createdAt, commercialRange.from, commercialRange.to)).length
     const honored = list.filter((r) => r.status === 'honore')
     const signed = list.filter((r) => r.result === 'signe')
     const lost = list.filter((r) => r.result === 'perdu')
@@ -272,8 +273,11 @@ function OverviewCommercial() {
       lost: analytics?.resultSegments.find((segment) => segment.label === 'Perdu')?.value ?? lost.length,
       reflexion: analytics?.resultSegments.find((segment) => segment.label === 'Réflexion')?.value ?? reflexion.length,
       leadsToday,
+      qualifiedProspects: commercialQualifiedProspects(list, leadList, me?.id),
+      qualifiedDebriefSegments: commercialQualifiedDebriefSegments(list),
+      nonSaleDebriefSegments: commercialNonSaleDebriefSegments(list),
     }
-  }, [rdvs, todayIso, commercialSummary, allLeads, commercialRange.from, commercialRange.to])
+  }, [rdvs, todayIso, commercialSummary, allLeads, me?.id, commercialRange.from, commercialRange.to])
 
   return (
     <AppShell blobsKey="commercial" flat>
@@ -386,17 +390,19 @@ function OverviewCommercial() {
             <AirKpi icon="users" label="RDV suivis" value={fmtCompact(stats.totalRdv)} sub={`${fmtCompact(stats.totalHonored)} honorés`} />
           </div>
 
-          <div className="overview-air-card overview-role-wide overview-revenue-evolution-card">
-            <RevenueEvolutionChart points={rdvRevenueSeries(rdvs ?? [])} total={stats.ca} />
-          </div>
+          <CommercialQualifiedProspects prospects={stats.qualifiedProspects} />
 
-          <div className="overview-air-card overview-role-side">
-            <CardHead title="Closing" icon="target" />
-            <div className="overview-role-closing">{stats.closing}%</div>
-            <p className="overview-role-muted">{fmtCompact(stats.signed)} ventes, {fmtCompact(stats.lost)} perdus, {fmtCompact(stats.reflexion)} en réflexion.</p>
-            <div className="overview-real-segments mt-4" style={{ ['--seg-a' as string]: Math.max(stats.signed, 1), ['--seg-b' as string]: Math.max(stats.reflexion, 1), ['--seg-c' as string]: Math.max(stats.lost, 1) }}>
-              <span /><span /><span />
-            </div>
+          <div className="overview-commercial-debrief-grid">
+            <DebriefPieCard
+              title="Débrief qualifié"
+              subtitle="choix remplis par le commercial"
+              segments={stats.qualifiedDebriefSegments}
+            />
+            <DebriefPieCard
+              title="Raisons non-vente"
+              subtitle="répartition des non qualifiés"
+              segments={stats.nonSaleDebriefSegments}
+            />
           </div>
 
           <div className="overview-commercial-rdv-actions">
@@ -1075,7 +1081,82 @@ function hydrateMissingEvolutionTotals(points: LeadEvolutionPoint[], totals: { l
 
 const PIE_COLORS = ['#1F7857', '#3DA86A', '#3E9A6F', '#6B7C8C', '#145A41', '#7C6A46']
 
-type LeadSegment = { label: string; value: number }
+type LeadSegment = { label: string; value: number; description?: string }
+type QualifiedProspect = { id: string; name: string; phone: string | null; city: string | null; status: string; scheduledAt: string | null }
+
+function CommercialQualifiedProspects({ prospects }: { prospects: QualifiedProspect[] }) {
+  return (
+    <div className="overview-air-card overview-commercial-qualified-list">
+      <div className="shot-card-head">
+        <div>
+          <h3>Prospects qualifiés</h3>
+          <p>Liste prioritaire du commercial · données réelles</p>
+        </div>
+        <span><Icon name="users" size={16} /></span>
+      </div>
+      <div className="commercial-qualified-list-body">
+        {prospects.length === 0 ? (
+          <div className="text-xs text-faint">Aucun prospect qualifié sur cette période.</div>
+        ) : prospects.slice(0, 8).map((prospect) => (
+          <div key={prospect.id} className="commercial-qualified-row">
+            <div className="overview-role-avatar">{userInitials(prospect.name)}</div>
+            <div>
+              <strong>{prospect.name}</strong>
+              <small>{prospect.city ?? 'Ville non renseignée'} · {prospect.phone ?? 'sans téléphone'}</small>
+            </div>
+            <div className="commercial-qualified-meta">
+              <span>{prospect.status}</span>
+              <small>{prospect.scheduledAt ? shortDateTime(prospect.scheduledAt) : 'à suivre'}</small>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function DebriefPieCard({ title, subtitle, segments }: { title: string; subtitle: string; segments: LeadSegment[] }) {
+  const total = segments.reduce((sum, segment) => sum + segment.value, 0)
+  const visibleSegments = segments.length > 0 ? segments : [{ label: 'Aucune donnée', value: 0, description: 'Débrief à remplir' }]
+  const gradient = total
+    ? visibleSegments.reduce<{ parts: string[]; cursor: number }>((acc, segment, index) => {
+        const start = acc.cursor
+        const end = start + (segment.value / total) * 360
+        acc.parts.push(`${PIE_COLORS[index % PIE_COLORS.length]} ${start}deg ${end}deg`)
+        acc.cursor = end
+        return acc
+      }, { parts: [], cursor: 0 }).parts.join(', ')
+    : 'var(--color-line-soft) 0deg 360deg'
+
+  return (
+    <div className="overview-air-card commercial-debrief-card">
+      <div className="shot-card-head">
+        <div>
+          <h3>{title}</h3>
+          <p>{subtitle}</p>
+        </div>
+        <span><Icon name="target" size={16} /></span>
+      </div>
+      <div className="commercial-debrief-body">
+        <div className="overview-pie commercial-debrief-pie" style={{ background: `conic-gradient(${gradient})` }}>
+          <div>
+            <strong>{total ? `${pct(segments[0]?.value ?? 0, total)}%` : '0%'}</strong>
+            <span>{fmtCompact(total)} choix</span>
+          </div>
+        </div>
+        <div className="overview-pie-legend commercial-debrief-legend">
+          {visibleSegments.map((segment, index) => (
+            <div key={`${title}-${segment.label}-${index}`}>
+              <i style={{ background: PIE_COLORS[index % PIE_COLORS.length] }} />
+              <span>{segment.label}<small>{segment.description}</small></span>
+              <strong>{total ? `${pct(segment.value, total)}%` : '0%'}</strong>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function LeadPieAnalysis({ segments, totalFallback = 0, leads }: { segments?: LeadSegment[]; totalFallback?: number; leads?: LeadResponse[] }) {
   const resolvedSegments = segments ?? leadStatusSegments(leads ?? [])
@@ -1365,10 +1446,6 @@ function isoHour(iso: string | null | undefined): number | null {
   return Number.isNaN(hour) ? null : hour
 }
 
-function isoMonthKey(iso: string | null | undefined): string | null {
-  if (!iso) return null
-  return iso.slice(0, 7)
-}
 
 function weekLogicalCallSeries(calls: CallLogResponse[], classified: LeadResponse[]): ActivityPoint[] {
   return lastNDays(7).map((day) => {
@@ -1446,14 +1523,76 @@ function leadStatusSegments(leads: LeadResponse[]): { status: LeadStatus; label:
     .sort((a, b) => b.value - a.value)
 }
 
-function rdvRevenueSeries(rdvs: RdvResponse[]): ActivityPoint[] {
-  const months = lastNMonths(8)
-  return months.map((m) => ({
-    label: monthLabel(m),
-    value: rdvs
-      .filter((r) => r.result === 'signe' && isoMonthKey(r.signatureAt ?? r.scheduledAt) === m)
-      .reduce((sum, r) => sum + (parseFloat(r.montantTotal ?? '0') || 0), 0),
-  }))
+function commercialQualifiedProspects(rdvs: RdvResponse[], leads: LeadResponse[], commercialId: string | undefined): QualifiedProspect[] {
+  const leadById = new Map(leads.map((lead) => [lead.id, lead]))
+  const prospects = new Map<string, QualifiedProspect>()
+
+  leads
+    .filter((lead) => !commercialId || lead.assignedToId === commercialId || lead.latestRdvCommercialId === commercialId)
+    .filter((lead) => ['qualifie', 'rdv_pris', 'rdv_honore', 'signe'].includes(lead.status))
+    .forEach((lead) => prospects.set(lead.id, {
+      id: lead.id,
+      name: fullName(lead) || lead.email || lead.phone || 'Prospect qualifié',
+      phone: lead.phone,
+      city: lead.city,
+      status: STATUS_LABEL[lead.status] ?? 'Qualifié',
+      scheduledAt: lead.latestRdvAt,
+    }))
+
+  rdvs
+    .filter((rdv) => rdv.status === 'planifie' || rdv.status === 'honore' || rdv.result === 'signe' || rdv.result === 'reflexion')
+    .forEach((rdv) => {
+      const lead = leadById.get(rdv.leadId)
+      const status = rdv.result === 'signe' ? 'Vente signée' : rdv.result === 'reflexion' ? 'Suivi prévu' : rdv.status === 'honore' ? 'RDV honoré' : 'Qualifié'
+      prospects.set(rdv.leadId, {
+        id: rdv.leadId,
+        name: lead ? (fullName(lead) || lead.email || lead.phone || 'Prospect qualifié') : 'Prospect qualifié',
+        phone: lead?.phone ?? null,
+        city: lead?.city ?? null,
+        status,
+        scheduledAt: rdv.scheduledAt,
+      })
+    })
+
+  return Array.from(prospects.values()).sort((a, b) => (b.scheduledAt ?? '').localeCompare(a.scheduledAt ?? ''))
+}
+
+const QUALIFIED_DEBRIEF_LABELS: Array<{ label: string; description: string; match: (rdv: RdvResponse) => boolean }> = [
+  { label: 'Suivi prévu', description: 'Je veux faire un suivi', match: (rdv) => rdv.result === 'reflexion' || textIncludes(rdv.notes, ['suivi prévu', 'faire un suivi', 'suivi prevu']) },
+  { label: 'Vente signée', description: 'Client signé', match: (rdv) => rdv.result === 'signe' },
+  { label: 'RDV honoré', description: 'Projet qualifié à traiter', match: (rdv) => rdv.status === 'honore' && rdv.result !== 'signe' && rdv.result !== 'perdu' && rdv.result !== 'reflexion' },
+  { label: 'RDV planifié', description: 'Prospect qualifié à venir', match: (rdv) => rdv.status === 'planifie' },
+]
+
+const NON_SALE_DEBRIEF_LABELS: Array<{ label: string; description: string; match: (rdv: RdvResponse) => boolean }> = [
+  { label: 'Non qualifié', description: 'Le contact était faible', match: (rdv) => textIncludes(rdv.nonSaleReason, ['non qualifié', 'non qualifie', 'contact faible']) },
+  { label: 'No-show', description: "Ne s'est pas présenté", match: (rdv) => rdv.status === 'no_show' || rdv.result === 'no_show' || textIncludes(rdv.nonSaleReason, ['no-show', 'no show', 'pas présenté', 'pas presente']) },
+  { label: 'Contact annulé', description: 'Le contact a annulé', match: (rdv) => textIncludes(rdv.nonSaleReason, ['contact annulé', 'contact annule', 'client annulé', 'client annule']) },
+  { label: 'Annulation administrative', description: 'Annulé de notre côté', match: (rdv) => textIncludes(rdv.nonSaleReason, ['administrative', 'notre côté', 'notre cote']) },
+  { label: 'Pas intéressé', description: 'Pas envie de continuer', match: (rdv) => rdv.result === 'perdu' || textIncludes(rdv.nonSaleReason, ['pas intéressé', 'pas interesse', 'pas envie', 'refus']) },
+]
+
+function commercialQualifiedDebriefSegments(rdvs: RdvResponse[]): LeadSegment[] {
+  return QUALIFIED_DEBRIEF_LABELS
+    .map(({ label, description, match }) => ({ label, description, value: rdvs.filter(match).length }))
+    .filter((segment) => segment.value > 0)
+}
+
+function commercialNonSaleDebriefSegments(rdvs: RdvResponse[]): LeadSegment[] {
+  const matchedIds = new Set<string>()
+  const segments = NON_SALE_DEBRIEF_LABELS.map(({ label, description, match }) => {
+    const matching = rdvs.filter((rdv) => match(rdv))
+    matching.forEach((rdv) => matchedIds.add(rdv.id))
+    return { label, description, value: matching.length }
+  }).filter((segment) => segment.value > 0)
+  const otherLost = rdvs.filter((rdv) => (rdv.result === 'perdu' || rdv.status === 'annule') && !matchedIds.has(rdv.id)).length
+  return otherLost > 0 ? [...segments, { label: 'Autres', description: 'Non-vente à préciser', value: otherLost }] : segments
+}
+
+function textIncludes(value: string | null | undefined, needles: string[]): boolean {
+  if (!value) return false
+  const normalized = value.toLocaleLowerCase('fr-FR')
+  return needles.some((needle) => normalized.includes(needle.toLocaleLowerCase('fr-FR')))
 }
 
 function lastNDays(n: number): string[] {
@@ -1464,135 +1603,8 @@ function lastNDays(n: number): string[] {
   })
 }
 
-function lastNMonths(n: number): string[] {
-  return Array.from({ length: n }, (_, i) => {
-    const d = new Date()
-    d.setMonth(d.getMonth() - (n - 1 - i), 1)
-    return d.toISOString().slice(0, 7)
-  })
-}
-
-function monthLabel(month: string): string {
-  const d = new Date(`${month}-01T12:00:00`)
-  return d.toLocaleDateString('fr-FR', { month: 'short' }).replace('.', '')
-}
 
 // ===== Atoms =====
-
-function RevenueEvolutionChart({ points, total }: { points: ActivityPoint[]; total: number }) {
-  const color = '#3DA86A'
-  const safePoints = points.length ? points : [{ label: 'Live', value: 0 }]
-  const [hover, setHover] = useState<{ x: number; y: number; value: number; index: number } | null>(null)
-  const width = 620
-  const height = 218
-  const padX = 44
-  const padTop = 22
-  const padBottom = 38
-  const chartWidth = width - padX * 2
-  const chartHeight = height - padTop - padBottom
-  const max = Math.max(1, ...safePoints.map((point) => point.value))
-  const peak = safePoints.reduce((best, point) => point.value > best.value ? point : best, safePoints[0])
-  const first = safePoints[0]
-  const last = safePoints[safePoints.length - 1]
-  const delta = last.value - first.value
-  const xFor = (index: number) => padX + (safePoints.length === 1 ? chartWidth / 2 : (index / (safePoints.length - 1)) * chartWidth)
-  const yFor = (value: number) => padTop + chartHeight - (value / max) * chartHeight
-  const path = safePoints.map((point, index) => `${index === 0 ? 'M' : 'L'} ${xFor(index).toFixed(1)} ${yFor(point.value).toFixed(1)}`).join(' ')
-  const activePoint = hover ? safePoints[hover.index] : null
-
-  const onMove = (event: MouseEvent<SVGSVGElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect()
-    const x = Math.min(width - padX, Math.max(padX, ((event.clientX - rect.left) / rect.width) * width))
-    const ratio = chartWidth ? (x - padX) / chartWidth : 0
-    const index = safePoints.length <= 1 ? 0 : Math.min(safePoints.length - 1, Math.max(0, Math.round(ratio * (safePoints.length - 1))))
-    const point = safePoints[index]
-    setHover({ x: xFor(index), y: yFor(point.value), value: point.value, index })
-  }
-
-  return (
-    <div className="lead-evolution revenue-evolution">
-      <div className="lead-evolution-head">
-        <div>
-          <h3>Évolution CA</h3>
-          <p>CA signé par mois · données réelles</p>
-        </div>
-        <span>commercial</span>
-      </div>
-      <div className="lead-evolution-tabs revenue-evolution-tabs" aria-label="Indicateur CA">
-        <button type="button" className="active" style={{ ['--series-color' as string]: color }}>
-          <small><i style={{ background: color }} />CA signé</small>
-          <strong>{fmtKEur(total)}</strong>
-        </button>
-        <button type="button" style={{ ['--series-color' as string]: '#1F7857' }}>
-          <small><i style={{ background: '#1F7857' }} />Pic mensuel</small>
-          <strong>{fmtKEur(peak.value)}</strong>
-        </button>
-        <button type="button" style={{ ['--series-color' as string]: '#3E9A6F' }}>
-          <small><i style={{ background: '#3E9A6F' }} />Tendance</small>
-          <strong className={delta >= 0 ? 'positive' : 'negative'}>{delta >= 0 ? '+' : ''}{fmtKEur(delta)}</strong>
-        </button>
-      </div>
-      <div className="lead-evolution-svg-wrap revenue-evolution-svg-wrap">
-        <div className="lead-evolution-last-card">
-          <small>Dernier mois</small>
-          <strong style={{ color }}>{fmtKEur(last.value)}</strong>
-          <span className={delta >= 0 ? 'positive' : 'negative'}>{delta >= 0 ? '+' : ''}{fmtKEur(delta)} vs début</span>
-        </div>
-        <svg viewBox={`0 0 ${width} ${height}`} onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img" aria-label="Évolution CA commercial">
-          <defs>
-            <linearGradient id="revenueEvolutionFill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity="0.24" />
-              <stop offset="100%" stopColor={color} stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          {[0, 0.5, 1].map((ratio) => {
-            const y = padTop + ratio * chartHeight
-            const label = max * (1 - ratio)
-            return (
-              <g key={ratio}>
-                <line x1={padX} x2={width - padX} y1={y} y2={y} className="lead-evolution-grid" />
-                <text x="10" y={y + 4} className="lead-evolution-yaxis">{fmtKEur(label)}</text>
-              </g>
-            )
-          })}
-          <path d={`${path} L ${xFor(safePoints.length - 1)} ${height - padBottom} L ${xFor(0)} ${height - padBottom} Z`} fill="url(#revenueEvolutionFill)" />
-          <path d={path} className="lead-evolution-line" style={{ stroke: color }} />
-          {hover ? (
-            <g pointerEvents="none">
-              <line x1={hover.x} x2={hover.x} y1={padTop} y2={height - padBottom} className="lead-evolution-guide" style={{ stroke: color }} />
-              <circle cx={hover.x} cy={hover.y} r="7" className="lead-evolution-dot" style={{ stroke: color }} />
-              <text x={Math.min(width - 92, hover.x + 10)} y={Math.max(16, hover.y - 10)} className="lead-evolution-cursor-label" style={{ fill: color }}>{fmtKEur(hover.value)}</text>
-            </g>
-          ) : null}
-          {safePoints.map((point, index) => {
-            const x = xFor(index)
-            const y = yFor(point.value)
-            const isPeak = point.label === peak.label && peak.value > 0
-            return (
-              <g key={`${point.label}-${index}`}>
-                <circle cx={x} cy={y} r={isPeak ? 6 : 4} className="lead-evolution-dot" style={{ stroke: color }} />
-                {isPeak ? <text x={x} y={Math.max(13, y - 12)} className="lead-evolution-peak" style={{ fill: color }}>pic {fmtKEur(point.value)}</text> : null}
-                <text x={x} y={height - 12} className="lead-evolution-axis" textAnchor={index === 0 ? 'start' : index === safePoints.length - 1 ? 'end' : 'middle'}>{point.label}</text>
-              </g>
-            )
-          })}
-        </svg>
-        {activePoint && hover ? (
-          <div className="lead-evolution-tooltip" style={{ left: hover.x > width * 0.58 ? 'auto' : `${Math.min(58, Math.max(2, (hover.x / width) * 100))}%`, right: hover.x > width * 0.58 ? `${Math.min(58, Math.max(2, ((width - hover.x) / width) * 100))}%` : 'auto', top: `${Math.min(62, Math.max(6, (hover.y / height) * 100))}%` }}>
-            <small>{activePoint.label}</small>
-            <strong style={{ color }}>{fmtKEur(activePoint.value)} CA</strong>
-            <em>Total période : {fmtKEur(total)} · Pic : {fmtKEur(peak.value)}</em>
-          </div>
-        ) : null}
-      </div>
-      <div className="lead-evolution-footer">
-        <div><small>Total période</small><strong>{fmtKEur(total)}</strong></div>
-        <div><small>Pic</small><strong>{fmtKEur(peak.value)}</strong></div>
-        <div><small>Tendance</small><strong className={delta >= 0 ? 'positive' : 'negative'}>{delta >= 0 ? 'Hausse' : 'Baisse'}</strong></div>
-      </div>
-    </div>
-  )
-}
 
 function FuturisticLineChart({ points, color, caption }: { points: ActivityPoint[]; color: string; caption: string }) {
   const values = points.map((p) => p.value)
