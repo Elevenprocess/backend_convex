@@ -533,7 +533,7 @@ body {
 }
 .overview-commercial-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(260px, .85fr);
+  grid-template-columns: minmax(260px, 0.9fr) minmax(0, 1.6fr);
   gap: 14px;
   margin-bottom: 12px;
   border: 1px solid rgba(42, 37, 32, 0.08);
@@ -544,6 +544,7 @@ body {
   overflow: hidden;
   position: relative;
   flex-shrink: 0;
+  align-items: stretch;
 }
 .overview-commercial-hero::after {
   content: '';
@@ -557,6 +558,16 @@ body {
   pointer-events: none;
 }
 .overview-commercial-hero-main { display: flex; align-items: center; gap: 14px; min-width: 0; position: relative; z-index: 1; }
+.overview-commercial-hero-content { min-width: 0; }
+.overview-commercial-hero-content h3 {
+  margin: 0 0 2px;
+  font-size: clamp(18px, 1.8vw, 24px);
+  line-height: 1.05;
+  font-weight: 850;
+  letter-spacing: -0.035em;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
 .overview-commercial-avatar {
   width: 56px;
   height: 56px;
@@ -609,44 +620,52 @@ body {
   border-color: var(--color-text);
 }
 .overview-commercial-actions button:first-child:hover { background: #0F172A; }
-.overview-commercial-hero-metrics {
+.overview-commercial-hero-stats {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(96px, 1fr));
   gap: 8px;
   align-self: stretch;
 }
-.overview-commercial-hero-metrics div {
+.overview-commercial-hero-stats div {
   border: 1px solid rgba(42, 37, 32, 0.08);
   border-radius: 10px;
-  background: rgba(248, 244, 235, 0.5);
-  padding: 12px;
+  background: rgba(255, 255, 255, 0.58);
+  padding: 10px 11px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 70px;
+  min-height: 76px;
   min-width: 0;
 }
-.overview-commercial-hero-metrics small {
-  font-size: 9.5px;
-  font-weight: 750;
-  letter-spacing: 0.13em;
+.overview-commercial-hero-stats small {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
   color: rgba(42, 37, 32, 0.48);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.overview-commercial-hero-metrics strong {
-  margin-top: 6px;
-  font-size: clamp(20px, 2vw, 24px);
+.overview-commercial-hero-stats strong {
+  margin-top: 5px;
+  font-size: clamp(20px, 1.9vw, 25px);
   line-height: 1;
-  font-weight: 650;
-  letter-spacing: -0.022em;
+  font-weight: 750;
+  letter-spacing: -0.026em;
   color: var(--color-text);
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
+}
+.overview-commercial-hero-stats span {
+  margin-top: 5px;
+  font-size: 10.5px;
+  line-height: 1.15;
+  font-weight: 650;
+  color: #64748B;
+  overflow-wrap: anywhere;
 }
 .overview-commercial-toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 9px; min-width: 0; }
 .overview-commercial-date-range { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
@@ -1443,14 +1462,15 @@ body {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 [data-theme="dark"] .overview-air-kpi small,
-[data-theme="dark"] .overview-commercial-hero-metrics small,
+[data-theme="dark"] .overview-commercial-hero-stats small,
 [data-theme="dark"] .shot-eyebrow,
 [data-theme="dark"] .lead-evolution-footer small,
 [data-theme="dark"] .lead-evolution-last-card small,
 [data-theme="dark"] .lead-evolution-last-card span,
 [data-theme="dark"] .overview-pie span { color: rgba(255, 255, 255, 0.42); }
 [data-theme="dark"] .overview-air-kpi strong,
-[data-theme="dark"] .overview-commercial-hero-metrics strong,
+[data-theme="dark"] .overview-commercial-hero-stats strong,
+[data-theme="dark"] .overview-commercial-hero-content h3,
 [data-theme="dark"] .overview-profile-panel h2,
 [data-theme="dark"] .overview-profile-chip strong,
 [data-theme="dark"] .lead-evolution-footer strong,
@@ -1476,7 +1496,8 @@ body {
 [data-theme="dark"] .overview-pie-legend strong,
 [data-theme="dark"] .overview-role-row strong,
 [data-theme="dark"] .shot-task-line strong { color: rgba(255, 255, 255, 0.95); }
-[data-theme="dark"] .overview-commercial-hero-metrics div { background: rgba(255, 255, 255, 0.04); border-color: rgba(255, 255, 255, 0.08); }
+[data-theme="dark"] .overview-commercial-hero-stats div { background: rgba(255, 255, 255, 0.04); border-color: rgba(255, 255, 255, 0.08); }
+[data-theme="dark"] .overview-commercial-hero-stats span { color: rgba(255, 255, 255, 0.55); }
 [data-theme="dark"] .overview-commercial-actions button,
 [data-theme="dark"] .overview-commercial-date-range label,
 [data-theme="dark"] .shot-calendar-head button {
@@ -1538,10 +1559,11 @@ body {
   .overview-role-list-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 680px) {
-  .overview-commercial-hero { padding: 14px; border-radius: 24px; }
+  .overview-commercial-hero { padding: 14px; border-radius: 24px; grid-template-columns: 1fr; }
   .overview-commercial-hero-main { align-items: flex-start; flex-direction: column; }
   .overview-commercial-avatar { width: 76px; height: 76px; border-radius: 24px; }
-  .overview-commercial-hero-metrics { grid-template-columns: 1fr; }
+  .overview-commercial-hero-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .overview-commercial-hero-stats div:last-child { grid-column: 1 / -1; }
 }
 @media (max-width: 860px) {
   .overview-shot-page { padding: 18px; }

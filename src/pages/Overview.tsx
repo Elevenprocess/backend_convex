@@ -364,7 +364,8 @@ function OverviewCommercial() {
             <div className="overview-commercial-avatar">
               {me?.image ? <img src={me.image} alt={me.name ?? 'Profil'} /> : <span>{userInitials(me?.name ?? display.firstName)}</span>}
             </div>
-            <div>
+            <div className="overview-commercial-hero-content">
+              <h3>{me?.name ?? display.firstName}</h3>
               <span className="shot-eyebrow">Performance commerciale</span>
               <h2>{fmtKEur(stats.ca)}</h2>
               <p>{fmtCompact(stats.totalRdv)} RDV suivis · {fmtCompact(stats.totalHonored)} honorés · {fmtCompact(stats.signed)} ventes signées</p>
@@ -374,22 +375,16 @@ function OverviewCommercial() {
               </div>
             </div>
           </div>
-          <div className="overview-commercial-hero-metrics">
-            <div><small>Closing</small><strong>{stats.closing}%</strong></div>
-            <div><small>Panier moyen</small><strong>{fmtKEur(stats.panier)}</strong></div>
-            <div><small>À venir</small><strong>{fmtCompact(stats.upcoming.length)}</strong></div>
+          <div className="overview-commercial-hero-stats">
+            <div><small>{leadsKpiLabelFor(commercialPeriod.mode)}</small><strong>{fmtCompact(stats.leadsToday)}</strong><span>leads arrivés</span></div>
+            <div><small>CA signé</small><strong>{fmtKEur(stats.ca)}</strong><span>{fmtCompact(stats.signed)} ventes</span></div>
+            <div><small>Closing</small><strong>{stats.closing}%</strong><span>{fmtCompact(stats.lost)} perdus</span></div>
+            <div><small>Panier moyen</small><strong>{fmtKEur(stats.panier)}</strong><span>sur ventes signées</span></div>
+            <div><small>RDV suivis</small><strong>{fmtCompact(stats.totalRdv)}</strong><span>{fmtCompact(stats.totalHonored)} honorés</span></div>
           </div>
         </section>
 
         <section className="overview-air-grid overview-commercial-grid">
-          <div className="overview-commercial-kpis">
-            <AirKpi icon="inbox" label={leadsKpiLabelFor(commercialPeriod.mode)} value={fmtCompact(stats.leadsToday)} sub="leads arrivés" />
-            <AirKpi icon="trophy" label="CA signé" value={fmtKEur(stats.ca)} sub={`${fmtCompact(stats.signed)} ventes`} />
-            <AirKpi icon="target" label="Closing" value={`${stats.closing}%`} sub={`${fmtCompact(stats.lost)} perdus`} />
-            <AirKpi icon="chart" label="Panier moyen" value={fmtKEur(stats.panier)} sub="sur ventes signées" />
-            <AirKpi icon="users" label="RDV suivis" value={fmtCompact(stats.totalRdv)} sub={`${fmtCompact(stats.totalHonored)} honorés`} />
-          </div>
-
           <CommercialQualifiedProspects prospects={stats.qualifiedProspects} />
 
           <div className="overview-commercial-debrief-grid">
