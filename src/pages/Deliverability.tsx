@@ -147,9 +147,9 @@ export function Deliverability() {
 
   return (
     <AppShell flat>
-      <Topbar eyebrow="ADMIN — DEIVRABILITÉ" title="Processus commerciaux" />
+      <Topbar eyebrow="ADMIN — DÉLIVRABILITÉ" title="Suivi pipeline" />
 
-      <main className="commercial-prospect-page px-4 sm:px-8 pt-4 pb-8 flex flex-col gap-3 overflow-y-auto flex-grow">
+      <main className="commercial-prospect-page deliverability-jenkins-page px-4 sm:px-8 pt-4 pb-8 flex flex-col gap-3 overflow-y-auto flex-grow">
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 flex-shrink-0">
           <Metric label="Total RDV" value={`${totals.total}`} hint={`${totals.planned} planifiés · ${totals.honored} honorés`} />
           <Metric label="Commerciaux" value={`${totals.commercials}`} hint={`${totals.withCommercial} RDV assignés`} />
@@ -158,7 +158,7 @@ export function Deliverability() {
         </section>
 
         <section className="grid grid-cols-12 gap-3 flex-shrink-0">
-          <div className="commercial-pipeline-board glass-card col-span-12 xl:col-span-8 px-4 py-3 bg-white border border-line-soft">
+          <div className="commercial-pipeline-board jenkins-panel col-span-12 xl:col-span-8 px-4 py-3 bg-white border border-line-soft">
             <div className="flex items-center justify-between gap-3 mb-2">
               <div>
                 <span className="eyebrow text-[10px]">DÉLIVRABILITÉ / COMMERCIAL</span>
@@ -174,7 +174,7 @@ export function Deliverability() {
             </div>
           </div>
 
-          <div className="commercial-pipeline-board glass-card col-span-12 xl:col-span-4 px-4 py-3 bg-white border border-line-soft overflow-hidden">
+          <div className="commercial-pipeline-board jenkins-panel col-span-12 xl:col-span-4 px-4 py-3 bg-white border border-line-soft overflow-hidden">
             <div className="flex items-center justify-between mb-2">
               <span className="eyebrow text-[10px]">RÉPARTITION</span>
               <span className="text-[11px] text-faint">Top commerciaux</span>
@@ -191,7 +191,7 @@ export function Deliverability() {
           </div>
         </section>
 
-        <section className="commercial-pipeline-board glass-card px-4 py-3 flex flex-col h-[1000px] flex-shrink-0 bg-white border border-line-soft">
+        <section className="commercial-pipeline-board jenkins-pipeline-board px-4 py-3 flex flex-col h-[1000px] flex-shrink-0 bg-white border border-line-soft">
           <div className="flex items-center justify-between gap-3 mb-2 flex-shrink-0">
             <div className="min-w-0">
               <span className="eyebrow text-[10px]">PIPELINE GHL CRM VENTE</span>
@@ -204,7 +204,7 @@ export function Deliverability() {
               {moveError && <span className="text-rouille">{moveError}</span>}
               {movingOppId && <span className="text-amber-600">Sync GHL…</span>}
               {ghlOpps?.truncated && <span className="text-amber-600">Limité à {ghlOpps.total} cartes</span>}
-              <span className="rounded-full border border-line-soft bg-success-tint px-2.5 py-1 text-[11px] font-bold text-success whitespace-nowrap">{ghlTotals.total} opp. · {formatCurrency(ghlTotals.amount)}</span>
+              <span className="jenkins-pill">{ghlTotals.total} opp. · {formatCurrency(ghlTotals.amount)}</span>
             </div>
           </div>
 
@@ -256,9 +256,9 @@ function GhlStageColumn({
     <div
       onDragOver={(event) => event.preventDefault()}
       onDrop={onDrop}
-      className="commercial-pipeline-column w-[252px] rounded-[18px] border border-line-soft bg-cream/45 p-2.5 flex flex-col min-h-0"
+      className="commercial-pipeline-column jenkins-stage-column w-[252px] rounded-[18px] border border-line-soft bg-cream/45 p-2.5 flex flex-col min-h-0"
     >
-      <div className="commercial-pipeline-column-head bg-white rounded-[14px] border border-line-soft p-2.5 mb-2 flex-shrink-0">
+      <div className="commercial-pipeline-column-head jenkins-stage-head bg-white rounded-[14px] border border-line-soft p-2.5 mb-2 flex-shrink-0">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <h4 className="font-black text-xs leading-snug">{cleanGhlStageName(stage.name)}</h4>
@@ -312,7 +312,7 @@ function GhlOpportunityCard({
     <div
       draggable={!moving}
       onDragStart={onDragStart}
-      className={`commercial-prospect-card rounded-[18px] border border-emerald-100 bg-emerald-50/60 p-3 shadow-sm transition cursor-grab active:cursor-grabbing ${moving ? 'opacity-50 scale-[0.98]' : 'hover:-translate-y-0.5 hover:shadow-md'}`}
+      className={`commercial-prospect-card jenkins-opportunity-card rounded-[18px] border border-emerald-100 bg-emerald-50/60 p-3 shadow-sm transition cursor-grab active:cursor-grabbing ${moving ? 'opacity-50 scale-[0.98]' : 'hover:-translate-y-0.5 hover:shadow-md'}`}
       title={moving ? 'Sync GHL en cours…' : 'Glisser pour déplacer'}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
