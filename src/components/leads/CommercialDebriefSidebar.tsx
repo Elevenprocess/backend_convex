@@ -189,6 +189,7 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
     setSavedAt(null)
     setForm(selectedRdv ? rdvToForm(selectedRdv) : EMPTY_FORM)
     setCurrentStep(0)
+    setTransitionDirection('forward')
   }, [selectedRdv?.id])
 
   const update = (patch: Partial<FormState>) => {
@@ -323,7 +324,7 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
             <ProgressDots total={stepSequence.length} currentIndex={Math.min(currentStep, stepSequence.length - 1)} />
 
             <div
-              key={currentStepId}
+              key={`${selectedRdv?.id ?? 'none'}-${currentStepId}`}
               className={`animate-slide-${transitionDirection}`}
             >
               {currentStepId === 'result' && <Step1Result form={form} update={update} />}
