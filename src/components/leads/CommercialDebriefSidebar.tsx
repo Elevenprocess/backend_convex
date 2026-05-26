@@ -363,7 +363,7 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
           <>
             <RdvSelector rdvs={sortedRdvs} selectedId={selectedRdv?.id ?? null} onSelect={setSelectedRdvId} />
 
-            {selectedRdv && (
+            {selectedRdv && form.outcome === 'non_vente' && (
               <RescheduleCard
                 date={rescheduleDate}
                 time={rescheduleTime}
