@@ -15,8 +15,6 @@ import { RdvCalendar } from './pages/rdv/RdvCalendar'
 import { RdvDetail } from './pages/rdv/RdvDetail'
 import { RdvSplit } from './pages/rdv/RdvSplit'
 import { Analytics } from './pages/Analytics'
-import { Deliverability } from './pages/Deliverability'
-import { Delivrabilite } from './pages/Delivrabilite'
 import { Suivi } from './pages/Suivi'
 import { ProfilSetter } from './pages/profils/ProfilSetter'
 import { ProfilCommercial } from './pages/profils/ProfilCommercial'
@@ -46,8 +44,6 @@ const router = createHashRouter([
           { path: '/rdv/:id', element: <RdvDetail /> },
           { path: '/analytics', element: <Analytics /> },
           { path: '/suivi', element: <Suivi /> },
-          { path: '/deivrabilite', element: <Deliverability /> },
-          { path: '/delivrabilite', element: <Delivrabilite /> },
           { path: '/team/setters/:id', element: <ProfilSetter /> },
           { path: '/team/commerciaux/:id', element: <ProfilCommercial /> },
           { path: '/settings', element: <Settings /> },

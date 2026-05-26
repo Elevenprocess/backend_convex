@@ -26,7 +26,6 @@ const SECTIONS: Section[] = [
       { to: '/notifications', icon: 'bell', label: 'Rappels' },
       { to: '/analytics', icon: 'chart', label: 'Analytics' },
       { to: '/suivi', icon: 'grid', label: 'Suivi', roles: ['admin', 'delivrabilite'] },
-      { to: '/delivrabilite', icon: 'shield', label: 'Délivrabilité', roles: ['admin', 'delivrabilite'] },
     ],
   },
   {
