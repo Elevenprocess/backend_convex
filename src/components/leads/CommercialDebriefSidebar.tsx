@@ -86,15 +86,15 @@ function getStepSequence(form: FormState): WizardStepId[] {
 function canAdvanceStep(stepId: WizardStepId, form: FormState): boolean {
   switch (stepId) {
     case 'result': return form.outcome !== ''
-    case 'objection_v': return true // optionnel
-    case 'acceptance_v': return true // optionnel
+    case 'objection_v': return form.objection !== ''
+    case 'acceptance_v': return form.acceptanceFactors.length > 0
     case 'details_v':
       return form.quoteAmount.trim() !== ''
         && form.signedAt !== ''
         && form.kits.trim() !== ''
         && form.paymentMethod !== ''
     case 'reason_nv': return form.nonSaleReason !== ''
-    case 'objection_nv': return true // optionnel
+    case 'objection_nv': return form.objection !== ''
     case 'notes': return true // step final, le bouton submit fait sa propre validation
   }
 }
@@ -472,7 +472,7 @@ function Step1Result({ form, update }: StepProps) {
 
 function Step2VObjection({ form, update }: StepProps) {
   return (
-    <FieldGroup label="Quelle objection avez-vous surmontée ?">
+    <FieldGroup label="Quelle objection avez-vous surmontée ?" required>
       <div className="grid grid-cols-2 gap-1.5">
         {OBJECTIONS.map((o) => (
           <ChoiceChip
@@ -495,7 +495,7 @@ type Step3VProps = StepProps & {
 function Step3VAcceptance({ form, update, toggleAcceptance }: Step3VProps) {
   return (
     <div className="space-y-4">
-      <FieldGroup label="Facteurs d'acceptation">
+      <FieldGroup label="Facteurs d'acceptation" required>
         <div className="grid grid-cols-2 gap-1.5">
           {ACCEPTANCE_FACTORS.map((f) => (
             <ChoiceChip
@@ -601,7 +601,7 @@ function Step2NVReason({ form, update }: StepProps) {
 
 function Step3NVObjection({ form, update }: StepProps) {
   return (
-    <FieldGroup label="Quelle objection n'avez-vous pas pu surmonter ?">
+    <FieldGroup label="Quelle objection n'avez-vous pas pu surmonter ?" required>
       <div className="grid grid-cols-2 gap-1.5">
         {OBJECTIONS.map((o) => (
           <ChoiceChip
