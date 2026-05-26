@@ -57,6 +57,46 @@ type FormState = {
   paymentMethod: FinancingType | ''
 }
 
+// ─── Wizard state machine ───────────────────────────────────────────
+type WizardStepId =
+  | 'result'        // Step 1 (toutes branches)
+  | 'objection_v'   // Step 2V — objection surmontée (Vente)
+  | 'acceptance_v'  // Step 3V — facteurs d'acceptation (Vente)
+  | 'details_v'     // Step 4V — devis/date/kits/paiement (Vente)
+  | 'reason_nv'     // Step 2NV — raison non-vente (Non-vente)
+  | 'objection_nv'  // Step 3NV-A — objection non surmontée (Non-vente / Suivi prévu uniquement)
+  | 'notes'         // Step final (toutes branches)
+
+export function getStepSequence(form: FormState): WizardStepId[] {
+  if (form.outcome === '') return ['result']
+  if (form.outcome === 'vente') {
+    return ['result', 'objection_v', 'acceptance_v', 'details_v', 'notes']
+  }
+  // Non-vente
+  if (form.nonSaleReason === '') return ['result', 'reason_nv']
+  if (form.nonSaleReason === 'suivi_prevu') {
+    return ['result', 'reason_nv', 'objection_nv', 'notes']
+  }
+  // Non qualifié, no_show, contact_annule, annulation_administrative, pas_interesse
+  return ['result', 'reason_nv', 'notes']
+}
+
+export function canAdvanceStep(stepId: WizardStepId, form: FormState): boolean {
+  switch (stepId) {
+    case 'result': return form.outcome !== ''
+    case 'objection_v': return true // optionnel
+    case 'acceptance_v': return true // optionnel
+    case 'details_v':
+      return form.quoteAmount.trim() !== ''
+        && form.signedAt !== ''
+        && form.kits.trim() !== ''
+        && form.paymentMethod !== ''
+    case 'reason_nv': return form.nonSaleReason !== ''
+    case 'objection_nv': return true // optionnel
+    case 'notes': return true // step final, le bouton submit fait sa propre validation
+  }
+}
+
 type DebriefStatus = 'en_attente' | 'signe' | 'non_qualifie'
 
 const DEBRIEF_STATUS_META: Record<DebriefStatus, { label: string; badgeClass: string; dotClass: string }> = {
