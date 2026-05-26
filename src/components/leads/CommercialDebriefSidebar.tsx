@@ -120,58 +120,6 @@ const NON_SALE_REASONS: { value: NonSaleReason; label: string; hint: string }[] 
   { value: 'pas_interesse', label: 'Pas intéressé', hint: 'Pas envie de continuer' },
 ]
 
-// Sous-cas par raison de non-vente — affichés en chips conditionnels.
-const NON_SALE_SUB_REASONS: Record<NonSaleReason, string[]> = {
-  suivi_prevu: [
-    'Devis en réflexion',
-    'Attente accord conjoint / décideur',
-    'Comparaison concurrent en cours',
-    'Travaux préalables nécessaires',
-    'Attente déblocage budget',
-    'Autre',
-  ],
-  non_qualifie: [
-    'Locataire / pas propriétaire',
-    'Copropriété (refus AG)',
-    'Toit incompatible (orientation/ombrage)',
-    'Toit incompatible (matériau)',
-    'Budget trop faible',
-    'Pas le décideur',
-    'Déjà équipé en PV',
-    'Zone hors couverture',
-    'Autre',
-  ],
-  no_show: [
-    'Pas répondu au téléphone',
-    'Annulation dernière minute',
-    'Indisponible (maladie / urgence)',
-    'Oubli déclaré',
-    'Autre',
-  ],
-  contact_annule: [
-    'Plus intéressé entre-temps',
-    'A choisi un concurrent',
-    'Reporté sine die',
-    'Travaux annulés',
-    'Autre',
-  ],
-  annulation_administrative: [
-    'Erreur de planning ECOI',
-    'Commercial indisponible',
-    'Doublon RDV',
-    'Re-qualification nécessaire',
-    'Autre',
-  ],
-  pas_interesse: [
-    'Démarchage ressenti',
-    'Méfiance solaire',
-    'Pas de retour économique perçu',
-    'Mauvaise expérience passée',
-    'Pas le bon moment',
-    'Autre',
-  ],
-}
-
 const OBJECTIONS: { value: Objection; label: string; hint: string }[] = [
   { value: 'argent', label: 'Argent', hint: "Je n'ai pas d'argent" },
   { value: 'logistique', label: 'Logistique', hint: 'Il faut trouver la solution' },
@@ -259,10 +207,6 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
     if (isFirstStep) return
     setCurrentStep((s) => Math.max(0, s - 1))
   }
-  // goNext/goBack wired in next task — void refs prevent noUnusedLocals until then
-  void goNext
-  void goBack
-
   const toggleAcceptance = (factor: AcceptanceFactor) =>
     setForm((current) => ({
       ...current,
@@ -270,8 +214,6 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
         ? current.acceptanceFactors.filter((f) => f !== factor)
         : [...current.acceptanceFactors, factor],
     }))
-
-  const subReasonOptions = form.nonSaleReason ? NON_SALE_SUB_REASONS[form.nonSaleReason] : []
 
   const canSubmit =
     !!selectedRdv &&
@@ -350,159 +292,15 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
           <>
             <RdvSelector rdvs={sortedRdvs} selectedId={selectedRdv?.id ?? null} onSelect={setSelectedRdvId} />
 
-            {/* Q3 — Résultat */}
-            <FieldGroup label="Résultat de l'appel" required>
-              <div className="grid grid-cols-2 gap-2">
-                <ChoicePill active={form.outcome === 'vente'} icon="check" label="Vente réalisée" tone="success" onClick={() => update({ outcome: 'vente' })} />
-                <ChoicePill active={form.outcome === 'non_vente'} icon="x" label="Vente non réalisée" tone="rouille" onClick={() => update({ outcome: 'non_vente' })} />
-              </div>
-            </FieldGroup>
+            <ProgressDots total={stepSequence.length} currentIndex={currentStep} />
 
-            {form.outcome === 'non_vente' && (
-              <>
-                <FieldGroup label="Raison de la non-vente" required>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {NON_SALE_REASONS.map((r) => (
-                      <ChoiceChip
-                        key={r.value}
-                        active={form.nonSaleReason === r.value}
-                        label={r.label}
-                        sublabel={r.hint}
-                        onClick={() => update({ nonSaleReason: r.value, nonSaleSubReason: '' })}
-                      />
-                    ))}
-                  </div>
-                </FieldGroup>
-
-                {subReasonOptions.length > 0 && (
-                  <FieldGroup label={`Précision — ${labelFromNonSaleReason(form.nonSaleReason as NonSaleReason)}`}>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {subReasonOptions.map((sub) => (
-                        <ChoiceChip
-                          key={sub}
-                          active={form.nonSaleSubReason === sub}
-                          label={sub}
-                          onClick={() => update({ nonSaleSubReason: form.nonSaleSubReason === sub ? '' : sub })}
-                        />
-                      ))}
-                    </div>
-                    <p className="mt-1 text-[10px] text-faint">Optionnel — aide les stats à identifier les vrais blocages.</p>
-                  </FieldGroup>
-                )}
-
-                {form.nonSaleReason && (
-                  <FieldGroup label={`Commentaire — pourquoi ${labelFromNonSaleReason(form.nonSaleReason as NonSaleReason).toLowerCase()} ?`}>
-                    <AutoGrowTextarea
-                      value={form.nonSaleComment}
-                      onChange={(e) => update({ nonSaleComment: e.target.value })}
-                      minRows={2}
-                      maxRows={8}
-                      placeholder={nonSaleCommentPlaceholder(form.nonSaleReason as NonSaleReason)}
-                      className="w-full rounded-xl border border-line bg-cream px-3 py-2 text-sm leading-relaxed text-text outline-none focus:border-or"
-                    />
-                    <p className="mt-1 text-[10px] text-faint">Facultatif mais enregistré — explique le contexte de ton choix.</p>
-                  </FieldGroup>
-                )}
-
-                <FieldGroup label="Objection non surmontée">
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {OBJECTIONS.map((o) => (
-                      <ChoiceChip
-                        key={o.value}
-                        active={form.objection === o.value}
-                        label={o.label}
-                        sublabel={o.hint}
-                        onClick={() => update({ objection: form.objection === o.value ? '' : o.value })}
-                      />
-                    ))}
-                  </div>
-                </FieldGroup>
-              </>
-            )}
-
-            {form.outcome === 'vente' && (
-              <>
-                <FieldGroup label="Facteurs d'acceptation">
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {ACCEPTANCE_FACTORS.map((f) => (
-                      <ChoiceChip
-                        key={f.value}
-                        active={form.acceptanceFactors.includes(f.value)}
-                        label={f.label}
-                        onClick={() => toggleAcceptance(f.value)}
-                      />
-                    ))}
-                  </div>
-                  <p className="mt-1 text-[10px] text-faint">Sélection multiple — pourquoi le prospect a dit oui.</p>
-                </FieldGroup>
-
-                <FieldGroup label="Objection surmontée">
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {OBJECTIONS.map((o) => (
-                      <ChoiceChip
-                        key={o.value}
-                        active={form.objection === o.value}
-                        label={o.label}
-                        sublabel={o.hint}
-                        onClick={() => update({ objection: form.objection === o.value ? '' : o.value })}
-                      />
-                    ))}
-                  </div>
-                </FieldGroup>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <FieldGroup label="Valeur du devis signé (€)" required>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      step="0.01"
-                      value={form.quoteAmount}
-                      onChange={(e) => update({ quoteAmount: e.target.value })}
-                      placeholder="0,00"
-                      className="w-full rounded-xl border border-line bg-cream px-3 py-2 text-sm font-bold text-text outline-none focus:border-or"
-                    />
-                  </FieldGroup>
-                  <FieldGroup label="Date signature devis" required>
-                    <input
-                      type="date"
-                      value={form.signedAt}
-                      onChange={(e) => update({ signedAt: e.target.value })}
-                      className="w-full rounded-xl border border-line bg-cream px-3 py-2 text-sm font-bold text-text outline-none focus:border-or"
-                    />
-                  </FieldGroup>
-                </div>
-
-                <FieldGroup label="Kits vendus" required>
-                  <input
-                    type="text"
-                    value={form.kits}
-                    onChange={(e) => update({ kits: e.target.value })}
-                    placeholder="Ex. : 8 PV + 1 onduleur + 1 batterie 5 kWh"
-                    className="w-full rounded-xl border border-line bg-cream px-3 py-2 text-sm text-text outline-none focus:border-or"
-                  />
-                </FieldGroup>
-
-                <FieldGroup label="Type de paiement" required>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {PAYMENT_METHODS.map((p) => (
-                      <ChoiceChip key={p.value} active={form.paymentMethod === p.value} label={p.label} onClick={() => update({ paymentMethod: p.value })} />
-                    ))}
-                  </div>
-                </FieldGroup>
-              </>
-            )}
-
-            <FieldGroup label="Notes supplémentaires">
-              <AutoGrowTextarea
-                value={form.notes}
-                onChange={(e) => update({ notes: e.target.value })}
-                minRows={4}
-                maxRows={20}
-                placeholder={notesPlaceholder(form)}
-                className="w-full rounded-xl border border-line bg-cream px-3 py-2 text-sm leading-relaxed text-text outline-none focus:border-or"
-              />
-            </FieldGroup>
+            {currentStepId === 'result' && <Step1Result form={form} update={update} />}
+            {currentStepId === 'objection_v' && <Step2VObjection form={form} update={update} />}
+            {currentStepId === 'acceptance_v' && <Step3VAcceptance form={form} update={update} toggleAcceptance={toggleAcceptance} />}
+            {currentStepId === 'details_v' && <Step4VDetails form={form} update={update} />}
+            {currentStepId === 'reason_nv' && <Step2NVReason form={form} update={update} />}
+            {currentStepId === 'objection_nv' && <Step3NVObjection form={form} update={update} />}
+            {currentStepId === 'notes' && <StepFinalNotes form={form} update={update} />}
 
             {error && (
               <div className="rounded-xl border border-rouille/40 bg-rouille-tint px-3 py-2 text-xs font-bold text-rouille">{error}</div>
@@ -517,22 +315,48 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
       </div>
 
       {sortedRdvs.length > 0 && (
-        <footer className="sticky bottom-0 z-10 border-t border-line bg-white/95 px-5 py-3 backdrop-blur-2xl">
-          <button
-            type="button"
-            disabled={!canSubmit || saving || readOnly}
-            onClick={handleSubmit}
-            className={`w-full rounded-2xl px-4 py-3 text-sm font-black tracking-wide transition ${
-              canSubmit && !saving
-                ? 'bg-text text-white hover:bg-text/90 shadow-md'
-                : 'bg-cream-darker text-faint cursor-not-allowed'
-            }`}
-          >
-            {saving ? 'Enregistrement…' : readOnly ? 'Lecture seule — impersonation' : 'Enregistrer le débrief'}
-          </button>
-          {!canSubmit && form.outcome === '' && (
-            <p className="mt-2 text-center text-[11px] text-faint">Choisis un résultat pour activer l'enregistrement</p>
-          )}
+        <footer className="sticky bottom-0 z-10 border-t border-line bg-white/95 px-5 py-3 backdrop-blur-2xl space-y-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={goBack}
+              disabled={isFirstStep || saving}
+              className={`rounded-2xl border border-line px-4 py-3 text-sm font-bold transition ${
+                isFirstStep || saving
+                  ? 'bg-cream-darker text-faint cursor-not-allowed'
+                  : 'bg-white text-text hover:bg-cream'
+              }`}
+            >
+              ← Retour
+            </button>
+            {!isLastStep ? (
+              <button
+                type="button"
+                onClick={goNext}
+                disabled={!canAdvanceStep(currentStepId, form) || saving}
+                className={`flex-1 rounded-2xl px-4 py-3 text-sm font-black tracking-wide transition ${
+                  canAdvanceStep(currentStepId, form) && !saving
+                    ? 'bg-text text-white hover:bg-text/90 shadow-md'
+                    : 'bg-cream-darker text-faint cursor-not-allowed'
+                }`}
+              >
+                Continuer →
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={!canSubmit || saving || readOnly}
+                onClick={handleSubmit}
+                className={`flex-1 rounded-2xl px-4 py-3 text-sm font-black tracking-wide transition ${
+                  canSubmit && !saving
+                    ? 'bg-success text-white hover:bg-success/90 shadow-md'
+                    : 'bg-cream-darker text-faint cursor-not-allowed'
+                }`}
+              >
+                {saving ? 'Enregistrement…' : readOnly ? 'Lecture seule — impersonation' : 'Enregistrer le débrief'}
+              </button>
+            )}
+          </div>
         </footer>
       )}
     </aside>
@@ -546,7 +370,7 @@ type StepProps = {
   update: (patch: Partial<FormState>) => void
 }
 
-export function Step1Result({ form, update }: StepProps) {
+function Step1Result({ form, update }: StepProps) {
   return (
     <FieldGroup label="Résultat de l'appel" required>
       <div className="grid grid-cols-2 gap-2">
@@ -557,7 +381,7 @@ export function Step1Result({ form, update }: StepProps) {
   )
 }
 
-export function Step2VObjection({ form, update }: StepProps) {
+function Step2VObjection({ form, update }: StepProps) {
   return (
     <FieldGroup label="Quelle objection avez-vous surmontée ?">
       <div className="grid grid-cols-2 gap-1.5">
@@ -579,7 +403,7 @@ type Step3VProps = StepProps & {
   toggleAcceptance: (factor: AcceptanceFactor) => void
 }
 
-export function Step3VAcceptance({ form, toggleAcceptance }: Step3VProps) {
+function Step3VAcceptance({ form, toggleAcceptance }: Step3VProps) {
   return (
     <FieldGroup label="Facteurs d'acceptation">
       <div className="grid grid-cols-2 gap-1.5">
@@ -597,7 +421,7 @@ export function Step3VAcceptance({ form, toggleAcceptance }: Step3VProps) {
   )
 }
 
-export function Step4VDetails({ form, update }: StepProps) {
+function Step4VDetails({ form, update }: StepProps) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -644,7 +468,7 @@ export function Step4VDetails({ form, update }: StepProps) {
   )
 }
 
-export function Step2NVReason({ form, update }: StepProps) {
+function Step2NVReason({ form, update }: StepProps) {
   return (
     <FieldGroup label="Raison de la non-vente" required>
       <div className="grid grid-cols-2 gap-1.5">
@@ -662,7 +486,7 @@ export function Step2NVReason({ form, update }: StepProps) {
   )
 }
 
-export function Step3NVObjection({ form, update }: StepProps) {
+function Step3NVObjection({ form, update }: StepProps) {
   return (
     <FieldGroup label="Quelle objection n'avez-vous pas pu surmonter ?">
       <div className="grid grid-cols-2 gap-1.5">
@@ -680,7 +504,7 @@ export function Step3NVObjection({ form, update }: StepProps) {
   )
 }
 
-export function StepFinalNotes({ form, update }: StepProps) {
+function StepFinalNotes({ form, update }: StepProps) {
   return (
     <FieldGroup label="Notes supplémentaires">
       <AutoGrowTextarea
@@ -692,6 +516,30 @@ export function StepFinalNotes({ form, update }: StepProps) {
         className="w-full rounded-xl border border-line bg-cream px-3 py-2 text-sm leading-relaxed text-text outline-none focus:border-or"
       />
     </FieldGroup>
+  )
+}
+
+function ProgressDots({ total, currentIndex }: { total: number; currentIndex: number }) {
+  return (
+    <div className="flex items-center justify-between gap-2 px-1">
+      <div className="flex items-center gap-1.5">
+        {Array.from({ length: total }, (_, i) => (
+          <span
+            key={i}
+            className={`h-1.5 rounded-full transition-all ${
+              i === currentIndex
+                ? 'w-6 bg-or'
+                : i < currentIndex
+                ? 'w-1.5 bg-or-dark'
+                : 'w-1.5 bg-line'
+            }`}
+          />
+        ))}
+      </div>
+      <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-faint">
+        Étape {currentIndex + 1} sur {total}
+      </span>
+    </div>
   )
 }
 
@@ -935,18 +783,6 @@ function splitNotes(raw: string | null): { acceptance: string[]; precision: stri
   }
 
   return { acceptance, precision, freeText: rest.trim() }
-}
-
-function nonSaleCommentPlaceholder(reason: NonSaleReason): string {
-  switch (reason) {
-    case 'suivi_prevu': return 'Pourquoi le prospect veut un suivi ? Contexte, date, décideur attendu…'
-    case 'non_qualifie': return 'Qu\'est-ce qui rend ce contact non qualifié ? Budget, toit, décideur, statut…'
-    case 'no_show': return 'Contexte du no-show, raison invoquée si connue, prochain contact prévu…'
-    case 'contact_annule': return 'Motif d\'annulation par le contact, suite prévue ou non…'
-    case 'annulation_administrative': return 'Détail de l\'annulation côté ECOI, impact, action de récup prévue…'
-    case 'pas_interesse': return 'Pourquoi le prospect n\'est pas intéressé ? Objection principale, ressenti…'
-    default: return 'Contexte, décision, prochaines étapes…'
-  }
 }
 
 function notesPlaceholder(form: FormState): string {
