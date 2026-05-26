@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon, type IconName } from '../../components/Icon'
 import { EmptyState } from '../../components/EmptyState'
 import { LoadingBlock } from '../../components/Spinner'
 import { useAuth } from '../../lib/auth'
-import { deleteLead, useLeadStats, useLeads, useLeadsProgressive, useUsers, useStartCall } from '../../lib/hooks'
+import { deleteLead, useLeadStats, useLeads, useLeadsProgressive, useUsers, useStartCall, useRdvList } from '../../lib/hooks'
 import { useLeadSidebar } from '../../lib/leadSidebar'
 import { emitLeadDeselect, emitLeadSelect, useLeadLocks, type LeadLockInfo } from '../../lib/realtime'
 import { DEFAULT_LEAD_FILTERS, applyLeadFilters, leadFiltersActive, type LeadLastCallFilter, type LeadListFilters } from '../../lib/leadFilters'
@@ -109,7 +109,69 @@ export function LeadsList() {
   const role = useAuth((s) => s.user?.role)
   if (role === 'admin') return <LeadsAdmin />
   if (role === 'commercial') return <LeadsCommercial />
+  if (role === 'delivrabilite') return <LeadsSuivi />
   return <LeadsSetter />
+}
+
+function LeadsSuivi() {
+  const navigate = useNavigate()
+  const { data: leadsData, loading, error } = useLeads({ limit: 500 })
+  const { data: rdvsData } = useRdvList({ limit: 200 })
+  const leads = leadsData ?? []
+  const rdvs = rdvsData ?? []
+  const signedRdvByLead = new Map(rdvs.filter((r) => r.result === 'signe' || Boolean(r.signatureAt)).map((r) => [r.leadId, r]))
+  const rows = leads
+    .filter((lead) => lead.status === 'signe' || signedRdvByLead.has(lead.id))
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+
+  return (
+    <AppShell>
+      <Topbar eyebrow="LEADS / DÉLIVRABILITÉ" title="Dossiers signés à suivre" />
+      <main className="p-4 sm:p-6 md:p-8 flex-grow overflow-auto">
+        <div className="mb-4 glass-card !p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div>
+            <span className="eyebrow text-[10px]">Vue leads adaptée AD</span>
+            <h2 className="text-lg font-black">Tous les prospects signés avec accès dossier complet</h2>
+            <p className="text-xs text-muted">La colonne Suivi ouvre le workflow Jenkins/n8n du prospect.</p>
+          </div>
+          <button type="button" onClick={() => navigate('/suivi')} className="rounded-full bg-success text-white px-4 py-2 text-xs font-black">Ouvrir Suivi global</button>
+        </div>
+        {loading && rows.length === 0 ? <LoadingBlock label="Chargement dossiers signés…" /> : error ? (
+          <div className="py-16 text-center text-rouille text-sm">Erreur : {error}</div>
+        ) : rows.length === 0 ? (
+          <EmptyState icon="users" title="Aucun devis signé" description="Dès qu'un RDV est signé, le dossier apparaît ici pour la Délivrabilité." />
+        ) : (
+          <div className="glass-card overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-cream/60 text-[10px] uppercase tracking-[0.16em] text-faint">
+                <tr><th className="text-left px-4 py-3">Prospect</th><th className="text-left px-4 py-3">Contact</th><th className="text-left px-4 py-3">Ville</th><th className="text-left px-4 py-3">Montant</th><th className="text-left px-4 py-3">Étape</th><th className="text-right px-4 py-3">Action</th></tr>
+              </thead>
+              <tbody>
+                {rows.map((lead) => {
+                  const rdv = signedRdvByLead.get(lead.id)
+                  return (
+                    <tr key={lead.id} className="border-t border-line-soft hover:bg-success-tint/25 transition">
+                      <td className="px-4 py-3 font-black">{fullName(lead) || 'Prospect signé'}</td>
+                      <td className="px-4 py-3 text-muted">{lead.phone ?? lead.email ?? '—'}</td>
+                      <td className="px-4 py-3 text-muted">{lead.city ?? '—'}</td>
+                      <td className="px-4 py-3 font-bold">{formatLeadAmount(rdv?.montantTotal ?? lead.monetaryValue)}</td>
+                      <td className="px-4 py-3"><span className="rounded-full bg-success-tint text-success px-2 py-1 text-[11px] font-bold">Suivi post-signature</span></td>
+                      <td className="px-4 py-3 text-right"><button onClick={() => navigate(`/suivi?lead=${lead.id}`)} className="rounded-full border border-line-soft px-3 py-1.5 text-xs font-black hover:border-success">Workflow</button></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </main>
+    </AppShell>
+  )
+}
+
+function formatLeadAmount(value: string | null | undefined): string {
+  const n = Number(value ?? 0)
+  return n > 0 ? n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }) : '—'
 }
 
 type CommercialFilter = 'all' | 'en_attente' | 'signe' | 'non_qualifie'

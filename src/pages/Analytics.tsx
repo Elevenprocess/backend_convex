@@ -3,7 +3,7 @@ import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Spinner } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
-import { useAnalyticsSummary, prefetchAnalyticsSummary } from '../lib/hooks'
+import { useAnalyticsSummary, prefetchAnalyticsSummary, useLeads, useRdvList } from '../lib/hooks'
 import type { AnalyticsAdminSummary, AnalyticsCommercialPerf, AnalyticsCommercialSummary, AnalyticsDailyPoint, AnalyticsHourlyCallPoint, AnalyticsSegment, AnalyticsSetterSummary } from '../lib/types'
 import { DebriefAnalytics } from '../components/analytics/DebriefAnalytics'
 
@@ -92,7 +92,55 @@ export function Analytics() {
 
   if (me?.role === 'admin') return <AnalyticsAdmin />
   if (me?.role === 'commercial') return <AnalyticsCommercial name={me.name} />
+  if (me?.role === 'delivrabilite') return <AnalyticsSuivi />
   return <AnalyticsSetter name={me?.name ?? 'Setter'} />
+}
+
+function AnalyticsSuivi() {
+  const { data: leadsData } = useLeads({ limit: 500 })
+  const { data: rdvsData } = useRdvList({ limit: 200 })
+  const leads = leadsData ?? []
+  const rdvs = rdvsData ?? []
+  const signedRdvs = rdvs.filter((r) => r.result === 'signe' || Boolean(r.signatureAt))
+  const signedIds = new Set(signedRdvs.map((r) => r.leadId))
+  const signedLeads = leads.filter((l) => l.status === 'signe' || signedIds.has(l.id))
+  const ca = signedRdvs.reduce((sum, r) => sum + (Number(r.montantTotal ?? 0) || 0), 0)
+  const comptant = signedRdvs.filter((r) => r.financingType === 'comptant').length
+  const financement = signedRdvs.filter((r) => r.financingType && r.financingType !== 'comptant').length
+  const lateLike = signedLeads.filter((l) => (l.daysSinceLastStageChange ?? 0) >= 7).length
+
+  return (
+    <AppShell flat>
+      <Topbar eyebrow="ANALYTICS / DÉLIVRABILITÉ" title="Performance suivi post-signature" />
+      <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+          <BigStatCard label="DOSSIERS SIGNÉS" value={fmtInt(signedLeads.length)} sub="base Suivi" />
+          <BigStatCard label="CA À LIVRER" value={fmtKEur(ca)} sub={fmtFullEur(ca)} />
+          <BigStatCard label="FINANCEMENTS" value={fmtInt(financement)} sub={`${comptant} comptants`} />
+          <BigStatCard label="ALERTES 7J" value={fmtInt(lateLike)} sub="étape sans mouvement" />
+        </div>
+        <div className="grid grid-cols-12 gap-6">
+          <div className="glass-card p-6 col-span-12 xl:col-span-7">
+            <div className="flex items-center justify-between mb-4"><h3 className="font-bold">Pipeline délivrabilité</h3><span className="eyebrow">workflow réel côté UI</span></div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <Goal label="Devis signés" value={`${signedLeads.length} dossiers`} pct={100} color="#0E7E6B" />
+              <Goal label="VT / technique" value="à piloter dans Suivi" pct={62} color="#9DC41A" />
+              <Goal label="DP / CNO" value="mandat + mairie" pct={44} color="#3E9A6F" />
+              <Goal label="Installation" value="pose + satisfaction" pct={28} color="#1F7857" />
+            </div>
+          </div>
+          <div className="glass-card p-6 col-span-12 xl:col-span-5">
+            <h3 className="font-bold mb-4">Répartition paiement</h3>
+            <div className="space-y-4">
+              <Goal label="Comptant" value={`${comptant} dossiers · acompte 40/20/20/20`} pct={percent(comptant, signedRdvs.length)} color="#0E7E6B" />
+              <Goal label="Financement" value={`${financement} dossiers · sans acomptes`} pct={percent(financement, signedRdvs.length)} color="#9DC41A" />
+              <Row label="Action principale" value="ouvrir /suivi" highlight />
+            </div>
+          </div>
+        </div>
+      </main>
+    </AppShell>
+  )
 }
 
 function useWarmAnalyticsPresetRanges() {
@@ -499,7 +547,11 @@ function pct(num: number, denom: number): number {
 }
 
 function fmtInt(n: number | null | undefined): string {
-  return (n ?? 0).toLocaleString('fr-FR')
+  return Math.round(Number(n ?? 0)).toLocaleString('fr-FR')
+}
+
+function percent(value: number, total: number): number {
+  return total > 0 ? Math.round((value / total) * 100) : 0
 }
 
 function fmtKEur(val: number | null | undefined): string {

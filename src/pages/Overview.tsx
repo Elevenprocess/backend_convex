@@ -50,7 +50,68 @@ export function Overview() {
 
   if (role === 'admin') return <OverviewAdmin />
   if (role === 'commercial') return <OverviewCommercial />
+  if (role === 'delivrabilite') return <OverviewSuivi />
   return <OverviewSetter />
+}
+
+function OverviewSuivi() {
+  const navigate = useNavigate()
+  const { data: leadsData } = useLeads({ limit: 500 })
+  const { data: rdvsData } = useRdvList({ limit: 200 })
+  const leads = leadsData ?? []
+  const rdvs = rdvsData ?? []
+  const signedRdvs = rdvs.filter((r) => r.result === 'signe' || Boolean(r.signatureAt))
+  const signedLeadIds = new Set(signedRdvs.map((r) => r.leadId))
+  const signedLeads = leads.filter((l) => l.status === 'signe' || signedLeadIds.has(l.id))
+  const inTech = signedLeads.filter((l) => l.latestRdvStatus === 'honore' || l.status === 'signe').length
+  const blocked = signedLeads.filter((l) => l.lostReason || l.ghlStageName?.toLowerCase().includes('perdu')).length
+  const ca = signedRdvs.reduce((sum, r) => sum + (Number(r.montantTotal ?? 0) || 0), 0)
+
+  return (
+    <AppShell flat>
+      <Topbar eyebrow="DÉLIVRABILITÉ" title="Overview suivi dossiers" />
+      <main className="overview-shot-page flex-grow overflow-auto">
+        <div className="overview-air-header">
+          <div>
+            <span className="shot-eyebrow">Post-signature · AD</span>
+            <h1>Suivi complet des prospects signés</h1>
+          </div>
+          <button type="button" className="rounded-full bg-success text-white px-4 py-2 text-xs font-black" onClick={() => navigate('/suivi')}>Ouvrir le workflow</button>
+        </div>
+        <section className="overview-air-grid">
+          <AirKpi icon="trophy" label="Dossiers signés" value={fmtCompact(signedLeads.length)} sub="devis à livrer" />
+          <AirKpi icon="settings" label="Technique / pose" value={fmtCompact(inTech)} sub="VT, CNO ou installation" />
+          <AirKpi icon="shield" label="Blocages" value={fmtCompact(blocked)} sub="à débloquer rapidement" />
+          <AirKpi icon="tag" label="CA signé" value={fmtKEur(ca)} sub="base RDV signés" />
+          <div className="overview-air-card overview-role-wide">
+            <CardHead title="Workflow livraison" icon="grid" />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+              {['Devis signé', 'VT sous 72h', 'DP / CNO', 'Installation'].map((label, i) => (
+                <button key={label} type="button" onClick={() => navigate('/suivi')} className="rounded-[18px] border border-line-soft bg-white/70 px-4 py-5 text-left hover:border-success/50 transition">
+                  <span className="text-[10px] font-black text-faint">0{i + 1}</span>
+                  <strong className="block mt-2 text-sm">{label}</strong>
+                  <small className="text-muted">cliquer pour piloter</small>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="overview-air-card overview-role-side">
+            <CardHead title="À suivre maintenant" icon="bell" />
+            <div className="overview-role-list">
+              {signedLeads.slice(0, 5).map((lead) => (
+                <div key={lead.id} className="overview-role-row">
+                  <div className="overview-role-avatar">{initials(lead)}</div>
+                  <div><strong>{fullName(lead) || lead.phone}</strong><small>{lead.city ?? '—'} · {STATUS_LABEL[lead.status]}</small></div>
+                  <button onClick={() => navigate(`/suivi?lead=${lead.id}`)}>Suivi</button>
+                </div>
+              ))}
+              {signedLeads.length === 0 && <div className="text-xs text-faint">Aucun dossier signé chargé.</div>}
+            </div>
+          </div>
+        </section>
+      </main>
+    </AppShell>
+  )
 }
 
 // ----- F2 Setter -----
@@ -661,7 +722,7 @@ function OverviewAdmin() {
 
 // ===== Helpers =====
 
-type ShotIcon = 'trophy' | 'users' | 'target' | 'arrow-right' | 'chart' | 'phone' | 'check' | 'inbox'
+type ShotIcon = 'trophy' | 'users' | 'target' | 'arrow-right' | 'chart' | 'phone' | 'check' | 'inbox' | 'settings' | 'shield' | 'tag' | 'grid' | 'bell'
 
 function userInitials(name: string | null | undefined): string {
   const clean = (name ?? '').trim()
