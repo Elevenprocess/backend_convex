@@ -30,23 +30,23 @@ export function SuiviDetail() {
   return (
     <AppShell flat>
       <Topbar eyebrow="SUIVI INSTALLATION" title="Détail dossier" />
-      <main className="suivi-v2-page flex-grow overflow-y-auto px-4 sm:px-8 pt-4 pb-8">
-        <nav className="suivi-v2-breadcrumb">
+      <main className="suivi-page flex-grow overflow-y-auto px-4 sm:px-8 pt-4 pb-8">
+        <nav className="suivi-breadcrumb">
           <Link to="/suivi">← Tous les dossiers</Link>
         </nav>
 
         {isLoading ? (
           <LoadingBlock label="Chargement du dossier…" />
         ) : !dossier ? (
-          <div className="suivi-v2-empty">
+          <div className="suivi-empty">
             <p>Dossier introuvable.</p>
             <Link to="/suivi">Retour à la liste</Link>
           </div>
         ) : (
-          <div className="suivi-v2-split">
+          <div className="suivi-split">
             <DossierSidebar dossier={dossier} />
-            <section className="suivi-v2-timeline-wrap glass-card">
-              <header className="suivi-v2-timeline-head">
+            <section className="suivi-timeline-wrap glass-card">
+              <header className="suivi-timeline-head">
                 <h2>Workflow installation</h2>
                 <p>Cliquez une étape pour éditer son avancement. Sauvegarde automatique.</p>
               </header>

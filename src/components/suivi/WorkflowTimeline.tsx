@@ -46,7 +46,7 @@ export function WorkflowTimeline({ dossierId, initialState, activeStep, onStateC
   const savedAgo = savedAt ? Math.max(0, Math.floor((now - savedAt) / 1000)) : null
 
   return (
-    <ol className="suivi-v2-timeline">
+    <ol className="suivi-timeline">
       {WORKFLOW.map((step, idx) => {
         const status = state.statuses[step.id] ?? statusForId(activeStep, step.id)
         const expanded = expandedStep === step.id

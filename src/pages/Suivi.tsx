@@ -68,15 +68,15 @@ export function Suivi() {
   return (
     <AppShell flat>
       <Topbar eyebrow="SUIVI INSTALLATION" title="Dossiers signés" />
-      <main className="suivi-v2-page flex-grow overflow-y-auto px-4 sm:px-8 pt-4 pb-8">
-        <header className="suivi-v2-hero">
+      <main className="suivi-page flex-grow overflow-y-auto px-4 sm:px-8 pt-4 pb-8">
+        <header className="suivi-hero">
           <div>
             <span className="eyebrow">Pipeline post-signature</span>
             <h1>Suivi des installations</h1>
             <p>Vue d&apos;ensemble des dossiers signés et de leur avancement workflow.</p>
           </div>
-          <div className="suivi-v2-hero-actions">
-            <div className="suivi-v2-period" role="group" aria-label="Période">
+          <div className="suivi-hero-actions">
+            <div className="suivi-period" role="group" aria-label="Période">
               {SUIVI_PERIOD_OPTIONS.map((option) => (
                 <button
                   key={option.id}
@@ -93,27 +93,27 @@ export function Suivi() {
               placeholder="Rechercher un dossier…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="suivi-v2-search"
+              className="suivi-search"
             />
           </div>
         </header>
 
-        <section className="suivi-v2-kpis">
-          <div className="kpi-card suivi-v2-kpi"><strong>{signedDossiers.length}</strong><span>Dossiers signés</span></div>
-          <div className="kpi-card suivi-v2-kpi"><strong>{progressAvg}%</strong><span>Progression moyenne</span></div>
-          <div className="kpi-card suivi-v2-kpi"><strong>{blockedCount}</strong><span>Bloqués</span></div>
-          <div className="kpi-card suivi-v2-kpi"><strong>{deliveredCount}</strong><span>Livrés</span></div>
+        <section className="suivi-kpis">
+          <div className="kpi-card suivi-kpi"><strong>{signedDossiers.length}</strong><span>Dossiers signés</span></div>
+          <div className="kpi-card suivi-kpi"><strong>{progressAvg}%</strong><span>Progression moyenne</span></div>
+          <div className="kpi-card suivi-kpi"><strong>{blockedCount}</strong><span>Bloqués</span></div>
+          <div className="kpi-card suivi-kpi"><strong>{deliveredCount}</strong><span>Livrés</span></div>
         </section>
 
         {isLoading ? (
           <LoadingBlock label="Chargement des dossiers signés…" />
         ) : filtered.length === 0 ? (
-          <div className="suivi-v2-empty">
+          <div className="suivi-empty">
             <p>{query ? 'Aucun dossier ne correspond à votre recherche.' : 'Aucun dossier signé pour cette période.'}</p>
             {query && <button type="button" onClick={() => setQuery('')}>Effacer la recherche</button>}
           </div>
         ) : (
-          <section className="suivi-v2-grid">
+          <section className="suivi-grid">
             {filtered.map((d) => (
               <DossierCard key={d.id} dossier={d} onClick={() => navigate(`/suivi/${d.id}`)} />
             ))}

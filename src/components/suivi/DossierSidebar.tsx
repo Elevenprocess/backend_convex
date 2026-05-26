@@ -13,16 +13,16 @@ export function DossierSidebar({ dossier }: Props) {
   const ghlId: string | undefined = undefined
 
   return (
-    <aside className="suivi-v2-side glass-card">
-      <header className="suivi-v2-side-head">
-        <span className="suivi-v2-side-avatar" aria-hidden>{initials(dossier.lead)}</span>
+    <aside className="suivi-side glass-card">
+      <header className="suivi-side-head">
+        <span className="suivi-side-avatar" aria-hidden>{initials(dossier.lead)}</span>
         <div>
           <strong>{fullName(dossier.lead) || 'Client sans nom'}</strong>
           <span>{dossier.lead.city || '—'}</span>
         </div>
       </header>
 
-      <dl className="suivi-v2-side-list">
+      <dl className="suivi-side-list">
         {tel && (<><dt>Téléphone</dt><dd><a href={`tel:${tel}`}>{tel}</a></dd></>)}
         {mail && (<><dt>Email</dt><dd><a href={`mailto:${mail}`}>{mail}</a></dd></>)}
         <dt>Montant</dt><dd>{formatCurrency(dossier.amount)}</dd>
@@ -31,22 +31,22 @@ export function DossierSidebar({ dossier }: Props) {
         {dossier.commercial && (<><dt>Commercial</dt><dd>{dossier.commercial.name}</dd></>)}
       </dl>
 
-      <div className="suivi-v2-side-progress" aria-label={`Avancement global ${dossier.progress} pour cent`}>
-        <div className="suivi-v2-side-progress-head">
+      <div className="suivi-side-progress" aria-label={`Avancement global ${dossier.progress} pour cent`}>
+        <div className="suivi-side-progress-head">
           <span>Avancement</span>
           <strong>{dossier.progress}%</strong>
         </div>
-        <div className="suivi-v2-side-progress-track">
-          <div className="suivi-v2-side-progress-fill" style={{ width: `${dossier.progress}%` }} />
+        <div className="suivi-side-progress-track">
+          <div className="suivi-side-progress-fill" style={{ width: `${dossier.progress}%` }} />
         </div>
       </div>
 
-      <div className="suivi-v2-side-actions">
-        {tel && <a className="suivi-v2-side-cta" href={`tel:${tel}`}>Appeler</a>}
-        {mail && <a className="suivi-v2-side-cta" href={`mailto:${mail}`}>Email</a>}
+      <div className="suivi-side-actions">
+        {tel && <a className="suivi-side-cta" href={`tel:${tel}`}>Appeler</a>}
+        {mail && <a className="suivi-side-cta" href={`mailto:${mail}`}>Email</a>}
         {ghlId && (
           <a
-            className="suivi-v2-side-cta secondary"
+            className="suivi-side-cta secondary"
             href={`https://app.gohighlevel.com/v2/location/_/contacts/detail/${ghlId}`}
             target="_blank"
             rel="noreferrer"

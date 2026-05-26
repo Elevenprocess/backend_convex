@@ -50,10 +50,10 @@ export function WorkflowStep({ step, status, state, expanded, isLast, onToggle, 
   }
 
   return (
-    <li className={`suivi-v2-step suivi-v2-step-${status} ${expanded ? 'is-expanded' : ''} ${isLast ? 'is-last' : ''}`}>
+    <li className={`suivi-step suivi-step-${status} ${expanded ? 'is-expanded' : ''} ${isLast ? 'is-last' : ''}`}>
       <button
         type="button"
-        className="suivi-v2-step-circle"
+        className="suivi-step-circle"
         aria-expanded={expanded}
         aria-controls={`suivi-step-${step.id}`}
         onClick={onToggle}
@@ -63,8 +63,8 @@ export function WorkflowStep({ step, status, state, expanded, isLast, onToggle, 
           : <span aria-hidden>{stepIndex(step.id) + 1}</span>}
       </button>
 
-      <div className="suivi-v2-step-body" id={`suivi-step-${step.id}`}>
-        <button type="button" className="suivi-v2-step-head" onClick={onToggle}>
+      <div className="suivi-step-body" id={`suivi-step-${step.id}`}>
+        <button type="button" className="suivi-step-head" onClick={onToggle}>
           <div>
             <strong>{step.label}</strong>
             <span>{step.short} · {step.owner}</span>
@@ -76,10 +76,10 @@ export function WorkflowStep({ step, status, state, expanded, isLast, onToggle, 
         </button>
 
         {expanded && (
-          <div className="suivi-v2-step-panel">
-            <p className="suivi-v2-step-detail">{nodeDetail(step, state)}</p>
+          <div className="suivi-step-panel">
+            <p className="suivi-step-detail">{nodeDetail(step, state)}</p>
 
-            <div className="suivi-v2-step-fields">
+            <div className="suivi-step-fields">
               <label>
                 <span>Date prévue / réalisation</span>
                 <input type="date" value={localDate} onChange={(e) => handleDate(e.target.value)} />
@@ -95,11 +95,11 @@ export function WorkflowStep({ step, status, state, expanded, isLast, onToggle, 
               </label>
             </div>
 
-            <footer className="suivi-v2-step-foot">
-              <button type="button" className="suivi-v2-step-cta" onClick={toggleDone}>
+            <footer className="suivi-step-foot">
+              <button type="button" className="suivi-step-cta" onClick={toggleDone}>
                 {status === 'done' ? 'Réouvrir' : 'Marquer terminé'}
               </button>
-              {savedAgo !== null && <span className="suivi-v2-step-saved">Enregistré il y a {savedAgo}s ✓</span>}
+              {savedAgo !== null && <span className="suivi-step-saved">Enregistré il y a {savedAgo}s ✓</span>}
             </footer>
           </div>
         )}
