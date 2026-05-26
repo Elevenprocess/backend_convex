@@ -1529,21 +1529,21 @@ function commercialQualifiedProspects(rdvs: RdvResponse[], leads: LeadResponse[]
 
   leads
     .filter((lead) => !commercialId || lead.assignedToId === commercialId || lead.latestRdvCommercialId === commercialId)
-    .filter((lead) => ['qualifie', 'rdv_pris', 'rdv_honore', 'signe'].includes(lead.status))
+    .filter((lead) => ['qualifie', 'rdv_pris', 'rdv_honore', 'signe', 'perdu', 'pas_qualifie'].includes(lead.status))
     .forEach((lead) => prospects.set(lead.id, {
       id: lead.id,
       name: fullName(lead) || lead.email || lead.phone || 'Prospect qualifié',
       phone: lead.phone,
       city: lead.city,
-      status: STATUS_LABEL[lead.status] ?? 'Qualifié',
+      status: commercialProspectStatus({ lead }),
       scheduledAt: lead.latestRdvAt,
     }))
 
   rdvs
-    .filter((rdv) => rdv.status === 'planifie' || rdv.status === 'honore' || rdv.result === 'signe' || rdv.result === 'reflexion')
+    .filter((rdv) => rdv.status === 'planifie' || rdv.status === 'honore' || rdv.status === 'annule' || rdv.status === 'no_show' || rdv.result === 'signe' || rdv.result === 'reflexion' || rdv.result === 'perdu' || rdv.result === 'no_show')
     .forEach((rdv) => {
       const lead = leadById.get(rdv.leadId)
-      const status = rdv.result === 'signe' ? 'Vente signée' : rdv.result === 'reflexion' ? 'Suivi prévu' : rdv.status === 'honore' ? 'RDV honoré' : 'Qualifié'
+      const status = commercialProspectStatus({ rdv, lead })
       prospects.set(rdv.leadId, {
         id: rdv.leadId,
         name: lead ? (fullName(lead) || lead.email || lead.phone || 'Prospect qualifié') : 'Prospect qualifié',
@@ -1559,9 +1559,7 @@ function commercialQualifiedProspects(rdvs: RdvResponse[], leads: LeadResponse[]
 
 const QUALIFIED_DEBRIEF_LABELS: Array<{ label: string; description: string; match: (rdv: RdvResponse) => boolean }> = [
   { label: 'Suivi prévu', description: 'Je veux faire un suivi', match: (rdv) => rdv.result === 'reflexion' || textIncludes(rdv.notes, ['suivi prévu', 'faire un suivi', 'suivi prevu']) },
-  { label: 'Vente signée', description: 'Client signé', match: (rdv) => rdv.result === 'signe' },
-  { label: 'RDV honoré', description: 'Projet qualifié à traiter', match: (rdv) => rdv.status === 'honore' && rdv.result !== 'signe' && rdv.result !== 'perdu' && rdv.result !== 'reflexion' },
-  { label: 'RDV planifié', description: 'Prospect qualifié à venir', match: (rdv) => rdv.status === 'planifie' },
+  { label: 'Signé', description: 'Client signé', match: (rdv) => rdv.result === 'signe' },
 ]
 
 const NON_SALE_DEBRIEF_LABELS: Array<{ label: string; description: string; match: (rdv: RdvResponse) => boolean }> = [
@@ -1573,9 +1571,16 @@ const NON_SALE_DEBRIEF_LABELS: Array<{ label: string; description: string; match
 ]
 
 function commercialQualifiedDebriefSegments(rdvs: RdvResponse[]): LeadSegment[] {
-  return QUALIFIED_DEBRIEF_LABELS
-    .map(({ label, description, match }) => ({ label, description, value: rdvs.filter(match).length }))
+  const matchedIds = new Set<string>()
+  const segments = QUALIFIED_DEBRIEF_LABELS
+    .map(({ label, description, match }) => {
+      const matching = rdvs.filter(match)
+      matching.forEach((rdv) => matchedIds.add(rdv.id))
+      return { label, description, value: matching.length }
+    })
     .filter((segment) => segment.value > 0)
+  const waiting = rdvs.filter((rdv) => (rdv.status === 'planifie' || rdv.status === 'honore') && !matchedIds.has(rdv.id)).length
+  return waiting > 0 ? [...segments, { label: 'En attente', description: 'Débrief à remplir', value: waiting }] : segments
 }
 
 function commercialNonSaleDebriefSegments(rdvs: RdvResponse[]): LeadSegment[] {
@@ -1585,8 +1590,14 @@ function commercialNonSaleDebriefSegments(rdvs: RdvResponse[]): LeadSegment[] {
     matching.forEach((rdv) => matchedIds.add(rdv.id))
     return { label, description, value: matching.length }
   }).filter((segment) => segment.value > 0)
-  const otherLost = rdvs.filter((rdv) => (rdv.result === 'perdu' || rdv.status === 'annule') && !matchedIds.has(rdv.id)).length
-  return otherLost > 0 ? [...segments, { label: 'Autres', description: 'Non-vente à préciser', value: otherLost }] : segments
+  const waiting = rdvs.filter((rdv) => (rdv.result === 'perdu' || rdv.status === 'annule' || rdv.status === 'no_show') && !matchedIds.has(rdv.id)).length
+  return waiting > 0 ? [...segments, { label: 'En attente', description: 'Raison à remplir', value: waiting }] : segments
+}
+
+function commercialProspectStatus({ rdv, lead }: { rdv?: RdvResponse; lead?: LeadResponse }): 'Signé' | 'Non qualifié' | 'En attente' {
+  if (rdv?.result === 'signe' || lead?.status === 'signe') return 'Signé'
+  if (rdv?.result === 'perdu' || rdv?.result === 'no_show' || rdv?.status === 'annule' || rdv?.status === 'no_show' || lead?.status === 'perdu' || lead?.status === 'pas_qualifie') return 'Non qualifié'
+  return 'En attente'
 }
 
 function textIncludes(value: string | null | undefined, needles: string[]): boolean {
