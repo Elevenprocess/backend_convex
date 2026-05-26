@@ -1141,7 +1141,7 @@ function DebriefPieCard({ title, subtitle, segments }: { title: string; subtitle
       <div className="commercial-debrief-body">
         <div className="overview-pie commercial-debrief-pie" style={{ background: `conic-gradient(${gradient})` }}>
           <div>
-            <strong>{total ? `${pct(segments[0]?.value ?? 0, total)}%` : '0%'}</strong>
+            <strong>{total ? `${pct(Math.max(...segments.map((segment) => segment.value)), total)}%` : '0%'}</strong>
             <span>{fmtCompact(total)} choix</span>
           </div>
         </div>
@@ -1558,12 +1558,17 @@ function commercialQualifiedProspects(rdvs: RdvResponse[], leads: LeadResponse[]
   return Array.from(prospects.values()).sort((a, b) => (b.scheduledAt ?? '').localeCompare(a.scheduledAt ?? ''))
 }
 
-const QUALIFIED_DEBRIEF_LABELS: Array<{ label: string; description: string; match: (source: CommercialDebriefSource) => boolean }> = [
-  { label: 'Suivi prévu', description: 'Je veux faire un suivi', match: ({ rdv }) => rdv?.result === 'reflexion' || textIncludes(rdv?.nonSaleReason, ['suivi prévu', 'suivi prevu']) || textIncludes(rdv?.notes, ['suivi prévu', 'faire un suivi', 'suivi prevu']) },
-  { label: 'Signé', description: 'Client signé', match: ({ rdv, lead }) => rdv?.result === 'signe' || lead?.status === 'signe' },
+const QUALIFIED_OBJECTION_LABELS: Array<{ label: string; description: string; match: (source: CommercialDebriefSource) => boolean }> = [
+  { label: 'Argent', description: "Je n'ai pas d'argent", match: ({ rdv }) => textIncludes(rdv?.objections, ['argent']) },
+  { label: 'Logistique', description: 'Il faut trouver la solution', match: ({ rdv }) => textIncludes(rdv?.objections, ['logistique']) },
+  { label: 'Partenaire', description: 'Je dois parler à mon partenaire', match: ({ rdv }) => textIncludes(rdv?.objections, ['partenaire']) },
+  { label: 'Peur', description: "Je ne sais pas si vous pouvez m'aider", match: ({ rdv }) => textIncludes(rdv?.objections, ['peur']) },
+  { label: 'Écran de fumée', description: "J'ai poney demain…", match: ({ rdv }) => textIncludes(rdv?.objections, ['écran de fumée', 'ecran de fumee']) },
+  { label: "Pas d'objection", description: 'Aucune objection restante', match: ({ rdv }) => textIncludes(rdv?.objections, ["pas d'objection", 'pas objection']) },
 ]
 
 const NON_SALE_DEBRIEF_LABELS: Array<{ label: string; description: string; match: (source: CommercialDebriefSource) => boolean }> = [
+  { label: 'Suivi prévu', description: 'Je veux faire un suivi', match: ({ rdv }) => rdv?.result === 'reflexion' || textIncludes(rdv?.nonSaleReason, ['suivi prévu', 'suivi prevu']) || textIncludes(rdv?.notes, ['suivi prévu', 'faire un suivi', 'suivi prevu']) },
   { label: 'Non qualifié', description: 'Le contact était faible', match: ({ rdv, lead }) => lead?.status === 'pas_qualifie' || textIncludes(rdv?.nonSaleReason, ['non qualifié', 'non qualifie', 'contact faible']) || textIncludes(lead?.lostReason, ['non qualifié', 'non qualifie', 'contact faible']) },
   { label: 'No-show', description: "Ne s'est pas présenté", match: ({ rdv, lead }) => rdv?.status === 'no_show' || rdv?.result === 'no_show' || textIncludes(rdv?.nonSaleReason, ['no-show', 'no show', 'pas présenté', 'pas presente']) || textIncludes(lead?.ghlStageName, ['no-show', 'no show']) },
   { label: 'Contact annulé', description: 'Le contact a annulé', match: ({ rdv, lead }) => (rdv?.status === 'annule' && !textIncludes(rdv?.nonSaleReason, ['administrative', 'notre côté', 'notre cote'])) || textIncludes(rdv?.nonSaleReason, ['contact annulé', 'contact annule', 'client annulé', 'client annule']) || textIncludes(lead?.lostReason, ['contact annulé', 'contact annule', 'client annulé', 'client annule']) },
@@ -1574,27 +1579,21 @@ const NON_SALE_DEBRIEF_LABELS: Array<{ label: string; description: string; match
 function commercialQualifiedDebriefSegments(rdvs: RdvResponse[], leads: LeadResponse[], commercialId: string | undefined): LeadSegment[] {
   const sources = commercialDebriefSources(rdvs, leads, commercialId).filter(isQualifiedDebriefSource)
   const matchedIds = new Set<string>()
-  const segments = QUALIFIED_DEBRIEF_LABELS
-    .map(({ label, description, match }) => {
-      const matching = sources.filter((source) => !matchedIds.has(source.id) && match(source))
-      matching.forEach((source) => matchedIds.add(source.id))
-      return { label, description, value: matching.length }
-    })
-    .filter((segment) => segment.value > 0)
-  const waiting = sources.filter((source) => !matchedIds.has(source.id)).length
-  return waiting > 0 ? [...segments, { label: 'En attente', description: 'Débrief à remplir', value: waiting }] : segments
+  return QUALIFIED_OBJECTION_LABELS.map(({ label, description, match }) => {
+    const matching = sources.filter((source) => !matchedIds.has(source.id) && match(source))
+    matching.forEach((source) => matchedIds.add(source.id))
+    return { label, description, value: matching.length }
+  })
 }
 
 function commercialNonSaleDebriefSegments(rdvs: RdvResponse[], leads: LeadResponse[], commercialId: string | undefined): LeadSegment[] {
   const sources = commercialDebriefSources(rdvs, leads, commercialId).filter(isNonSaleDebriefSource)
   const matchedIds = new Set<string>()
-  const segments = NON_SALE_DEBRIEF_LABELS.map(({ label, description, match }) => {
+  return NON_SALE_DEBRIEF_LABELS.map(({ label, description, match }) => {
     const matching = sources.filter((source) => !matchedIds.has(source.id) && match(source))
     matching.forEach((source) => matchedIds.add(source.id))
     return { label, description, value: matching.length }
-  }).filter((segment) => segment.value > 0)
-  const waiting = sources.filter((source) => !matchedIds.has(source.id)).length
-  return waiting > 0 ? [...segments, { label: 'En attente', description: 'Raison à remplir', value: waiting }] : segments
+  })
 }
 
 function commercialDebriefSources(rdvs: RdvResponse[], leads: LeadResponse[], commercialId: string | undefined): CommercialDebriefSource[] {
