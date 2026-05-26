@@ -274,8 +274,8 @@ function OverviewCommercial() {
       reflexion: analytics?.resultSegments.find((segment) => segment.label === 'Réflexion')?.value ?? reflexion.length,
       leadsToday,
       qualifiedProspects: commercialQualifiedProspects(list, leadList, me?.id),
-      qualifiedDebriefSegments: commercialQualifiedDebriefSegments(list),
-      nonSaleDebriefSegments: commercialNonSaleDebriefSegments(list),
+      qualifiedDebriefSegments: commercialQualifiedDebriefSegments(list, leadList, me?.id),
+      nonSaleDebriefSegments: commercialNonSaleDebriefSegments(list, leadList, me?.id),
     }
   }, [rdvs, todayIso, commercialSummary, allLeads, me?.id, commercialRange.from, commercialRange.to])
 
@@ -1083,6 +1083,7 @@ const PIE_COLORS = ['#1F7857', '#3DA86A', '#3E9A6F', '#6B7C8C', '#145A41', '#7C6
 
 type LeadSegment = { label: string; value: number; description?: string }
 type QualifiedProspect = { id: string; name: string; phone: string | null; city: string | null; status: string; scheduledAt: string | null }
+type CommercialDebriefSource = { id: string; rdv?: RdvResponse; lead?: LeadResponse }
 
 function CommercialQualifiedProspects({ prospects }: { prospects: QualifiedProspect[] }) {
   return (
@@ -1557,46 +1558,83 @@ function commercialQualifiedProspects(rdvs: RdvResponse[], leads: LeadResponse[]
   return Array.from(prospects.values()).sort((a, b) => (b.scheduledAt ?? '').localeCompare(a.scheduledAt ?? ''))
 }
 
-const QUALIFIED_DEBRIEF_LABELS: Array<{ label: string; description: string; match: (rdv: RdvResponse) => boolean }> = [
-  { label: 'Suivi prévu', description: 'Je veux faire un suivi', match: (rdv) => rdv.result === 'reflexion' || textIncludes(rdv.notes, ['suivi prévu', 'faire un suivi', 'suivi prevu']) },
-  { label: 'Signé', description: 'Client signé', match: (rdv) => rdv.result === 'signe' },
+const QUALIFIED_DEBRIEF_LABELS: Array<{ label: string; description: string; match: (source: CommercialDebriefSource) => boolean }> = [
+  { label: 'Suivi prévu', description: 'Je veux faire un suivi', match: ({ rdv }) => rdv?.result === 'reflexion' || textIncludes(rdv?.nonSaleReason, ['suivi prévu', 'suivi prevu']) || textIncludes(rdv?.notes, ['suivi prévu', 'faire un suivi', 'suivi prevu']) },
+  { label: 'Signé', description: 'Client signé', match: ({ rdv, lead }) => rdv?.result === 'signe' || lead?.status === 'signe' },
 ]
 
-const NON_SALE_DEBRIEF_LABELS: Array<{ label: string; description: string; match: (rdv: RdvResponse) => boolean }> = [
-  { label: 'Non qualifié', description: 'Le contact était faible', match: (rdv) => textIncludes(rdv.nonSaleReason, ['non qualifié', 'non qualifie', 'contact faible']) },
-  { label: 'No-show', description: "Ne s'est pas présenté", match: (rdv) => rdv.status === 'no_show' || rdv.result === 'no_show' || textIncludes(rdv.nonSaleReason, ['no-show', 'no show', 'pas présenté', 'pas presente']) },
-  { label: 'Contact annulé', description: 'Le contact a annulé', match: (rdv) => textIncludes(rdv.nonSaleReason, ['contact annulé', 'contact annule', 'client annulé', 'client annule']) },
-  { label: 'Annulation administrative', description: 'Annulé de notre côté', match: (rdv) => textIncludes(rdv.nonSaleReason, ['administrative', 'notre côté', 'notre cote']) },
-  { label: 'Pas intéressé', description: 'Pas envie de continuer', match: (rdv) => rdv.result === 'perdu' || textIncludes(rdv.nonSaleReason, ['pas intéressé', 'pas interesse', 'pas envie', 'refus']) },
+const NON_SALE_DEBRIEF_LABELS: Array<{ label: string; description: string; match: (source: CommercialDebriefSource) => boolean }> = [
+  { label: 'Non qualifié', description: 'Le contact était faible', match: ({ rdv, lead }) => lead?.status === 'pas_qualifie' || textIncludes(rdv?.nonSaleReason, ['non qualifié', 'non qualifie', 'contact faible']) || textIncludes(lead?.lostReason, ['non qualifié', 'non qualifie', 'contact faible']) },
+  { label: 'No-show', description: "Ne s'est pas présenté", match: ({ rdv, lead }) => rdv?.status === 'no_show' || rdv?.result === 'no_show' || textIncludes(rdv?.nonSaleReason, ['no-show', 'no show', 'pas présenté', 'pas presente']) || textIncludes(lead?.ghlStageName, ['no-show', 'no show']) },
+  { label: 'Contact annulé', description: 'Le contact a annulé', match: ({ rdv, lead }) => (rdv?.status === 'annule' && !textIncludes(rdv?.nonSaleReason, ['administrative', 'notre côté', 'notre cote'])) || textIncludes(rdv?.nonSaleReason, ['contact annulé', 'contact annule', 'client annulé', 'client annule']) || textIncludes(lead?.lostReason, ['contact annulé', 'contact annule', 'client annulé', 'client annule']) },
+  { label: 'Annulation administrative', description: 'Annulé de notre côté', match: ({ rdv, lead }) => textIncludes(rdv?.nonSaleReason, ['administrative', 'notre côté', 'notre cote']) || textIncludes(lead?.lostReason, ['administrative', 'notre côté', 'notre cote']) },
+  { label: 'Pas intéressé', description: 'Pas envie de continuer', match: ({ rdv, lead }) => rdv?.result === 'perdu' || lead?.status === 'perdu' || textIncludes(rdv?.nonSaleReason, ['pas intéressé', 'pas interesse', 'pas envie', 'refus']) || textIncludes(lead?.lostReason, ['pas intéressé', 'pas interesse', 'pas envie', 'refus']) },
 ]
 
-function commercialQualifiedDebriefSegments(rdvs: RdvResponse[]): LeadSegment[] {
+function commercialQualifiedDebriefSegments(rdvs: RdvResponse[], leads: LeadResponse[], commercialId: string | undefined): LeadSegment[] {
+  const sources = commercialDebriefSources(rdvs, leads, commercialId).filter(isQualifiedDebriefSource)
   const matchedIds = new Set<string>()
   const segments = QUALIFIED_DEBRIEF_LABELS
     .map(({ label, description, match }) => {
-      const matching = rdvs.filter(match)
-      matching.forEach((rdv) => matchedIds.add(rdv.id))
+      const matching = sources.filter((source) => !matchedIds.has(source.id) && match(source))
+      matching.forEach((source) => matchedIds.add(source.id))
       return { label, description, value: matching.length }
     })
     .filter((segment) => segment.value > 0)
-  const waiting = rdvs.filter((rdv) => (rdv.status === 'planifie' || rdv.status === 'honore') && !matchedIds.has(rdv.id)).length
+  const waiting = sources.filter((source) => !matchedIds.has(source.id)).length
   return waiting > 0 ? [...segments, { label: 'En attente', description: 'Débrief à remplir', value: waiting }] : segments
 }
 
-function commercialNonSaleDebriefSegments(rdvs: RdvResponse[]): LeadSegment[] {
+function commercialNonSaleDebriefSegments(rdvs: RdvResponse[], leads: LeadResponse[], commercialId: string | undefined): LeadSegment[] {
+  const sources = commercialDebriefSources(rdvs, leads, commercialId).filter(isNonSaleDebriefSource)
   const matchedIds = new Set<string>()
   const segments = NON_SALE_DEBRIEF_LABELS.map(({ label, description, match }) => {
-    const matching = rdvs.filter((rdv) => match(rdv))
-    matching.forEach((rdv) => matchedIds.add(rdv.id))
+    const matching = sources.filter((source) => !matchedIds.has(source.id) && match(source))
+    matching.forEach((source) => matchedIds.add(source.id))
     return { label, description, value: matching.length }
   }).filter((segment) => segment.value > 0)
-  const waiting = rdvs.filter((rdv) => (rdv.result === 'perdu' || rdv.status === 'annule' || rdv.status === 'no_show') && !matchedIds.has(rdv.id)).length
+  const waiting = sources.filter((source) => !matchedIds.has(source.id)).length
   return waiting > 0 ? [...segments, { label: 'En attente', description: 'Raison à remplir', value: waiting }] : segments
+}
+
+function commercialDebriefSources(rdvs: RdvResponse[], leads: LeadResponse[], commercialId: string | undefined): CommercialDebriefSource[] {
+  const leadById = new Map(leads.map((lead) => [lead.id, lead]))
+  const sourceById = new Map<string, CommercialDebriefSource>()
+
+  const relevantLeadStatuses: LeadStatus[] = ['qualifie', 'rdv_pris', 'rdv_honore', 'signe', 'perdu', 'pas_qualifie']
+  leads
+    .filter((lead) => !commercialId || lead.assignedToId === commercialId || lead.latestRdvCommercialId === commercialId)
+    .filter((lead) => relevantLeadStatuses.includes(lead.status))
+    .forEach((lead) => sourceById.set(`lead:${lead.id}`, { id: `lead:${lead.id}`, lead }))
+
+  rdvs
+    .filter((rdv) => rdv.status === 'planifie' || rdv.status === 'honore' || rdv.status === 'annule' || rdv.status === 'no_show' || rdv.status === 'reporte' || rdv.result === 'signe' || rdv.result === 'reflexion' || rdv.result === 'perdu' || rdv.result === 'no_show' || rdv.result === 'reporte')
+    .forEach((rdv) => {
+      const lead = leadById.get(rdv.leadId)
+      sourceById.delete(`lead:${rdv.leadId}`)
+      sourceById.set(`rdv:${rdv.id}`, { id: `rdv:${rdv.id}`, rdv, lead })
+    })
+
+  return Array.from(sourceById.values())
+}
+
+function isNonSaleDebriefSource({ rdv, lead }: CommercialDebriefSource): boolean {
+  if (lead?.status === 'perdu' || lead?.status === 'pas_qualifie') return true
+  if (rdv?.result === 'perdu' || rdv?.result === 'no_show' || rdv?.status === 'annule' || rdv?.status === 'no_show') return true
+  return Boolean(rdv?.nonSaleReason && !textIncludes(rdv.nonSaleReason, ['suivi prévu', 'suivi prevu']))
+}
+
+function isQualifiedDebriefSource(source: CommercialDebriefSource): boolean {
+  const { rdv, lead } = source
+  if (isNonSaleDebriefSource(source)) return false
+  if (lead?.status === 'qualifie' || lead?.status === 'rdv_pris' || lead?.status === 'rdv_honore' || lead?.status === 'signe') return true
+  if (rdv?.status === 'planifie' || rdv?.status === 'honore' || rdv?.result === 'signe' || rdv?.result === 'reflexion') return true
+  return Boolean(rdv?.nonSaleReason && textIncludes(rdv.nonSaleReason, ['suivi prévu', 'suivi prevu']))
 }
 
 function commercialProspectStatus({ rdv, lead }: { rdv?: RdvResponse; lead?: LeadResponse }): 'Signé' | 'Non qualifié' | 'En attente' {
   if (rdv?.result === 'signe' || lead?.status === 'signe') return 'Signé'
-  if (rdv?.result === 'perdu' || rdv?.result === 'no_show' || rdv?.status === 'annule' || rdv?.status === 'no_show' || lead?.status === 'perdu' || lead?.status === 'pas_qualifie') return 'Non qualifié'
+  if (rdv?.result === 'perdu' || rdv?.result === 'no_show' || rdv?.status === 'annule' || rdv?.status === 'no_show' || (rdv?.nonSaleReason && !textIncludes(rdv.nonSaleReason, ['suivi prévu', 'suivi prevu'])) || lead?.status === 'perdu' || lead?.status === 'pas_qualifie') return 'Non qualifié'
   return 'En attente'
 }
 
