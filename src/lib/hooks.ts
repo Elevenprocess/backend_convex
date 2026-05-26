@@ -349,7 +349,9 @@ export type UpdateRdvPayload = {
 }
 
 export async function updateRdv(id: string, input: UpdateRdvPayload): Promise<RdvResponse> {
-  return api<RdvResponse>(`/rdv/${id}`, { method: 'PATCH', body: input })
+  const updated = await api<RdvResponse>(`/rdv/${id}`, { method: 'PATCH', body: input })
+  notifyRealtimeRefresh({ event: 'rdv:updated', paths: ['/rdv', '/leads', '/analytics/summary', '/analytics/funnel', '/ghl-calendar/events'] })
+  return updated
 }
 
 // ─── Users ─────────────────────────────────────────────────

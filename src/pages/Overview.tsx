@@ -313,26 +313,34 @@ function OverviewCommercial() {
     const lost = list.filter((r) => r.result === 'perdu')
     const reflexion = list.filter((r) => r.result === 'reflexion')
     const fallbackCa = signed.reduce((sum, r) => sum + (parseFloat(r.montantTotal ?? '0') || 0), 0)
-    const outcomeBase = Math.max(honored.length, signed.length + lost.length + reflexion.length)
-    const fallbackClosing = outcomeBase ? Math.round((signed.length / outcomeBase) * 100) : 0
-    const fallbackPanier = signed.length ? fallbackCa / signed.length : 0
+    const fallbackSigned = signed.length
+    const fallbackLost = lost.length
+    const fallbackReflexion = reflexion.length
+    const fallbackHonored = honored.length
+    const outcomeBase = Math.max(fallbackHonored, fallbackSigned + fallbackLost + fallbackReflexion)
+    const fallbackClosing = outcomeBase ? Math.round((fallbackSigned / outcomeBase) * 100) : 0
     const upcoming = list
       .filter((r) => r.status === 'planifie' && r.scheduledAt >= todayIso)
       .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))
     const totalPlanifie = list.filter((r) => r.status === 'planifie').length
-    const totalHonored = analytics?.honored ?? honored.length
-    const totalRdv = analytics?.total ?? list.length
+    const totalHonored = Math.max(analytics?.honored ?? 0, fallbackHonored)
+    const totalRdv = Math.max(analytics?.total ?? 0, list.length)
+    const totalSigned = Math.max(analytics?.signed ?? 0, fallbackSigned)
+    const totalCa = Math.max(analytics?.ca ?? 0, fallbackCa)
+    const totalLost = Math.max(analytics?.resultSegments.find((segment) => segment.label === 'Perdu')?.value ?? 0, fallbackLost)
+    const totalReflexion = Math.max(analytics?.resultSegments.find((segment) => segment.label === 'Réflexion')?.value ?? 0, fallbackReflexion)
+    const closingBase = Math.max(totalHonored, totalSigned + totalLost + totalReflexion)
     return {
-      ca: analytics?.ca ?? fallbackCa,
-      closing: analytics?.closing ?? fallbackClosing,
-      panier: analytics?.panier ?? fallbackPanier,
-      signed: analytics?.signed ?? signed.length,
+      ca: totalCa,
+      closing: Math.max(analytics?.closing ?? 0, fallbackClosing, closingBase ? Math.round((totalSigned / closingBase) * 100) : 0),
+      panier: totalSigned ? totalCa / totalSigned : 0,
+      signed: totalSigned,
       upcoming,
       totalPlanifie,
       totalHonored,
       totalRdv,
-      lost: analytics?.resultSegments.find((segment) => segment.label === 'Perdu')?.value ?? lost.length,
-      reflexion: analytics?.resultSegments.find((segment) => segment.label === 'Réflexion')?.value ?? reflexion.length,
+      lost: totalLost,
+      reflexion: totalReflexion,
       leadsToday,
       qualifiedProspects: commercialQualifiedProspects(list, leadList, me?.id),
       qualifiedDebriefSegments: commercialQualifiedDebriefSegments(list, leadList, me?.id, commercialRange),
