@@ -57,6 +57,8 @@ type FormState = {
   paymentMethod: FinancingType | ''
 }
 
+type SummaryCard = { label: string; sublabel?: string; tone: 'success' | 'rouille' | 'or' }
+
 // ─── Wizard state machine ───────────────────────────────────────────
 type WizardStepId =
   | 'result'        // Step 1 (toutes branches)
@@ -540,16 +542,50 @@ function Step3NVObjection({ form, update }: StepProps) {
 
 function StepFinalNotes({ form, update }: StepProps) {
   return (
-    <FieldGroup label="Notes supplémentaires">
-      <AutoGrowTextarea
-        value={form.notes}
-        onChange={(e) => update({ notes: e.target.value })}
-        minRows={4}
-        maxRows={20}
-        placeholder={notesPlaceholder(form)}
-        className="w-full rounded-xl border border-line bg-cream px-3 py-2 text-sm leading-relaxed text-text outline-none focus:border-or"
-      />
-    </FieldGroup>
+    <div className="space-y-4">
+      <DebriefSummaryCards form={form} />
+      <FieldGroup label="Commentaire final du commercial">
+        <AutoGrowTextarea
+          value={form.notes}
+          onChange={(e) => update({ notes: e.target.value })}
+          minRows={4}
+          maxRows={20}
+          placeholder={notesPlaceholder(form)}
+          className="w-full rounded-xl border border-line bg-cream px-3 py-2 text-sm leading-relaxed text-text outline-none focus:border-or"
+        />
+        <p className="text-[10px] text-faint">Ce commentaire sera enregistré avec les choix cochés du débrief.</p>
+      </FieldGroup>
+    </div>
+  )
+}
+
+function DebriefSummaryCards({ form }: { form: FormState }) {
+  const cards = selectedDebriefCards(form)
+  return (
+    <div className="rounded-2xl border border-line bg-cream/35 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="eyebrow text-or-dark">Résumé avant enregistrement</div>
+          <h3 className="mt-0.5 text-sm font-black text-text">Cartes cochées par le commercial</h3>
+        </div>
+        <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-muted border border-line">{cards.length} choix</span>
+      </div>
+      <div className="mt-3 grid grid-cols-1 gap-2">
+        {cards.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-line bg-white/70 px-3 py-2 text-xs font-bold text-muted">Aucun choix coché pour le moment.</div>
+        ) : cards.map((card, index) => (
+          <div key={`${card.label}-${index}`} className="flex items-start gap-2 rounded-xl border border-line bg-white px-3 py-2 shadow-sm">
+            <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-white ${card.tone === 'success' ? 'bg-success' : card.tone === 'rouille' ? 'bg-rouille' : 'bg-or-dark'}`}>
+              <Icon name="check" size={12} />
+            </span>
+            <span className="min-w-0">
+              <strong className="block text-xs font-black text-text">{card.label}</strong>
+              {card.sublabel && <small className="block text-[10px] leading-snug text-muted">{card.sublabel}</small>}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -755,6 +791,25 @@ function labelFromObjection(value: Objection): string {
 
 function labelFromAcceptance(value: AcceptanceFactor): string {
   return ACCEPTANCE_FACTORS.find((f) => f.value === value)?.label ?? value
+}
+
+function selectedDebriefCards(form: FormState): SummaryCard[] {
+  const cards: SummaryCard[] = []
+  if (form.outcome === 'vente') {
+    cards.push({ label: 'Vente réalisée', sublabel: 'Le prospect a signé', tone: 'success' })
+    if (form.objection) cards.push({ label: labelFromObjection(form.objection), sublabel: 'Objection surmontée', tone: 'or' })
+    form.acceptanceFactors.forEach((factor) => cards.push({ label: labelFromAcceptance(factor), sublabel: 'Facteur d’acceptation', tone: 'success' }))
+    if (form.quoteAmount.trim()) cards.push({ label: `${form.quoteAmount.trim()} €`, sublabel: 'Valeur du devis signé', tone: 'success' })
+    if (form.signedAt) cards.push({ label: form.signedAt, sublabel: 'Date de signature', tone: 'success' })
+    if (form.kits.trim()) cards.push({ label: form.kits.trim(), sublabel: 'Kits vendus', tone: 'success' })
+    if (form.paymentMethod) cards.push({ label: PAYMENT_METHODS.find((p) => p.value === form.paymentMethod)?.label ?? form.paymentMethod, sublabel: 'Type de paiement', tone: 'success' })
+  }
+  if (form.outcome === 'non_vente') {
+    cards.push({ label: 'Vente non réalisée', sublabel: 'À classer en non-vente', tone: 'rouille' })
+    if (form.nonSaleReason) cards.push({ label: labelFromNonSaleReason(form.nonSaleReason), sublabel: NON_SALE_REASONS.find((r) => r.value === form.nonSaleReason)?.hint, tone: form.nonSaleReason === 'suivi_prevu' ? 'or' : 'rouille' })
+    if (form.objection) cards.push({ label: labelFromObjection(form.objection), sublabel: 'Objection non surmontée', tone: 'rouille' })
+  }
+  return cards
 }
 
 function nonSaleReasonFromLabel(label: string): NonSaleReason | '' {
