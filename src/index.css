@@ -787,6 +787,18 @@ body {
   font-size: 10.5px;
   font-weight: 650;
 }
+.commercial-qualified-attribution {
+  margin-top: 4px;
+  display: block;
+  color: var(--color-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.commercial-qualified-attribution b { color: var(--color-text); font-weight: 800; }
+.commercial-qualified-attribution i { color: var(--color-muted); font-style: italic; font-weight: 600; }
+.overview-admin-prospects { grid-column: span 12; min-height: 0; }
+.overview-admin-prospects .commercial-qualified-list-body { max-height: 520px; }
 .commercial-qualified-meta { text-align: right; min-width: 92px; }
 .commercial-qualified-meta span {
   color: var(--color-success);

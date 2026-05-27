@@ -6,7 +6,7 @@ import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
 import { useDisplayUser } from '../lib/role'
 import { useCallLogs, useLeads, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary, prefetchAnalyticsFunnel, prefetchAnalyticsSummary } from '../lib/hooks'
-import { STATUS_LABEL, fullName, initials, type AnalyticsFunnelResponse, type CallLogResponse, type LeadResponse, type LeadStatus, type RdvResponse } from '../lib/types'
+import { STATUS_LABEL, fullName, initials, type AnalyticsFunnelResponse, type CallLogResponse, type LeadResponse, type LeadStatus, type RdvResponse, type UserResponse } from '../lib/types'
 
 type FunnelPeriodMode = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'custom'
 type FunnelPeriodState = { mode: FunnelPeriodMode; customFrom: string; customTo: string }
@@ -593,6 +593,7 @@ function OverviewAdmin() {
       leadsToday,
       qualifiedDebriefSegments: commercialQualifiedDebriefSegments(allRdvs ?? [], allLeads ?? [], undefined, funnelRange),
       nonSaleDebriefSegments: commercialNonSaleDebriefSegments(allRdvs ?? [], allLeads ?? [], undefined, funnelRange),
+      funnelProspects: adminFunnelProspects(allRdvs ?? [], allLeads ?? [], usersList ?? []),
     }
   }, [adminSummary, funnelTotals, treatedLeadTotal, usersList, allLeads, allRdvs, funnelRange.from, funnelRange.to])
   const funnelNoAnswer = Math.min(funnelTotals.noAnswer, stats.leads)
@@ -719,6 +720,14 @@ function OverviewAdmin() {
             </div>
             <FunnelFlowMap totals={overviewFunnelTotals} />
           </div>
+
+          <CommercialQualifiedProspects
+            prospects={stats.funnelProspects}
+            title="Prospects avec RDV"
+            subtitle="Liste complète des leads qualifiés · commercial assigné + setter qualifiant"
+            limit={20}
+            className="overview-admin-prospects"
+          />
           </section>
 
           <aside className="overview-admin-side-rail" aria-label="Répartition des leads">
@@ -1159,28 +1168,35 @@ function hydrateMissingEvolutionTotals(points: LeadEvolutionPoint[], totals: { l
 const PIE_COLORS = ['#1F7857', '#3DA86A', '#3E9A6F', '#6B7C8C', '#145A41', '#7C6A46']
 
 type LeadSegment = { label: string; value: number; description?: string }
-type QualifiedProspect = { id: string; name: string; phone: string | null; city: string | null; status: string; scheduledAt: string | null }
+type QualifiedProspect = { id: string; name: string; phone: string | null; city: string | null; status: string; scheduledAt: string | null; commercialName?: string | null; setterName?: string | null }
 type CommercialDebriefSource = { id: string; rdv?: RdvResponse; lead?: LeadResponse }
 
-function CommercialQualifiedProspects({ prospects }: { prospects: QualifiedProspect[] }) {
+function CommercialQualifiedProspects({ prospects, title = 'Prospects qualifiés', subtitle = 'Liste prioritaire du commercial · données réelles', limit = 8, className }: { prospects: QualifiedProspect[]; title?: string; subtitle?: string; limit?: number; className?: string }) {
   return (
-    <div className="overview-air-card overview-commercial-qualified-list">
+    <div className={`overview-air-card overview-commercial-qualified-list${className ? ` ${className}` : ''}`}>
       <div className="shot-card-head">
         <div>
-          <h3>Prospects qualifiés</h3>
-          <p>Liste prioritaire du commercial · données réelles</p>
+          <h3>{title}</h3>
+          <p>{subtitle}</p>
         </div>
         <span><Icon name="users" size={16} /></span>
       </div>
       <div className="commercial-qualified-list-body">
         {prospects.length === 0 ? (
           <div className="text-xs text-faint">Aucun prospect qualifié sur cette période.</div>
-        ) : prospects.slice(0, 8).map((prospect) => (
+        ) : prospects.slice(0, limit).map((prospect) => (
           <div key={prospect.id} className="commercial-qualified-row">
             <div className="overview-role-avatar">{userInitials(prospect.name)}</div>
             <div>
               <strong>{prospect.name}</strong>
               <small>{prospect.city ?? 'Ville non renseignée'} · {prospect.phone ?? 'sans téléphone'}</small>
+              {(prospect.commercialName || prospect.setterName) && (
+                <small className="commercial-qualified-attribution">
+                  {prospect.commercialName ? <>Commercial · <b>{prospect.commercialName}</b></> : <>Commercial · <i>non assigné</i></>}
+                  {' · '}
+                  {prospect.setterName ? <>Setter · <b>{prospect.setterName}</b></> : <>Setter · <i>non assigné</i></>}
+                </small>
+              )}
             </div>
             <div className="commercial-qualified-meta">
               <span>{prospect.status}</span>
@@ -1599,6 +1615,41 @@ function leadStatusSegments(leads: LeadResponse[]): { status: LeadStatus; label:
     .map(([status, value]) => ({ status: status as LeadStatus, label: STATUS_LABEL[status as LeadStatus] ?? status, value }))
     .filter((segment) => segment.value > 0)
     .sort((a, b) => b.value - a.value)
+}
+
+function adminFunnelProspects(rdvs: RdvResponse[], leads: LeadResponse[], users: UserResponse[]): QualifiedProspect[] {
+  const leadById = new Map(leads.map((lead) => [lead.id, lead]))
+  const userById = new Map(users.map((user) => [user.id, user]))
+  const nameOf = (id: string | null | undefined) => (id ? userById.get(id)?.name ?? null : null)
+  const todayIso = new Date().toISOString()
+
+  return rdvs
+    .filter((rdv) => rdv.status === 'planifie' || rdv.status === 'honore')
+    .map((rdv) => {
+      const lead = leadById.get(rdv.leadId)
+      const commercialName = nameOf(rdv.commercialId) ?? nameOf(lead?.latestRdvCommercialId) ?? nameOf(lead?.assignedToId)
+      const setterName = nameOf(lead?.setterId) ?? (lead?.assignedSetterIds?.length ? nameOf(lead.assignedSetterIds[0]) : null)
+      return {
+        id: rdv.id,
+        name: lead ? (fullName(lead) || lead.email || lead.phone || 'Prospect qualifié') : 'Prospect qualifié',
+        phone: lead?.phone ?? null,
+        city: lead?.city ?? null,
+        status: commercialProspectStatus({ rdv, lead }),
+        scheduledAt: rdv.scheduledAt,
+        commercialName,
+        setterName,
+      }
+    })
+    .sort((a, b) => {
+      const aFuture = (a.scheduledAt ?? '') >= todayIso
+      const bFuture = (b.scheduledAt ?? '') >= todayIso
+      if (aFuture && !bFuture) return -1
+      if (!aFuture && bFuture) return 1
+      // future RDVs: soonest first ; passés : plus récents d'abord
+      return aFuture
+        ? (a.scheduledAt ?? '').localeCompare(b.scheduledAt ?? '')
+        : (b.scheduledAt ?? '').localeCompare(a.scheduledAt ?? '')
+    })
 }
 
 function commercialQualifiedProspects(rdvs: RdvResponse[], leads: LeadResponse[], commercialId: string | undefined): QualifiedProspect[] {
