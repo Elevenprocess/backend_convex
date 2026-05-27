@@ -2,8 +2,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type TextareaHTM
 import { Icon } from '../Icon'
 import { useIsReadOnlyImpersonation } from '../../lib/auth'
 import {
-  STATUS_BADGE,
-  STATUS_LABEL,
   fullName,
   type FinancingType,
   type LeadResponse,
@@ -181,7 +179,7 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [savedAt, setSavedAt] = useState<string | null>(null)
+  const [successOverlay, setSuccessOverlay] = useState<null | { outcome: Outcome; label: string }>(null)
   const [currentStep, setCurrentStep] = useState<number>(0)
   const [transitionDirection, setTransitionDirection] = useState<'forward' | 'backward'>('forward')
   const [rescheduleDate, setRescheduleDate] = useState('')
@@ -190,13 +188,22 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
   const [rescheduleSavedAt, setRescheduleSavedAt] = useState<string | null>(null)
   const readOnly = useIsReadOnlyImpersonation()
 
+  // Auto-close 1.6s après une sauvegarde réussie pour libérer l'écran et signaler la fin.
+  useEffect(() => {
+    if (!successOverlay) return
+    const timer = window.setTimeout(() => {
+      setSuccessOverlay(null)
+      onClose()
+    }, 1600)
+    return () => window.clearTimeout(timer)
+  }, [successOverlay, onClose])
+
   useEffect(() => {
     if (!selectedRdvId && sortedRdvs[0]) setSelectedRdvId(sortedRdvs[0].id)
   }, [sortedRdvs, selectedRdvId])
 
   useEffect(() => {
     setError(null)
-    setSavedAt(null)
     setRescheduleSavedAt(null)
     setForm(selectedRdv ? rdvToForm(selectedRdv) : EMPTY_FORM)
     const initialSlot = selectedRdv ? dateTimeInputsFromIso(selectedRdv.scheduledAt) : { date: '', time: '' }
@@ -312,9 +319,15 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
         financingType: form.outcome === 'vente' && form.paymentMethod ? form.paymentMethod : null,
         debriefFilledAt: new Date().toISOString(),
       })
-      setSavedAt(new Date().toISOString())
       refetchRdvs()
       onSaved?.()
+      const successLabel =
+        form.outcome === 'vente'
+          ? 'Vente enregistrée'
+          : form.nonSaleReason
+            ? labelFromNonSaleReason(form.nonSaleReason)
+            : 'Débrief enregistré'
+      setSuccessOverlay({ outcome: form.outcome, label: successLabel })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur à l\'enregistrement')
     } finally {
@@ -323,7 +336,8 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
   }
 
   return (
-    <aside className={`flex flex-col w-full md:w-[460px] max-w-full md:max-w-[92vw] overflow-y-auto border-l border-line bg-white/95 backdrop-blur-2xl shadow-2xl ${className}`}>
+    <aside className={`relative flex flex-col w-full md:w-[460px] max-w-full md:max-w-[92vw] overflow-y-auto border-l border-line bg-white/95 backdrop-blur-2xl shadow-2xl ${className}`}>
+      {successOverlay && <DebriefSuccessOverlay outcome={successOverlay.outcome} label={successOverlay.label} />}
       <header className="sticky top-0 z-10 border-b border-line bg-white/95 px-5 py-4 backdrop-blur-2xl">
         <button type="button" onClick={onClose} className="absolute right-3 top-3 rounded-full p-1.5 text-muted hover:bg-cream hover:text-text" aria-label="Fermer le débriefing">
           <Icon name="x" size={16} />
@@ -331,7 +345,6 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
         <div className="eyebrow text-or-dark">Débriefing commercial</div>
         <h2 className="mt-1 pr-8 text-base font-black text-text">{fullName(lead)}</h2>
         <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
-          <span className={`status-badge ${STATUS_BADGE[lead.status] ?? 'bg-cream text-muted'}`}>{STATUS_LABEL[lead.status] ?? lead.status}</span>
           {selectedRdv && (() => {
             const debriefStatus = resolveDebriefStatus(selectedRdv.result)
             const meta = DEBRIEF_STATUS_META[debriefStatus]
@@ -396,11 +409,6 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
 
             {error && (
               <div className="rounded-xl border border-rouille/40 bg-rouille-tint px-3 py-2 text-xs font-bold text-rouille">{error}</div>
-            )}
-            {savedAt && !error && (
-              <div className="rounded-xl border border-success/40 bg-success-tint px-3 py-2 text-xs font-bold text-success">
-                Débrief enregistré · {formatTime(savedAt)}
-              </div>
             )}
           </>
         )}
@@ -664,6 +672,35 @@ function DebriefSummaryCards({ form }: { form: FormState }) {
             </span>
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+function DebriefSuccessOverlay({ outcome, label }: { outcome: Outcome; label: string }) {
+  const isVente = outcome === 'vente'
+  const tone = isVente ? 'success' : 'rouille'
+  const ringClass = tone === 'success' ? 'bg-success' : 'bg-rouille'
+  const ringSoftClass = tone === 'success' ? 'bg-success/30' : 'bg-rouille/30'
+  const headline = isVente ? 'Vente enregistrée' : 'Débrief enregistré'
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-white/96 backdrop-blur-xl px-6 text-center"
+    >
+      <div className="relative h-24 w-24">
+        <span className={`absolute inset-0 rounded-full ${ringSoftClass} debrief-success-ring`} />
+        <span className={`relative flex h-24 w-24 items-center justify-center rounded-full ${ringClass} text-white shadow-lg debrief-success-pop`}>
+          <Icon name="check" size={44} />
+        </span>
+      </div>
+      <div className="debrief-success-fade space-y-1">
+        <h3 className="text-lg font-black text-text">{headline}</h3>
+        <p className="text-sm font-bold text-muted">{label}</p>
+      </div>
+      <div className="debrief-success-fade text-[11px] font-bold uppercase tracking-[0.14em] text-faint">
+        Le statut est mis à jour
       </div>
     </div>
   )
