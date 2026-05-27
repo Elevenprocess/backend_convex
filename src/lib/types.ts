@@ -44,6 +44,7 @@ export type LeadStatus =
   | 'qualifie'
   | 'rdv_pris'
   | 'rdv_honore'
+  | 'signature_en_cours'
   | 'signe'
   | 'perdu'
   | 'relance'
@@ -365,6 +366,7 @@ export const STATUS_LABEL: Record<LeadStatus, string> = {
   qualifie: 'Qualifié',
   rdv_pris: 'Qualifié',
   rdv_honore: 'RDV honoré',
+  signature_en_cours: 'Signature en cours',
   signe: 'Signé',
   perdu: 'Non qualifié',
   relance: 'Relance',
@@ -378,6 +380,7 @@ export const STATUS_BADGE: Record<LeadStatus, string> = {
   qualifie: 'bg-success-tint text-success',
   rdv_pris: 'bg-success-tint text-success',
   rdv_honore: 'bg-or-tint text-or-dark',
+  signature_en_cours: 'bg-cuivre-tint text-cuivre',
   signe: 'bg-success-tint text-success',
   perdu: 'bg-rouille-tint text-rouille',
   relance: 'bg-cuivre-tint text-cuivre',
