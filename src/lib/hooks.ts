@@ -301,7 +301,11 @@ export function useRdvList(filters?: {
   toDate?: string
   limit?: number
 } | null): Async<RdvResponse[]> {
-  return useFetch<RdvResponse[]>(filters === null ? null : '/rdv', filters === null ? undefined : { ...filters, limit: clampLimit(filters?.limit, 200, RDV_LIMIT_MAX) })
+  return useFetch<RdvResponse[]>(
+    filters === null ? null : '/rdv',
+    filters === null ? undefined : { ...filters, limit: clampLimit(filters?.limit, 200, RDV_LIMIT_MAX) },
+    { refreshCachedOnMount: true, silentInitialLoading: true },
+  )
 }
 
 // Cf. useLeadsProgressive — même pattern pour les RDV.

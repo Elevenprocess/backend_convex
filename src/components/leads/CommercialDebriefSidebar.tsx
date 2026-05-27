@@ -46,8 +46,6 @@ type AcceptanceFactor =
 type FormState = {
   outcome: Outcome
   nonSaleReason: NonSaleReason | ''
-  nonSaleSubReason: string
-  nonSaleComment: string
   objection: Objection | ''
   acceptanceFactors: AcceptanceFactor[]
   notes: string
@@ -56,6 +54,13 @@ type FormState = {
   kits: string
   paymentMethod: FinancingType | ''
 }
+
+const RESCHEDULE_REASONS = new Set<NonSaleReason>([
+  'suivi_prevu',
+  'no_show',
+  'contact_annule',
+  'annulation_administrative',
+])
 
 type SummaryCard = { label: string; sublabel?: string; tone: 'success' | 'rouille' | 'or' }
 
@@ -154,8 +159,6 @@ const PAYMENT_METHODS: { value: FinancingType; label: string }[] = [
 const EMPTY_FORM: FormState = {
   outcome: '',
   nonSaleReason: '',
-  nonSaleSubReason: '',
-  nonSaleComment: '',
   objection: '',
   acceptanceFactors: [],
   notes: '',
@@ -363,7 +366,7 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
           <>
             <RdvSelector rdvs={sortedRdvs} selectedId={selectedRdv?.id ?? null} onSelect={setSelectedRdvId} />
 
-            {selectedRdv && form.outcome === 'non_vente' && (
+            {selectedRdv && form.outcome === 'non_vente' && form.nonSaleReason && RESCHEDULE_REASONS.has(form.nonSaleReason) && (
               <RescheduleCard
                 date={rescheduleDate}
                 time={rescheduleTime}
@@ -906,14 +909,22 @@ function sortRdvsForDebrief(rdvs: RdvResponse[]): RdvResponse[] {
 }
 
 function rdvToForm(rdv: RdvResponse): FormState {
-  const outcome: Outcome = rdv.result === 'signe' ? 'vente' : rdv.result === 'perdu' || rdv.result === 'no_show' ? 'non_vente' : ''
-  const { mainLabel, subLabel } = splitNonSaleReason(rdv.nonSaleReason)
+  const { mainLabel } = splitNonSaleReason(rdv.nonSaleReason)
+  const restoredNonSaleReason = nonSaleReasonFromLabel(mainLabel)
+  // Un débrief non-vente peut avoir produit result = perdu | no_show | reflexion (suivi prévu)
+  // ou un état historique 'reporte' (ancien comportement). On reflète "non_vente" dès qu'il y a
+  // une raison ou un statut négatif, pour que le formulaire restaure la saisie à la réouverture.
+  const isNonVente =
+    rdv.result === 'perdu' ||
+    rdv.result === 'no_show' ||
+    rdv.result === 'reflexion' ||
+    rdv.result === 'reporte' ||
+    Boolean(restoredNonSaleReason)
+  const outcome: Outcome = rdv.result === 'signe' ? 'vente' : isNonVente ? 'non_vente' : ''
   const { acceptance, freeText } = splitNotes(rdv.notes)
   return {
     outcome,
-    nonSaleReason: nonSaleReasonFromLabel(mainLabel),
-    nonSaleSubReason: subLabel,
-    nonSaleComment: '',
+    nonSaleReason: restoredNonSaleReason,
     objection: objectionFromLabel(rdv.objections),
     acceptanceFactors: acceptance.map(acceptanceFactorFromLabel).filter((f): f is AcceptanceFactor => f !== ''),
     notes: freeText,
@@ -928,8 +939,9 @@ function outcomeToResult(outcome: Outcome, reason: NonSaleReason | ''): RdvResul
   if (outcome === 'vente') return 'signe'
   if (outcome === 'non_vente') {
     if (reason === 'no_show') return 'no_show'
-    if (reason === 'annulation_administrative' || reason === 'contact_annule') return 'reporte'
     if (reason === 'suivi_prevu') return 'reflexion'
+    // contact_annule, annulation_administrative, pas_interesse, non_qualifie → perdu
+    // (la raison précise reste portée par nonSaleReason ; on ne marque PAS le RDV "à reporter")
     return 'perdu'
   }
   return null
