@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
@@ -15,7 +15,11 @@ import {
   type RdvResponse,
   type CallLogResponse,
   type UserResponse,
+  type Devis,
 } from '../../lib/types'
+import { listDevisByLead } from '../../lib/api'
+import { DevisUploader } from '../../components/devis/DevisUploader'
+import { DevisList } from '../../components/devis/DevisList'
 
 type TimelineItem = {
   icon: IconName
@@ -41,6 +45,11 @@ export function LeadDetail() {
     for (const u of users ?? []) m.set(u.id, u)
     return m
   }, [users])
+
+  const [devisList, setDevisList] = useState<Devis[]>([])
+  useEffect(() => {
+    if (id) void listDevisByLead(id).then(setDevisList)
+  }, [id])
 
   if (loading) {
     return (
@@ -169,6 +178,22 @@ export function LeadDetail() {
                 ))}
               </div>
             )}
+          </div>
+
+          <div className="glass-card p-6">
+            <section className="space-y-3">
+              <h3 className="text-sm font-semibold">Devis Solteo</h3>
+              <DevisUploader
+                leadId={id!}
+                onUploaded={(d) => setDevisList((prev) => [d, ...prev])}
+              />
+              <DevisList
+                devisList={devisList}
+                onChange={(u) =>
+                  setDevisList((prev) => prev.map((d) => (d.id === u.id ? u : d)))
+                }
+              />
+            </section>
           </div>
         </div>
       </main>
