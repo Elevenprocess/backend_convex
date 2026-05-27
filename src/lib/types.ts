@@ -415,3 +415,60 @@ export function cleanField<T extends string | null | undefined>(v: T): string | 
 export function fieldOrDash(v: string | null | undefined): string {
   return cleanField(v) ?? '—'
 }
+
+// ─── Devis ────────────────────────────────────────────────
+export type DevisStatus =
+  | 'brouillon'
+  | 'en_attente'
+  | 'signature_en_cours'
+  | 'signe'
+  | 'perdu';
+
+export type OcrStatus = 'pending' | 'processing' | 'done' | 'failed';
+
+export interface DevisLigne {
+  designation: string;
+  qty: number;
+  prixUnitaireHt: number;
+  totalHt: number;
+  tva: number;
+  totalTtc: number;
+  type?: string;
+}
+
+export interface DevisEcheance {
+  label: string;
+  phase?: string;
+  montant: number;
+}
+
+export interface Devis {
+  id: string;
+  leadId: string;
+  rdvId: string | null;
+  commercialId: string;
+  status: DevisStatus;
+  filename: string;
+  storageKey: string;
+  ocrStatus: OcrStatus;
+  ocrError: string | null;
+  devisNumber: string | null;
+  devisDate: string | null;
+  dateExpiration: string | null;
+  delaiExecution: string | null;
+  montantHt: string | null;
+  montantTva: string | null;
+  montantTtc: string | null;
+  montantNet: string | null;
+  puissanceKwc: string | null;
+  nbPanneaux: number | null;
+  kits: string | null;
+  financingType: string | null;
+  primeAutoconsommation: string | null;
+  primeTarifKwc: string | null;
+  primeZone: string | null;
+  lignes: DevisLigne[];
+  echeancier: DevisEcheance[];
+  signedAt: string | null;
+  createdAt: string;
+}

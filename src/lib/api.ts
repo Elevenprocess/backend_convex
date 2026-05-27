@@ -1,3 +1,5 @@
+import type { Devis } from './types'
+
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
 
 function buildApiUrl(path: string): string {
@@ -118,6 +120,39 @@ function formatZodIssues(issues: unknown[]): string | null {
     return path ? `${path}: ${message}` : message
   })
   return parts.length ? parts.join(' · ') : null
+}
+
+// ─── Devis (Solteo PDF integration) ──────────────────────
+// Upload uses FormData (multipart), so we bypass the generic `api<T>` helper
+// which assumes JSON. The other two endpoints use the standard helper.
+export async function uploadDevis(
+  leadId: string,
+  rdvId: string | undefined,
+  file: File,
+): Promise<Devis> {
+  const fd = new FormData()
+  fd.append('leadId', leadId)
+  if (rdvId) fd.append('rdvId', rdvId)
+  fd.append('file', file)
+  const url = buildApiUrl('/devis')
+  const res = await fetch(url, {
+    method: 'POST',
+    credentials: 'include',
+    body: fd,
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, text || `Upload devis failed: ${res.status}`)
+  }
+  return res.json() as Promise<Devis>
+}
+
+export function listDevisByLead(leadId: string): Promise<Devis[]> {
+  return api<Devis[]>(`/devis/lead/${leadId}`)
+}
+
+export function markDevisSigned(devisId: string): Promise<Devis> {
+  return api<Devis>(`/devis/${devisId}/mark-signed`, { method: 'POST' })
 }
 
 export { API_BASE }
