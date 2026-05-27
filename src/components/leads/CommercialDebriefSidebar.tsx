@@ -202,6 +202,12 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
     if (!selectedRdvId && sortedRdvs[0]) setSelectedRdvId(sortedRdvs[0].id)
   }, [sortedRdvs, selectedRdvId])
 
+  // Reset l'overlay de succès si l'user change de lead pendant le timeout
+  // d'auto-close — sinon le timer du précédent débrief fermerait le nouveau sidebar.
+  useEffect(() => {
+    setSuccessOverlay(null)
+  }, [lead.id])
+
   useEffect(() => {
     setError(null)
     setRescheduleSavedAt(null)
