@@ -155,4 +155,8 @@ export function markDevisSigned(devisId: string): Promise<Devis> {
   return api<Devis>(`/devis/${devisId}/mark-signed`, { method: 'POST' })
 }
 
+export function retryDevisOcr(devisId: string): Promise<Devis> {
+  return api<Devis>(`/devis/${devisId}/retry-ocr`, { method: 'POST' })
+}
+
 export { API_BASE }

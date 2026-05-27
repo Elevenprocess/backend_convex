@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { markDevisSigned } from '../../lib/api';
+import { markDevisSigned, retryDevisOcr } from '../../lib/api';
 import type { Devis } from '../../lib/types';
 
 interface Props {
@@ -9,6 +9,8 @@ interface Props {
 
 export function DevisList({ devisList, onChange }: Props) {
   const [pending, setPending] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState<string | null>(null);
+
   async function sign(id: string) {
     setPending(id);
     try {
@@ -16,6 +18,18 @@ export function DevisList({ devisList, onChange }: Props) {
       onChange(updated);
     } finally {
       setPending(null);
+    }
+  }
+
+  async function retry(id: string) {
+    setRetrying(id);
+    try {
+      const updated = await retryDevisOcr(id);
+      onChange(updated);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setRetrying(null);
     }
   }
   if (devisList.length === 0)
@@ -32,6 +46,9 @@ export function DevisList({ devisList, onChange }: Props) {
               <p className="text-xs text-stone-500">
                 {d.devisDate} · OCR: {d.ocrStatus} · Statut: {d.status}
               </p>
+              {d.ocrError && (
+                <p className="text-xs text-red-600 mt-1">OCR: {d.ocrError}</p>
+              )}
               {d.kits && (
                 <p className="text-xs text-stone-700 mt-1">{d.kits}</p>
               )}
@@ -67,16 +84,28 @@ export function DevisList({ devisList, onChange }: Props) {
                 </details>
               )}
             </div>
-            {d.status !== 'signe' && d.ocrStatus === 'done' && (
-              <button
-                type="button"
-                disabled={pending === d.id}
-                onClick={() => sign(d.id)}
-                className="px-3 py-1 text-xs bg-emerald-700 text-white rounded disabled:opacity-50 shrink-0"
-              >
-                {pending === d.id ? '…' : 'Devis signé'}
-              </button>
-            )}
+            <div className="flex flex-col gap-1">
+              {d.ocrStatus === 'failed' && (
+                <button
+                  type="button"
+                  disabled={retrying === d.id}
+                  onClick={() => retry(d.id)}
+                  className="px-3 py-1 text-xs bg-stone-700 text-white rounded disabled:opacity-50 shrink-0"
+                >
+                  {retrying === d.id ? '…' : 'Relancer OCR'}
+                </button>
+              )}
+              {d.status !== 'signe' && d.ocrStatus === 'done' && (
+                <button
+                  type="button"
+                  disabled={pending === d.id}
+                  onClick={() => sign(d.id)}
+                  className="px-3 py-1 text-xs bg-emerald-700 text-white rounded disabled:opacity-50 shrink-0"
+                >
+                  {pending === d.id ? '…' : 'Devis signé'}
+                </button>
+              )}
+            </div>
           </div>
         </li>
       ))}
