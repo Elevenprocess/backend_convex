@@ -551,6 +551,7 @@ function OverviewAdmin() {
   })
   const { data: usersList = [] } = useUsers()
   const { data: allLeads = [] } = useLeads({ limit: 500 })
+  const { data: allRdvs = [] } = useRdvList({ fromDate: funnelRange.from, toDate: funnelRange.to, limit: 200 })
 
   const adminSummary = summary?.admin ?? null
   const funnelTotals = funnel?.totals ?? EMPTY_FUNNEL_TOTALS
@@ -590,8 +591,10 @@ function OverviewAdmin() {
       teamTotal: (usersList ?? []).length,
       rdvPris,
       leadsToday,
+      qualifiedDebriefSegments: commercialQualifiedDebriefSegments(allRdvs ?? [], allLeads ?? [], undefined, funnelRange),
+      nonSaleDebriefSegments: commercialNonSaleDebriefSegments(allRdvs ?? [], allLeads ?? [], undefined, funnelRange),
     }
-  }, [adminSummary, funnelTotals, treatedLeadTotal, usersList, allLeads, funnelRange.from, funnelRange.to])
+  }, [adminSummary, funnelTotals, treatedLeadTotal, usersList, allLeads, allRdvs, funnelRange.from, funnelRange.to])
   const funnelNoAnswer = Math.min(funnelTotals.noAnswer, stats.leads)
   const funnelAnswered = Math.max(
     funnelTotals.answered,
@@ -720,6 +723,16 @@ function OverviewAdmin() {
 
           <aside className="overview-admin-side-rail" aria-label="Répartition des leads">
             <LeadPieAnalysis segments={leadSegments} totalFallback={stats.leads} />
+            <DebriefPieCard
+              title="Débrief qualifié"
+              subtitle="choix remplis par les commerciaux"
+              segments={stats.qualifiedDebriefSegments}
+            />
+            <DebriefPieCard
+              title="Raisons non-vente"
+              subtitle="répartition des non qualifiés"
+              segments={stats.nonSaleDebriefSegments}
+            />
           </aside>
         </div>
 

@@ -481,14 +481,18 @@ body {
   top: 18px;
   align-self: start;
   z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 .overview-admin-side-rail .overview-air-pie {
   grid-column: auto;
   width: 100%;
-  min-height: calc(100vh - 132px);
-  max-height: calc(100vh - 36px);
-  overflow: auto;
   padding: 18px;
+}
+.overview-admin-side-rail .commercial-debrief-card {
+  width: 100%;
+  min-height: 0;
 }
 .overview-air-card,
 .overview-air-kpi,
@@ -1544,7 +1548,6 @@ body {
   .overview-commercial-toolbar { justify-content: flex-start; }
   .overview-admin-layout { grid-template-columns: 1fr; }
   .overview-admin-side-rail { position: static; }
-  .overview-admin-side-rail .overview-air-pie { min-height: 330px; max-height: none; }
   .overview-admin-main-grid .overview-lead-evolution-card { grid-column: span 6; }
   .overview-role-wide, .overview-role-side { grid-column: span 6; }
   .overview-profile-panel, .overview-air-kpi { grid-column: span 4; }
