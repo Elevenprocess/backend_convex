@@ -694,24 +694,6 @@ function OverviewAdmin() {
           </div>
 
 
-          <div className="overview-air-card overview-air-pipeline">
-            <div className="shot-onboarding-top">
-              <div>
-                <span className="shot-eyebrow">Pipeline réel</span>
-                <h3>Avancement CRM</h3>
-              </div>
-              <strong>{pct(stats.rdvPris, stats.leads)}%</strong>
-            </div>
-            <div className="overview-real-segments" style={{ ['--seg-a' as string]: `${Math.max(1, stats.leads)}`, ['--seg-b' as string]: `${Math.max(1, funnelTotals.qualified || stats.qualified)}`, ['--seg-c' as string]: `${Math.max(1, funnelTotals.rdv || stats.rdvPris)}` }}>
-              <span />
-              <span />
-              <span />
-            </div>
-            <TaskLine icon="phone" title="Leads traités" sub={`${fmtCompact(stats.leads)} traités · ${fmtCompact(Math.max(funnelTotals.calls, stats.appels))} appels`} done={stats.leads > 0} />
-            <TaskLine icon="target" title="Leads qualifiés" sub={`${fmtCompact(funnelTotals.qualified || stats.qualified)} leads`} done={(funnelTotals.qualified || stats.qualified) > 0} />
-            <TaskLine icon="trophy" title="RDV obtenus" sub={`${fmtCompact(funnelTotals.rdv || stats.rdvPris)} RDV`} done={(funnelTotals.rdv || stats.rdvPris) > 0} />
-          </div>
-
           <div className="overview-air-card overview-air-funnel">
             <div className="shot-calendar-head">
               <span>{formatShortDate(new Date(funnelRange.from))}</span>
