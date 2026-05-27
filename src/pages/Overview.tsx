@@ -1,4 +1,4 @@
-import { type MouseEvent, useEffect, useMemo, useState } from 'react'
+import { type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '../components/Icon'
 import { AppShell } from '../components/shell/AppShell'
@@ -1209,18 +1209,149 @@ function CommercialQualifiedProspects({ prospects, title = 'Prospects qualifiés
   )
 }
 
+type InteractivePieSegment = { label: string; description?: string; value: number }
+
+function donutSlicePath(cx: number, cy: number, rOuter: number, rInner: number, startAngle: number, endAngle: number): string {
+  const x1 = cx + rOuter * Math.cos(startAngle)
+  const y1 = cy + rOuter * Math.sin(startAngle)
+  const x2 = cx + rOuter * Math.cos(endAngle)
+  const y2 = cy + rOuter * Math.sin(endAngle)
+  const x3 = cx + rInner * Math.cos(endAngle)
+  const y3 = cy + rInner * Math.sin(endAngle)
+  const x4 = cx + rInner * Math.cos(startAngle)
+  const y4 = cy + rInner * Math.sin(startAngle)
+  const largeArc = endAngle - startAngle > Math.PI ? 1 : 0
+  return `M ${x1.toFixed(3)} ${y1.toFixed(3)} A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${x2.toFixed(3)} ${y2.toFixed(3)} L ${x3.toFixed(3)} ${y3.toFixed(3)} A ${rInner} ${rInner} 0 ${largeArc} 0 ${x4.toFixed(3)} ${y4.toFixed(3)} Z`
+}
+
+function InteractivePie({
+  segments,
+  size,
+  innerRadius,
+  centerTop,
+  centerBottom,
+  activeIndex,
+  onActiveChange,
+  valueLabel = 'élément',
+  valueLabelPlural,
+}: {
+  segments: InteractivePieSegment[]
+  size: number
+  innerRadius: number
+  centerTop: ReactNode
+  centerBottom: ReactNode
+  activeIndex: number | null
+  onActiveChange: (index: number | null) => void
+  valueLabel?: string
+  valueLabelPlural?: string
+}) {
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null)
+  const total = segments.reduce((sum, seg) => sum + seg.value, 0)
+  const cx = size / 2
+  const cy = size / 2
+  const outerR = size / 2 - 1
+  const innerR = Math.max(2, innerRadius)
+  const startOffset = -Math.PI / 2
+
+  const slices = useMemo(() => {
+    if (total <= 0) return [] as { index: number; path: string; start: number; end: number }[]
+    let acc = 0
+    return segments.map((seg, index) => {
+      const start = startOffset + (acc / total) * Math.PI * 2
+      acc += seg.value
+      const end = startOffset + (acc / total) * Math.PI * 2
+      if (seg.value <= 0) return null
+      // 100% slice → draw two halves to avoid the degenerate arc
+      if (Math.abs(end - start - Math.PI * 2) < 1e-6) {
+        const mid = start + Math.PI
+        return {
+          index,
+          path: `${donutSlicePath(cx, cy, outerR, innerR, start, mid)} ${donutSlicePath(cx, cy, outerR, innerR, mid, end)}`,
+          start,
+          end,
+        }
+      }
+      return { index, path: donutSlicePath(cx, cy, outerR, innerR, start, end), start, end }
+    }).filter(Boolean) as { index: number; path: string; start: number; end: number }[]
+  }, [segments, total, cx, cy, outerR, innerR, startOffset])
+
+  const active = activeIndex !== null ? segments[activeIndex] : null
+  const activePct = active && total ? Math.round((active.value / total) * 100) : 0
+  const innerSize = innerR * 2
+
+  const handleMove = (event: MouseEvent<HTMLDivElement>) => {
+    const rect = wrapRef.current?.getBoundingClientRect()
+    if (!rect) return
+    setCursor({ x: event.clientX - rect.left, y: event.clientY - rect.top })
+  }
+
+  return (
+    <div
+      ref={wrapRef}
+      className="interactive-pie"
+      style={{ width: size, height: size }}
+      onMouseMove={handleMove}
+      onMouseLeave={() => { onActiveChange(null); setCursor(null) }}
+    >
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Répartition">
+        {total <= 0 ? (
+          <circle cx={cx} cy={cy} r={(outerR + innerR) / 2} fill="none" stroke="var(--color-line-soft)" strokeWidth={outerR - innerR} />
+        ) : slices.map(({ index, path }) => {
+          const isActive = activeIndex === index
+          return (
+            <path
+              key={`slice-${index}`}
+              d={path}
+              fill={PIE_COLORS[index % PIE_COLORS.length]}
+              stroke="#FFFFFF"
+              strokeWidth={1.5}
+              style={{
+                transformOrigin: `${cx}px ${cy}px`,
+                transform: isActive ? 'scale(1.04)' : 'scale(1)',
+                transition: 'transform 0.16s ease',
+                opacity: activeIndex === null || isActive ? 1 : 0.55,
+                cursor: 'pointer',
+              }}
+              onMouseEnter={() => onActiveChange(index)}
+            />
+          )
+        })}
+      </svg>
+      <div className="interactive-pie-center" style={{ width: innerSize, height: innerSize }}>
+        {active ? (
+          <>
+            <strong>{activePct}%</strong>
+            <span>{fmtCompact(active.value)} {(active.value > 1 ? (valueLabelPlural ?? valueLabel) : valueLabel)}</span>
+          </>
+        ) : (
+          <>
+            {centerTop}
+            {centerBottom}
+          </>
+        )}
+      </div>
+      {active && cursor && (
+        <div
+          className="interactive-pie-tooltip"
+          style={{ left: cursor.x, top: cursor.y, borderColor: PIE_COLORS[(activeIndex ?? 0) % PIE_COLORS.length] }}
+        >
+          <i style={{ background: PIE_COLORS[(activeIndex ?? 0) % PIE_COLORS.length] }} />
+          <div>
+            <strong>{active.label}</strong>
+            {active.description && <small>{active.description}</small>}
+            <em>{fmtCompact(active.value)} · {activePct}%</em>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function DebriefPieCard({ title, subtitle, segments }: { title: string; subtitle: string; segments: LeadSegment[] }) {
   const total = segments.reduce((sum, segment) => sum + segment.value, 0)
-  const visibleSegments = segments.length > 0 ? segments : [{ label: 'Aucune donnée', value: 0, description: 'Débrief à remplir' }]
-  const gradient = total
-    ? visibleSegments.reduce<{ parts: string[]; cursor: number }>((acc, segment, index) => {
-        const start = acc.cursor
-        const end = start + (segment.value / total) * 360
-        acc.parts.push(`${PIE_COLORS[index % PIE_COLORS.length]} ${start}deg ${end}deg`)
-        acc.cursor = end
-        return acc
-      }, { parts: [], cursor: 0 }).parts.join(', ')
-    : 'var(--color-line-soft) 0deg 360deg'
+  const visibleSegments: InteractivePieSegment[] = segments.length > 0 ? segments : [{ label: 'Aucune donnée', value: 0, description: 'Débrief à remplir' }]
+  const [activeIndex, setActiveIndex] = useState<number | null>(null)
 
   return (
     <div className="overview-air-card commercial-debrief-card">
@@ -1232,15 +1363,24 @@ function DebriefPieCard({ title, subtitle, segments }: { title: string; subtitle
         <span><Icon name="target" size={16} /></span>
       </div>
       <div className="commercial-debrief-body">
-        <div className="overview-pie commercial-debrief-pie" style={{ background: `conic-gradient(${gradient})` }}>
-          <div>
-            <strong>{total ? `${pct(Math.max(...segments.map((segment) => segment.value)), total)}%` : '0%'}</strong>
-            <span>{fmtCompact(total)} choix</span>
-          </div>
-        </div>
+        <InteractivePie
+          segments={visibleSegments}
+          size={140}
+          innerRadius={44}
+          centerTop={<strong>{total ? `${pct(Math.max(...visibleSegments.map((segment) => segment.value)), total)}%` : '0%'}</strong>}
+          centerBottom={<span>{fmtCompact(total)} choix</span>}
+          activeIndex={activeIndex}
+          onActiveChange={setActiveIndex}
+          valueLabel="choix"
+        />
         <div className="overview-pie-legend commercial-debrief-legend">
           {visibleSegments.map((segment, index) => (
-            <div key={`${title}-${segment.label}-${index}`}>
+            <div
+              key={`${title}-${segment.label}-${index}`}
+              className={activeIndex === index ? 'is-active' : undefined}
+              onMouseEnter={() => setActiveIndex(index)}
+              onMouseLeave={() => setActiveIndex(null)}
+            >
               <i style={{ background: PIE_COLORS[index % PIE_COLORS.length] }} />
               <span>{segment.label}<small>{segment.description}</small></span>
               <strong>{total ? `${pct(segment.value, total)}%` : '0%'}</strong>
@@ -1255,32 +1395,36 @@ function DebriefPieCard({ title, subtitle, segments }: { title: string; subtitle
 function LeadPieAnalysis({ segments, totalFallback = 0, leads }: { segments?: LeadSegment[]; totalFallback?: number; leads?: LeadResponse[] }) {
   const resolvedSegments = segments ?? leadStatusSegments(leads ?? [])
   const total = resolvedSegments.reduce((sum, segment) => sum + segment.value, 0) || totalFallback
-  const visibleSegments = resolvedSegments.length > 0 ? resolvedSegments : [{ label: 'Données en cours', value: totalFallback }]
-  const gradient = total
-    ? visibleSegments.reduce<{ parts: string[]; cursor: number }>((acc, segment, index) => {
-        const start = acc.cursor
-        const end = start + (segment.value / total) * 360
-        acc.parts.push(`${PIE_COLORS[index % PIE_COLORS.length]} ${start}deg ${end}deg`)
-        acc.cursor = end
-        return acc
-      }, { parts: [], cursor: 0 }).parts.join(', ')
-    : 'var(--color-line-soft) 0deg 360deg'
+  const visibleSegments: InteractivePieSegment[] = resolvedSegments.length > 0
+    ? resolvedSegments
+    : [{ label: 'Données en cours', value: totalFallback }]
+  const [activeIndex, setActiveIndex] = useState<number | null>(null)
 
   return (
     <div className="overview-air-card overview-air-pie">
       <CardHead title="Répartition des leads" icon="target" />
       <div className="overview-pie-body">
-        <div className="overview-pie" style={{ background: `conic-gradient(${gradient})` }}>
-          <div>
-            <strong>{fmtCompact(total)}</strong>
-            <span>leads</span>
-          </div>
-        </div>
+        <InteractivePie
+          segments={visibleSegments}
+          size={178}
+          innerRadius={52}
+          centerTop={<strong>{fmtCompact(total)}</strong>}
+          centerBottom={<span>leads</span>}
+          activeIndex={activeIndex}
+          onActiveChange={setActiveIndex}
+          valueLabel="lead"
+          valueLabelPlural="leads"
+        />
         <div className="overview-pie-legend">
           {visibleSegments.length === 0 ? (
             <span className="text-xs text-faint">Aucune donnée lead.</span>
           ) : visibleSegments.slice(0, 5).map((segment, index) => (
-            <div key={`${segment.label}-${index}`}>
+            <div
+              key={`${segment.label}-${index}`}
+              className={activeIndex === index ? 'is-active' : undefined}
+              onMouseEnter={() => setActiveIndex(index)}
+              onMouseLeave={() => setActiveIndex(null)}
+            >
               <i style={{ background: PIE_COLORS[index % PIE_COLORS.length] }} />
               <span>{segment.label}</span>
               <strong>{fmtCompact(segment.value)}</strong>
