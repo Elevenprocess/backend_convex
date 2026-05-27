@@ -440,7 +440,7 @@ body {
   align-items: start;
 }
 .overview-admin-main-grid { min-width: 0; }
-.overview-admin-main-grid .overview-lead-evolution-card { grid-column: span 8; }
+.overview-admin-main-grid .overview-lead-evolution-card { grid-column: span 12; }
 
 /* Admin header strip — profil + 4 KPIs alignés.
    Wide : profil à gauche (1.4fr) + 4 KPIs en ligne (3.6fr)
