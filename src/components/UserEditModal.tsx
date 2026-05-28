@@ -8,16 +8,29 @@ import type { InvitationResponse, Role, Team, UserResponse } from '../lib/types'
 
 const ROLE_OPTIONS: { value: Role; label: string }[] = [
   { value: 'setter', label: 'Setter' },
+  { value: 'setter_lead', label: 'Setter Lead' },
   { value: 'commercial', label: 'Commercial' },
+  { value: 'commercial_lead', label: 'Commercial Lead' },
+  { value: 'responsable_technique', label: 'Responsable technique' },
+  { value: 'back_office', label: 'Back office' },
+  { value: 'technicien', label: 'Technicien' },
+  { value: 'finances', label: 'Finances' },
   { value: 'admin', label: 'Admin' },
-  { value: 'delivrabilite', label: 'Délivrabilité' },
 ]
 
+// Ne propose plus 'delivrabilite' (deprecated) à la création/édition — utilise
+// responsable_technique ou back_office. Reste mappé pour les users existants.
 const TEAM_BY_ROLE: Record<Role, NonNullable<Team>> = {
   setter: 'setting',
+  setter_lead: 'setting',
   commercial: 'closing',
+  commercial_lead: 'closing',
   admin: 'admin',
+  finances: 'admin',
   delivrabilite: 'delivrabilite',
+  responsable_technique: 'delivrabilite',
+  back_office: 'delivrabilite',
+  technicien: 'delivrabilite',
 }
 
 type Props = {

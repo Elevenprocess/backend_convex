@@ -13,30 +13,56 @@ import type { InvitationResponse, Role, Team, UserResponse } from '../lib/types'
 
 const ROLE_BADGE: Record<Role, string> = {
   setter: 'bg-cuivre-tint text-cuivre',
+  setter_lead: 'bg-cuivre-tint text-cuivre',
   commercial: 'bg-info-tint text-info',
+  commercial_lead: 'bg-or-tint text-or-dark',
   admin: 'bg-rouille-tint text-rouille',
   delivrabilite: 'bg-info-tint text-info',
+  responsable_technique: 'bg-info-tint text-info',
+  back_office: 'bg-info-tint text-info',
+  technicien: 'bg-info-tint text-info',
+  finances: 'bg-rouille-tint text-rouille',
 }
 
 const ROLE_LABEL: Record<Role, string> = {
   setter: 'Setter',
+  setter_lead: 'Setter Lead',
   commercial: 'Commercial',
+  commercial_lead: 'Commercial Lead',
   admin: 'Admin',
   delivrabilite: 'Délivrabilité',
+  responsable_technique: 'Responsable technique',
+  back_office: 'Back office',
+  technicien: 'Technicien',
+  finances: 'Finances',
 }
 
 const ROLE_TINT: Record<Role, string> = {
   setter: 'bg-cuivre-tint',
+  setter_lead: 'bg-cuivre-tint',
   commercial: 'bg-info-tint',
+  commercial_lead: 'bg-or-tint',
   admin: 'bg-rouille-tint',
   delivrabilite: 'bg-info-tint',
+  responsable_technique: 'bg-info-tint',
+  back_office: 'bg-info-tint',
+  technicien: 'bg-info-tint',
+  finances: 'bg-rouille-tint',
 }
 
+// Mapping source de vérité côté backend : src/scripts/airtable/mappings.ts → mapTeam().
+// 'delivrabilite' (deprecated) conservé pour les users existants — pas proposé à la création.
 const TEAM_BY_ROLE: Record<Role, NonNullable<Team>> = {
   setter: 'setting',
+  setter_lead: 'setting',
   commercial: 'closing',
+  commercial_lead: 'closing',
   admin: 'admin',
+  finances: 'admin',
   delivrabilite: 'delivrabilite',
+  responsable_technique: 'delivrabilite',
+  back_office: 'delivrabilite',
+  technicien: 'delivrabilite',
 }
 
 export function Settings() {
@@ -113,9 +139,15 @@ function SettingsAdmin() {
 
   const counts = useMemo(() => ({
     total: team.length,
-    setters: team.filter((m) => m.role === 'setter').length,
-    commerciaux: team.filter((m) => m.role === 'commercial').length,
-    admins: team.filter((m) => m.role === 'admin').length,
+    setters: team.filter((m) => m.role === 'setter' || m.role === 'setter_lead').length,
+    commerciaux: team.filter((m) => m.role === 'commercial' || m.role === 'commercial_lead').length,
+    ops: team.filter((m) =>
+      m.role === 'delivrabilite'
+      || m.role === 'responsable_technique'
+      || m.role === 'back_office'
+      || m.role === 'technicien'
+    ).length,
+    admins: team.filter((m) => m.role === 'admin' || m.role === 'finances').length,
   }), [team])
 
   return (
@@ -129,11 +161,12 @@ function SettingsAdmin() {
       </div>
 
       <main className="p-4 sm:p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-6">
           <CountCard value={counts.total.toString()} label="UTILISATEURS" highlight />
           <CountCard value={counts.setters.toString()} label="SETTERS" />
           <CountCard value={counts.commerciaux.toString()} label="COMMERCIAUX" />
-          <CountCard value={counts.admins.toString()} label="ADMIN" />
+          <CountCard value={counts.ops.toString()} label="OPS / DÉLIV." />
+          <CountCard value={counts.admins.toString()} label="ADMIN / FIN." />
         </div>
 
         <div className="glass-card p-6">
@@ -273,10 +306,23 @@ function InviteModal({ onClose, onInvited }: { onClose: () => void; onInvited: (
         <label className="block text-sm">
           <span className="eyebrow text-faint">Rôle</span>
           <select value={role} onChange={(e) => setRole(e.target.value as Role)} className="mt-1 w-full rounded-xl border border-line bg-white/70 px-3 py-2 outline-none focus:border-or">
-            <option value="setter">Setter</option>
-            <option value="commercial">Commercial</option>
-            <option value="delivrabilite">Délivrabilité</option>
-            <option value="admin">Admin</option>
+            <optgroup label="Setting">
+              <option value="setter">Setter</option>
+              <option value="setter_lead">Setter Lead</option>
+            </optgroup>
+            <optgroup label="Closing">
+              <option value="commercial">Commercial</option>
+              <option value="commercial_lead">Commercial Lead</option>
+            </optgroup>
+            <optgroup label="Délivrabilité">
+              <option value="responsable_technique">Responsable technique</option>
+              <option value="back_office">Back office</option>
+              <option value="technicien">Technicien</option>
+            </optgroup>
+            <optgroup label="Administration">
+              <option value="finances">Finances</option>
+              <option value="admin">Admin</option>
+            </optgroup>
           </select>
         </label>
 

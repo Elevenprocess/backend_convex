@@ -4,7 +4,17 @@ import { useAuth } from './auth'
 // On garde la signature `useRole((s) => s.role)` pour compatibilité avec les pages qui
 // n'ont pas encore été migrées vers useAuth directement.
 
-export type Role = 'admin' | 'setter' | 'commercial' | 'delivrabilite'
+export type Role =
+  | 'admin'
+  | 'setter'
+  | 'setter_lead'
+  | 'commercial'
+  | 'commercial_lead'
+  | 'delivrabilite'
+  | 'responsable_technique'
+  | 'back_office'
+  | 'technicien'
+  | 'finances'
 
 type RoleSliceShape = {
   role: Role
@@ -20,8 +30,14 @@ export function useRole<T>(selector: (s: RoleSliceShape) => T): T {
 export const ROLE_LABELS: Record<Role, string> = {
   admin: 'Admin',
   setter: 'Setter',
+  setter_lead: 'Setter Lead',
   commercial: 'Commercial',
+  commercial_lead: 'Commercial Lead',
   delivrabilite: 'Délivrabilité',
+  responsable_technique: 'Responsable technique',
+  back_office: 'Back office',
+  technicien: 'Technicien',
+  finances: 'Finances',
 }
 
 export type Team = 'setting' | 'closing' | 'admin' | 'delivrabilite' | null
@@ -46,8 +62,14 @@ export function teamLabel(team: Team): string {
 export const ROLE_USERS: Record<Role, { name: string; firstName: string; initials: string; tint: string }> = {
   admin: { name: 'Admin', firstName: 'Admin', initials: 'AD', tint: 'bg-info-tint' },
   setter: { name: 'Setter', firstName: 'Setter', initials: 'ST', tint: 'bg-cuivre-tint' },
+  setter_lead: { name: 'Setter Lead', firstName: 'Setter', initials: 'SL', tint: 'bg-cuivre-tint' },
   commercial: { name: 'Commercial', firstName: 'Commercial', initials: 'CO', tint: 'bg-or-tint' },
-  delivrabilite: { name: 'Délivrabilité', firstName: 'Déliv', tint: 'bg-info-tint', initials: 'DV' },
+  commercial_lead: { name: 'Commercial Lead', firstName: 'Commercial', initials: 'CL', tint: 'bg-or-tint' },
+  delivrabilite: { name: 'Délivrabilité', firstName: 'Déliv', initials: 'DV', tint: 'bg-info-tint' },
+  responsable_technique: { name: 'Responsable technique', firstName: 'Resp.', initials: 'RT', tint: 'bg-info-tint' },
+  back_office: { name: 'Back office', firstName: 'Back', initials: 'BO', tint: 'bg-info-tint' },
+  technicien: { name: 'Technicien', firstName: 'Tech.', initials: 'TC', tint: 'bg-info-tint' },
+  finances: { name: 'Finances', firstName: 'Finances', initials: 'FI', tint: 'bg-rouille-tint' },
 }
 
 // Retourne les infos d'affichage construites depuis la vraie session quand dispo.

@@ -43,8 +43,14 @@ const SIDEBAR_STORAGE_KEY = 'ecoi.sidebar.expanded'
 const ROLE_TAG: Record<Role, string> = {
   admin: 'Administration',
   setter: 'Setter',
+  setter_lead: 'Setter Lead',
   commercial: 'Commercial',
+  commercial_lead: 'Commercial Lead',
   delivrabilite: 'Délivrabilité',
+  responsable_technique: 'Responsable technique',
+  back_office: 'Back office',
+  technicien: 'Technicien',
+  finances: 'Finances',
 }
 
 export function Sidebar() {

@@ -1,6 +1,16 @@
 // Types alignés sur les réponses du backend NestJS (toLeadResponse, toRdvResponse, toUserResponse).
 
-export type Role = 'admin' | 'setter' | 'commercial' | 'delivrabilite'
+export type Role =
+  | 'admin'
+  | 'setter'
+  | 'setter_lead'
+  | 'commercial'
+  | 'commercial_lead'
+  | 'delivrabilite'
+  | 'responsable_technique'
+  | 'back_office'
+  | 'technicien'
+  | 'finances'
 export type Team = 'setting' | 'closing' | 'admin' | 'delivrabilite' | null
 
 export type UserResponse = {
