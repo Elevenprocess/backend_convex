@@ -312,27 +312,26 @@ function AnalyticsAdmin() {
           <BigStatCard label="CA SIGNÉ" value={fmtKEur(stats.ca)} delta={`${stats.signed} ventes signées`} sub={fmtFullEur(stats.ca)} accent="gold" icon="trophy" trend={stats.dailyEvolution.map((d) => d.ca)} />
         </div>
 
-        <div className="grid grid-cols-12 gap-6 items-stretch">
-          <div className="col-span-12 xl:col-span-7">
+        <div className="grid grid-cols-12 gap-6 items-start">
+          <div className="col-span-12 md:col-span-7">
             <AnalyticsStatsTable title="Tableau statistiques global" rows={adminTableRows(stats)} />
           </div>
-        </div>
-
-        <div className="grid grid-cols-12 gap-6">
-          <div className="glass-card p-6 col-span-12 xl:col-span-7">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold">Camembert OLAP — issues d'appel & statuts</h3>
-              <span className="eyebrow">appels réels + statuts CRM</span>
+          <div className="col-span-12 md:col-span-5 flex flex-col gap-6">
+            <div className="glass-card p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold">Camembert OLAP — issues d'appel & statuts</h3>
+                <span className="eyebrow">appels réels enregistrés</span>
+              </div>
+              <PieChart segments={stats.resultSegments} center={`${stats.loggedCalls}\nappels réels`} />
             </div>
-            <PieChart segments={stats.resultSegments} center={`${stats.calls}\nappels`} />
-          </div>
-          <div className="glass-card p-6 col-span-12 xl:col-span-5">
-            <h3 className="font-bold mb-4">ETL qualité data</h3>
-            <div className="space-y-4">
-              <Goal label="Couverture traitement" value={`${stats.classified} traités / ${stats.calls} appels`} pct={pct(stats.classified, stats.calls)} color="#1F7857" />
-              <Goal label="Qualification" value={`${stats.qualified} qualifiés`} pct={stats.qualificationRate} color="#3DA86A" />
-              <Goal label="RDV / qualifiés" value={`${stats.rdvPris} opérationnels · ${stats.scheduledRdv} calendrier`} pct={stats.rdvRate} color="#3E9A6F" />
-              <Row label="Leads non traités" value={String(stats.unclassified)} />
+            <div className="glass-card p-6">
+              <h3 className="font-bold mb-4">ETL qualité data</h3>
+              <div className="space-y-4">
+                <Goal label="Couverture traitement" value={`${stats.classified} traités / ${stats.loggedCalls} appels réels`} pct={pct(stats.classified, stats.loggedCalls)} color="#1F7857" />
+                <Goal label="Qualification" value={`${stats.qualified} qualifiés`} pct={stats.qualificationRate} color="#3DA86A" />
+                <Goal label="RDV / qualifiés" value={`${stats.rdvPris} opérationnels · ${stats.scheduledRdv} calendrier`} pct={stats.rdvRate} color="#3E9A6F" />
+                <Row label="Leads non traités" value={String(stats.unclassified)} />
+              </div>
             </div>
           </div>
         </div>
