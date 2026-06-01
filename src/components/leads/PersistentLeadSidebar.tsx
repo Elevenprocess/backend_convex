@@ -1,6 +1,7 @@
 import { useLocation } from 'react-router-dom'
 import { SplitPanel } from '../SplitPanel'
 import { CommercialLeadPanel } from './CommercialLeadPanel'
+import { CommercialDebriefSidebar } from './CommercialDebriefSidebar'
 import { useLead, useLeads, useUsers } from '../../lib/hooks'
 import { useAuth } from '../../lib/auth'
 import { useLeadSidebar } from '../../lib/leadSidebar'
@@ -60,20 +61,32 @@ export function PersistentLeadSidebar() {
   // riche (projets + devis + débriefs + photos + docs). Le manager travaille
   // toujours sur les leads, juste avec une vue toute l'équipe en amont.
   if (role === 'commercial' || role === 'commercial_lead') {
+    // Déterminer quel sidebar afficher en fonction du chemin
+    const isClientPage = hashPath.startsWith('/client')
+    
     return (
       <>
         <button
           type="button"
-          aria-label="Fermer le débriefing"
+          aria-label={isClientPage ? 'Fermer le débrief' : 'Fermer le débriefing'}
           onClick={closeSidebar}
           className="fixed inset-0 z-[135] bg-text/40 backdrop-blur-sm md:hidden"
         />
-        <CommercialLeadPanel
-          lead={displayLead}
-          onClose={closeSidebar}
-          onSaved={refetch}
-          className="fixed top-0 right-0 bottom-0 z-[140]"
-        />
+        {isClientPage ? (
+          <CommercialDebriefSidebar
+            lead={displayLead}
+            onClose={closeSidebar}
+            onSaved={refetch}
+            className="fixed top-0 right-0 bottom-0 z-[140]"
+          />
+        ) : (
+          <CommercialLeadPanel
+            lead={displayLead}
+            onClose={closeSidebar}
+            onSaved={refetch}
+            className="fixed top-0 right-0 bottom-0 z-[140]"
+          />
+        )}
       </>
     )
   }

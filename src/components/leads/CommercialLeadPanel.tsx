@@ -7,6 +7,7 @@ import { ProjectDetailView } from './project/ProjectDetailView'
 import {
   ApiError,
   createProject,
+  createLeadDebrief,
   listProjectsByLead,
   uploadDevis,
 } from '../../lib/api'
@@ -84,6 +85,42 @@ export function CommercialLeadPanel({
     setRefreshKey((k) => k + 1)
   }
 
+  async function handleDebriefSubmit(
+    payload: any,
+    outcome: 'vente' | 'non_vente',
+  ) {
+    let projectToOpen: ProjectResponse | null = null
+
+    if (outcome === 'vente') {
+      // Vente → créer le projet automatiquement
+      const defaultAddress = [lead.addressLine, lead.postalCode, lead.city]
+        .filter(Boolean)
+        .join(', ')
+      const projectName = `${lead.firstName || 'Prospect'} ${lead.lastName || ''} - ${new Date().toLocaleDateString('fr-FR')}`
+      projectToOpen = await createProject({
+        leadId: lead.id,
+        name: projectName.trim(),
+        addressLine: defaultAddress || null,
+      })
+      payload.projectId = projectToOpen.id
+    }
+
+    // Créer le débrief (avec ou sans projectId)
+    await createLeadDebrief(lead.id, payload)
+
+    onSaved?.()
+    refreshProjects()
+
+    if (projectToOpen) {
+      // Vente → rediriger vers le projet créé
+      onClose()
+      navigate(`/projects/${projectToOpen.id}`)
+    } else {
+      // Non-vente → fermer la sidebar
+      onClose()
+    }
+  }
+
   if (view === 'debrief') {
     return (
       <CommercialDebriefSidebar
@@ -94,6 +131,7 @@ export function CommercialLeadPanel({
           onSaved?.()
           refreshProjects()
         }}
+        onSubmitFromFiche={handleDebriefSubmit}
         className={className}
       />
     )

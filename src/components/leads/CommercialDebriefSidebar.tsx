@@ -1072,6 +1072,7 @@ function formToDebriefPayload(form: FormState, rdvId: string | null) {
       ? form.quoteAmount.trim().replace(',', '.')
       : null
   return {
+    projectId: null as string | null,
     rdvId,
     outcome: (isVente ? 'vente' : 'non_vente') as 'vente' | 'non_vente',
     // nonSaleReason est conservé pour TOUS les motifs non-vente (y compris

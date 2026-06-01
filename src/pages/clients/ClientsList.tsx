@@ -136,6 +136,19 @@ export function ClientsList() {
     [usersData],
   )
 
+  // Vue admin / responsable commercial : on affiche le commercial attribué sur
+  // chaque carte. Priorité au commercial assigné, repli sur celui du dernier RDV
+  // (même logique que les compteurs « Par commercial »).
+  const userNameById = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const u of usersData ?? []) map.set(u.id, u.name)
+    return map
+  }, [usersData])
+  const commercialNameForLead = (l: LeadResponse): string | null => {
+    const id = l.assignedToId ?? l.latestRdvCommercialId
+    return id ? userNameById.get(id) ?? null : null
+  }
+
   const matchStatus = (l: LeadResponse, f: ClientStatusFilter) => f === 'all' || clientBucketForLead(l) === f
   const matchDoc = (l: LeadResponse, f: ClientDocFilter) =>
     f === 'all' || (f === 'devis' ? l.hasDevis === true : l.hasDebrief === true)
@@ -261,7 +274,13 @@ export function ClientsList() {
           ) : (
             <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {clients.map((c) => (
-                <ClientCard key={c.id} client={c} selected={selectedId === c.id} onClick={() => selectLead(c.id)} />
+                <ClientCard
+                  key={c.id}
+                  client={c}
+                  selected={selectedId === c.id}
+                  onClick={() => selectLead(c.id)}
+                  commercialName={isManager ? commercialNameForLead(c) : null}
+                />
               ))}
             </div>
           )}
@@ -271,7 +290,7 @@ export function ClientsList() {
   )
 }
 
-function ClientCard({ client, selected, onClick }: { client: LeadResponse; selected: boolean; onClick: () => void }) {
+function ClientCard({ client, selected, onClick, commercialName }: { client: LeadResponse; selected: boolean; onClick: () => void; commercialName?: string | null }) {
   // Une fois le projet signé transmis à la délivrabilité, le badge reflète
   // l'avancement du dossier (VT à faire, Installation planifiée…) plutôt que
   // le statut commercial 'Signé'.
@@ -309,6 +328,12 @@ function ClientCard({ client, selected, onClick }: { client: LeadResponse; selec
           <div className="flex items-start gap-1.5">
             <Icon name="clock" size={12} className="mt-0.5 shrink-0 text-faint" />
             <span className="truncate">Transféré le {fullDateTime(client.transferredAt)}</span>
+          </div>
+        )}
+        {commercialName && (
+          <div className="flex items-start gap-1.5">
+            <Icon name="users" size={12} className="mt-0.5 shrink-0 text-faint" />
+            <span className="truncate" title={`Commercial : ${commercialName}`}>{commercialName}</span>
           </div>
         )}
       </div>
