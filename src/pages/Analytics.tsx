@@ -196,10 +196,6 @@ function AnalyticsSetter({ name }: { name: string }) {
           <div className="col-span-12 xl:col-span-7">
             <AnalyticsStatsTable title="Tableau statistiques setter" rows={setterTableRows(stats)} />
           </div>
-          <EvolutionChart title="Courbes d'évolution setter" data={stats.dailyEvolution} hourlyCalls={stats.hourlyCalls} series={[
-            { key: 'calls', label: 'Appels', color: '#1F7857' },
-            { key: 'rdv', label: 'RDV', color: '#3E9A6F' },
-          ]} />
         </div>
 
         <div className="grid grid-cols-12 gap-6">
@@ -321,11 +317,6 @@ function AnalyticsAdmin() {
           <div className="col-span-12 xl:col-span-7">
             <AnalyticsStatsTable title="Tableau statistiques global" rows={adminTableRows(stats)} />
           </div>
-          <EvolutionChart title="Courbes d'évolution globales" data={stats.dailyEvolution} hourlyCalls={stats.hourlyCalls} series={[
-            { key: 'calls', label: 'Appels', color: '#1F7857' },
-            { key: 'rdv', label: 'RDV', color: '#3E9A6F' },
-            { key: 'signed', label: 'Ventes', color: '#3DA86A' },
-          ]} />
         </div>
 
         <div className="grid grid-cols-12 gap-6">
