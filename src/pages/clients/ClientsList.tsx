@@ -118,9 +118,14 @@ export function ClientsList() {
   // tout le portefeuille (comme un commercial_lead), pas seulement les clients qui
   // lui seraient assignés — sinon la liste est vide (« Aucun client assigné »).
   const isManager = me?.role === 'commercial_lead' || me?.role === 'admin'
+  // Page client : on ne charge QUE les leads arrivés au RDV planifié et au-delà
+  // (chemin positif), filtré côté backend via scope=clients. limit relevée car le
+  // chemin positif dépasse 250 → sinon les compteurs du rail seraient tronqués.
   const leadsFilter = isManager
-    ? { limit: 250 }
-    : me?.id ? { assignedToId: me.id, limit: 250 } : { limit: 250 }
+    ? { scope: 'clients' as const, limit: 1000 }
+    : me?.id
+      ? { assignedToId: me.id, scope: 'clients' as const, limit: 1000 }
+      : { scope: 'clients' as const, limit: 1000 }
   const { data, loading, error } = useLeads(leadsFilter)
   const { data: usersData } = useUsers()
   const allClients = data ?? []
