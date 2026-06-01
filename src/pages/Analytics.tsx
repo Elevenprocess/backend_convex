@@ -306,10 +306,9 @@ function AnalyticsAdmin() {
         <PeriodSelector value={period} onChange={setPeriod} />
       </div>
       <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 overflow-y-auto space-y-4 sm:space-y-6 flex-grow">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-          <BigStatCard label="APPELS TRAITÉS" value={fmtInt(stats.calls)} delta={`${stats.loggedCalls} réels`} sub={`${stats.syntheticCalls} déduits des statuts CRM`} accent="green" icon="phone" trend={stats.dailyEvolution.map((d) => d.calls)} />
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
           <BigStatCard label="LEADS TRAITÉS" value={fmtInt(stats.classified)} delta={`${stats.qualificationRate}%`} deltaTone="info" sub={`${stats.qualificationRate}% deviennent qualifiés`} accent="info" icon="users" progress={stats.qualificationRate} />
-          <BigStatCard label="RDV / QUALIFIÉS" value={fmtInt(stats.rdvPris)} delta={`${stats.scheduledRdv} calendrier`} deltaTone="info" sub={`${stats.rdvRate}% / appels traités`} accent="success" icon="calendar" trend={stats.dailyEvolution.map((d) => d.rdv)} />
+          <BigStatCard label="RDV / QUALIFIÉS" value={fmtInt(stats.rdvPris)} delta={`${stats.scheduledRdv} calendrier`} deltaTone="info" sub={`${stats.rdvRate}% de conversion`} accent="success" icon="calendar" trend={stats.dailyEvolution.map((d) => d.rdv)} />
           <BigStatCard label="CA SIGNÉ" value={fmtKEur(stats.ca)} delta={`${stats.signed} ventes signées`} sub={fmtFullEur(stats.ca)} accent="gold" icon="trophy" trend={stats.dailyEvolution.map((d) => d.ca)} />
         </div>
 
@@ -673,9 +672,8 @@ function commercialTableRows(stats: AnalyticsCommercialSummary) {
 function adminTableRows(stats: AnalyticsAdminSummary) {
   return [
     ['Appels réels enregistrés', fmtInt(stats.loggedCalls), 'Appels réellement créés dans les logs sur la période'],
-    ['Appels traités total', fmtInt(stats.calls), `${stats.loggedCalls} réels + ${stats.syntheticCalls} déduits des statuts CRM`],
     ['Leads traités', fmtInt(stats.classified), 'Leads qui ont eu un vrai statut : qualifié, relance, refus ou RDV'],
-    ['Leads qualifiés', fmtInt(stats.qualified), `${stats.qualificationRate}% des appels traités deviennent qualifiés`],
+    ['Leads qualifiés', fmtInt(stats.qualified), `${stats.qualificationRate}% des leads traités deviennent qualifiés`],
     ['RDV calendrier', fmtInt(stats.scheduledRdv), 'RDV réellement présents dans le calendrier/CRM sur la période'],
     ['RDV / qualifiés opérationnels', fmtInt(stats.rdvPris), `${stats.rdvRate}% appel → RDV ou qualification`],
     ['Ventes signées', fmtInt(stats.signed), 'Nombre de dossiers signés après RDV honoré'],
