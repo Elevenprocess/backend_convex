@@ -1,6 +1,7 @@
 import type {
   DebriefResponse,
   Devis,
+  LeadResponse,
   ProjectAttachmentKind,
   ProjectAttachmentResponse,
   ProjectDetailResponse,
@@ -177,6 +178,14 @@ export function parseProjectMeta(filename: string): { name: string; address: str
     return { name: parts[0], address: null, rawFilename: parts[1] }
   }
   return { name: filename.replace(/\.pdf$/i, ''), address: null, rawFilename: filename }
+}
+
+// ─── Leads : attribution / partage ───────────────────────
+// « Donner » un client à un commercial = transfert de propriété (leads.assignedToId).
+// Côté backend, les RDV à venir suivent le client (cf. spec attribution-partage-client).
+// Réservé admin / commercial_lead (garde @Roles côté API).
+export function assignLeadToCommercial(leadId: string, commercialId: string): Promise<LeadResponse> {
+  return api<LeadResponse>(`/leads/${leadId}/assign`, { method: 'POST', body: { commercialId } })
 }
 
 export function getDevis(devisId: string): Promise<Devis> {

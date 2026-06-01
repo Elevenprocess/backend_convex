@@ -12,6 +12,7 @@ import { useLeadSidebar } from '../../lib/leadSidebar'
 import type { LeadDateField } from '../../lib/leadFilters'
 import { fullName, type LeadResponse, type UserResponse } from '../../lib/types'
 import { clientBucketForLead, clientStatusBadge, type ClientBucket } from '../../lib/clientStatus'
+import { AssignCommercialModal } from '../../components/leads/AssignCommercialModal'
 
 // ─── Types ────────────────────────────────────────────────
 type ClientStatusFilter = 'all' | ClientBucket
@@ -135,6 +136,8 @@ export function ClientsList() {
   const [dateFieldFilter, setDateFieldFilter] = useState<LeadDateField>('arrival')
   const [commercialFilter, setCommercialFilter] = useState<string>('all')
   const [query, setQuery] = useState('')
+  // Client en cours d'attribution (responsable commercial / admin uniquement).
+  const [assignTarget, setAssignTarget] = useState<LeadResponse | null>(null)
 
   const teamCommerciaux = useMemo(
     () => (usersData ?? []).filter((u) => (u.role === 'commercial' || u.role === 'commercial_lead') && u.active),
@@ -285,17 +288,26 @@ export function ClientsList() {
                   selected={selectedId === c.id}
                   onClick={() => selectLead(c.id)}
                   commercialName={isManager ? commercialNameForLead(c) : null}
+                  onAssign={isManager ? () => setAssignTarget(c) : undefined}
                 />
               ))}
             </div>
           )}
         </main>
       </div>
+
+      {assignTarget && (
+        <AssignCommercialModal
+          lead={assignTarget}
+          commerciaux={teamCommerciaux}
+          onClose={() => setAssignTarget(null)}
+        />
+      )}
     </AppShell>
   )
 }
 
-function ClientCard({ client, selected, onClick, commercialName }: { client: LeadResponse; selected: boolean; onClick: () => void; commercialName?: string | null }) {
+function ClientCard({ client, selected, onClick, commercialName, onAssign }: { client: LeadResponse; selected: boolean; onClick: () => void; commercialName?: string | null; onAssign?: () => void }) {
   // Une fois le projet signé transmis à la délivrabilité, le badge reflète
   // l'avancement du dossier (VT à faire, Installation planifiée…) plutôt que
   // le statut commercial 'Signé'.
@@ -303,11 +315,12 @@ function ClientCard({ client, selected, onClick, commercialName }: { client: Lea
   const address = addressFull(client)
   const rdv = rdvLabel(client)
   return (
+    <div className="relative h-full">
     <button
       type="button"
       onClick={onClick}
       title="Cliquer pour ouvrir le débriefing commercial"
-      className={`glass-card !p-4 text-left transition-all ${selected ? 'ring-2 ring-or shadow-lg' : 'hover:bg-white/70 hover:shadow'}`}
+      className={`glass-card !p-4 text-left transition-all w-full h-full ${selected ? 'ring-2 ring-or shadow-lg' : 'hover:bg-white/70 hover:shadow'}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
@@ -316,7 +329,7 @@ function ClientCard({ client, selected, onClick, commercialName }: { client: Lea
         </div>
         <span className={`status-badge ${badgeClass} shrink-0 text-[10px]`}>{badgeLabel}</span>
       </div>
-      <div className="mt-2 space-y-1 text-[11px] text-muted">
+      <div className={`mt-2 space-y-1 text-[11px] text-muted ${onAssign ? 'pb-7' : ''}`}>
         {address !== '—' && (
           <div className="flex items-start gap-1.5">
             <Icon name="map-pin" size={12} className="mt-0.5 shrink-0 text-faint" />
@@ -343,6 +356,19 @@ function ClientCard({ client, selected, onClick, commercialName }: { client: Lea
         )}
       </div>
     </button>
+      {onAssign && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onAssign() }}
+          title="Donner ce client à un commercial"
+          aria-label="Donner ce client à un commercial"
+          className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full border border-line bg-white/90 px-2.5 py-1 text-[10px] font-bold text-muted hover:border-or hover:text-or-dark shadow-sm"
+        >
+          <Icon name="users" size={12} />
+          Donner à…
+        </button>
+      )}
+    </div>
   )
 }
 

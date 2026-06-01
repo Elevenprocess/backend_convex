@@ -28,6 +28,7 @@ import { useAuth } from '../../lib/auth'
 import { leadListPath } from '../../lib/leadPaths'
 import { CommercialDebriefSidebar } from '../../components/leads/CommercialDebriefSidebar'
 import { DebriefRow } from '../../components/leads/project/ProjectDebriefsTab'
+import { AssignCommercialModal } from '../../components/leads/AssignCommercialModal'
 
 type TimelineItem = {
   icon: IconName
@@ -64,6 +65,7 @@ export function LeadDetail() {
   const [debriefRefreshKey, setDebriefRefreshKey] = useState(0)
   const [debriefOpen, setDebriefOpen] = useState(false)
   const [postSaleModal, setPostSaleModal] = useState(false)
+  const [assignOpen, setAssignOpen] = useState(false)
   // Attribution d'un débrief fait depuis la fiche (sans RDV) : payload en attente
   // + sélecteur de projet quand un choix est nécessaire.
   const [pendingDebrief, setPendingDebrief] = useState<{ payload: DebriefDraft; outcome: 'vente' | 'non_vente' } | null>(null)
@@ -152,6 +154,11 @@ export function LeadDetail() {
   // statut setter brut (« Sans réponse »…), seulement la terminologie commerciale.
   // Côté setter/admin (pages leads), on garde le statut setter d'origine.
   const isCommercialView = role === 'commercial' || role === 'commercial_lead'
+  // Seuls le responsable commercial et l'admin peuvent donner/réattribuer un client.
+  const isManager = role === 'commercial_lead' || role === 'admin'
+  const teamCommerciaux = (users ?? []).filter(
+    (u) => (u.role === 'commercial' || u.role === 'commercial_lead') && u.active,
+  )
   const statusBadge = isCommercialView
     ? clientStatusBadge(lead)
     : lead.delivrabiliteStatus
@@ -236,9 +243,22 @@ export function LeadDetail() {
                   : <span className="text-faint">Non assigné</span>}
               </Row>
               <Row label="Commercial">
-                {commercial
-                  ? <PersonChip name={commercial.name} tint="bg-or-tint" />
-                  : <span className="text-faint">Non assigné</span>}
+                <div className="flex items-center justify-end gap-2">
+                  {commercial
+                    ? <PersonChip name={commercial.name} tint="bg-or-tint" />
+                    : <span className="text-faint">Non assigné</span>}
+                  {isManager && (
+                    <button
+                      type="button"
+                      onClick={() => setAssignOpen(true)}
+                      title="Donner ce client à un commercial"
+                      className="inline-flex items-center gap-1 rounded-full border border-line bg-white px-2.5 py-1 text-[10px] font-bold text-muted hover:border-or hover:text-or-dark"
+                    >
+                      <Icon name="users" size={12} />
+                      {commercial ? 'Réattribuer' : 'Donner à…'}
+                    </button>
+                  )}
+                </div>
               </Row>
               <Row label="Source"><span className="font-semibold">{prettySource(lead)}</span></Row>
               {lead.utmSource && <Row label="UTM"><span className="font-mono text-xs">{lead.utmSource}</span></Row>}
@@ -361,6 +381,14 @@ export function LeadDetail() {
           }}
           onCreateNew={() => { setAttributionMode(null); setPostSaleModal(true) }}
           onClose={() => { setAttributionMode(null); setPendingDebrief(null) }}
+        />
+      )}
+
+      {assignOpen && (
+        <AssignCommercialModal
+          lead={lead}
+          commerciaux={teamCommerciaux}
+          onClose={() => setAssignOpen(false)}
         />
       )}
 

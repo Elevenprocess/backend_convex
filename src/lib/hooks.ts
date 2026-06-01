@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, ApiError } from './api'
+import { api, ApiError, assignLeadToCommercial } from './api'
 import { notifyClipboardCopied } from './clipboardToast'
 import { notifyRealtimeRefresh, REALTIME_REFRESH_EVENT, type RealtimeRefreshPayload } from './realtime'
 import { useNetworkActivity } from './networkActivity'
@@ -666,6 +666,18 @@ export async function updateLead(id: string, input: UpdateLeadInput): Promise<Le
 
 export async function deleteLead(id: string): Promise<{ ok: true }> {
   return api<{ ok: true }>(`/leads/${id}`, { method: 'DELETE' })
+}
+
+// « Donner » un client à un commercial (transfert de propriété + RDV à venir).
+// On rafraîchit /leads ET /rdv : côté backend les RDV futurs changent de commercial.
+export async function assignLead(leadId: string, commercialId: string): Promise<LeadResponse> {
+  const updated = await assignLeadToCommercial(leadId, commercialId)
+  updateLeadCaches(updated)
+  notifyRealtimeRefresh({
+    event: 'lead:assigned',
+    paths: ['/leads', '/rdv', '/analytics/summary', '/analytics/funnel', '/ghl-calendar/events'],
+  })
+  return updated
 }
 
 export type CreateRdvInput = {
