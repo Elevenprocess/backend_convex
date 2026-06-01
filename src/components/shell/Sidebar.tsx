@@ -17,6 +17,7 @@ const SECTIONS: Section[] = [
     items: [
       { to: '/overview', icon: 'home', label: 'Overview' },
       { to: '/leads', icon: 'users', label: 'Leads' },
+      { to: '/client', icon: 'inbox', label: 'Clients', roles: ['admin'] },
       { to: '/rdv', icon: 'calendar', label: 'RDV' },
     ],
   },
