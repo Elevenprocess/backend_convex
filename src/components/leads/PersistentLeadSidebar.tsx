@@ -12,7 +12,8 @@ export function PersistentLeadSidebar() {
   const selectedLeadId = useLeadSidebar((s) => s.selectedLeadId)
   const sidebarOpen = useLeadSidebar((s) => s.sidebarOpen)
   const closeSidebar = useLeadSidebar((s) => s.closeSidebar)
-  const sidebarAllowed = location.pathname.startsWith('/leads') || location.pathname.startsWith('/client') || location.pathname.startsWith('/call')
+  const isClientRoute = location.pathname.startsWith('/client')
+  const sidebarAllowed = location.pathname.startsWith('/leads') || isClientRoute || location.pathname.startsWith('/call')
   const shouldRenderSidebar = Boolean(
     role &&
     selectedLeadId &&
@@ -40,7 +41,7 @@ export function PersistentLeadSidebar() {
         />
         <aside className="fixed top-0 right-0 bottom-0 z-[140] w-full md:w-[460px] md:max-w-[92vw] border-l border-line bg-white/95 p-6 shadow-2xl">
           <button type="button" onClick={closeSidebar} className="absolute right-4 top-4 text-xl text-muted hover:text-text">×</button>
-          <div className="eyebrow text-or">Lead</div>
+          <div className="eyebrow text-or">{isClientRoute ? 'Client' : 'Lead'}</div>
           <h2 className="mt-1 text-xl font-black">Ouverture du détail…</h2>
           <div className="mt-6 space-y-3">
             <div className="h-4 w-2/3 animate-pulse rounded bg-cream-darker" />
@@ -55,10 +56,9 @@ export function PersistentLeadSidebar() {
   const userMap = new Map<string, UserResponse>()
   for (const user of usersList ?? []) userMap.set(user.id, user)
 
-  // commercial + commercial_lead (responsable commercial) partagent la sidebar
-  // riche (projets + devis + débriefs + photos + docs). Le manager travaille
-  // toujours sur les leads, juste avec une vue toute l'équipe en amont.
-  if (role === 'commercial' || role === 'commercial_lead') {
+  // Sur la page /client, on veut la sidebar commerciale / client
+  // même pour les admins qui regardent le portefeuille client.
+  if (role === 'commercial' || role === 'commercial_lead' || isClientRoute) {
     return (
       <>
         <button
