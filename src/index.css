@@ -4118,6 +4118,7 @@ body {
 
 /* Accent aurora: a slow drifting tinted wash anchored to the accent corner. */
 .mkpi-aurora {
+  display: none;
   position: absolute;
   inset: -40% -10% auto auto;
   width: 78%;
