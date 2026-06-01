@@ -114,7 +114,10 @@ export function ClientsList() {
   const me = useAuth((s) => s.user)
   const selectedId = useLeadSidebar((s) => s.selectedLeadId)
   const selectLead = useLeadSidebar((s) => s.selectLead)
-  const isManager = me?.role === 'commercial_lead'
+  // L'admin accède à cette page via le lien « Clients » de la sidebar et doit voir
+  // tout le portefeuille (comme un commercial_lead), pas seulement les clients qui
+  // lui seraient assignés — sinon la liste est vide (« Aucun client assigné »).
+  const isManager = me?.role === 'commercial_lead' || me?.role === 'admin'
   const leadsFilter = isManager
     ? { limit: 250 }
     : me?.id ? { assignedToId: me.id, limit: 250 } : { limit: 250 }
