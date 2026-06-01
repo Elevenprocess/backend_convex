@@ -1,7 +1,6 @@
 import { useLocation } from 'react-router-dom'
 import { SplitPanel } from '../SplitPanel'
 import { CommercialLeadPanel } from './CommercialLeadPanel'
-import { CommercialDebriefSidebar } from './CommercialDebriefSidebar'
 import { useLead, useLeads, useUsers } from '../../lib/hooks'
 import { useAuth } from '../../lib/auth'
 import { useLeadSidebar } from '../../lib/leadSidebar'
@@ -13,8 +12,7 @@ export function PersistentLeadSidebar() {
   const selectedLeadId = useLeadSidebar((s) => s.selectedLeadId)
   const sidebarOpen = useLeadSidebar((s) => s.sidebarOpen)
   const closeSidebar = useLeadSidebar((s) => s.closeSidebar)
-  const hashPath = window.location.hash.replace(/^#/, '') || location.pathname
-  const sidebarAllowed = hashPath.startsWith('/leads') || hashPath.startsWith('/client') || hashPath.startsWith('/call')
+  const sidebarAllowed = location.pathname.startsWith('/leads') || location.pathname.startsWith('/client') || location.pathname.startsWith('/call')
   const shouldRenderSidebar = Boolean(
     role &&
     selectedLeadId &&
@@ -61,32 +59,20 @@ export function PersistentLeadSidebar() {
   // riche (projets + devis + débriefs + photos + docs). Le manager travaille
   // toujours sur les leads, juste avec une vue toute l'équipe en amont.
   if (role === 'commercial' || role === 'commercial_lead') {
-    // Déterminer quel sidebar afficher en fonction du chemin
-    const isClientPage = hashPath.startsWith('/client')
-    
     return (
       <>
         <button
           type="button"
-          aria-label={isClientPage ? 'Fermer le débrief' : 'Fermer le débriefing'}
+          aria-label="Fermer le débriefing"
           onClick={closeSidebar}
           className="fixed inset-0 z-[135] bg-text/40 backdrop-blur-sm md:hidden"
         />
-        {isClientPage ? (
-          <CommercialDebriefSidebar
-            lead={displayLead}
-            onClose={closeSidebar}
-            onSaved={refetch}
-            className="fixed top-0 right-0 bottom-0 z-[140]"
-          />
-        ) : (
-          <CommercialLeadPanel
-            lead={displayLead}
-            onClose={closeSidebar}
-            onSaved={refetch}
-            className="fixed top-0 right-0 bottom-0 z-[140]"
-          />
-        )}
+        <CommercialLeadPanel
+          lead={displayLead}
+          onClose={closeSidebar}
+          onSaved={refetch}
+          className="fixed top-0 right-0 bottom-0 z-[140]"
+        />
       </>
     )
   }
