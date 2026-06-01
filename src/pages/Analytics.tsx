@@ -269,11 +269,6 @@ function AnalyticsCommercial({ name }: { name: string }) {
           <div className="col-span-12 xl:col-span-7">
             <AnalyticsStatsTable title="Tableau statistiques commercial" rows={commercialTableRows(stats)} />
           </div>
-          <EvolutionChart title="Courbes d'évolution commercial" data={stats.dailyEvolution} series={[
-            { key: 'rdv', label: 'RDV', color: '#1F7857' },
-            { key: 'signed', label: 'Ventes', color: '#3DA86A' },
-            { key: 'ca', label: 'CA', color: '#3E9A6F' },
-          ]} />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
