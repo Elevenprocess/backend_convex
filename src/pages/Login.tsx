@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { useAuth } from '../lib/auth'
+import { useAuth, signInWithGoogle } from '../lib/auth'
 import { ApiError } from '../lib/api'
 import { Spinner } from '../components/Spinner'
 import Orb from '../components/visual/Orb'
@@ -10,12 +10,38 @@ export function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const signIn = useAuth((s) => s.signIn)
 
   const fromState = (location.state as { from?: string } | null)?.from
   const redirectTo = fromState && fromState !== '/login' ? fromState : '/overview'
+
+  // Retour d'un échec OAuth Google : better-auth redirige vers /login?error=...
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const err = params.get('error')
+    if (!err) return
+    setError(
+      err === 'signup_disabled'
+        ? "Aucun compte ECOI n'est associé à ce compte Google. Contactez votre administrateur."
+        : 'La connexion avec Google a échoué. Réessayez ou utilisez votre e-mail.',
+    )
+    window.history.replaceState({}, '', window.location.pathname)
+  }, [])
+
+  const handleGoogle = async () => {
+    if (googleLoading) return
+    setGoogleLoading(true)
+    setError(null)
+    try {
+      await signInWithGoogle() // redirige hors de la SPA
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'La connexion avec Google a échoué.')
+      setGoogleLoading(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -44,14 +70,11 @@ export function Login() {
           rotateOnHover
           hue={344}
           forceHoverState={false}
-          backgroundColor="#000000"
+          backgroundColor="#131f13"
           globalHover
         />
       </div>
 
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(255,255,255,0.05),transparent_34%),linear-gradient(180deg,rgba(0,0,0,0.58)_0%,rgba(0,0,0,0.22)_45%,rgba(0,0,0,0.76)_100%)]" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/80 to-transparent" />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/85 to-transparent" />
 
       <header className="relative z-10 flex h-20 items-center justify-between px-6 sm:px-10 lg:px-14">
         <Link to="/" className="flex items-center gap-3">
@@ -129,16 +152,23 @@ export function Login() {
 
               <button
                 type="button"
-                disabled
-                className="inline-flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-full border border-white/12 bg-white/[0.04] px-4 py-3 text-xs font-bold uppercase tracking-[0.16em] text-white/55 opacity-70"
+                onClick={handleGoogle}
+                disabled={googleLoading || submitting}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-white/12 bg-white/[0.06] px-4 py-3 text-xs font-bold uppercase tracking-[0.16em] text-white/75 transition hover:border-white/25 hover:bg-white/12 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                </svg>
-                Continuer avec Google (bientôt)
+                {googleLoading ? (
+                  <Spinner size={16} stroke={3} label="Redirection…" />
+                ) : (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
+                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                    </svg>
+                    Continuer avec Google
+                  </>
+                )}
               </button>
             </form>
 

@@ -47,9 +47,11 @@ export const useAuth = create<AuthState>((set, get) => ({
           const target = await api<UserResponse>(`/users/${persistedViewAsId}`)
           if (typeof window !== 'undefined') window.localStorage.setItem(VIEW_AS_KEY, persistedViewAsId)
 
-          // Règles : admin → n'importe qui ; commercial → setter (read-only).
+          // Règles : admin → n'importe qui ; commercial_lead → équipe commercial/setter ;
+          // commercial → setter (read-only).
           const allowed =
             me.role === 'admin' ||
+            (me.role === 'commercial_lead' && (target.role === 'commercial' || target.role === 'commercial_lead' || target.role === 'setter' || target.role === 'setter_lead')) ||
             (me.role === 'commercial' && target.role === 'setter')
           if (allowed) {
             overlay = target
@@ -110,8 +112,11 @@ export const useAuth = create<AuthState>((set, get) => ({
   viewAs: (target) => {
     const me = get().realUser
     if (!me || target.id === me.id) return
-    // admin = tout user ; commercial = setter (lecture seule garantie back-side).
-    const allowed = me.role === 'admin' || (me.role === 'commercial' && target.role === 'setter')
+    // admin = tout user ; commercial_lead = équipe commercial/setter ; commercial = setter (lecture seule garantie back-side).
+    const allowed =
+      me.role === 'admin' ||
+      (me.role === 'commercial_lead' && (target.role === 'commercial' || target.role === 'commercial_lead' || target.role === 'setter' || target.role === 'setter_lead')) ||
+      (me.role === 'commercial' && target.role === 'setter')
     if (!allowed) return
     if (typeof window !== 'undefined') window.localStorage.setItem(VIEW_AS_KEY, target.id)
     set({ viewAsUser: target, user: target })
@@ -123,6 +128,25 @@ export const useAuth = create<AuthState>((set, get) => ({
     set({ viewAsUser: null, user: real })
   },
 }))
+
+// Lance le flow OAuth Google (better-auth). Le back répond avec une URL
+// d'autorisation Google ; on y redirige le navigateur (pas de navigate SPA).
+// Au retour sur callbackURL, better-auth a posé le cookie de session et
+// hydrate() prend le relais. En cas d'échec (ex. email sans compte ECOI →
+// signup_disabled), Google renvoie vers errorCallbackURL=/login?error=...
+export async function signInWithGoogle(): Promise<void> {
+  const origin = window.location.origin
+  const res = await api<{ url?: string; redirect?: boolean }>('/api/auth/sign-in/social', {
+    method: 'POST',
+    body: {
+      provider: 'google',
+      callbackURL: `${origin}/overview`,
+      errorCallbackURL: `${origin}/login`,
+    },
+  })
+  if (!res.url) throw new ApiError(500, 'Réponse OAuth invalide')
+  window.location.href = res.url
+}
 
 // Rôle perçu (override par viewAs si actif).
 export function useRole(): Role | null {

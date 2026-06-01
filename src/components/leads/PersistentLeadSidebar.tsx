@@ -1,6 +1,6 @@
 import { useLocation } from 'react-router-dom'
 import { SplitPanel } from '../SplitPanel'
-import { CommercialDebriefSidebar } from './CommercialDebriefSidebar'
+import { CommercialLeadPanel } from './CommercialLeadPanel'
 import { useLead, useLeads, useUsers } from '../../lib/hooks'
 import { useAuth } from '../../lib/auth'
 import { useLeadSidebar } from '../../lib/leadSidebar'
@@ -13,7 +13,7 @@ export function PersistentLeadSidebar() {
   const sidebarOpen = useLeadSidebar((s) => s.sidebarOpen)
   const closeSidebar = useLeadSidebar((s) => s.closeSidebar)
   const hashPath = window.location.hash.replace(/^#/, '') || location.pathname
-  const sidebarAllowed = hashPath.startsWith('/leads') || hashPath.startsWith('/call')
+  const sidebarAllowed = hashPath.startsWith('/leads') || hashPath.startsWith('/client') || hashPath.startsWith('/call')
   const shouldRenderSidebar = Boolean(
     role &&
     selectedLeadId &&
@@ -56,7 +56,10 @@ export function PersistentLeadSidebar() {
   const userMap = new Map<string, UserResponse>()
   for (const user of usersList ?? []) userMap.set(user.id, user)
 
-  if (role === 'commercial') {
+  // commercial + commercial_lead (responsable commercial) partagent la sidebar
+  // riche (projets + devis + débriefs + photos + docs). Le manager travaille
+  // toujours sur les leads, juste avec une vue toute l'équipe en amont.
+  if (role === 'commercial' || role === 'commercial_lead') {
     return (
       <>
         <button
@@ -65,7 +68,7 @@ export function PersistentLeadSidebar() {
           onClick={closeSidebar}
           className="fixed inset-0 z-[135] bg-text/40 backdrop-blur-sm md:hidden"
         />
-        <CommercialDebriefSidebar
+        <CommercialLeadPanel
           lead={displayLead}
           onClose={closeSidebar}
           onSaved={refetch}

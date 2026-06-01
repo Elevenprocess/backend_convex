@@ -68,8 +68,8 @@ export function RdvSplit() {
         eyebrow="RDV · SPLIT"
         title="Workflow inline"
       />
-      <div className="flex flex-grow overflow-hidden">
-        <main className="flex-grow p-6 overflow-y-auto min-w-0">
+      <div className="flex flex-col md:flex-row flex-grow overflow-y-auto md:overflow-hidden">
+        <main className="flex-grow p-4 sm:p-6 overflow-y-auto min-w-0">
           {loading ? (
             <LoadingBlock label="Chargement des RDV…" />
           ) : error ? (

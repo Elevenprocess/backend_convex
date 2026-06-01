@@ -242,8 +242,8 @@ export function ProfilCommercial() {
         </div>
       </div>
 
-      <main className="commercial-prospect-page px-8 pt-2 pb-6 flex flex-col gap-3 overflow-hidden flex-grow">
-        <section className="grid grid-cols-4 gap-3 flex-shrink-0">
+      <main className="commercial-prospect-page px-4 sm:px-8 pt-2 pb-6 flex flex-col gap-3 overflow-hidden flex-grow">
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 flex-shrink-0">
           <div className="commercial-summary-card profile-info-card glass-card px-4 py-3 border border-line-soft bg-white">
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 rounded-full overflow-hidden bg-cream-darker border border-line-soft flex items-center justify-center text-sm font-black shrink-0">

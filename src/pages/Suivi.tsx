@@ -58,7 +58,14 @@ export function Suivi() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signedDossiers.map((d) => d.id).join('|')])
 
-  if (role && role !== 'admin' && role !== 'delivrabilite') return <Navigate to="/overview" replace />
+  if (
+    role
+    && role !== 'admin'
+    && role !== 'delivrabilite'
+    && role !== 'responsable_technique'
+    && role !== 'back_office'
+    && role !== 'technicien'
+  ) return <Navigate to="/overview" replace />
 
   const isLoading = leadsLoading || rdvLoading
   const blockedCount = signedDossiers.filter((d) => d.state.statuses[d.activeStep] === 'blocked').length

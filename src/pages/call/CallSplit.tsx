@@ -128,9 +128,9 @@ export function CallSplit() {
         eyebrow="APPEL · SPLIT"
         title={`En appel — ${displayName}`}
       />
-      <div className="flex flex-grow overflow-hidden">
+      <div className="flex flex-col md:flex-row flex-grow overflow-y-auto md:overflow-hidden">
         {/* Main: call panel — avatar + timer + controls only */}
-        <main className="flex-grow flex flex-col items-center justify-center p-12 min-w-0 relative">
+        <main className="flex-grow flex flex-col items-center justify-center p-6 md:p-12 min-w-0 relative">
           <button
             onClick={() => {
               minimize()
@@ -178,7 +178,7 @@ export function CallSplit() {
         </main>
 
         {lead ? <SplitPanel lead={lead} userMap={userMap} defaultTab="notes" /> : (
-          <aside className="w-[420px] border-l border-line bg-white/30 backdrop-blur-md p-6">
+          <aside className="w-full md:w-[420px] border-t md:border-t-0 md:border-l border-line bg-white/30 backdrop-blur-md p-6">
             <div className="glass-card p-5">
               <span className="eyebrow">APPEL MANUEL</span>
               <h3 className="font-bold mt-2">Aucun lead associé</h3>

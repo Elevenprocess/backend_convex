@@ -2,13 +2,25 @@ import type { LeadResponse, LeadStatus } from './types'
 
 export type LeadStatusFilter = 'all' | LeadStatus
 export type LeadLastCallFilter = 'all' | 'never' | 'today' | 'older_3d' | 'older_7d'
-export type LeadArrivedAtFilter = 'all' | 'today' | 'yesterday' | 'this_week'
+export type LeadArrivedAtFilter =
+  | 'all'
+  | 'today'
+  | 'yesterday'
+  | 'this_week'
+  | 'last_week'
+  | 'this_month'
+  | 'last_month'
+export type LeadHasFilter = 'all' | 'with' | 'without'
+export type LeadDateField = 'arrival' | 'devis' | 'debrief' | 'call'
 
 export type LeadListFilters = {
   onlyNew: boolean
   status: LeadStatusFilter
   lastCall: LeadLastCallFilter
   arrivedAt: LeadArrivedAtFilter
+  hasDevis: LeadHasFilter
+  hasDebrief: LeadHasFilter
+  dateField: LeadDateField
 }
 
 export const DEFAULT_LEAD_FILTERS: LeadListFilters = {
@@ -16,6 +28,9 @@ export const DEFAULT_LEAD_FILTERS: LeadListFilters = {
   status: 'all',
   lastCall: 'all',
   arrivedAt: 'all',
+  hasDevis: 'all',
+  hasDebrief: 'all',
+  dateField: 'arrival',
 }
 
 // Matche la vraie date d'arrivée SaaS (createdAt) sur le jour Réunion (UTC+4, pas de DST).
@@ -30,33 +45,59 @@ function reunionDayKey(date: Date): string {
   }).format(date)
 }
 
-function leadArrivalDate(lead: Pick<LeadResponse, 'createdAt' | 'arrivalAt'>): string {
+type DateSource = Pick<
+  LeadResponse,
+  'createdAt' | 'arrivalAt' | 'latestDevisAt' | 'latestDebriefAt' | 'latestCallAt'
+>
+
+function leadDateForField(lead: DateSource, field: LeadDateField): string | null {
+  if (field === 'devis') return lead.latestDevisAt ?? null
+  if (field === 'debrief') return lead.latestDebriefAt ?? null
+  if (field === 'call') return lead.latestCallAt ?? null
   return lead.arrivalAt || lead.createdAt
 }
 
-function leadInArrivedRange(
-  lead: Pick<LeadResponse, 'createdAt' | 'arrivalAt'>,
+export function matchesLeadDateRange(
+  lead: DateSource,
   range: LeadArrivedAtFilter,
+  field: LeadDateField = 'arrival',
 ): boolean {
   if (range === 'all') return true
+  const iso = leadDateForField(lead, field)
+  if (!iso) return false
   const now = new Date()
   const todayKey = reunionDayKey(now)
-  const createdKey = reunionDayKey(new Date(leadArrivalDate(lead)))
-  if (range === 'today') return createdKey === todayKey
+  const dKey = reunionDayKey(new Date(iso))
+  if (range === 'today') return dKey === todayKey
   if (range === 'yesterday') {
     const yKey = reunionDayKey(new Date(now.getTime() - 24 * 60 * 60 * 1000))
-    return createdKey === yKey
+    return dKey === yKey
   }
+  // Lundi 00:00 Réunion en clé YYYY-MM-DD. Day-of-week selon TZ Réunion.
+  const reunionWeekday = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Indian/Reunion',
+    weekday: 'short',
+  }).format(now)
+  const dayOffset = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 }[reunionWeekday as 'Mon'] ?? 0
   if (range === 'this_week') {
-    // Lundi 00:00 Réunion en clé YYYY-MM-DD. Day-of-week selon TZ Réunion.
-    const reunionWeekday = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Indian/Reunion',
-      weekday: 'short',
-    }).format(now)
-    const offset = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 }[reunionWeekday as 'Mon'] ?? 0
-    const monday = new Date(now.getTime() - offset * 24 * 60 * 60 * 1000)
-    const mondayKey = reunionDayKey(monday)
-    return createdKey >= mondayKey
+    const monday = new Date(now.getTime() - dayOffset * 24 * 60 * 60 * 1000)
+    return dKey >= reunionDayKey(monday)
+  }
+  if (range === 'last_week') {
+    const thisMonday = new Date(now.getTime() - dayOffset * 24 * 60 * 60 * 1000)
+    const lastMonday = new Date(thisMonday.getTime() - 7 * 24 * 60 * 60 * 1000)
+    const lastMondayKey = reunionDayKey(lastMonday)
+    const thisMondayKey = reunionDayKey(thisMonday)
+    return dKey >= lastMondayKey && dKey < thisMondayKey
+  }
+  // Pour this_month / last_month on compare sur YYYY-MM en TZ Réunion.
+  const ymKey = (d: Date) => reunionDayKey(d).slice(0, 7)
+  const currentYm = ymKey(now)
+  if (range === 'this_month') return dKey.slice(0, 7) === currentYm
+  if (range === 'last_month') {
+    const prev = new Date(now)
+    prev.setUTCMonth(prev.getUTCMonth() - 1)
+    return dKey.slice(0, 7) === ymKey(prev)
   }
   return true
 }
@@ -68,8 +109,25 @@ function leadMatchesStatus(lead: Pick<LeadResponse, 'status'>, status: LeadStatu
   return lead.status === status
 }
 
+function matchesHas(value: boolean | undefined, filter: LeadHasFilter): boolean {
+  if (filter === 'all') return true
+  if (filter === 'with') return value === true
+  return value !== true
+}
+
 export function applyLeadFilters<
-  T extends Pick<LeadResponse, 'status' | 'joursSansContact' | 'createdAt' | 'arrivalAt'>,
+  T extends Pick<
+    LeadResponse,
+    | 'status'
+    | 'joursSansContact'
+    | 'createdAt'
+    | 'arrivalAt'
+    | 'latestDevisAt'
+    | 'latestDebriefAt'
+    | 'latestCallAt'
+    | 'hasDevis'
+    | 'hasDebrief'
+  >,
 >(leads: T[], filters: LeadListFilters): T[] {
   return leads.filter((lead) => {
     if (filters.onlyNew && lead.status !== 'nouveau') return false
@@ -78,7 +136,9 @@ export function applyLeadFilters<
     if (filters.lastCall === 'today' && lead.joursSansContact !== 0) return false
     if (filters.lastCall === 'older_3d' && (lead.joursSansContact === null || lead.joursSansContact < 3)) return false
     if (filters.lastCall === 'older_7d' && (lead.joursSansContact === null || lead.joursSansContact < 7)) return false
-    if (!leadInArrivedRange(lead, filters.arrivedAt)) return false
+    if (!matchesHas(lead.hasDevis, filters.hasDevis)) return false
+    if (!matchesHas(lead.hasDebrief, filters.hasDebrief)) return false
+    if (!matchesLeadDateRange(lead, filters.arrivedAt, filters.dateField)) return false
     return true
   })
 }
@@ -88,6 +148,8 @@ export function leadFiltersActive(filters: LeadListFilters): boolean {
     filters.onlyNew ||
     filters.status !== 'all' ||
     filters.lastCall !== 'all' ||
-    filters.arrivedAt !== 'all'
+    filters.arrivedAt !== 'all' ||
+    filters.hasDevis !== 'all' ||
+    filters.hasDebrief !== 'all'
   )
 }

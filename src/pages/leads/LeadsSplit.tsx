@@ -55,16 +55,16 @@ export function LeadsSplit() {
         eyebrow="LEADS · SPLIT"
         title="Workflow inline"
       />
-      <div className="flex flex-grow overflow-hidden">
+      <div className="flex flex-col md:flex-row flex-grow overflow-y-auto md:overflow-hidden">
         {/* Main: leads table */}
-        <main className="flex-grow p-6 overflow-y-auto min-w-0">
+        <main className="flex-grow p-4 sm:p-6 overflow-y-auto min-w-0">
           {loading ? (
             <LoadingBlock label="Chargement des leads…" />
           ) : error ? (
             <div className="py-16 text-center text-rouille text-sm">Erreur : {error}</div>
           ) : (
             <div className="glass-card !p-0 overflow-hidden">
-              <div className="px-5 py-4 border-b border-line-soft flex items-center justify-between">
+              <div className="px-4 sm:px-5 py-4 border-b border-line-soft flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <div className="font-semibold">{counts.total} leads</div>
                   <div className="text-xs text-muted">{counts.nouveau} nouveaux · {counts.qualifie} qualifiés · {counts.relance} en relance</div>
@@ -76,17 +76,18 @@ export function LeadsSplit() {
                     placeholder="Rechercher…"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-52"
+                    className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full sm:w-52"
                   />
                 </div>
               </div>
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[480px]">
                 <thead className="bg-or-tint">
                   <tr className="text-left eyebrow">
-                    <th className="px-5 py-3">NOM</th>
-                    <th className="px-5 py-3">TÉL.</th>
-                    <th className="px-5 py-3">VILLE</th>
-                    <th className="px-5 py-3">STATUT</th>
+                    <th className="px-3 sm:px-5 py-3">NOM</th>
+                    <th className="px-3 sm:px-5 py-3">TÉL.</th>
+                    <th className="px-3 sm:px-5 py-3">VILLE</th>
+                    <th className="px-3 sm:px-5 py-3">STATUT</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -98,7 +99,7 @@ export function LeadsSplit() {
                         selected?.id === l.id ? 'bg-cuivre-tint/30' : 'hover:bg-white/50'
                       }`}
                     >
-                      <td className="px-5 py-3">
+                      <td className="px-3 sm:px-5 py-3">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-cuivre-tint flex items-center justify-center text-[10px] font-bold">{leadInitials(l)}</div>
                           <span className="font-semibold">{fullName(l)}</span>
@@ -106,7 +107,7 @@ export function LeadsSplit() {
                       </td>
                       <td className="px-5 py-3 text-muted">{l.phone ?? '—'}</td>
                       <td className="px-5 py-3 text-muted">{l.city ?? '—'}</td>
-                      <td className="px-5 py-3">
+                      <td className="px-3 sm:px-5 py-3">
                         <span className={`status-badge ${statusBadgeForLead(l)}`}>{statusLabelForLead(l)}</span>
                       </td>
                     </tr>
@@ -118,6 +119,7 @@ export function LeadsSplit() {
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
         </main>
@@ -125,7 +127,7 @@ export function LeadsSplit() {
         {selected ? (
           <SplitPanel lead={selected} userMap={userMap} onClose={() => setSelectedId(null)} onSaved={refetch} />
         ) : (
-          <aside className="w-[420px] border-l border-line bg-white/30 backdrop-blur-md p-6 flex-shrink-0">
+          <aside className="hidden md:flex flex-col w-[420px] border-l border-line bg-white/30 backdrop-blur-md p-6 flex-shrink-0">
             <div className="glass-card p-5 text-sm text-muted">
               <span className="eyebrow">SIDEBAR LEAD</span>
               <h3 className="font-bold text-text mt-2">Sélectionne un lead</h3>

@@ -44,7 +44,7 @@ const STAGE_ORDER: string[] = [
 
 export function AdminPipeline() {
   const role = useAuth((s) => s.user?.role)
-  if (role && role !== 'admin') return <Navigate to="/overview" replace />
+  if (role && role !== 'admin' && role !== 'commercial_lead') return <Navigate to="/overview" replace />
 
   const [tab, setTab] = useState<Tab>('tracking')
 

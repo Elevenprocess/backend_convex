@@ -1,4 +1,12 @@
-import type { Devis } from './types'
+import type {
+  DebriefResponse,
+  Devis,
+  ProjectAttachmentKind,
+  ProjectAttachmentResponse,
+  ProjectDetailResponse,
+  ProjectResponse,
+  ProjectStatus,
+} from './types'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
 
@@ -129,11 +137,19 @@ export async function uploadDevis(
   leadId: string,
   rdvId: string | undefined,
   file: File,
+  meta?: { projectName?: string; installationAddress?: string; projectId?: string },
 ): Promise<Devis> {
   const fd = new FormData()
   fd.append('leadId', leadId)
   if (rdvId) fd.append('rdvId', rdvId)
-  fd.append('file', file)
+  if (meta?.projectId) fd.append('projectId', meta.projectId)
+  const name = meta?.projectName?.trim()
+  const addr = meta?.installationAddress?.trim()
+  const parts = ([name, addr].filter(Boolean) as string[]).map(sanitizeFileName)
+  const renamed = parts.length
+    ? new File([file], `${parts.join(' — ')} — ${file.name}`, { type: file.type })
+    : file
+  fd.append('file', renamed)
   const url = buildApiUrl('/devis')
   const res = await fetch(url, {
     method: 'POST',
@@ -147,6 +163,26 @@ export async function uploadDevis(
   return res.json() as Promise<Devis>
 }
 
+function sanitizeFileName(name: string): string {
+  return name.replace(/[\\/:*?"<>|]+/g, '-').trim().slice(0, 80) || 'Projet'
+}
+
+// Parse "Nom — Adresse — fichier.pdf" produit par uploadDevis() ci-dessus.
+export function parseProjectMeta(filename: string): { name: string; address: string | null; rawFilename: string } {
+  const parts = filename.split(' — ')
+  if (parts.length >= 3) {
+    return { name: parts[0], address: parts[1] || null, rawFilename: parts.slice(2).join(' — ') }
+  }
+  if (parts.length === 2) {
+    return { name: parts[0], address: null, rawFilename: parts[1] }
+  }
+  return { name: filename.replace(/\.pdf$/i, ''), address: null, rawFilename: filename }
+}
+
+export function getDevis(devisId: string): Promise<Devis> {
+  return api<Devis>(`/devis/${devisId}`)
+}
+
 export function listDevisByLead(leadId: string): Promise<Devis[]> {
   return api<Devis[]>(`/devis/lead/${leadId}`)
 }
@@ -155,8 +191,153 @@ export function markDevisSigned(devisId: string): Promise<Devis> {
   return api<Devis>(`/devis/${devisId}/mark-signed`, { method: 'POST' })
 }
 
+// Patch partiel. Tous les champs sont optionnels ; `null` efface une valeur.
+export function updateDevis(
+  devisId: string,
+  patch: import('./types').UpdateDevisPatch,
+): Promise<Devis> {
+  return api<Devis>(`/devis/${devisId}`, { method: 'PATCH', body: patch })
+}
+
 export function retryDevisOcr(devisId: string): Promise<Devis> {
   return api<Devis>(`/devis/${devisId}/retry-ocr`, { method: 'POST' })
+}
+
+export async function downloadDevisPdf(devisId: string, suggestedName?: string): Promise<void> {
+  const res = await fetch(buildApiUrl(`/devis/${devisId}/pdf`), {
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, text || `Téléchargement échoué : ${res.status}`)
+  }
+  const blob = await res.blob()
+  let filename = suggestedName ?? `devis-${devisId}.pdf`
+  const cd = res.headers.get('content-disposition')
+  if (cd) {
+    const utf8Match = cd.match(/filename\*=UTF-8''([^;]+)/i)
+    if (utf8Match) filename = decodeURIComponent(utf8Match[1])
+    else {
+      const plain = cd.match(/filename="([^"]+)"/i)
+      if (plain) filename = plain[1]
+    }
+  }
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+// ─── Projects ─────────────────────────────────────────────
+export function createProject(input: {
+  leadId: string
+  name: string
+  addressLine?: string | null
+  postalCode?: string | null
+  city?: string | null
+  notes?: string | null
+}): Promise<ProjectResponse> {
+  return api<ProjectResponse>('/projects', { method: 'POST', body: input })
+}
+
+export function listProjectsByLead(leadId: string): Promise<ProjectResponse[]> {
+  return api<ProjectResponse[]>(`/projects/lead/${leadId}`)
+}
+
+export function getProjectDetail(projectId: string): Promise<ProjectDetailResponse> {
+  return api<ProjectDetailResponse>(`/projects/${projectId}`)
+}
+
+export function updateProject(
+  projectId: string,
+  patch: { name?: string; status?: ProjectStatus; notes?: string | null; addressLine?: string | null; postalCode?: string | null; city?: string | null },
+): Promise<ProjectResponse> {
+  return api<ProjectResponse>(`/projects/${projectId}`, { method: 'PATCH', body: patch })
+}
+
+export function deleteProject(projectId: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/projects/${projectId}`, { method: 'DELETE' })
+}
+
+// ─── Debriefs ─────────────────────────────────────────────
+export function createDebrief(
+  projectId: string,
+  input: Partial<Omit<DebriefResponse, 'id' | 'projectId' | 'commercialId' | 'createdAt' | 'updatedAt'>> & { outcome: DebriefResponse['outcome'] },
+): Promise<DebriefResponse> {
+  return api<DebriefResponse>(`/projects/${projectId}/debriefs`, { method: 'POST', body: input })
+}
+
+export function createLeadDebrief(
+  leadId: string,
+  input: Partial<Omit<DebriefResponse, 'id' | 'commercialId' | 'createdAt' | 'updatedAt'>> & { outcome: DebriefResponse['outcome'] },
+): Promise<DebriefResponse> {
+  return api<DebriefResponse>(`/leads/${leadId}/debriefs`, { method: 'POST', body: input })
+}
+
+export function listDebriefsByProject(projectId: string): Promise<DebriefResponse[]> {
+  return api<DebriefResponse[]>(`/projects/${projectId}/debriefs`)
+}
+
+export function listDebriefsByLead(leadId: string): Promise<DebriefResponse[]> {
+  return api<DebriefResponse[]>(`/leads/${leadId}/debriefs`)
+}
+
+export function deleteDebrief(debriefId: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/debriefs/${debriefId}`, { method: 'DELETE' })
+}
+
+// ─── Project attachments ──────────────────────────────────
+export async function uploadProjectAttachment(
+  projectId: string,
+  file: File,
+  opts: { kind: ProjectAttachmentKind; label?: string | null },
+): Promise<ProjectAttachmentResponse> {
+  const fd = new FormData()
+  fd.append('file', file)
+  fd.append('kind', opts.kind)
+  if (opts.label) fd.append('label', opts.label)
+  const res = await fetch(buildApiUrl(`/projects/${projectId}/attachments`), {
+    method: 'POST',
+    credentials: 'include',
+    body: fd,
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, text || `Upload attachment failed: ${res.status}`)
+  }
+  return res.json() as Promise<ProjectAttachmentResponse>
+}
+
+export function listAttachmentsByProject(
+  projectId: string,
+): Promise<ProjectAttachmentResponse[]> {
+  return api<ProjectAttachmentResponse[]>(`/projects/${projectId}/attachments`)
+}
+
+export function getAttachmentSignedUrl(
+  attachmentId: string,
+): Promise<{ url: string; filename: string; contentType: string }> {
+  return api<{ url: string; filename: string; contentType: string }>(
+    `/attachments/${attachmentId}/url`,
+  )
+}
+
+/**
+ * URL directe vers les octets de l'attachment, streamés par l'API (route
+ * `/attachments/:id/raw`). Utilisable dans un <img src> ou window.open —
+ * fonctionne en dev (local-FS) comme en prod (R2), contrairement à
+ * getAttachmentSignedUrl qui renvoie un file:// inexploitable en local.
+ */
+export function attachmentRawUrl(attachmentId: string): string {
+  return buildApiUrl(`/attachments/${attachmentId}/raw`)
+}
+
+export function deleteProjectAttachment(attachmentId: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/attachments/${attachmentId}`, { method: 'DELETE' })
 }
 
 export { API_BASE }

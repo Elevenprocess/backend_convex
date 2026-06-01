@@ -10,6 +10,7 @@ import { useLeads, useRdvList } from '../../lib/hooks'
 import { useNetworkActivity } from '../../lib/networkActivity'
 import { useNavSidebar } from '../../lib/navSidebar'
 import { useTheme } from '../../lib/theme'
+import { leadSearchPath } from '../../lib/leadPaths'
 
 type TopbarProps = {
   eyebrow?: string
@@ -22,7 +23,7 @@ type TopbarProps = {
 export function Topbar({ eyebrow, title }: TopbarProps) {
   const user = useDisplayUser()
   const authUser = useAuth((s) => s.user)
-  const isAdmin = user.role === 'admin'
+  const isAdmin = user.role === 'admin' || user.role === 'commercial_lead'
   const signOut = useAuth((s) => s.signOut)
   const isDark = useTheme((s) => s.isDark)
   const toggleTheme = useTheme((s) => s.toggleTheme)
@@ -83,12 +84,12 @@ export function Topbar({ eyebrow, title }: TopbarProps) {
     const q = search.trim()
     if (!q) return
     setOpenMenu(null)
-    navigate(`/leads?search=${encodeURIComponent(q)}`)
+    navigate(leadSearchPath(authUser?.role, q))
   }
 
   return (
     <header ref={topbarRef} className="app-topbar">
-      <div className="min-w-0 flex items-center gap-2 max-w-[320px] pr-4">
+      <div className="min-w-0 flex items-center gap-2 max-w-[60%] md:max-w-[420px] pr-2 sm:pr-4">
         <button
           type="button"
           className="topbar-burger"

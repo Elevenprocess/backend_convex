@@ -18,11 +18,6 @@ export function Landing() {
           globalHover
         />
       </div>
-
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(255,255,255,0.05),transparent_34%),linear-gradient(180deg,rgba(0,0,0,0.58)_0%,rgba(0,0,0,0.22)_45%,rgba(0,0,0,0.76)_100%)]" />
-      <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/80 to-transparent" />
-      <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/85 to-transparent" />
-
       <header className="relative z-10 flex h-20 items-center justify-between px-6 sm:px-10 lg:px-14">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/12 bg-white/[0.08] text-sm font-black backdrop-blur-2xl">

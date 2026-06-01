@@ -6,8 +6,11 @@ import { Icon, type IconName } from '../../components/Icon'
 import { LoadingScreen } from '../../components/Spinner'
 import { useLead, useRdvList, useCallLogs, useUsers, useStartCall } from '../../lib/hooks'
 import {
+  PROJECT_STATUS_LABEL,
   STATUS_BADGE,
   STATUS_LABEL,
+  DELIVRABILITE_STATUS_LABEL,
+  DELIVRABILITE_STATUS_BADGE,
   CALL_RESULT_LABEL,
   fullName,
   initials as leadInitials,
@@ -15,11 +18,16 @@ import {
   type RdvResponse,
   type CallLogResponse,
   type UserResponse,
-  type Devis,
+  type ProjectResponse,
+  type DebriefResponse,
 } from '../../lib/types'
-import { listDevisByLead } from '../../lib/api'
-import { DevisUploader } from '../../components/devis/DevisUploader'
-import { DevisList } from '../../components/devis/DevisList'
+import { ApiError, createProject, listProjectsByLead, listDebriefsByLead, createLeadDebrief, deleteDebrief } from '../../lib/api'
+import { clientStatusBadge } from '../../lib/clientStatus'
+import { Spinner } from '../../components/Spinner'
+import { useAuth } from '../../lib/auth'
+import { leadListPath } from '../../lib/leadPaths'
+import { CommercialDebriefSidebar } from '../../components/leads/CommercialDebriefSidebar'
+import { DebriefRow } from '../../components/leads/project/ProjectDebriefsTab'
 
 type TimelineItem = {
   icon: IconName
@@ -30,10 +38,15 @@ type TimelineItem = {
   desc?: string
 }
 
+// Corps d'un débrief tel que produit par CommercialDebriefSidebar (sans RDV).
+type DebriefDraft = Parameters<typeof createLeadDebrief>[1]
+
 export function LeadDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const startCall = useStartCall()
+  const role = useAuth((s) => s.user?.role)
+  const listPath = leadListPath(role)
 
   const { data: lead, loading, error } = useLead(id)
   const { data: rdvs } = useRdvList(id ? { leadId: id, limit: 50 } : undefined)
@@ -46,10 +59,68 @@ export function LeadDetail() {
     return m
   }, [users])
 
-  const [devisList, setDevisList] = useState<Devis[]>([])
+  const [projects, setProjects] = useState<ProjectResponse[]>([])
+  const [debriefs, setDebriefs] = useState<DebriefResponse[]>([])
+  const [debriefRefreshKey, setDebriefRefreshKey] = useState(0)
+  const [debriefOpen, setDebriefOpen] = useState(false)
+  const [postSaleModal, setPostSaleModal] = useState(false)
+  // Attribution d'un débrief fait depuis la fiche (sans RDV) : payload en attente
+  // + sélecteur de projet quand un choix est nécessaire.
+  const [pendingDebrief, setPendingDebrief] = useState<{ payload: DebriefDraft; outcome: 'vente' | 'non_vente' } | null>(null)
+  const [attributionMode, setAttributionMode] = useState<null | 'vente' | 'non_vente'>(null)
   useEffect(() => {
-    if (id) void listDevisByLead(id).then(setDevisList)
+    if (!id) return
+    void listProjectsByLead(id).then(setProjects).catch(() => undefined)
   }, [id])
+  useEffect(() => {
+    if (!id) return
+    void listDebriefsByLead(id).then(setDebriefs).catch(() => undefined)
+  }, [id, debriefRefreshKey])
+
+  async function handleDeleteDebrief(debriefId: string) {
+    if (!window.confirm('Supprimer ce débrief ?')) return
+    try {
+      await deleteDebrief(debriefId)
+      setDebriefRefreshKey((k) => k + 1)
+    } catch {
+      /* noop */
+    }
+  }
+
+  async function saveDebrief(input: DebriefDraft) {
+    if (!id) return
+    try {
+      await createLeadDebrief(id, input)
+      setDebriefRefreshKey((k) => k + 1)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Échec de l'enregistrement du débrief")
+    }
+  }
+
+  // Débrief fait depuis la fiche (sans RDV) → décision d'attribution :
+  //  non-vente : 0 projet → lead-level ; 1 → ce projet ; ≥2 → sélecteur
+  //  vente     : 0 projet → création ; ≥1 → choix (existant ou nouveau)
+  function handleFicheDebrief(payload: DebriefDraft, outcome: 'vente' | 'non_vente') {
+    setDebriefOpen(false)
+    if (outcome === 'non_vente') {
+      if (projects.length === 0) {
+        void saveDebrief({ ...payload, projectId: null })
+      } else if (projects.length === 1) {
+        void saveDebrief({ ...payload, projectId: projects[0].id })
+      } else {
+        setPendingDebrief({ payload, outcome })
+        setAttributionMode('non_vente')
+      }
+      return
+    }
+    // vente
+    setPendingDebrief({ payload, outcome })
+    if (projects.length === 0) {
+      setPostSaleModal(true)
+    } else {
+      setAttributionMode('vente')
+    }
+  }
 
   if (loading) {
     return (
@@ -67,7 +138,7 @@ export function LeadDetail() {
         <main className="p-8 flex items-center justify-center flex-grow">
           <div className="glass-card p-12 text-center">
             <p className="text-muted mb-4">{error ?? "Ce lead n'existe pas (ou plus)."}</p>
-            <Link to="/leads" className="btn-primary inline-block px-4 py-2 rounded-xl text-sm">Retour à la liste</Link>
+            <Link to={listPath} className="btn-primary inline-block px-4 py-2 rounded-xl text-sm">Retour à la liste</Link>
           </div>
         </main>
       </AppShell>
@@ -77,6 +148,16 @@ export function LeadDetail() {
   const setter = lead.setterId ? userMap.get(lead.setterId) : undefined
   const commercial = lead.assignedToId ? userMap.get(lead.assignedToId) : undefined
 
+  // Côté commercial, la fiche est ouverte comme « client » : on n'affiche jamais le
+  // statut setter brut (« Sans réponse »…), seulement la terminologie commerciale.
+  // Côté setter/admin (pages leads), on garde le statut setter d'origine.
+  const isCommercialView = role === 'commercial' || role === 'commercial_lead'
+  const statusBadge = isCommercialView
+    ? clientStatusBadge(lead)
+    : lead.delivrabiliteStatus
+      ? { label: DELIVRABILITE_STATUS_LABEL[lead.delivrabiliteStatus], className: DELIVRABILITE_STATUS_BADGE[lead.delivrabiliteStatus] }
+      : { label: STATUS_LABEL[lead.status], className: STATUS_BADGE[lead.status] }
+
   const timeline = buildTimeline(rdvs ?? [], calls ?? [], userMap)
 
   return (
@@ -85,22 +166,30 @@ export function LeadDetail() {
         eyebrow="LEADS / DÉTAIL"
         title={fullName(lead)}
       />
-      <div className="px-8 pt-4 flex items-center gap-3 flex-shrink-0">
+      <div className="px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 flex items-center gap-2 flex-shrink-0 flex-wrap">
         <button
-          onClick={() => navigate('/leads')}
-          className="text-muted hover:text-text flex items-center gap-1 text-sm"
+          onClick={() => navigate(listPath)}
+          className="text-muted hover:text-text flex items-center gap-1 text-sm shrink-0"
         >
           <Icon name="arrow-left" size={16} />
-          Retour
+          <span className="hidden sm:inline">Retour</span>
         </button>
-        <div className="flex items-center gap-3 ml-auto">
-          <button className="px-4 py-2 rounded-[14px] text-sm font-semibold border border-line bg-white flex items-center gap-2">
+        <div className="flex items-center gap-2 ml-auto flex-wrap justify-end">
+          <button className="hidden md:flex px-3 py-2 rounded-[14px] text-sm font-semibold border border-line bg-white items-center gap-2">
             <Icon name="mail" size={14} />
-            Email
+            <span className="hidden lg:inline">Email</span>
           </button>
-          <button className="px-4 py-2 rounded-[14px] text-sm font-semibold border border-line bg-white flex items-center gap-2">
+          <button className="hidden md:flex px-3 py-2 rounded-[14px] text-sm font-semibold border border-line bg-white items-center gap-2">
             <Icon name="edit" size={14} />
-            Note
+            <span className="hidden lg:inline">Note</span>
+          </button>
+          <button
+            onClick={() => setDebriefOpen(true)}
+            title="Débrief structuré sur RDV planifié (wizard)"
+            className="px-3 sm:px-4 py-2 rounded-[14px] text-xs sm:text-sm font-semibold border border-or text-or-dark bg-or/10 hover:bg-or/20 flex items-center gap-2 whitespace-nowrap"
+          >
+            <Icon name="phone" size={12} />
+            Débrief RDV
           </button>
           <button
             onClick={() => {
@@ -111,7 +200,7 @@ export function LeadDetail() {
               })
             }}
             disabled={!lead.phone}
-            className="btn-primary px-5 py-2 rounded-[14px] text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-primary px-3 sm:px-5 py-2 rounded-[14px] text-xs sm:text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
           >
             <Icon name="phone" size={14} />
             Appeler
@@ -119,17 +208,22 @@ export function LeadDetail() {
         </div>
       </div>
 
-      <main className="p-8 pt-4 grid grid-cols-3 gap-6 overflow-y-auto flex-grow">
+      <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6 overflow-y-auto flex-grow">
         {/* Left col */}
-        <div className="col-span-1 space-y-6">
+        <div className="lg:col-span-1 space-y-4 lg:space-y-6">
           <div className="glass-card p-6 text-center">
             <div className="w-24 h-24 rounded-full bg-cuivre-tint flex items-center justify-center text-3xl font-bold mx-auto mb-4">{leadInitials(lead)}</div>
             <h3 className="text-xl font-bold">{fullName(lead)}</h3>
-            <span className={`status-badge ${STATUS_BADGE[lead.status]} mt-2 inline-block`}>{STATUS_LABEL[lead.status]}</span>
+            <span className={`status-badge ${statusBadge.className} mt-2 inline-block`}>{statusBadge.label}</span>
             <div className="mt-4 space-y-2 text-sm text-muted">
               {lead.phone && <div className="flex items-center justify-center gap-2"><Icon name="phone" size={14} /> {lead.phone}</div>}
               {lead.email && <div className="flex items-center justify-center gap-2"><Icon name="mail" size={14} /> {lead.email}</div>}
-              {lead.city && <div className="flex items-center justify-center gap-2"><Icon name="map-pin" size={14} /> {lead.city}</div>}
+              {fullAddress(lead) && (
+                <div className="flex items-start justify-center gap-2">
+                  <Icon name="map-pin" size={14} className="mt-0.5 shrink-0" />
+                  <span>{fullAddress(lead)}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -152,10 +246,24 @@ export function LeadDetail() {
               <Row label="Dernier contact"><span className="font-semibold">{lastContactLabel(lead.joursSansContact)}</span></Row>
             </div>
           </div>
+
+          {lead.customFields && lead.customFields.length > 0 && (
+            <div className="glass-card p-6">
+              <span className="eyebrow block mb-3">DONNÉES FORMULAIRE / SETTER</span>
+              <div className="space-y-3 text-sm">
+                {lead.customFields.map((field) => (
+                  <div key={`${field.fieldKey}-${field.fieldName}`} className="flex flex-col gap-0.5">
+                    <span className="text-faint text-xs">{field.fieldName || field.fieldKey}</span>
+                    <span className="font-semibold break-words">{field.value?.trim() ? field.value : '—'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right col */}
-        <div className="col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-4 lg:space-y-6">
           <div className="glass-card p-6">
             <h3 className="font-bold mb-4">Historique</h3>
             {timeline.length === 0 ? (
@@ -181,22 +289,98 @@ export function LeadDetail() {
           </div>
 
           <div className="glass-card p-6">
-            <section className="space-y-3">
-              <h3 className="text-sm font-semibold">Devis Solteo</h3>
-              <DevisUploader
-                leadId={id!}
-                onUploaded={(d) => setDevisList((prev) => [d, ...prev])}
-              />
-              <DevisList
-                devisList={devisList}
-                onChange={(u) =>
-                  setDevisList((prev) => prev.map((d) => (d.id === u.id ? u : d)))
-                }
-              />
-            </section>
+            <div className="flex items-center justify-between gap-2 mb-4">
+              <h3 className="font-bold">Débriefs</h3>
+              {debriefs.length > 0 && (
+                <span className="text-[10px] font-black uppercase tracking-wider text-faint">{debriefs.length} débrief{debriefs.length > 1 ? 's' : ''}</span>
+              )}
+            </div>
+            {debriefs.length === 0 ? (
+              <p className="text-sm text-faint">Aucun débrief enregistré pour ce client.</p>
+            ) : (
+              <ul className="space-y-2">
+                {debriefs.map((d) => (
+                  <DebriefRow
+                    key={d.id}
+                    debrief={d}
+                    projectName={d.projectId ? (projects.find((p) => p.id === d.projectId)?.name ?? 'Projet') : 'Débrief libre'}
+                    onDelete={() => void handleDeleteDebrief(d.id)}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="glass-card p-6">
+            <CreateProjectInline
+              lead={lead}
+              projects={projects}
+              onCreated={(p) => { setProjects((prev) => [p, ...prev]); navigate(`/projects/${p.id}`) }}
+              onOpenProject={(p) => navigate(`/projects/${p.id}`)}
+            />
           </div>
         </div>
       </main>
+
+      {debriefOpen && (
+        <>
+          <button
+            type="button"
+            aria-label="Fermer le débriefing"
+            onClick={() => setDebriefOpen(false)}
+            className="fixed inset-0 z-[135] bg-text/40 backdrop-blur-sm"
+          />
+          <CommercialDebriefSidebar
+            lead={lead}
+            onSubmitFromFiche={handleFicheDebrief}
+            onSaved={() => setDebriefRefreshKey((k) => k + 1)}
+            onClose={() => setDebriefOpen(false)}
+            onValidated={(outcome) => {
+              // Chemin RDV uniquement (le sans-RDV passe par onSubmitFromFiche).
+              setDebriefRefreshKey((k) => k + 1)
+              if (outcome === 'vente') {
+                setDebriefOpen(false)
+                setPostSaleModal(true)
+              }
+            }}
+            className="fixed top-0 right-0 bottom-0 z-[140]"
+          />
+        </>
+      )}
+
+      {attributionMode && pendingDebrief && (
+        <DebriefProjectPicker
+          projects={projects}
+          allowCreate={attributionMode === 'vente'}
+          onPick={(p) => {
+            const draft = pendingDebrief
+            setAttributionMode(null)
+            setPendingDebrief(null)
+            void saveDebrief({ ...draft.payload, projectId: p.id })
+            if (draft.outcome === 'vente') navigate(`/projects/${p.id}`)
+          }}
+          onCreateNew={() => { setAttributionMode(null); setPostSaleModal(true) }}
+          onClose={() => { setAttributionMode(null); setPendingDebrief(null) }}
+        />
+      )}
+
+      {postSaleModal && (
+        <PostSaleProjectModal
+          lead={lead}
+          onClose={() => { setPostSaleModal(false); setPendingDebrief(null) }}
+          onCreated={(p) => {
+            setPostSaleModal(false)
+            setProjects((prev) => [p, ...prev])
+            // Si un débrief « vente » attendait l'attribution, on le rattache au projet créé.
+            if (pendingDebrief) {
+              void saveDebrief({ ...pendingDebrief.payload, projectId: p.id })
+              setPendingDebrief(null)
+            }
+            navigate(`/projects/${p.id}`)
+          }}
+        />
+      )}
+
     </AppShell>
   )
 }
@@ -249,6 +433,10 @@ function prettySource(l: Pick<LeadResponse, 'source' | 'canalAcquisition' | 'utm
   }
 }
 
+function fullAddress(l: Pick<LeadResponse, 'addressLine' | 'postalCode' | 'city'>): string {
+  return [l.addressLine, [l.postalCode, l.city].filter(Boolean).join(' ')].filter(Boolean).join(', ')
+}
+
 function lastContactLabel(j: number | null): string {
   if (j === null) return 'Jamais'
   if (j === 0) return "Aujourd'hui"
@@ -271,6 +459,284 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
     <div className="flex justify-between items-center gap-2">
       <span className="text-faint">{label}</span>
       <div className="text-right">{children}</div>
+    </div>
+  )
+}
+
+// ─── Section "Créer un projet" inline (création directe + navigate) ───
+function CreateProjectInline(props: {
+  lead: LeadResponse
+  projects: ProjectResponse[]
+  onCreated: (p: ProjectResponse) => void
+  onOpenProject: (p: ProjectResponse) => void
+}) {
+  const { lead, projects, onCreated, onOpenProject } = props
+  const defaultAddress = [lead.addressLine, lead.postalCode, lead.city].filter(Boolean).join(', ')
+  const [name, setName] = useState('')
+  const [address, setAddress] = useState(lead.addressLine ?? '')
+  const [postalCode, setPostalCode] = useState(lead.postalCode ?? '')
+  const [city, setCity] = useState(lead.city ?? '')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit() {
+    setError(null)
+    const projectName = name.trim()
+    if (!projectName) return setError('Donne un nom au projet.')
+    if (!address.trim() && !city.trim()) return setError('Indique l’adresse de la maison.')
+    setSubmitting(true)
+    try {
+      const created = await createProject({
+        leadId: lead.id,
+        name: projectName,
+        addressLine: address.trim() || null,
+        postalCode: postalCode.trim() || null,
+        city: city.trim() || null,
+      })
+      onCreated(created)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Échec de la création.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">Créer un projet sur ce client</h3>
+        {projects.length > 0 && (
+          <span className="text-[10px] font-black uppercase tracking-wider text-faint">{projects.length} projet{projects.length > 1 ? 's' : ''}</span>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-line bg-white/60 p-4 space-y-3">
+        <div>
+          <label className="block text-[11px] font-bold uppercase tracking-wider text-faint mb-1">Nom du projet</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Ex. Installation 6 kWc Valentin"
+            className="w-full bg-white border border-line rounded-[14px] px-3 py-2 text-sm focus:outline-none focus:border-or"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-bold uppercase tracking-wider text-faint mb-1">Adresse de la maison</label>
+          <input
+            type="text"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder="Rue & numéro"
+            className="w-full bg-white border border-line rounded-[14px] px-3 py-2 text-sm focus:outline-none focus:border-or"
+          />
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            <input
+              type="text"
+              value={postalCode}
+              onChange={(e) => setPostalCode(e.target.value)}
+              placeholder="CP"
+              className="col-span-1 bg-white border border-line rounded-[14px] px-3 py-2 text-sm focus:outline-none focus:border-or"
+            />
+            <input
+              type="text"
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              placeholder="Ville"
+              className="col-span-2 bg-white border border-line rounded-[14px] px-3 py-2 text-sm focus:outline-none focus:border-or"
+            />
+          </div>
+          {defaultAddress && (
+            <div className="mt-1 text-[10px] text-faint">Adresse prospect : {defaultAddress}</div>
+          )}
+        </div>
+
+        {error && <div className="rounded-xl bg-rouille-tint px-3 py-2 text-sm text-rouille">{error}</div>}
+
+        <button
+          type="button"
+          onClick={submit}
+          disabled={submitting || !name.trim() || (!address.trim() && !city.trim())}
+          className="btn-primary w-full px-4 py-2.5 rounded-[14px] text-sm font-bold inline-flex items-center justify-center gap-2 disabled:opacity-60"
+        >
+          {submitting && <Spinner size={14} />}
+          {submitting ? 'Création…' : 'Créer le projet'}
+        </button>
+      </div>
+
+      {projects.length > 0 && (
+        <div className="space-y-2">
+          <div className="eyebrow text-faint text-[10px]">Projets existants</div>
+          <ul className="space-y-2">
+            {projects.map((p, i) => {
+              const projectAddress = [p.addressLine, p.postalCode, p.city].filter(Boolean).join(', ')
+              return (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    onClick={() => onOpenProject(p)}
+                    className="w-full text-left rounded-2xl border border-line bg-white/70 hover:bg-white px-4 py-3 text-sm"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-bold truncate">Projet {projects.length - i} — {p.name}</div>
+                        {projectAddress && <div className="text-[11px] text-muted mt-0.5 truncate">{projectAddress}</div>}
+                        <div className="text-[10px] text-faint mt-0.5">{new Date(p.createdAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}</div>
+                      </div>
+                      <span className="shrink-0 inline-flex rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-wider bg-cuivre-tint text-cuivre">{PROJECT_STATUS_LABEL[p.status]}</span>
+                    </div>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+    </section>
+  )
+}
+
+// ─── Modal post-vente : capture nom + adresse, créé le projet, redirige ───
+function PostSaleProjectModal({ lead, onClose, onCreated }: { lead: LeadResponse; onClose: () => void; onCreated: (p: ProjectResponse) => void }) {
+  const defaultAddress = [lead.addressLine, lead.postalCode, lead.city].filter(Boolean).join(', ')
+  const [name, setName] = useState(`Projet ${fullName(lead)}`)
+  const [address, setAddress] = useState(lead.addressLine ?? '')
+  const [postalCode, setPostalCode] = useState(lead.postalCode ?? '')
+  const [city, setCity] = useState(lead.city ?? '')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit() {
+    setError(null)
+    if (!name.trim()) return setError('Donne un nom au projet.')
+    if (!address.trim() && !city.trim()) return setError('Indique l’adresse de la maison.')
+    setSubmitting(true)
+    try {
+      const created = await createProject({
+        leadId: lead.id,
+        name: name.trim(),
+        addressLine: address.trim() || null,
+        postalCode: postalCode.trim() || null,
+        city: city.trim() || null,
+      })
+      onCreated(created)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Échec de la création.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[160] flex items-center justify-center bg-noir/50 backdrop-blur-sm px-4" onClick={(e) => e.target === e.currentTarget && !submitting && onClose()}>
+      <div className="glass-card w-full max-w-md max-h-[92vh] flex flex-col p-0 shadow-2xl">
+        <div className="px-6 py-4 border-b border-line">
+          <div className="eyebrow text-or-dark">Vente enregistrée 🎉</div>
+          <h3 className="text-xl font-black mt-1">Créer le projet</h3>
+          <p className="text-xs text-muted mt-1">Indique le nom et l’adresse pour ouvrir le dossier projet.</p>
+        </div>
+
+        <div className="px-6 py-4 space-y-3 overflow-y-auto">
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-faint mb-1">Nom du projet</label>
+            <input
+              type="text"
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full bg-white border border-line rounded-[14px] px-3 py-2 text-sm focus:outline-none focus:border-or"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-faint mb-1">Adresse de la maison</label>
+            <input
+              type="text"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="Rue & numéro"
+              className="w-full bg-white border border-line rounded-[14px] px-3 py-2 text-sm focus:outline-none focus:border-or"
+            />
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              <input type="text" value={postalCode} onChange={(e) => setPostalCode(e.target.value)} placeholder="CP" className="col-span-1 bg-white border border-line rounded-[14px] px-3 py-2 text-sm focus:outline-none focus:border-or" />
+              <input type="text" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ville" className="col-span-2 bg-white border border-line rounded-[14px] px-3 py-2 text-sm focus:outline-none focus:border-or" />
+            </div>
+            {defaultAddress && <div className="mt-1 text-[10px] text-faint">Adresse prospect : {defaultAddress}</div>}
+          </div>
+
+          {error && <div className="rounded-xl bg-rouille-tint px-3 py-2 text-sm text-rouille">{error}</div>}
+        </div>
+
+        <div className="px-6 py-4 border-t border-line flex items-center justify-between gap-2">
+          <button type="button" onClick={onClose} disabled={submitting} className="px-4 py-2 rounded-xl text-sm font-semibold text-muted hover:text-text disabled:opacity-50">
+            Plus tard
+          </button>
+          <button type="button" onClick={submit} disabled={submitting} className="btn-primary px-5 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2 disabled:opacity-60">
+            {submitting && <Spinner size={14} />}
+            {submitting ? 'Création…' : 'Créer & ouvrir le projet →'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Sélecteur de projet pour attribuer un débrief (fiche) ───
+function DebriefProjectPicker({
+  projects,
+  allowCreate,
+  onPick,
+  onCreateNew,
+  onClose,
+}: {
+  projects: ProjectResponse[]
+  allowCreate: boolean
+  onPick: (p: ProjectResponse) => void
+  onCreateNew: () => void
+  onClose: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-[160] flex items-center justify-center bg-noir/50 backdrop-blur-sm px-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="glass-card w-full max-w-md max-h-[92vh] flex flex-col p-0 shadow-2xl">
+        <div className="px-6 py-4 border-b border-line">
+          <div className="eyebrow text-or-dark">Attribuer le débrief</div>
+          <h3 className="text-xl font-black mt-1">Choisir un projet</h3>
+          <p className="text-xs text-muted mt-1">À quel projet rattacher ce débrief ?</p>
+        </div>
+
+        <div className="px-6 py-4 space-y-2 overflow-y-auto">
+          {projects.map((p) => {
+            const projectAddress = [p.addressLine, p.postalCode, p.city].filter(Boolean).join(', ')
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => onPick(p)}
+                className="w-full text-left rounded-2xl border border-line bg-white/70 hover:bg-white hover:border-or px-4 py-3 text-sm transition"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-bold truncate">{p.name}</div>
+                    {projectAddress && <div className="text-[11px] text-muted mt-0.5 truncate">{projectAddress}</div>}
+                  </div>
+                  <span className="shrink-0 inline-flex rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-wider bg-cuivre-tint text-cuivre">{PROJECT_STATUS_LABEL[p.status]}</span>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="px-6 py-4 border-t border-line flex items-center justify-between gap-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-semibold text-muted hover:text-text">
+            Annuler
+          </button>
+          {allowCreate && (
+            <button type="button" onClick={onCreateNew} className="btn-primary px-5 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2">
+              <Icon name="plus" size={14} />
+              Créer un nouveau projet
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

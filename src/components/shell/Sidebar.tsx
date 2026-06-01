@@ -5,6 +5,7 @@ import { useRole, useDisplayUser, type Role } from '../../lib/role'
 import { useAuth } from '../../lib/auth'
 import { useNavSidebar } from '../../lib/navSidebar'
 import { useTheme } from '../../lib/theme'
+import { leadListPath } from '../../lib/leadPaths'
 
 type Item = { to: string; icon: IconName; label: string; roles?: Role[] }
 type Section = { id: string; label: string; items: Item[] }
@@ -25,7 +26,7 @@ const SECTIONS: Section[] = [
     items: [
       { to: '/notifications', icon: 'bell', label: 'Rappels' },
       { to: '/analytics', icon: 'chart', label: 'Analytics' },
-      { to: '/suivi', icon: 'grid', label: 'Suivi', roles: ['admin', 'delivrabilite'] },
+      { to: '/suivi', icon: 'grid', label: 'Suivi', roles: ['admin', 'delivrabilite', 'responsable_technique', 'back_office', 'technicien'] },
     ],
   },
   {
@@ -33,7 +34,7 @@ const SECTIONS: Section[] = [
     label: 'Administration',
     items: [
       { to: '/settings', icon: 'users', label: 'Équipe', roles: ['commercial'] },
-      { to: '/settings', icon: 'shield', label: 'Paramètres', roles: ['admin'] },
+      { to: '/settings', icon: 'shield', label: 'Paramètres', roles: ['admin', 'commercial_lead'] },
     ],
   },
 ]
@@ -108,7 +109,13 @@ export function Sidebar() {
     () =>
       SECTIONS.map((s) => ({
         ...s,
-        items: s.items.filter((it) => !it.roles || it.roles.includes(role)),
+        items: s.items
+          .filter((it) => !it.roles || it.roles.includes(role))
+          .map((it) =>
+            it.to === '/leads' && (role === 'commercial' || role === 'commercial_lead')
+              ? { ...it, to: '/client', label: 'Clients' }
+              : it,
+          ),
       })).filter((s) => s.items.length > 0),
     [role],
   )
@@ -119,7 +126,7 @@ export function Sidebar() {
     navigate('/', { replace: true })
   }
 
-  const goSearch = () => navigate('/leads')
+  const goSearch = () => navigate(leadListPath(role))
 
   return (
     <>

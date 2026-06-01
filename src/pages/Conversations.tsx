@@ -6,6 +6,8 @@ import { Icon } from '../components/Icon'
 import { MockBanner } from '../components/MockBanner'
 import { CONVERSATIONS, LEADS } from '../lib/mock-data'
 import { useStartCall } from '../lib/hooks'
+import { useAuth } from '../lib/auth'
+import { leadDetailPath } from '../lib/leadPaths'
 
 type Message = { from: 'lead' | 'me'; text: string }
 
@@ -48,8 +50,11 @@ const THREADS: Record<string, { date: string; messages: Message[] }[]> = {
 export function Conversations() {
   const [activeId, setActiveId] = useState('c1')
   const [draft, setDraft] = useState('')
+  // Mobile master-detail : on affiche soit la liste, soit le fil (pas les deux côte à côte).
+  const [showThreadMobile, setShowThreadMobile] = useState(false)
   const navigate = useNavigate()
   const startCall = useStartCall()
+  const role = useAuth((s) => s.user?.role)
 
   const active = CONVERSATIONS.find((c) => c.id === activeId)!
   const lead = LEADS.find((l) => l.id === active.leadId)
@@ -61,7 +66,7 @@ export function Conversations() {
       <MockBanner reason="messagerie pas encore branchée — pas de endpoint /conversations côté backend." />
       <div className="flex flex-grow overflow-hidden">
         {/* Conversations list */}
-        <div className="w-[320px] border-r border-line bg-white/30 backdrop-blur-md flex flex-col flex-shrink-0">
+        <div className={`w-full sm:w-[320px] border-r border-line bg-white/30 backdrop-blur-md flex-col flex-shrink-0 ${showThreadMobile ? 'hidden sm:flex' : 'flex'}`}>
           <div className="p-4 border-b border-line">
             <input
               type="text"
@@ -73,7 +78,7 @@ export function Conversations() {
             {CONVERSATIONS.map((c) => (
               <button
                 key={c.id}
-                onClick={() => setActiveId(c.id)}
+                onClick={() => { setActiveId(c.id); setShowThreadMobile(true) }}
                 className={`w-full p-4 border-b border-line-soft text-left transition-colors ${
                   activeId === c.id ? 'bg-cuivre-tint/40' : 'hover:bg-white/40'
                 }`}
@@ -97,10 +102,18 @@ export function Conversations() {
         </div>
 
         {/* Thread */}
-        <div className="flex-grow flex flex-col min-w-0">
-          <div className="px-6 py-3 border-b border-line bg-white/30 flex items-center justify-between flex-shrink-0">
-            <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-full ${active.tintClass} flex items-center justify-center text-sm font-bold`}>{active.initials}</div>
+        <div className={`flex-grow flex-col min-w-0 ${showThreadMobile ? 'flex' : 'hidden sm:flex'}`}>
+          <div className="px-4 sm:px-6 py-3 border-b border-line bg-white/30 flex items-center justify-between flex-shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <button
+                type="button"
+                onClick={() => setShowThreadMobile(false)}
+                className="sm:hidden w-10 h-10 -ml-2 rounded-full flex items-center justify-center text-muted hover:bg-white/50 shrink-0"
+                aria-label="Retour aux conversations"
+              >
+                <Icon name="arrow-left" size={18} />
+              </button>
+              <div className={`w-9 h-9 rounded-full ${active.tintClass} flex items-center justify-center text-sm font-bold shrink-0`}>{active.initials}</div>
               <div>
                 <h2 className="text-base font-bold">{active.name}</h2>
                 <span className="text-xs text-faint">{lead?.phone ?? ''} — En ligne</span>
@@ -108,7 +121,7 @@ export function Conversations() {
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => lead && navigate(`/leads/${lead.id}`)}
+                onClick={() => lead && navigate(leadDetailPath(role, lead.id))}
                 className="btn-secondary px-3 py-2 rounded-xl text-xs"
               >
                 Voir le profil

@@ -1,12 +1,13 @@
 import { type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '../components/Icon'
+import { MagicKpi } from '../components/kpi/MagicKpi'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
 import { useDisplayUser } from '../lib/role'
-import { useCallLogs, useLeads, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary, prefetchAnalyticsFunnel, prefetchAnalyticsSummary } from '../lib/hooks'
-import { STATUS_LABEL, fullName, initials, type AnalyticsFunnelResponse, type CallLogResponse, type LeadResponse, type LeadStatus, type RdvResponse, type UserResponse } from '../lib/types'
+import { useCallLogs, useLeads, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary, useDebriefAnalytics, prefetchAnalyticsFunnel, prefetchAnalyticsSummary, type DebriefAnalyticsResponse } from '../lib/hooks'
+import { STATUS_LABEL, DEBRIEF_ACCEPTANCE_FACTOR_LABEL, DEBRIEF_NON_SALE_REASON_LABEL, fullName, initials, type AnalyticsFunnelResponse, type CallLogResponse, type DebriefAcceptanceFactor, type DebriefNonSaleReason, type LeadResponse, type LeadStatus, type RdvResponse, type UserResponse } from '../lib/types'
 
 type FunnelPeriodMode = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'custom'
 type FunnelPeriodState = { mode: FunnelPeriodMode; customFrom: string; customTo: string }
@@ -49,8 +50,13 @@ export function Overview() {
   const role = useAuth((s) => s.user?.role)
 
   if (role === 'admin') return <OverviewAdmin />
-  if (role === 'commercial') return <OverviewCommercial />
-  if (role === 'delivrabilite') return <OverviewSuivi />
+  // commercial_lead = responsable commercial : même UI que commercial mais
+  // sans filtre me.id (cf. OverviewCommercial → `isManager`), il supervise
+  // toute l'équipe closing.
+  if (role === 'commercial' || role === 'commercial_lead') return <OverviewCommercial />
+  // Délivrabilité (legacy) + son split : responsable_technique / back_office / technicien.
+  // Tous voient la vue Suivi (basée sur /leads et /rdv, ouverts à tous les rôles).
+  if (role === 'delivrabilite' || role === 'responsable_technique' || role === 'back_office' || role === 'technicien') return <OverviewSuivi />
   return <OverviewSetter />
 }
 
@@ -296,12 +302,20 @@ function OverviewCommercial() {
   const me = useAuth((s) => s.user)
   const display = useDisplayUser()
   const [tab, setTab] = useState('overview')
+  // Un commercial_lead voit l'ensemble de l'équipe closing, pas seulement ses
+  // propres RDV — pas de filtre commercialId, pas de scope `me.id` dans les
+  // helpers de prospects/débriefs.
+  const isManager = me?.role === 'commercial_lead'
+  const scopeCommercialId = isManager ? undefined : me?.id
   const [commercialPeriod, setCommercialPeriod] = useState<FunnelPeriodState>({ ...DEFAULT_FUNNEL_PERIOD, mode: 'this_month' })
   const commercialRange = buildFunnelPeriodRange(commercialPeriod)
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), [])
-  const { data: rdvs = [] } = useRdvList({ commercialId: me?.id, fromDate: commercialRange.from, toDate: commercialRange.to, limit: 200 })
+  const { data: rdvs = [] } = useRdvList({ commercialId: scopeCommercialId, fromDate: commercialRange.from, toDate: commercialRange.to, limit: 200 })
   const { data: commercialSummary } = useAnalyticsSummary({ from: commercialRange.from, to: commercialRange.to })
   const { data: allLeads = [] } = useLeads({ limit: 500 })
+  const { data: debriefAnalytics } = useDebriefAnalytics({ from: commercialRange.from, to: commercialRange.to, commercialId: scopeCommercialId })
+  const qualifiedDebriefSegments = useMemo(() => acceptanceFactorSegments(debriefAnalytics), [debriefAnalytics])
+  const nonSaleDebriefSegments = useMemo(() => nonSaleReasonSegments(debriefAnalytics), [debriefAnalytics])
 
   const stats = useMemo(() => {
     const list = rdvs ?? []
@@ -342,16 +356,16 @@ function OverviewCommercial() {
       lost: totalLost,
       reflexion: totalReflexion,
       leadsToday,
-      qualifiedProspects: commercialQualifiedProspects(list, leadList, me?.id),
-      qualifiedDebriefSegments: commercialQualifiedDebriefSegments(list, leadList, me?.id, commercialRange),
-      nonSaleDebriefSegments: commercialNonSaleDebriefSegments(list, leadList, me?.id, commercialRange),
+      qualifiedProspects: commercialQualifiedProspects(list, leadList, scopeCommercialId),
+      qualifiedDebriefSegments: commercialQualifiedDebriefSegments(list, leadList, scopeCommercialId, commercialRange),
+      nonSaleDebriefSegments: commercialNonSaleDebriefSegments(list, leadList, scopeCommercialId, commercialRange),
     }
-  }, [rdvs, todayIso, commercialSummary, allLeads, me?.id, commercialRange.from, commercialRange.to])
+  }, [rdvs, todayIso, commercialSummary, allLeads, scopeCommercialId, commercialRange.from, commercialRange.to])
 
   return (
     <AppShell blobsKey="commercial" flat>
       <Topbar
-        eyebrow="COMMERCIAL"
+        eyebrow={isManager ? 'RESPONSABLE COMMERCIAL' : 'COMMERCIAL'}
         title={`Bonjour, ${display.firstName}`}
         tabs={[
           { id: 'overview', label: 'Overview' },
@@ -445,11 +459,11 @@ function OverviewCommercial() {
             </div>
           </div>
           <div className="overview-commercial-hero-stats">
-            <div><small>{leadsKpiLabelFor(commercialPeriod.mode)}</small><strong>{fmtCompact(stats.leadsToday)}</strong><span>leads arrivés</span></div>
-            <div><small>CA signé</small><strong>{fmtKEur(stats.ca)}</strong><span>{fmtCompact(stats.signed)} ventes</span></div>
-            <div><small>Closing</small><strong>{stats.closing}%</strong><span>{fmtCompact(stats.lost)} perdus</span></div>
-            <div><small>Panier moyen</small><strong>{fmtKEur(stats.panier)}</strong><span>sur ventes signées</span></div>
-            <div><small>RDV suivis</small><strong>{fmtCompact(stats.totalRdv)}</strong><span>{fmtCompact(stats.totalHonored)} honorés</span></div>
+            <MagicKpi size="sm" accent="info" icon="inbox" label={leadsKpiLabelFor(commercialPeriod.mode)} value={fmtCompact(stats.leadsToday)} sub="leads arrivés" />
+            <MagicKpi size="sm" accent="gold" icon="trophy" label="CA signé" value={fmtKEur(stats.ca)} sub={`${fmtCompact(stats.signed)} ventes`} />
+            <MagicKpi size="sm" accent="success" icon="target" label="Closing" value={`${stats.closing}%`} sub={`${fmtCompact(stats.lost)} perdus`} progress={stats.closing} />
+            <MagicKpi size="sm" accent="green" icon="tag" label="Panier moyen" value={fmtKEur(stats.panier)} sub="sur ventes signées" />
+            <MagicKpi size="sm" accent="info" icon="calendar" label="RDV suivis" value={fmtCompact(stats.totalRdv)} sub={`${fmtCompact(stats.totalHonored)} honorés`} />
           </div>
         </section>
 
@@ -459,13 +473,13 @@ function OverviewCommercial() {
           <div className="overview-commercial-debrief-grid">
             <DebriefPieCard
               title="Débrief qualifié"
-              subtitle="choix remplis par le commercial"
-              segments={stats.qualifiedDebriefSegments}
+              subtitle="facteurs d'acceptation des ventes"
+              segments={qualifiedDebriefSegments}
             />
             <DebriefPieCard
               title="Raisons non-vente"
-              subtitle="répartition des non qualifiés"
-              segments={stats.nonSaleDebriefSegments}
+              subtitle="motifs des débriefs non-vente"
+              segments={nonSaleDebriefSegments}
             />
           </div>
 
@@ -552,6 +566,9 @@ function OverviewAdmin() {
   const { data: usersList = [] } = useUsers()
   const { data: allLeads = [] } = useLeads({ limit: 500 })
   const { data: allRdvs = [] } = useRdvList({ fromDate: funnelRange.from, toDate: funnelRange.to, limit: 200 })
+  const { data: debriefAnalytics } = useDebriefAnalytics({ from: funnelRange.from, to: funnelRange.to })
+  const qualifiedDebriefSegments = useMemo(() => acceptanceFactorSegments(debriefAnalytics), [debriefAnalytics])
+  const nonSaleDebriefSegments = useMemo(() => nonSaleReasonSegments(debriefAnalytics), [debriefAnalytics])
 
   const adminSummary = summary?.admin ?? null
   const funnelTotals = funnel?.totals ?? EMPTY_FUNNEL_TOTALS
@@ -716,13 +733,13 @@ function OverviewAdmin() {
             <LeadPieAnalysis segments={leadSegments} totalFallback={stats.leads} />
             <DebriefPieCard
               title="Débrief qualifié"
-              subtitle="choix remplis par les commerciaux"
-              segments={stats.qualifiedDebriefSegments}
+              subtitle="facteurs d'acceptation des ventes"
+              segments={qualifiedDebriefSegments}
             />
             <DebriefPieCard
               title="Raisons non-vente"
-              subtitle="répartition des non qualifiés"
-              segments={stats.nonSaleDebriefSegments}
+              subtitle="motifs des débriefs non-vente"
+              segments={nonSaleDebriefSegments}
             />
           </aside>
         </div>
@@ -856,8 +873,8 @@ function LeadEvolutionChart({ points, granularity, rangeLabel, totals }: { point
         <svg viewBox={`0 0 ${width} ${height}`} onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img" aria-label="Évolution leads RDV ventes">
           <defs>
             <linearGradient id="leadEvolutionFill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor={activeSeries.color} stopOpacity="0.24" />
-              <stop offset="100%" stopColor={activeSeries.color} stopOpacity="0" />
+              <stop offset="0%" stopColor={activeSeries.color} stopOpacity="0.12" />
+              <stop offset="100%" stopColor={activeSeries.color} stopOpacity="0.12" />
             </linearGradient>
           </defs>
           {[0, 0.5, 1].map((ratio) => {
@@ -1810,6 +1827,27 @@ function commercialQualifiedProspects(rdvs: RdvResponse[], leads: LeadResponse[]
     })
 
   return Array.from(prospects.values()).sort((a, b) => (b.scheduledAt ?? '').localeCompare(a.scheduledAt ?? ''))
+}
+
+// Cartes Overview alimentées par les débriefs réels (table debriefs via
+// /analytics/debriefs). Les catégories sont exactement celles du formulaire de
+// débrief : facteurs d'acceptation (vente) + motifs de non-vente.
+function acceptanceFactorSegments(data: DebriefAnalyticsResponse | null | undefined): LeadSegment[] {
+  const counts = data?.acceptanceFactorCounts ?? {}
+  return (Object.keys(DEBRIEF_ACCEPTANCE_FACTOR_LABEL) as DebriefAcceptanceFactor[]).map((key) => ({
+    label: DEBRIEF_ACCEPTANCE_FACTOR_LABEL[key],
+    description: DEBRIEF_ACCEPTANCE_FACTOR_LABEL[key],
+    value: counts[key] ?? 0,
+  }))
+}
+
+function nonSaleReasonSegments(data: DebriefAnalyticsResponse | null | undefined): LeadSegment[] {
+  const counts = data?.nonSaleReasonCounts ?? {}
+  return (Object.keys(DEBRIEF_NON_SALE_REASON_LABEL) as DebriefNonSaleReason[]).map((key) => ({
+    label: DEBRIEF_NON_SALE_REASON_LABEL[key],
+    description: DEBRIEF_NON_SALE_REASON_LABEL[key],
+    value: counts[key] ?? 0,
+  }))
 }
 
 const QUALIFIED_OBJECTION_LABELS: Array<{ label: string; description: string; match: (source: CommercialDebriefSource) => boolean }> = [

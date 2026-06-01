@@ -11,6 +11,8 @@ import { Overview } from './pages/Overview'
 import { LeadsList } from './pages/leads/LeadsList'
 import { LeadDetail } from './pages/leads/LeadDetail'
 import { LeadsSplit } from './pages/leads/LeadsSplit'
+import { ClientsList } from './pages/clients/ClientsList'
+import { ProjectDetail } from './pages/projects/ProjectDetail'
 import { RdvCalendar } from './pages/rdv/RdvCalendar'
 import { RdvDetail } from './pages/rdv/RdvDetail'
 import { RdvSplit } from './pages/rdv/RdvSplit'
@@ -40,6 +42,9 @@ const router = createHashRouter([
           { path: '/leads', element: <LeadsList /> },
           { path: '/leads/split', element: <LeadsSplit /> },
           { path: '/leads/:id', element: <LeadDetail /> },
+          { path: '/client', element: <ClientsList /> },
+          { path: '/client/:id', element: <LeadDetail /> },
+          { path: '/projects/:id', element: <ProjectDetail /> },
           { path: '/rdv', element: <RdvCalendar /> },
           { path: '/rdv/split', element: <RdvSplit /> },
           { path: '/rdv/:id', element: <RdvDetail /> },

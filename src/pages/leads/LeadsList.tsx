@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon, type IconName } from '../../components/Icon'
@@ -11,7 +11,7 @@ import { useLeadSidebar } from '../../lib/leadSidebar'
 import { emitLeadDeselect, emitLeadSelect, useLeadLocks, type LeadLockInfo } from '../../lib/realtime'
 import { DossierCard } from '../../components/suivi/DossierCard'
 import { buildDossiers, readWorkflowState } from '../../lib/suivi'
-import { DEFAULT_LEAD_FILTERS, applyLeadFilters, leadFiltersActive, type LeadLastCallFilter, type LeadListFilters } from '../../lib/leadFilters'
+import { DEFAULT_LEAD_FILTERS, applyLeadFilters, leadFiltersActive, matchesLeadDateRange, type LeadArrivedAtFilter, type LeadDateField, type LeadHasFilter, type LeadLastCallFilter, type LeadListFilters } from '../../lib/leadFilters'
 import {
   STATUS_BADGE,
   STATUS_LABEL,
@@ -110,8 +110,11 @@ const ADMIN_DEFAULT_COLUMNS: ColumnKey[] = [
 export function LeadsList() {
   const role = useAuth((s) => s.user?.role)
   if (role === 'admin') return <LeadsAdmin />
-  if (role === 'commercial') return <LeadsCommercial />
-  if (role === 'delivrabilite') return <LeadsSuivi />
+  // Les commerciaux ont leur propre URL (/client) et leur propre fichier
+  // (pages/clients/ClientsList.tsx). On les y redirige depuis /leads pour
+  // garder l'ancienne URL fonctionnelle (notifications, deep links…).
+  if (role === 'commercial' || role === 'commercial_lead') return <Navigate to="/client" replace />
+  if (role === 'delivrabilite' || role === 'responsable_technique' || role === 'back_office' || role === 'technicien') return <LeadsSuivi />
   return <LeadsSetter />
 }
 
@@ -168,237 +171,6 @@ function LeadsSuivi() {
   )
 }
 
-type CommercialFilter = 'all' | 'en_attente' | 'signe' | 'non_qualifie'
-
-const COMMERCIAL_STATUS_FILTERS: Array<{ key: CommercialFilter; label: string; icon: IconName }> = [
-  { key: 'all', label: 'Tous mes leads', icon: 'inbox' },
-  { key: 'en_attente', label: 'En attente', icon: 'clock' },
-  { key: 'signe', label: 'Signés', icon: 'check' },
-  { key: 'non_qualifie', label: 'Non qualifiés', icon: 'x' },
-]
-
-// ----- F3 Commercial -----
-type CommercialSortKey = 'nom' | 'statut' | 'phone' | 'address' | 'rdv' | 'transfert'
-type CommercialSortDir = 'asc' | 'desc'
-
-function compareNullableDates(a: string | null, b: string | null, dirMul: number): number {
-  if (!a && !b) return 0
-  if (!a) return 1
-  if (!b) return -1
-  return (new Date(a).getTime() - new Date(b).getTime()) * dirMul
-}
-
-function LeadsCommercial() {
-  const me = useAuth((s) => s.user)
-  const selectedId = useLeadSidebar((s) => s.selectedLeadId)
-  const selectLead = useLeadSidebar((s) => s.selectLead)
-  const { data, loading, error } = useLeads(me?.id ? { assignedToId: me.id, limit: 250 } : { limit: 250 })
-  const allLeads = data ?? []
-  const [filter, setFilter] = useState<CommercialFilter>('all')
-  const [sortKey, setSortKey] = useState<CommercialSortKey | null>(null)
-  const [sortDir, setSortDir] = useState<CommercialSortDir>('desc')
-
-  const counts = useMemo(() => ({
-    all: allLeads.length,
-    en_attente: allLeads.filter((l) => commercialBucketForLead(l) === 'en_attente').length,
-    signe: allLeads.filter((l) => commercialBucketForLead(l) === 'signe').length,
-    non_qualifie: allLeads.filter((l) => commercialBucketForLead(l) === 'non_qualifie').length,
-  }), [allLeads])
-
-  const leads = useMemo(() => {
-    const base = filter === 'all' ? allLeads : allLeads.filter((l) => commercialBucketForLead(l) === filter)
-    if (!sortKey) return base
-    const dirMul = sortDir === 'asc' ? 1 : -1
-    const cmp = (a: LeadResponse, b: LeadResponse): number => {
-      switch (sortKey) {
-        case 'nom': return fullName(a).localeCompare(fullName(b), 'fr', { sensitivity: 'base' }) * dirMul
-        case 'statut': return statusLabelForLead(a, 'commercial').localeCompare(statusLabelForLead(b, 'commercial'), 'fr') * dirMul
-        case 'phone': return (a.phone ?? '').localeCompare(b.phone ?? '') * dirMul
-        case 'address': return addressFull(a).localeCompare(addressFull(b), 'fr', { sensitivity: 'base' }) * dirMul
-        case 'rdv': return compareNullableDates(a.latestRdvAt, b.latestRdvAt, dirMul)
-        case 'transfert': return compareNullableDates(a.transferredAt, b.transferredAt, dirMul)
-      }
-    }
-    return [...base].sort(cmp)
-  }, [allLeads, filter, sortKey, sortDir])
-
-  function toggleSort(key: CommercialSortKey, defaultDir: CommercialSortDir) {
-    if (sortKey !== key) {
-      setSortKey(key)
-      setSortDir(defaultDir)
-    } else {
-      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
-    }
-  }
-
-  function sortIndicator(key: CommercialSortKey): string {
-    if (sortKey !== key) return '↕'
-    return sortDir === 'asc' ? '▲' : '▼'
-  }
-
-  return (
-    <AppShell>
-      <Topbar eyebrow="LEADS / COMMERCIAL" title="Mes leads" />
-      <div className="flex flex-grow overflow-hidden">
-        <CommercialRail filter={filter} onFilter={setFilter} counts={counts} />
-        <main className="p-4 sm:p-6 md:p-8 flex-grow overflow-auto">
-        {loading && leads.length === 0 ? (
-          <LoadingBlock label="Chargement des leads…" />
-        ) : error ? (
-          <div className="py-16 text-center text-rouille text-sm">Erreur : {error}</div>
-        ) : leads.length === 0 ? (
-          <EmptyState icon="users" title={allLeads.length === 0 ? 'Aucun lead assigné' : 'Aucun lead pour ce filtre'} description={allLeads.length === 0 ? "Aucun lead n'est rattaché à ton compte commercial pour le moment." : 'Essaie un autre filtre de statut.'} />
-        ) : (
-          <>
-            {/* Mobile : vue carte (md:hidden) */}
-            <div className="grid grid-cols-1 gap-3 md:hidden">
-              {leads.map((lead) => (
-                <button
-                  key={lead.id}
-                  type="button"
-                  onClick={() => selectLead(lead.id)}
-                  className={`glass-card !p-4 text-left transition-colors ${selectedId === lead.id ? 'ring-2 ring-or' : 'hover:bg-white/60'}`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-black text-sm text-text truncate">{fullName(lead)}</p>
-                      <p className="mt-0.5 text-[11px] text-muted truncate">{lead.phone ?? '—'}</p>
-                    </div>
-                    <span className={`status-badge ${statusBadgeForLead(lead, 'commercial')} shrink-0`}>{statusLabelForLead(lead, 'commercial')}</span>
-                  </div>
-                  <div className="mt-2 space-y-1 text-[11px] text-muted">
-                    {addressFull(lead) !== '—' && (
-                      <div className="flex items-start gap-1.5">
-                        <Icon name="map-pin" size={12} className="mt-0.5 shrink-0 text-faint" />
-                        <span className="truncate">{addressFull(lead)}</span>
-                      </div>
-                    )}
-                    {rdvLabel(lead) !== '—' && (
-                      <div className="flex items-start gap-1.5">
-                        <Icon name="calendar" size={12} className="mt-0.5 shrink-0 text-faint" />
-                        <span className="truncate">{rdvLabel(lead)}</span>
-                      </div>
-                    )}
-                    {lead.transferredAt && (
-                      <div className="flex items-start gap-1.5">
-                        <Icon name="clock" size={12} className="mt-0.5 shrink-0 text-faint" />
-                        <span className="truncate">Transféré le {fullDateTime(lead.transferredAt)}</span>
-                      </div>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            {/* Desktop : tableau (md:block) */}
-            <div className="hidden md:block glass-card !p-0 overflow-x-auto">
-              <table className="w-full min-w-[1160px] text-sm table-fixed lead-table">
-                <thead className="text-left eyebrow sticky top-0 z-10 border-b border-white/60 bg-white/65 shadow-sm shadow-text/5 backdrop-blur-2xl">
-                  <tr>
-                    <Th className="w-[260px]"><button type="button" onClick={() => toggleSort('nom', 'asc')} className={`inline-flex items-center gap-1 ${sortKey === 'nom' ? 'text-or-dark' : ''}`}>NOM <span className="text-[9px] opacity-60">{sortIndicator('nom')}</span></button></Th>
-                    <Th className="w-[170px]"><button type="button" onClick={() => toggleSort('statut', 'asc')} className={`inline-flex items-center gap-1 ${sortKey === 'statut' ? 'text-or-dark' : ''}`}>STATUT <span className="text-[9px] opacity-60">{sortIndicator('statut')}</span></button></Th>
-                    <Th className="w-[210px]"><button type="button" onClick={() => toggleSort('phone', 'asc')} className={`inline-flex items-center gap-1 ${sortKey === 'phone' ? 'text-or-dark' : ''}`}>TÉLÉPHONE <span className="text-[9px] opacity-60">{sortIndicator('phone')}</span></button></Th>
-                    <Th className="w-[260px]"><button type="button" onClick={() => toggleSort('address', 'asc')} className={`inline-flex items-center gap-1 ${sortKey === 'address' ? 'text-or-dark' : ''}`}>ADRESSE <span className="text-[9px] opacity-60">{sortIndicator('address')}</span></button></Th>
-                    <Th className="w-[180px]"><button type="button" onClick={() => toggleSort('rdv', 'desc')} className={`inline-flex items-center gap-1 ${sortKey === 'rdv' ? 'text-or-dark' : ''}`}>RENDEZ-VOUS <span className="text-[9px] opacity-60">{sortIndicator('rdv')}</span></button></Th>
-                    <Th className="w-[180px]"><button type="button" onClick={() => toggleSort('transfert', 'desc')} className={`inline-flex items-center gap-1 ${sortKey === 'transfert' ? 'text-or-dark' : ''}`}>TRANSFERT <span className="text-[9px] opacity-60">{sortIndicator('transfert')}</span></button></Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {leads.map((lead) => (
-                    <tr
-                      key={lead.id}
-                      className={`border-b border-line-soft last:border-0 cursor-pointer transition-colors ${selectedId === lead.id ? 'bg-or/20 shadow-[inset_4px_0_0_var(--color-or-dark)]' : 'hover:bg-white/40'}`}
-                      onClick={() => selectLead(lead.id)}
-                      title="Cliquer pour ouvrir le débriefing commercial"
-                    >
-                      <Td><span className="font-semibold truncate" title={fullName(lead)}>{fullName(lead)}</span></Td>
-                      <Td><span className={`status-badge ${statusBadgeForLead(lead, 'commercial')}`}>{statusLabelForLead(lead, 'commercial')}</span></Td>
-                      <Td className="text-muted truncate" title={lead.phone ?? undefined}>{lead.phone ?? '—'}</Td>
-                      <Td className="text-muted truncate" title={addressFull(lead)}>{addressFull(lead)}</Td>
-                      <Td className="text-muted truncate" title={rdvLabel(lead)}>{rdvLabel(lead)}</Td>
-                      <Td className="text-muted truncate" title={lead.transferredAt ? fullDateTime(lead.transferredAt) : undefined}>{lead.transferredAt ? fullDateTime(lead.transferredAt) : '—'}</Td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-        </main>
-      </div>
-    </AppShell>
-  )
-}
-
-const COMMERCIAL_RAIL_COLLAPSED_KEY = 'ecoi.leads.commercial.rail.collapsed'
-
-function CommercialRail({ filter, onFilter, counts }: { filter: CommercialFilter; onFilter: (f: CommercialFilter) => void; counts: Record<CommercialFilter, number> }) {
-  const [collapsed, setCollapsed] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false
-    return window.localStorage.getItem(COMMERCIAL_RAIL_COLLAPSED_KEY) === '1'
-  })
-
-  function toggle() {
-    setCollapsed((prev) => {
-      const next = !prev
-      try { window.localStorage.setItem(COMMERCIAL_RAIL_COLLAPSED_KEY, next ? '1' : '0') } catch { /* ignore */ }
-      return next
-    })
-  }
-
-  return (
-    <aside className={`leads-rail hidden lg:flex ${collapsed ? 'is-collapsed' : ''}`}>
-      <div className="leads-rail-toggle-row">
-        <button
-          type="button"
-          onClick={toggle}
-          className="leads-rail-toggle"
-          title={collapsed ? 'Étendre les filtres' : 'Réduire les filtres'}
-          aria-label={collapsed ? 'Étendre les filtres' : 'Réduire les filtres'}
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            {collapsed ? <polyline points="9 6 15 12 9 18" /> : <polyline points="15 6 9 12 15 18" />}
-          </svg>
-        </button>
-      </div>
-
-      {collapsed ? (
-        <div className="leads-rail-collapsed-group">
-          {COMMERCIAL_STATUS_FILTERS.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => onFilter(item.key)}
-              className={`leads-rail-mini ${filter === item.key ? 'is-active' : ''}`}
-              title={`${item.label} (${counts[item.key]})`}
-              aria-label={item.label}
-            >
-              <Icon name={item.icon} size={16} strokeWidth={1.75} />
-              {counts[item.key] > 0 && (
-                <span className="leads-rail-mini-dot">{counts[item.key] > 99 ? '99+' : counts[item.key]}</span>
-              )}
-            </button>
-          ))}
-        </div>
-      ) : (
-        <CollapsibleSection storageKey="ecoi.leads.commercial.section.statut" label="Statut">
-          {COMMERCIAL_STATUS_FILTERS.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => onFilter(item.key)}
-              className={`sb-item leads-rail-item ${filter === item.key ? 'is-active' : ''}`}
-            >
-              <span className="sb-item-icon"><Icon name={item.icon} size={15} strokeWidth={1.75} /></span>
-              <span className="sb-item-label">{item.label}</span>
-              <span className="leads-rail-count">{counts[item.key]}</span>
-            </button>
-          ))}
-        </CollapsibleSection>
-      )}
-    </aside>
-  )
-}
 
 type SetterFilter = 'nouveau' | 'sans_reponse' | 'rappel' | 'qualifie' | 'perdu' | 'relance_lt'
 type SetterMissingFilter = 'all' | 'any' | 'phone' | 'address' | 'postalCode' | 'email' | 'city'
@@ -533,7 +305,7 @@ function LeadsSetter() {
         />
 
         <div className="flex-grow flex flex-col min-w-0">
-          <div className="px-8 pt-4 flex items-center gap-3 flex-shrink-0 flex-wrap">
+          <div className="px-4 sm:px-8 pt-4 flex items-center gap-3 flex-shrink-0 flex-wrap">
             <div className="relative flex-grow max-w-sm min-w-[200px]">
               <Icon name="search" size={16} className="absolute left-3 top-2.5 text-faint" />
               <input
@@ -550,7 +322,7 @@ function LeadsSetter() {
             {(loading || backgroundLoading) && mine.length > 0 && <span className="text-xs text-faint">Actualisation…</span>}
           </div>
 
-          <main className="p-8 pt-4 flex-grow flex flex-col min-h-0 overflow-hidden">
+          <main className="p-3 pt-3 sm:p-8 sm:pt-4 flex-grow flex flex-col min-h-0 overflow-hidden">
 
             {loading && mine.length === 0 ? (
               <LoadingBlock label="Chargement des leads…" />
@@ -770,7 +542,7 @@ function LeadsAdmin() {
         />
 
         <div className="flex-grow flex flex-col min-w-0">
-          <div className="px-8 pt-4 flex items-center gap-3 flex-shrink-0 flex-wrap">
+          <div className="px-4 sm:px-8 pt-4 flex items-center gap-3 flex-shrink-0 flex-wrap">
             <span className="text-xs text-faint font-semibold">{filtered.length}/{(leads ?? []).length}</span>
             {leadFiltersActive(leadFilters) || setterFilter !== 'all' || commercialFilter !== 'all' ? (
               <button
@@ -949,6 +721,7 @@ function phoneSearchVariants(value: string): string[] {
   return Array.from(variants).filter((variant) => variant.length >= 4)
 }
 
+
 // Statut côté setter = 3 buckets visibles :
 //   "Qualifié" (job du setter terminé)
 //   "Non qualifié" (lead clôturé en perte)
@@ -959,26 +732,34 @@ function setterBucketForLead(lead: LeadResponse): 'qualifie' | 'non_qualifie' | 
   return 'en_attente'
 }
 
-// Statut côté commercial = 3 buckets visibles :
+// Statut côté commercial = 5 buckets visibles :
+//   "Signature en cours" (en train de signer)
 //   "Signé" (vente conclue)
-//   "Non qualifié" (RDV finalement perdu)
+//   "Perdu" (RDV finalement perdu / non qualifié)
 //   "En attente" (RDV passé au commercial mais pas encore signé)
-function commercialBucketForLead(lead: LeadResponse): 'signe' | 'non_qualifie' | 'en_attente' {
+function commercialBucketForLead(
+  lead: LeadResponse,
+): 'signature_en_cours' | 'signe' | 'perdu' | 'non_qualifie' | 'en_attente' {
   if (lead.status === 'signe') return 'signe'
-  if (lead.status === 'perdu' || lead.status === 'pas_qualifie') return 'non_qualifie'
+  if (lead.status === 'signature_en_cours') return 'signature_en_cours'
+  if (lead.status === 'perdu' || lead.status === 'pas_qualifie') return 'perdu'
   return 'en_attente'
 }
 
-const BUCKET_LABEL: Record<'qualifie' | 'signe' | 'non_qualifie' | 'en_attente', string> = {
+const BUCKET_LABEL: Record<'qualifie' | 'signature_en_cours' | 'signe' | 'perdu' | 'non_qualifie' | 'en_attente', string> = {
   qualifie: 'Qualifié',
+  signature_en_cours: 'Signature en cours',
   signe: 'Signé',
+  perdu: 'Perdu',
   non_qualifie: 'Non qualifié',
   en_attente: 'En attente',
 }
 
-const BUCKET_BADGE: Record<'qualifie' | 'signe' | 'non_qualifie' | 'en_attente', string> = {
+const BUCKET_BADGE: Record<'qualifie' | 'signature_en_cours' | 'signe' | 'perdu' | 'non_qualifie' | 'en_attente', string> = {
   qualifie: 'bg-success-tint text-success',
+  signature_en_cours: 'bg-cuivre-tint text-cuivre',
   signe: 'bg-success-tint text-success',
+  perdu: 'bg-rouille-tint text-rouille',
   non_qualifie: 'bg-rouille-tint text-rouille',
   en_attente: 'bg-cuivre-tint text-cuivre',
 }
@@ -1454,6 +1235,29 @@ const ADMIN_LAST_CALL_FILTERS: Array<{ key: LeadLastCallFilter; label: string; i
   { key: 'older_7d', label: '≥ 7 jours sans appel', icon: 'clock' },
 ]
 
+const ADMIN_DATE_RANGE_FILTERS: Array<{ key: LeadArrivedAtFilter; label: string; icon: IconName }> = [
+  { key: 'all', label: 'Toutes dates', icon: 'inbox' },
+  { key: 'today', label: "Aujourd'hui", icon: 'calendar' },
+  { key: 'yesterday', label: 'Hier', icon: 'calendar' },
+  { key: 'this_week', label: 'Cette semaine', icon: 'calendar' },
+  { key: 'last_week', label: 'Semaine dernière', icon: 'calendar' },
+  { key: 'this_month', label: 'Ce mois-ci', icon: 'calendar' },
+  { key: 'last_month', label: 'Mois dernier', icon: 'calendar' },
+]
+
+const ADMIN_DATE_FIELD_FILTERS: Array<{ key: LeadDateField; label: string; icon: IconName }> = [
+  { key: 'arrival', label: 'Arrivée du lead', icon: 'inbox' },
+  { key: 'devis', label: 'Date du devis', icon: 'tag' },
+  { key: 'debrief', label: 'Date du débrief', icon: 'message' },
+  { key: 'call', label: 'Dernier appel', icon: 'phone' },
+]
+
+const ADMIN_HAS_FILTERS: Array<{ key: LeadHasFilter; label: string }> = [
+  { key: 'all', label: 'Tous' },
+  { key: 'with', label: 'Avec' },
+  { key: 'without', label: 'Sans' },
+]
+
 function AdminLeadsRail({
   leads,
   leadFilters,
@@ -1501,6 +1305,35 @@ function AdminLeadsRail({
     older_3d: leads.filter((l) => l.joursSansContact !== null && l.joursSansContact >= 3).length,
     older_7d: leads.filter((l) => l.joursSansContact !== null && l.joursSansContact >= 7).length,
   } as Record<LeadLastCallFilter, number>), [leads])
+
+  // Compteurs croisés : chaque dimension compte sur les leads qui passent
+  // tous les AUTRES filtres (sauf la dimension elle-même).
+  const dateRangeCounts = useMemo(() => {
+    const base = applyLeadFilters(leads, { ...leadFilters, arrivedAt: 'all' })
+    const out = {} as Record<LeadArrivedAtFilter, number>
+    for (const f of ADMIN_DATE_RANGE_FILTERS) {
+      out[f.key] = f.key === 'all' ? base.length : base.filter((l) => matchesLeadDateRange(l, f.key, leadFilters.dateField)).length
+    }
+    return out
+  }, [leads, leadFilters])
+
+  const hasDevisCounts = useMemo(() => {
+    const base = applyLeadFilters(leads, { ...leadFilters, hasDevis: 'all' })
+    return {
+      all: base.length,
+      with: base.filter((l) => l.hasDevis === true).length,
+      without: base.filter((l) => l.hasDevis !== true).length,
+    } as Record<LeadHasFilter, number>
+  }, [leads, leadFilters])
+
+  const hasDebriefCounts = useMemo(() => {
+    const base = applyLeadFilters(leads, { ...leadFilters, hasDebrief: 'all' })
+    return {
+      all: base.length,
+      with: base.filter((l) => l.hasDebrief === true).length,
+      without: base.filter((l) => l.hasDebrief !== true).length,
+    } as Record<LeadHasFilter, number>
+  }, [leads, leadFilters])
 
   const setterCounts = useMemo(() => {
     const c: Record<string, number> = { all: leads.length }
@@ -1584,6 +1417,64 @@ function AdminLeadsRail({
             <span className="sb-item-icon"><Icon name={item.icon} size={15} strokeWidth={1.75} /></span>
             <span className="sb-item-label">{item.label}</span>
             <span className="leads-rail-count">{lastCallCounts[item.key] ?? 0}</span>
+          </button>
+        ))}
+      </CollapsibleSection>
+
+      <CollapsibleSection storageKey="ecoi.leads.admin.section.periode" label="Période">
+        {ADMIN_DATE_RANGE_FILTERS.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => setLeadFilters({ ...leadFilters, arrivedAt: item.key })}
+            className={`sb-item leads-rail-item ${leadFilters.arrivedAt === item.key ? 'is-active' : ''}`}
+          >
+            <span className="sb-item-icon"><Icon name={item.icon} size={15} strokeWidth={1.75} /></span>
+            <span className="sb-item-label">{item.label}</span>
+            <span className="leads-rail-count">{dateRangeCounts[item.key] ?? 0}</span>
+          </button>
+        ))}
+      </CollapsibleSection>
+
+      <CollapsibleSection storageKey="ecoi.leads.admin.section.champdate" label="Champ date">
+        {ADMIN_DATE_FIELD_FILTERS.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => setLeadFilters({ ...leadFilters, dateField: item.key })}
+            className={`sb-item leads-rail-item ${leadFilters.dateField === item.key ? 'is-active' : ''}`}
+          >
+            <span className="sb-item-icon"><Icon name={item.icon} size={15} strokeWidth={1.75} /></span>
+            <span className="sb-item-label">{item.label}</span>
+          </button>
+        ))}
+      </CollapsibleSection>
+
+      <CollapsibleSection storageKey="ecoi.leads.admin.section.documents" label="Documents">
+        <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-faint">Devis</div>
+        {ADMIN_HAS_FILTERS.map((item) => (
+          <button
+            key={`devis-${item.key}`}
+            type="button"
+            onClick={() => setLeadFilters({ ...leadFilters, hasDevis: item.key })}
+            className={`sb-item leads-rail-item ${leadFilters.hasDevis === item.key ? 'is-active' : ''}`}
+          >
+            <span className="sb-item-icon"><Icon name="tag" size={15} strokeWidth={1.75} /></span>
+            <span className="sb-item-label">{item.label}</span>
+            <span className="leads-rail-count">{hasDevisCounts[item.key] ?? 0}</span>
+          </button>
+        ))}
+        <div className="px-2 pt-2 pb-1 text-[10px] uppercase tracking-wide text-faint">Débrief</div>
+        {ADMIN_HAS_FILTERS.map((item) => (
+          <button
+            key={`debrief-${item.key}`}
+            type="button"
+            onClick={() => setLeadFilters({ ...leadFilters, hasDebrief: item.key })}
+            className={`sb-item leads-rail-item ${leadFilters.hasDebrief === item.key ? 'is-active' : ''}`}
+          >
+            <span className="sb-item-icon"><Icon name="message" size={15} strokeWidth={1.75} /></span>
+            <span className="sb-item-label">{item.label}</span>
+            <span className="leads-rail-count">{hasDebriefCounts[item.key] ?? 0}</span>
           </button>
         ))}
       </CollapsibleSection>

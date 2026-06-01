@@ -124,6 +124,13 @@ export type LeadResponse = {
   daysSinceLastStageChange: number | null
   arrivalAt: string | null
   transferredAt: string | null
+  hasDevis?: boolean
+  hasDebrief?: boolean
+  latestDevisAt?: string | null
+  latestDebriefAt?: string | null
+  // Statut du dossier délivrabilité (Lot 2). Présent une fois le projet signé
+  // transmis à la délivrabilité — remplace alors l'affichage 'signé'.
+  delivrabiliteStatus?: ClientStatus | null
   customFields?: { fieldKey: string; fieldName: string; value: string | null; updatedAt: string }[]
 }
 
@@ -399,6 +406,39 @@ export const STATUS_BADGE: Record<LeadStatus, string> = {
   pas_de_reponse: 'bg-muted/10 text-muted',
 }
 
+// ─── Délivrabilité (Lot 2) ────────────────────────────────
+export type ClientStatus =
+  | 'nouveau'
+  | 'vt_a_faire'
+  | 'administratif_en_cours'
+  | 'installation_planifiee'
+  | 'installe_en_attente_mes'
+  | 'cloture'
+  | 'bloque'
+  | 'annule'
+
+export const DELIVRABILITE_STATUS_LABEL: Record<ClientStatus, string> = {
+  nouveau: 'Délivrabilité',
+  vt_a_faire: 'VT à faire',
+  administratif_en_cours: 'Administratif',
+  installation_planifiee: 'Installation planifiée',
+  installe_en_attente_mes: 'Installé — attente MES',
+  cloture: 'Clôturé',
+  bloque: 'Bloqué',
+  annule: 'Annulé',
+}
+
+export const DELIVRABILITE_STATUS_BADGE: Record<ClientStatus, string> = {
+  nouveau: 'bg-info-tint text-info',
+  vt_a_faire: 'bg-or-tint text-or-dark',
+  administratif_en_cours: 'bg-cuivre-tint text-cuivre',
+  installation_planifiee: 'bg-cuivre-tint text-cuivre',
+  installe_en_attente_mes: 'bg-or-tint text-or-dark',
+  cloture: 'bg-success-tint text-success',
+  bloque: 'bg-rouille-tint text-rouille',
+  annule: 'bg-muted/10 text-muted',
+}
+
 export function fullName(l: { firstName: string | null; lastName: string | null }): string {
   return [cleanField(l.firstName), cleanField(l.lastName)].filter(Boolean).join(' ') || '—'
 }
@@ -441,6 +481,7 @@ export type OcrStatus = 'pending' | 'processing' | 'done' | 'failed';
 
 export interface DevisLigne {
   designation: string;
+  description?: string;
   qty: number;
   prixUnitaireHt: number;
   totalHt: number;
@@ -455,9 +496,98 @@ export interface DevisEcheance {
   montant: number;
 }
 
+export interface DevisVendor {
+  name?: string;
+  addressLine?: string;
+  postalCode?: string;
+  city?: string;
+  phone?: string;
+  email?: string;
+}
+
+export interface DevisCustomer {
+  firstName?: string;
+  lastName?: string;
+  addressLine?: string;
+  city?: string;
+  postalCode?: string;
+  email?: string;
+  phone?: string;
+}
+
+export interface DevisPrime {
+  type?: string;
+  montant?: number;
+  tarifEuroParKwc?: number;
+  zone?: string;
+  modaliteVersement?: string;
+  remarque?: string;
+}
+
+export interface DevisExtraction {
+  devisNumber?: string;
+  devisDate?: string;
+  dateExpiration?: string;
+  delaiExecution?: string;
+  vendor?: DevisVendor;
+  customer?: DevisCustomer;
+  puissanceKwc?: number;
+  nbPanneaux?: number;
+  kits?: string;
+  montantHt?: number;
+  montantTva?: number;
+  montantTtc?: number;
+  montantNet?: number;
+  lignes?: DevisLigne[];
+  prime?: DevisPrime;
+  conditionsReglement?: string;
+  echeancier?: DevisEcheance[];
+  financingType?: string;
+  financingDetails?: {
+    duree?: number;
+    mensualite?: number;
+    taux?: number;
+    apport?: number;
+  };
+}
+
+// Payload PATCH /devis/:id — tous les champs optionnels, `null` efface.
+// Statut "signe" interdit : passe par /mark-signed.
+export interface UpdateDevisPatch {
+  status?: 'brouillon' | 'en_attente' | 'signature_en_cours' | 'perdu';
+  devisNumber?: string | null;
+  devisDate?: string | null;
+  dateExpiration?: string | null;
+  delaiExecution?: string | null;
+  puissanceKwc?: number | null;
+  nbPanneaux?: number | null;
+  kits?: string | null;
+  montantHt?: number | null;
+  montantTva?: number | null;
+  montantTtc?: number | null;
+  montantNet?: number | null;
+  financingType?: string | null;
+  primeAutoconsommation?: number | null;
+  primeTarifKwc?: number | null;
+  primeZone?: string | null;
+  lignes?: DevisLigne[];
+  echeancier?: DevisEcheance[];
+  vendor?: Partial<DevisVendor>;
+  customer?: Partial<DevisCustomer>;
+  prime?: Partial<DevisPrime>;
+  conditionsReglement?: string | null;
+  financingDetails?: {
+    duree?: number | null;
+    mensualite?: number | null;
+    taux?: number | null;
+    apport?: number | null;
+  };
+}
+
 export interface Devis {
   id: string;
   leadId: string;
+  projectId: string | null;
   rdvId: string | null;
   commercialId: string;
   status: DevisStatus;
@@ -482,6 +612,169 @@ export interface Devis {
   primeZone: string | null;
   lignes: DevisLigne[];
   echeancier: DevisEcheance[];
+  extracted: DevisExtraction | null;
   signedAt: string | null;
   createdAt: string;
+}
+
+// ─── Projects ─────────────────────────────────────────────
+export type ProjectStatus =
+  | 'qualification'
+  | 'devis_en_cours'
+  | 'signature_en_cours'
+  | 'signe'
+  | 'perdu'
+  | 'abandonne';
+
+export const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = {
+  qualification: 'Qualification',
+  devis_en_cours: 'Devis en cours',
+  signature_en_cours: 'Signature en cours',
+  signe: 'Signé',
+  perdu: 'Perdu',
+  abandonne: 'Abandonné',
+}
+
+export interface ProjectResponse {
+  id: string;
+  leadId: string;
+  commercialId: string;
+  name: string;
+  addressLine: string | null;
+  postalCode: string | null;
+  city: string | null;
+  status: ProjectStatus;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ─── Debriefs ─────────────────────────────────────────────
+export type DebriefOutcome = 'vente' | 'non_vente' | 'en_reflexion' | 'suivi_prevu';
+
+export const DEBRIEF_OUTCOME_LABEL: Record<DebriefOutcome, string> = {
+  vente: 'Vente',
+  non_vente: 'Non-vente',
+  en_reflexion: 'En réflexion',
+  suivi_prevu: 'Suivi prévu',
+}
+
+export type DebriefNonSaleReason =
+  | 'suivi_prevu'
+  | 'non_qualifie'
+  | 'no_show'
+  | 'contact_annule'
+  | 'annulation_administrative'
+  | 'pas_interesse';
+
+export const DEBRIEF_NON_SALE_REASON_LABEL: Record<DebriefNonSaleReason, string> = {
+  suivi_prevu: 'Suivi prévu',
+  non_qualifie: 'Non qualifié',
+  no_show: 'No-show',
+  contact_annule: 'Contact annulé',
+  annulation_administrative: 'Annulation administrative',
+  pas_interesse: 'Pas intéressé',
+}
+
+export type DebriefReflexionReason =
+  | 'besoin_reflechir'
+  | 'consulter_partenaire'
+  | 'comparer_concurrence'
+  | 'budget_a_revoir'
+  | 'attente_info_technique'
+  | 'delai_a_confirmer'
+  | 'autre';
+
+export const DEBRIEF_REFLEXION_REASON_LABEL: Record<DebriefReflexionReason, string> = {
+  besoin_reflechir: 'Besoin de réfléchir',
+  consulter_partenaire: 'Consulter conjoint·e / famille',
+  comparer_concurrence: 'Comparer avec la concurrence',
+  budget_a_revoir: 'Budget à revoir',
+  attente_info_technique: 'Attente info technique',
+  delai_a_confirmer: 'Délai à confirmer',
+  autre: 'Autre',
+}
+
+export type DebriefSuiviReason =
+  | 'rappel_programme'
+  | 'pas_le_bon_moment'
+  | 'attend_devis_detaille'
+  | 'besoin_info_technique'
+  | 'autre';
+
+export const DEBRIEF_SUIVI_REASON_LABEL: Record<DebriefSuiviReason, string> = {
+  rappel_programme: 'Rappel programmé',
+  pas_le_bon_moment: 'Pas le bon moment',
+  attend_devis_detaille: 'Attend devis détaillé',
+  besoin_info_technique: 'Besoin info technique',
+  autre: 'Autre',
+}
+
+// Motifs "vente" — réutilise les acceptanceFactors (multi-select)
+export type DebriefAcceptanceFactor =
+  | 'prix_convenable'
+  | 'confiance_commercial'
+  | 'roi_rapide'
+  | 'garanties'
+  | 'recommandation'
+  | 'batterie_autonomie'
+  | 'financement_attractif'
+  | 'aides_etat'
+  | 'engagement_ecolo'
+  | 'autre';
+
+export const DEBRIEF_ACCEPTANCE_FACTOR_LABEL: Record<DebriefAcceptanceFactor, string> = {
+  prix_convenable: 'Prix convenable',
+  confiance_commercial: 'Confiance commerciale',
+  roi_rapide: 'ROI rapide',
+  garanties: 'Garanties rassurantes',
+  recommandation: 'Recommandation',
+  batterie_autonomie: 'Batterie / autonomie',
+  financement_attractif: 'Financement attractif',
+  aides_etat: 'Aides d\'État',
+  engagement_ecolo: 'Engagement écologique',
+  autre: 'Autre',
+}
+
+export interface DebriefResponse {
+  id: string;
+  projectId: string | null;
+  leadId: string | null;
+  rdvId: string | null;
+  commercialId: string;
+  outcome: DebriefOutcome;
+  nonSaleReason: DebriefNonSaleReason | null;
+  reflexionReason: DebriefReflexionReason | null;
+  suiviReason: DebriefSuiviReason | null;
+  objection: string | null;
+  acceptanceFactors: string[];
+  notes: string | null;
+  montantTotal: string | null;
+  financingType: FinancingType | null;
+  kits: string | null;
+  signedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ─── Project attachments ──────────────────────────────────
+export type ProjectAttachmentKind = 'photo' | 'document' | 'autre';
+
+export interface ProjectAttachmentResponse {
+  id: string;
+  projectId: string;
+  uploadedById: string;
+  kind: ProjectAttachmentKind;
+  label: string | null;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
+// Détail complet renvoyé par GET /projects/:id (le projet + ses sous-ressources)
+export interface ProjectDetailResponse extends ProjectResponse {
+  devis: Devis[];
+  debriefs: DebriefResponse[];
+  attachments: ProjectAttachmentResponse[];
 }

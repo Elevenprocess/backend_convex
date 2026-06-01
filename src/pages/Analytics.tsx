@@ -6,6 +6,8 @@ import { useAuth } from '../lib/auth'
 import { useAnalyticsSummary, prefetchAnalyticsSummary, useLeads, useRdvList } from '../lib/hooks'
 import type { AnalyticsAdminSummary, AnalyticsCommercialPerf, AnalyticsCommercialSummary, AnalyticsDailyPoint, AnalyticsHourlyCallPoint, AnalyticsSegment, AnalyticsSetterSummary } from '../lib/types'
 import { DebriefAnalytics } from '../components/analytics/DebriefAnalytics'
+import { MagicKpi, type KpiAccent, type DeltaTone } from '../components/kpi/MagicKpi'
+import type { IconName } from '../components/Icon'
 
 type Segment = AnalyticsSegment
 
@@ -90,9 +92,9 @@ const EMPTY_ADMIN_STATS: AnalyticsAdminSummary = {
 export function Analytics() {
   const me = useAuth((s) => s.user)
 
-  if (me?.role === 'admin') return <AnalyticsAdmin />
+  if (me?.role === 'admin' || me?.role === 'commercial_lead') return <AnalyticsAdmin />
   if (me?.role === 'commercial') return <AnalyticsCommercial name={me.name} />
-  if (me?.role === 'delivrabilite') return <AnalyticsSuivi />
+  if (me?.role === 'delivrabilite' || me?.role === 'responsable_technique' || me?.role === 'back_office' || me?.role === 'technicien') return <AnalyticsSuivi />
   return <AnalyticsSetter name={me?.name ?? 'Setter'} />
 }
 
@@ -112,12 +114,12 @@ function AnalyticsSuivi() {
   return (
     <AppShell flat>
       <Topbar eyebrow="ANALYTICS / DÉLIVRABILITÉ" title="Performance suivi post-signature" />
-      <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
+      <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 overflow-y-auto space-y-4 sm:space-y-6 flex-grow">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-          <BigStatCard label="DOSSIERS SIGNÉS" value={fmtInt(signedLeads.length)} sub="base Suivi" />
-          <BigStatCard label="CA À LIVRER" value={fmtKEur(ca)} sub={fmtFullEur(ca)} />
-          <BigStatCard label="FINANCEMENTS" value={fmtInt(financement)} sub={`${comptant} comptants`} />
-          <BigStatCard label="ALERTES 7J" value={fmtInt(lateLike)} sub="étape sans mouvement" />
+          <BigStatCard label="DOSSIERS SIGNÉS" value={fmtInt(signedLeads.length)} sub="base Suivi" accent="green" icon="check" />
+          <BigStatCard label="CA À LIVRER" value={fmtKEur(ca)} sub={fmtFullEur(ca)} accent="gold" icon="trophy" />
+          <BigStatCard label="FINANCEMENTS" value={fmtInt(financement)} sub={`${comptant} comptants`} accent="info" icon="tag" />
+          <BigStatCard label="ALERTES 7J" value={fmtInt(lateLike)} sub="étape sans mouvement" accent="rust" icon="clock" deltaTone="danger" />
         </div>
         <div className="grid grid-cols-12 gap-6">
           <div className="glass-card p-6 col-span-12 xl:col-span-7">
@@ -176,18 +178,18 @@ function AnalyticsSetter({ name }: { name: string }) {
   return (
     <AppShell flat>
       <Topbar eyebrow="ANALYTICS / SETTER" title={`Mes performances — ${name}`} />
-      <div className="px-8 pt-4 flex items-center justify-between gap-4 flex-shrink-0">
+      <div className="px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 flex items-center justify-between gap-2 sm:gap-4 flex-shrink-0 flex-wrap">
         <div className="text-xs text-faint font-semibold">
           Moteur OLAP/ETL backend : {range.label}.{loading && <AnalyticsInlineLoading />}{error ? ` Erreur: ${error}` : ''}
         </div>
         <PeriodSelector value={period} onChange={setPeriod} />
       </div>
-      <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
+      <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 overflow-y-auto space-y-4 sm:space-y-6 flex-grow">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-          <BigStatCard label="NOUVEAUX LEADS" value={fmtInt(stats.newLeads)} sub="Entrées du système sur la période" />
-          <BigStatCard label="APPELS EFFECTUÉS" value={fmtInt(stats.calls)} delta={`${stats.callsPerDay}/j`} sub={`${stats.syntheticCalls} déduits des statuts`} />
-          <BigStatCard label="LEADS AYANT RÉPONDU" value={fmtInt(stats.answered)} delta={`${stats.responseRate}%`} sub="Taux réponse = répondu / nouveaux leads" />
-          <BigStatCard label="RDV PRIS" value={fmtInt(stats.rdvPris)} delta={`${stats.globalRdvRate}%`} sub="Taux global RDV = RDV / nouveaux leads" />
+          <BigStatCard label="NOUVEAUX LEADS" value={fmtInt(stats.newLeads)} sub="Entrées du système sur la période" accent="info" icon="inbox" />
+          <BigStatCard label="APPELS EFFECTUÉS" value={fmtInt(stats.calls)} delta={`${stats.callsPerDay}/j`} sub={`${stats.syntheticCalls} déduits des statuts`} accent="green" icon="phone" trend={stats.dailyCalls} />
+          <BigStatCard label="LEADS AYANT RÉPONDU" value={fmtInt(stats.answered)} delta={`${stats.responseRate}%`} deltaTone={stats.responseRate >= 50 ? 'success' : 'warn'} sub="Taux réponse = répondu / nouveaux leads" accent="success" icon="message" progress={stats.responseRate} />
+          <BigStatCard label="RDV PRIS" value={fmtInt(stats.rdvPris)} delta={`${stats.globalRdvRate}%`} deltaTone={stats.globalRdvRate >= 10 ? 'success' : 'warn'} sub="Taux global RDV = RDV / nouveaux leads" accent="gold" icon="calendar" trend={stats.dailyEvolution.map((d) => d.rdv)} />
         </div>
 
         <div className="grid grid-cols-12 gap-6 items-stretch">
@@ -251,16 +253,16 @@ function AnalyticsCommercial({ name }: { name: string }) {
   return (
     <AppShell blobsKey="commercial">
       <Topbar eyebrow="ANALYTICS / COMMERCIAL" title={`Mes performances — ${name}`} />
-      <div className="px-8 pt-4 flex items-center justify-between gap-4 flex-shrink-0">
+      <div className="px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 flex items-center justify-between gap-2 sm:gap-4 flex-shrink-0 flex-wrap">
         <div className="text-xs text-faint font-semibold">OLAP/ETL backend sur {range.label}.{loading && <AnalyticsInlineLoading />}{error ? ` Erreur: ${error}` : ''}</div>
         <PeriodSelector value={period} onChange={setPeriod} />
       </div>
-      <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
+      <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 overflow-y-auto space-y-4 sm:space-y-6 flex-grow">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-          <BigStatCard label="CA SIGNÉ" value={fmtKEur(stats.ca)} delta={`${stats.signed} ventes signées`} sub={fmtFullEur(stats.ca)} />
-          <BigStatCard label="CLOSING RATE" value={`${stats.closing}%`} sub={`${commercialOutcomeCount(stats)} résultats RDV`} />
-          <BigStatCard label="PANIER MOYEN" value={fmtKEur(stats.panier)} />
-          <BigStatCard label="ACTIVITÉ RDV" value={fmtInt(stats.total)} sub={`${stats.honored} honorés confirmés`} />
+          <BigStatCard label="CA SIGNÉ" value={fmtKEur(stats.ca)} delta={`${stats.signed} ventes signées`} sub={fmtFullEur(stats.ca)} accent="gold" icon="trophy" trend={stats.dailyEvolution.map((d) => d.ca)} />
+          <BigStatCard label="CLOSING RATE" value={`${stats.closing}%`} sub={`${commercialOutcomeCount(stats)} résultats RDV`} accent="success" icon="target" progress={stats.closing} />
+          <BigStatCard label="PANIER MOYEN" value={fmtKEur(stats.panier)} sub="sur ventes signées" accent="green" icon="tag" />
+          <BigStatCard label="ACTIVITÉ RDV" value={fmtInt(stats.total)} sub={`${stats.honored} honorés confirmés`} accent="info" icon="calendar" trend={stats.dailyEvolution.map((d) => d.rdv)} />
         </div>
 
         <div className="grid grid-cols-12 gap-6 items-stretch">
@@ -308,16 +310,16 @@ function AnalyticsAdmin() {
   return (
     <AppShell blobsKey="admin" flat>
       <Topbar eyebrow="ANALYTICS / ADMIN" title="Performance globale équipe" />
-      <div className="px-8 pt-4 flex items-center justify-between gap-4 flex-shrink-0">
+      <div className="px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 flex items-center justify-between gap-2 sm:gap-4 flex-shrink-0 flex-wrap">
         <div className="text-xs text-faint font-semibold">Requête unique backend /analytics/summary : {range.label}.{loading && <AnalyticsInlineLoading />}{error ? ` Erreur: ${error}` : ''}</div>
         <PeriodSelector value={period} onChange={setPeriod} />
       </div>
-      <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
+      <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 overflow-y-auto space-y-4 sm:space-y-6 flex-grow">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-          <BigStatCard label="APPELS TRAITÉS" value={fmtInt(stats.calls)} delta={`${stats.loggedCalls} réels`} sub={`${stats.syntheticCalls} déduits des statuts CRM`} />
-          <BigStatCard label="LEADS TRAITÉS" value={fmtInt(stats.classified)} sub={`${stats.qualificationRate}% deviennent qualifiés`} />
-          <BigStatCard label="RDV / QUALIFIÉS" value={fmtInt(stats.rdvPris)} delta={`${stats.scheduledRdv} calendrier`} sub={`${stats.rdvRate}% / appels traités`} />
-          <BigStatCard label="CA SIGNÉ" value={fmtKEur(stats.ca)} delta={`${stats.signed} ventes signées`} sub={fmtFullEur(stats.ca)} />
+          <BigStatCard label="APPELS TRAITÉS" value={fmtInt(stats.calls)} delta={`${stats.loggedCalls} réels`} sub={`${stats.syntheticCalls} déduits des statuts CRM`} accent="green" icon="phone" trend={stats.dailyEvolution.map((d) => d.calls)} />
+          <BigStatCard label="LEADS TRAITÉS" value={fmtInt(stats.classified)} delta={`${stats.qualificationRate}%`} deltaTone="info" sub={`${stats.qualificationRate}% deviennent qualifiés`} accent="info" icon="users" progress={stats.qualificationRate} />
+          <BigStatCard label="RDV / QUALIFIÉS" value={fmtInt(stats.rdvPris)} delta={`${stats.scheduledRdv} calendrier`} deltaTone="info" sub={`${stats.rdvRate}% / appels traités`} accent="success" icon="calendar" trend={stats.dailyEvolution.map((d) => d.rdv)} />
+          <BigStatCard label="CA SIGNÉ" value={fmtKEur(stats.ca)} delta={`${stats.signed} ventes signées`} sub={fmtFullEur(stats.ca)} accent="gold" icon="trophy" trend={stats.dailyEvolution.map((d) => d.ca)} />
         </div>
 
         <div className="grid grid-cols-12 gap-6 items-stretch">
@@ -479,14 +481,8 @@ function CommercialTrackingDashboard({ commercials, totalCa, totalSigned, totalH
 }
 
 function CommercialMiniKpi({ label, value, detail, tone = 'neutral' }: { label: string; value: string; detail: string; tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'gold' }) {
-  const toneClass = tone === 'success' ? 'bg-success/10 text-success border-success/15' : tone === 'warning' ? 'bg-cuivre-tint text-cuivre border-cuivre/15' : tone === 'danger' ? 'bg-rouille/10 text-rouille border-rouille/15' : tone === 'gold' ? 'bg-or-tint text-or-dark border-or/15' : 'bg-white/70 text-text border-line-soft'
-  return (
-    <div className={`rounded-3xl border p-4 ${toneClass}`}>
-      <div className="eyebrow mb-2">{label}</div>
-      <div className="text-2xl font-extrabold leading-none">{value}</div>
-      <div className="text-[11px] text-faint mt-2">{detail}</div>
-    </div>
-  )
+  const accent: KpiAccent = tone === 'success' ? 'success' : tone === 'warning' ? 'gold' : tone === 'danger' ? 'rust' : tone === 'gold' ? 'gold' : 'info'
+  return <MagicKpi label={label} value={value} sub={detail} accent={accent} size="sm" />
 }
 
 function CommercialScoreCard({ commercial, rank, maxCa, maxClosing }: { commercial: AnalyticsCommercialPerf; rank: number; maxCa: number; maxClosing: number }) {
@@ -713,16 +709,15 @@ function AnalyticsInlineLoading() {
   )
 }
 
-function BigStatCard({ label, value, delta, sub }: { label: string; value: string; delta?: string; sub?: string }) {
+function BigStatCard({ label, value, delta, sub, accent, icon, trend, progress, deltaTone }: {
+  label: string; value: string; delta?: string; sub?: string;
+  accent?: KpiAccent; icon?: IconName; trend?: number[]; progress?: number; deltaTone?: DeltaTone
+}) {
   return (
-    <div className="glass-card p-3">
-      <span className="eyebrow text-[10px]">{label}</span>
-      <div className="flex items-end justify-between mt-1 gap-2">
-        <span className="text-[22px] font-bold leading-none">{value}</span>
-        {delta && <span className="delta-badge delta-success text-[11px]">{delta}</span>}
-      </div>
-      {sub && <div className="text-[11px] text-faint mt-1">{sub}</div>}
-    </div>
+    <MagicKpi
+      label={label} value={value} delta={delta} deltaTone={deltaTone} sub={sub}
+      accent={accent} icon={icon} trend={trend} progress={progress}
+    />
   )
 }
 

@@ -1,4 +1,4 @@
-import { useMemo, useState, type UIEvent, type WheelEvent } from 'react'
+import { useMemo, useState, type CSSProperties, type UIEvent, type WheelEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
@@ -6,29 +6,119 @@ import { Icon } from '../../components/Icon'
 import { LoadingBlock, Spinner } from '../../components/Spinner'
 import { useGhlCalendarEvents, useRdvList, useLeads, type GhlCalendarEvent } from '../../lib/hooks'
 import { fullName, type LeadResponse, type RdvResponse, type RdvStatus } from '../../lib/types'
+import { useAuth } from '../../lib/auth'
+import { leadSearchPath } from '../../lib/leadPaths'
 
 const DEFAULT_HOURS = Array.from({ length: 12 }, (_, i) => 8 + i)
 const DAY_LABELS = ['LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM', 'DIM']
 const REUNION_TZ = 'Indian/Reunion'
 const REUNION_OFFSET_MS = 4 * 60 * 60 * 1000
+// Durée par défaut d'un RDV : ~1h. Sert au rendu visuel uniquement (pas en BDD).
+const RDV_DURATION_MIN = 60
+// Niveaux de zoom vertical (px par heure). Permet de comprimer/aérer l'agenda
+// pour limiter le scroll. Persistant via localStorage.
+const HOUR_HEIGHT_LEVELS = [24, 32, 48, 64, 96, 128] as const
+const HOUR_HEIGHT_DEFAULT = 64
+const HOUR_HEIGHT_STORAGE_KEY = 'ecoi.calendar.hourHeight'
+// Limite de cartes visibles dans une pile de RDV chevauchants. Au-delà, on
+// affiche un bouton "+N" qui ouvre un popup avec la liste complète.
+// Volontairement à 1 pour ne pas déborder sur l'horaire suivant — la pile
+// loge dans le créneau d'1h (1 carte + petite pilule "+N").
+const STACK_VISIBLE_LIMIT = 1
+// Hauteur réservée en bas du créneau au bouton "+N" quand il y a un débordement.
+const MORE_PILL_HEIGHT = 18
+const MORE_PILL_GAP = 2
 type CalendarView = 'day' | 'week' | 'month'
 type CalendarItem =
   | { source: 'local'; id: string; scheduledAt: string; status: RdvStatus; rdv: RdvResponse }
   | { source: 'ghl'; id: string; scheduledAt: string; status: 'ghl'; event: GhlCalendarEvent }
 
-const STATUS_TONE: Record<RdvStatus, string> = {
-  planifie: 'bg-cuivre-tint text-cuivre',
-  honore: 'bg-success-tint text-success',
-  no_show: 'bg-rouille-tint text-rouille',
-  reporte: 'bg-info-tint text-info',
-  annule: 'bg-rouille-tint text-rouille',
+type Sector = 'Nord' | 'Sud' | 'Est' | 'Ouest' | 'Autre'
+const SECTORS: Sector[] = ['Nord', 'Sud', 'Est', 'Ouest', 'Autre']
+
+// Toutes les cartes RDV ont le MÊME fond gris neutre (look "skeleton/chargement").
+// Le secteur est uniquement signifié par la couleur du point ● à l'intérieur —
+// les badges restent eux aussi neutres pour ne pas réintroduire la couleur du secteur.
+const CARD_TONE = 'bg-cream-darker text-text border-line'
+const NEUTRAL_BADGE_TONE = 'bg-white text-muted border border-line'
+const SECTOR_DOT: Record<Sector, string> = {
+  Nord: 'bg-sky-500',
+  Sud: 'bg-orange-500',
+  Est: 'bg-emerald-500',
+  Ouest: 'bg-violet-500',
+  Autre: 'bg-faint',
+}
+
+const STATUS_BADGE_LABEL: Partial<Record<RdvStatus, string>> = {
+  planifie: 'Programmé',
+  honore: 'Confirmé',
+  reporte: 'Reporté',
+  no_show: 'No-show',
+  annule: 'Annulé',
+}
+
+// Communes de La Réunion → secteur (préfixe pour gérer "Saint-André", "Saint-Andre", "St-André"...)
+const CITY_SECTOR_PREFIXES: Array<[string, Sector]> = [
+  ['saint-denis', 'Nord'], ['sainte-marie', 'Nord'], ['sainte-suzanne', 'Nord'], ['salazie', 'Nord'],
+  ['saint-andre', 'Est'], ['bras-panon', 'Est'], ['saint-benoit', 'Est'], ['sainte-rose', 'Est'], ['plaine-des-palmistes', 'Est'],
+  ['saint-paul', 'Ouest'], ['le-port', 'Ouest'], ['la-possession', 'Ouest'], ['possession', 'Ouest'], ['saint-leu', 'Ouest'], ['trois-bassins', 'Ouest'],
+  ['saint-pierre', 'Sud'], ['saint-joseph', 'Sud'], ['saint-louis', 'Sud'], ['le-tampon', 'Sud'], ['tampon', 'Sud'], ['cilaos', 'Sud'], ['etang-sale', 'Sud'], ['petite-ile', 'Sud'], ['petit-ile', 'Sud'], ['les-avirons', 'Sud'], ['entre-deux', 'Sud'],
+]
+
+function normalizeCityKey(city: string | null | undefined): string {
+  if (!city) return ''
+  return city
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/^st-/, 'saint-')
+    .replace(/^ste-/, 'sainte-')
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+}
+
+function sectorFromCity(city: string | null | undefined): Sector {
+  const key = normalizeCityKey(city)
+  if (!key) return 'Autre'
+  for (const [prefix, sector] of CITY_SECTOR_PREFIXES) if (key.startsWith(prefix)) return sector
+  return 'Autre'
+}
+
+function sectorForItem(item: CalendarItem, lead?: LeadResponse): Sector {
+  if (item.source === 'ghl' && item.event.sector) {
+    const s = item.event.sector
+    if (s === 'Nord' || s === 'Sud' || s === 'Est' || s === 'Ouest') return s
+  }
+  if (item.source === 'ghl') return sectorFromCity(item.event.contactCity)
+  return sectorFromCity(lead?.city)
 }
 
 export function RdvCalendar() {
-  const [view, setView] = useState<CalendarView>('week')
+  const role = useAuth((s) => s.user?.role)
+  // Sur mobile, la vue semaine (7 colonnes) impose un scroll horizontal :
+  // on démarre donc en vue "jour", plus lisible au doigt. Desktop reste en semaine.
+  const [view, setView] = useState<CalendarView>(
+    () => (typeof window !== 'undefined' && window.innerWidth < 768 ? 'day' : 'week'),
+  )
   const [cursorDate, setCursorDate] = useState(() => startOfReunionDay(new Date()))
   const [continuousDays, setContinuousDays] = useState(35)
+  const [hourHeight, setHourHeight] = useState<number>(() => {
+    if (typeof window === 'undefined') return HOUR_HEIGHT_DEFAULT
+    const raw = Number(window.localStorage.getItem(HOUR_HEIGHT_STORAGE_KEY) ?? '')
+    return HOUR_HEIGHT_LEVELS.includes(raw as typeof HOUR_HEIGHT_LEVELS[number]) ? raw : HOUR_HEIGHT_DEFAULT
+  })
   const navigate = useNavigate()
+
+  function changeHourHeight(direction: -1 | 1) {
+    setHourHeight((current) => {
+      const idx = HOUR_HEIGHT_LEVELS.indexOf(current as typeof HOUR_HEIGHT_LEVELS[number])
+      const safeIdx = idx < 0 ? HOUR_HEIGHT_LEVELS.indexOf(HOUR_HEIGHT_DEFAULT) : idx
+      const nextIdx = Math.max(0, Math.min(HOUR_HEIGHT_LEVELS.length - 1, safeIdx + direction))
+      const next = HOUR_HEIGHT_LEVELS[nextIdx]
+      try { window.localStorage.setItem(HOUR_HEIGHT_STORAGE_KEY, String(next)) } catch { /* ignore */ }
+      return next
+    })
+  }
 
   const period = useMemo(() => buildPeriod(cursorDate, view, continuousDays), [continuousDays, cursorDate, view])
 
@@ -62,7 +152,7 @@ export function RdvCalendar() {
     }
     const lead = item.event.contactId ? leadByExternalId.get(item.event.contactId) : undefined
     const search = lead ? fullName(lead) : item.event.contactPhone || item.event.contactName || item.event.contactEmail || item.event.title || ''
-    if (search) navigate(`/leads?search=${encodeURIComponent(search)}`)
+    if (search) navigate(leadSearchPath(role, search))
   }
 
   const calendarItems = useMemo(() => {
@@ -135,34 +225,68 @@ export function RdvCalendar() {
         eyebrow="RDV / AGENDA"
         title={period.label}
       />
-      <div className="px-8 pt-4 flex items-center gap-3 flex-shrink-0">
-        <button onClick={() => setCursorDate((d) => moveDate(d, view, -1))} className="btn-secondary p-2 rounded-xl text-muted" aria-label="Période précédente">
+      <div className="px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 flex items-center gap-1.5 sm:gap-3 flex-shrink-0 flex-wrap">
+        <button onClick={() => setCursorDate((d) => moveDate(d, view, -1))} className="btn-secondary p-2 rounded-xl text-muted shrink-0" aria-label="Période précédente">
           <Icon name="chevron-down" size={14} className="rotate-90" />
         </button>
-        <button onClick={() => setCursorDate(startOfReunionDay(new Date()))} className="btn-secondary px-4 py-2 rounded-xl text-xs">Aujourd'hui</button>
-        <button onClick={() => setCursorDate((d) => moveDate(d, view, 1))} className="btn-secondary p-2 rounded-xl text-muted" aria-label="Période suivante">
+        <button onClick={() => setCursorDate(startOfReunionDay(new Date()))} className="btn-secondary px-3 sm:px-4 py-2 rounded-xl text-xs whitespace-nowrap">
+          <span className="hidden xs:inline">Aujourd'hui</span><span className="xs:hidden">Auj.</span>
+        </button>
+        <button onClick={() => setCursorDate((d) => moveDate(d, view, 1))} className="btn-secondary p-2 rounded-xl text-muted shrink-0" aria-label="Période suivante">
           <Icon name="chevron-right" size={14} />
         </button>
-        <div className="flex bg-or-tint p-1 rounded-xl">
+        <div className="flex bg-or-tint p-1 rounded-xl shrink-0">
           {(['day', 'week', 'month'] as const).map((v) => (
             <button
               key={v}
               onClick={() => setView(v)}
-              className={`px-3 py-1 text-xs font-semibold rounded-lg ${view === v ? 'bg-white shadow-sm text-text' : 'text-muted'}`}
+              className={`px-2 sm:px-3 py-1 text-[11px] sm:text-xs font-semibold rounded-lg ${view === v ? 'bg-white shadow-sm text-text' : 'text-muted'}`}
             >
-              {v === 'day' ? 'Jour' : v === 'week' ? 'Continu' : 'Mois'}
+              {v === 'day' ? 'Jour' : v === 'week' ? 'Sem.' : 'Mois'}
             </button>
           ))}
         </div>
-        <span className="text-xs text-faint ml-auto hidden lg:inline">Scroll horizontal fluide dans le calendrier</span>
-        {ghlLoading && <Spinner size={18} stroke={3} label="Sync GHL…" className="text-xs text-muted" />}
-        <button onClick={() => navigate('/rdv/split')} className="btn-primary px-4 py-2 rounded-xl text-sm flex items-center gap-2">
+        {view !== 'month' && (
+          <div className="flex items-center bg-white border border-line rounded-xl shrink-0" title="Comprimer / aérer l'agenda (échelle verticale)">
+            <button
+              onClick={() => changeHourHeight(-1)}
+              disabled={hourHeight <= HOUR_HEIGHT_LEVELS[0]}
+              aria-label="Comprimer la grille"
+              className="w-7 h-7 flex items-center justify-center text-base font-black text-muted hover:text-text disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              −
+            </button>
+            <span className="hidden xs:inline px-1 text-[10px] font-bold text-faint tabular-nums select-none">{hourHeight}px</span>
+            <button
+              onClick={() => changeHourHeight(1)}
+              disabled={hourHeight >= HOUR_HEIGHT_LEVELS[HOUR_HEIGHT_LEVELS.length - 1]}
+              aria-label="Aérer la grille"
+              className="w-7 h-7 flex items-center justify-center text-base font-black text-muted hover:text-text disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              +
+            </button>
+          </div>
+        )}
+        {ghlLoading && <Spinner size={16} stroke={3} className="text-xs text-muted shrink-0" />}
+        <button onClick={() => navigate('/rdv/split')} className="btn-primary ml-auto px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 shrink-0">
           <Icon name="plus" size={14} />
-          Nouveau RDV
+          <span className="hidden sm:inline">Nouveau RDV</span>
+          <span className="sm:hidden">RDV</span>
         </button>
       </div>
 
-      <main className="p-8 pt-4 overflow-hidden flex-grow">
+      {/* Légende secteur */}
+      <div className="px-4 sm:px-6 md:px-8 pt-2 flex items-center gap-2 sm:gap-3 flex-wrap text-[10px] sm:text-[11px] font-bold text-muted">
+        <span className="uppercase tracking-wider text-faint">Secteurs :</span>
+        {SECTORS.map((s) => (
+          <span key={s} className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border ${"bg-white border border-line text-text"}`}>
+            <span className={`w-2 h-2 rounded-full ${SECTOR_DOT[s]}`} />
+            <span>{s}</span>
+          </span>
+        ))}
+      </div>
+
+      <main className="p-3 sm:p-6 md:p-8 pt-3 overflow-hidden flex-grow">
         <div
           className="glass-card !p-0 overflow-hidden h-full flex flex-col select-none"
           onWheel={handleHorizontalCalendarScroll}
@@ -189,6 +313,7 @@ export function RdvCalendar() {
               rdvByCell={rdvByHourCell}
               leadMap={leadMap}
               leadByExternalId={leadByExternalId}
+              hourHeight={hourHeight}
               onOpen={openCalendarItem}
               onOpenDay={(date) => { setCursorDate(date); setView('day') }}
               onNeedMoreDays={() => setContinuousDays((days) => Math.min(days + 21, 365))}
@@ -208,6 +333,7 @@ function TimeGridView({
   rdvByCell,
   leadMap,
   leadByExternalId,
+  hourHeight,
   onOpen,
   onOpenDay,
   onNeedMoreDays,
@@ -217,97 +343,391 @@ function TimeGridView({
   rdvByCell: Map<string, CalendarItem[]>
   leadMap: Map<string, LeadResponse>
   leadByExternalId: Map<string, LeadResponse>
+  hourHeight: number
   onOpen: (item: CalendarItem) => void
   onOpenDay: (date: Date) => void
   onNeedMoreDays?: () => void
 }) {
-  const dayWidth = days.length > 1 ? 240 : 520
-  const gridColumns = `64px repeat(${days.length}, minmax(${dayWidth}px, 1fr))`
-  const minWidth = 64 + days.length * dayWidth
+  const [openStack, setOpenStack] = useState<CalendarItem[] | null>(null)
+  const isSingleDay = days.length === 1
+  // En mode jour : 1 colonne pleine largeur (pas de scroll horizontal).
+  // En mode semaine/continu : largeur fixe par jour, scroll horizontal.
+  const minDayWidth = isSingleDay ? 'minmax(0, 1fr)' : 'minmax(140px, 1fr)'
+  const gridColumns = `48px repeat(${days.length}, ${minDayWidth})`
+  const minWidth = isSingleDay ? undefined : 48 + days.length * 160
+
+  const itemsByDay = useMemo(() => {
+    const m = new Map<string, CalendarItem[]>()
+    for (const [key, list] of rdvByCell.entries()) {
+      const dayKey = key.split(':')[0]
+      const arr = m.get(dayKey) ?? []
+      arr.push(...list)
+      m.set(dayKey, arr)
+    }
+    for (const arr of m.values()) arr.sort(byCalendarItemAt)
+    return m
+  }, [rdvByCell])
+
   const handleNativeScroll = (event: UIEvent<HTMLDivElement>) => {
     const el = event.currentTarget
     if (onNeedMoreDays && el.scrollLeft + el.clientWidth > el.scrollWidth - 900) onNeedMoreDays()
   }
 
+  const startHour = Math.min(...visibleHours)
+  const endHour = Math.max(...visibleHours) + 1
+  const totalHours = Math.max(1, endHour - startHour)
+  const totalHeight = totalHours * hourHeight
+
   return (
-    <div data-native-horizontal-scroll="true" onScroll={handleNativeScroll} className="flex-grow overflow-x-auto overflow-y-hidden bg-white/30 overscroll-contain">
-      <div className="h-full flex flex-col" style={{ minWidth }}>
+    <div
+      data-native-horizontal-scroll="true"
+      onScroll={handleNativeScroll}
+      className={`flex-grow overflow-y-auto bg-white/30 overscroll-contain ${isSingleDay ? 'overflow-x-hidden' : 'overflow-x-auto'}`}
+    >
+      <div className="flex flex-col" style={{ minWidth }}>
         <div
-          className="grid border-b border-line-soft flex-shrink-0 bg-white/70 sticky top-0 z-10"
+          className="grid border-b border-line-soft flex-shrink-0 bg-white/95 backdrop-blur-md sticky top-0 z-10"
           style={{ gridTemplateColumns: gridColumns }}
         >
-          <div className="border-r border-line-soft" />
-          {days.map((d) => (
-            <button
-              key={d.key}
-              onClick={() => onOpenDay(d.date)}
-              className={`p-3 text-center border-l border-line-soft hover:bg-or-tint ${d.today ? 'bg-cuivre-tint' : ''}`}
-            >
-              <div className="eyebrow">{days.length === 1 ? formatReunionDate(d.date, { weekday: 'long' }) : formatReunionDate(d.date, { weekday: 'short' }).toUpperCase()}</div>
-              <div className={`text-2xl font-bold ${d.today ? 'text-cuivre' : ''}`}>{d.dayNum}</div>
-            </button>
-          ))}
+          <div />
+          {days.map((d) => {
+            const weekday = formatReunionDate(d.date, { weekday: 'short' }).replace('.', '')
+            const weekdayCap = weekday.charAt(0).toUpperCase() + weekday.slice(1)
+            return (
+              <button
+                key={d.key}
+                onClick={() => onOpenDay(d.date)}
+                className="px-2 py-2 sm:py-3 text-center hover:opacity-80 transition-opacity"
+              >
+                <div
+                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs sm:text-sm font-bold ${
+                    d.today ? 'bg-text text-white' : 'text-muted'
+                  }`}
+                >
+                  <span>{d.dayNum}</span>
+                  <span className="opacity-70">—</span>
+                  <span>{weekdayCap}</span>
+                </div>
+              </button>
+            )
+          })}
         </div>
+
         <div
-          className="grid flex-grow overflow-y-auto"
-          style={{ gridTemplateColumns: gridColumns, gridAutoRows: 'minmax(96px, auto)' }}
+          className="grid relative"
+          style={{ gridTemplateColumns: gridColumns, height: totalHeight }}
         >
-          {visibleHours.map((hour) => (
-            <RowHour
-              key={hour}
-              hour={hour}
-              days={days}
-              rdvByCell={rdvByCell}
-              leadMap={leadMap}
-              leadByExternalId={leadByExternalId}
-              onOpen={onOpen}
-            />
-          ))}
+          {/* Colonne des heures : épurée, pas de bordure, texte fin */}
+          <div className="relative bg-transparent">
+            {Array.from({ length: totalHours }).map((_, i) => (
+              <div
+                key={i}
+                className="absolute right-2 text-[10px] sm:text-[11px] text-faint tabular-nums tracking-tight"
+                style={{ top: i * hourHeight - 6 }}
+              >
+                {formatHour(startHour + i)}
+              </div>
+            ))}
+          </div>
+
+          {/* Colonnes des jours avec lignes horaires + blocs absolus */}
+          {days.map((d) => {
+            const list = itemsByDay.get(d.key) ?? []
+            const positioned = layoutDayItems(list)
+            const nowMarker = d.today && hourHeight >= 32 ? computeNowMarker(startHour, totalHours, hourHeight) : null
+            return (
+              <div
+                key={d.key}
+                className={`relative ${days.length > 1 ? 'border-l border-line-soft/70' : ''} ${d.today ? 'bg-cream/30' : ''}`}
+              >
+                {Array.from({ length: totalHours }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="absolute left-0 right-0 border-t border-line-soft/50"
+                    style={{ top: i * hourHeight }}
+                  />
+                ))}
+                {positioned.map((entry) => {
+                  if (entry.kind === 'rdv') {
+                    const { item, top, height, stackIndex, stackTotal } = entry
+                    return (
+                      <RdvBlock
+                        key={`${item.source}-${item.id}`}
+                        item={item}
+                        lead={item.source === 'local' ? leadMap.get(item.rdv.leadId) : item.event.contactId ? leadByExternalId.get(item.event.contactId) : undefined}
+                        hourHeight={hourHeight}
+                        stackIndex={stackIndex}
+                        stackTotal={stackTotal}
+                        onClick={() => onOpen(item)}
+                        style={{ position: 'absolute', top, height, left: 3, right: 3, zIndex: 10 + stackIndex }}
+                      />
+                    )
+                  }
+                  const { items, top, height, stackIndex, hiddenCount } = entry
+                  return (
+                    <MoreStackButton
+                      key={`more-${d.key}-${top}`}
+                      count={hiddenCount}
+                      total={items.length}
+                      onClick={() => setOpenStack(items)}
+                      style={{ position: 'absolute', top, height, left: 3, right: 3, zIndex: 10 + stackIndex }}
+                    />
+                  )
+                })}
+                {nowMarker && (
+                  <>
+                    <div
+                      className="absolute left-0 right-0 border-t-2 border-text z-30"
+                      style={{ top: nowMarker.topPx }}
+                    />
+                    <div
+                      className="absolute z-30 px-2 py-0.5 rounded-full bg-text text-white text-[10px] font-black tabular-nums shadow-md"
+                      style={{ top: nowMarker.topPx - 9, left: -4 }}
+                    >
+                      {nowMarker.label}
+                    </div>
+                  </>
+                )}
+              </div>
+            )
+          })}
         </div>
       </div>
+      {openStack && (
+        <StackPopup
+          items={openStack}
+          leadMap={leadMap}
+          leadByExternalId={leadByExternalId}
+          onPick={(it) => { setOpenStack(null); onOpen(it) }}
+          onClose={() => setOpenStack(null)}
+        />
+      )}
     </div>
+  )
+
+  // Position chaque RDV (carte ou bouton "+N") en pixels (top, height).
+  // Au-delà de STACK_VISIBLE_LIMIT, le surplus est groupé dans un marqueur
+  // "more" cliquable qui ouvre un popup avec la liste complète.
+  function layoutDayItems(items: CalendarItem[]): PositionedEntry[] {
+    if (items.length === 0) return []
+    type Slot = { startMin: number; endMin: number; item: CalendarItem }
+    const slots: Slot[] = items.map((item) => {
+      const hour = reunionHour(item.scheduledAt)
+      const minute = reunionMinute(item.scheduledAt)
+      const startMin = (hour - startHour) * 60 + minute
+      const endMin = startMin + RDV_DURATION_MIN
+      return { startMin, endMin, item }
+    })
+    slots.sort((a, b) => a.startMin - b.startMin)
+
+    const groups: Slot[][] = []
+    let current: Slot[] = []
+    let currentEnd = -1
+    for (const s of slots) {
+      if (s.startMin >= currentEnd) {
+        if (current.length) groups.push(current)
+        current = [s]
+        currentEnd = s.endMin
+      } else {
+        current.push(s)
+        currentEnd = Math.max(currentEnd, s.endMin)
+      }
+    }
+    if (current.length) groups.push(current)
+
+    const result: PositionedEntry[] = []
+    for (const group of groups) {
+      if (group.length === 1) {
+        const s = group[0]
+        result.push({
+          kind: 'rdv',
+          item: s.item,
+          top: (s.startMin / 60) * hourHeight,
+          height: ((s.endMin - s.startMin) / 60) * hourHeight - 2,
+          stackIndex: 0,
+          stackTotal: 1,
+        })
+        continue
+      }
+      const baseStartMin = group[0].startMin
+      const baseTop = (baseStartMin / 60) * hourHeight
+      // Toute la pile reste cantonnée au créneau du PREMIER RDV (= 1h max).
+      // → Le créneau de l'heure suivante n'est jamais couvert.
+      const slotHeight = (RDV_DURATION_MIN / 60) * hourHeight - 2
+      const hasMore = group.length > STACK_VISIBLE_LIMIT
+      const cardHeight = hasMore ? Math.max(slotHeight - MORE_PILL_HEIGHT - MORE_PILL_GAP, 24) : slotHeight
+
+      // Carte(s) visibles (STACK_VISIBLE_LIMIT) — par défaut 1 seule, hauteur réduite
+      // pour laisser la place à la pilule "+N" dans le créneau.
+      // On force stackTotal=1 côté affichage : pas de badge "1/N", pas d'effet
+      // pile (la pilule "+N" suffit à indiquer qu'il y en a d'autres).
+      const stackTotalShown = Math.min(group.length, STACK_VISIBLE_LIMIT)
+      for (let i = 0; i < stackTotalShown; i++) {
+        result.push({
+          kind: 'rdv',
+          item: group[i].item,
+          top: baseTop,
+          height: cardHeight,
+          stackIndex: 0,
+          stackTotal: 1,
+        })
+      }
+      // Pilule "+N" en bas du créneau (ne déborde pas).
+      if (hasMore) {
+        result.push({
+          kind: 'more',
+          items: group.map((s) => s.item),
+          top: baseTop + cardHeight + MORE_PILL_GAP,
+          height: MORE_PILL_HEIGHT,
+          stackIndex: STACK_VISIBLE_LIMIT,
+          hiddenCount: group.length - STACK_VISIBLE_LIMIT,
+        })
+      }
+    }
+    return result
+  }
+}
+
+type PositionedEntry =
+  | { kind: 'rdv'; item: CalendarItem; top: number; height: number; stackIndex: number; stackTotal: number }
+  | { kind: 'more'; items: CalendarItem[]; top: number; height: number; stackIndex: number; hiddenCount: number }
+
+function RdvBlock({ item, lead, hourHeight, stackIndex, stackTotal, onClick, style }: { item: CalendarItem; lead?: LeadResponse; hourHeight: number; stackIndex: number; stackTotal: number; onClick: () => void; style?: CSSProperties }) {
+  const isGhl = item.source === 'ghl'
+  const label = isGhl ? ghlEventLabel(item.event) : (lead ? fullName(lead) : localRdvFallbackLabel(item.rdv))
+  const detail = isGhl ? ghlEventDetail(item.event) : localRdvFallbackDetail(item.rdv)
+  const sector = sectorForItem(item, lead)
+  const tone = CARD_TONE
+  const startTime = formatTime(item.scheduledAt)
+  const endTime = formatTime(new Date(new Date(item.scheduledAt).getTime() + RDV_DURATION_MIN * 60_000).toISOString())
+  const title = `${startTime}–${endTime} — ${sector} — ${label}${detail ? ` — ${detail}` : ''}${isGhl ? ' — GHL temps réel' : ''}`
+
+  // Adaptation densité : à <40px on n'affiche que la ligne titre
+  const compact = hourHeight < 40
+  const statusLabel = isGhl ? 'GHL' : STATUS_BADGE_LABEL[item.rdv.status] ?? null
+  const badgeTone = NEUTRAL_BADGE_TONE
+
+  // Empilement type "deck" : chaque carte décalée de 22px (header visible)
+  // pour que les 5 cartes du paquet soient toutes lisibles d'un coup d'œil.
+  // Au hover : la carte remonte de 24px → se détache nettement du paquet.
+  const stacked = stackTotal > 1
+  const stackOffset = stacked ? stackIndex * 22 : 0
+  const stackedStyle: CSSProperties = {
+    ...style,
+    ['--stack-offset' as string]: `${stackOffset}px`,
+  }
+
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      data-stack-index={stackIndex}
+      style={stackedStyle}
+      className={`rdv-card group ${tone} overflow-hidden text-left rounded-lg border shadow-sm cursor-pointer ${compact ? 'px-2 py-1' : 'px-2.5 py-1.5'} ${stacked ? 'rdv-card--stacked' : ''}`}
+    >
+      <div className={`flex items-start justify-between gap-1 ${compact ? '' : 'mb-0.5'}`}>
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          <span className={`w-2 h-2 rounded-full shrink-0 ${SECTOR_DOT[sector]}`} />
+          <div className="font-bold text-[11px] sm:text-[12px] leading-tight truncate">{label}</div>
+        </div>
+        {stacked && (
+          <span className="shrink-0 inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-white/80 text-text text-[8px] font-black tabular-nums">{stackIndex + 1}/{stackTotal}</span>
+        )}
+      </div>
+      {!compact && (
+        <div className="flex items-center gap-2 text-[10px] leading-tight">
+          <span className="tabular-nums opacity-80">{startTime}–{endTime}</span>
+          {statusLabel && (
+            <span className={`inline-flex items-center gap-0.5 rounded px-1.5 py-px text-[8px] font-bold ${badgeTone}`}>
+              {statusLabel}
+            </span>
+          )}
+        </div>
+      )}
+    </button>
   )
 }
 
-function RowHour({
-  hour,
-  days,
-  rdvByCell,
+// ─── Pilule "+N" pour piles > limite visible ────────────────
+function MoreStackButton({ count, total, onClick, style }: { count: number; total: number; onClick: () => void; style?: CSSProperties }) {
+  return (
+    <button
+      onClick={onClick}
+      title={`Voir les ${total} RDV de ce créneau`}
+      style={style}
+      className="bg-text/90 hover:bg-text text-white border border-text/60 rounded-md shadow-sm cursor-pointer flex items-center justify-center gap-1 text-[10px] font-black tabular-nums leading-none transition-colors"
+    >
+      +{count} <span className="opacity-70 font-bold">{count > 1 ? 'autres' : 'autre'}</span>
+    </button>
+  )
+}
+
+// ─── Popup liste RDV (déclenché par "+N") ───────────────────
+function StackPopup({
+  items,
   leadMap,
   leadByExternalId,
-  onOpen,
+  onPick,
+  onClose,
 }: {
-  hour: number
-  days: DayCell[]
-  rdvByCell: Map<string, CalendarItem[]>
+  items: CalendarItem[]
   leadMap: Map<string, LeadResponse>
   leadByExternalId: Map<string, LeadResponse>
-  onOpen: (item: CalendarItem) => void
+  onPick: (item: CalendarItem) => void
+  onClose: () => void
 }) {
+  // Tri chronologique pour la liste
+  const sorted = [...items].sort(byCalendarItemAt)
   return (
-    <>
-      <div className="border-t border-line-soft text-xs text-faint text-right pr-2 pt-1 bg-white/50">{formatHour(hour)}</div>
-      {days.map((d) => {
-        const list = rdvByCell.get(`${d.key}:${hour}`) ?? []
-        const columns = tileColumns(list.length)
-        return (
-          <div
-            key={d.key}
-            className={`border-l border-t border-line-soft p-1 relative grid gap-1 content-start auto-rows-[minmax(42px,auto)] ${d.today ? 'bg-cuivre-tint/20' : ''}`}
-            style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
-          >
-            {list.map((item) => (
-              <RdvButton
-                key={`${item.source}-${item.id}`}
-                item={item}
-                lead={item.source === 'local' ? leadMap.get(item.rdv.leadId) : item.event.contactId ? leadByExternalId.get(item.event.contactId) : undefined}
-                onClick={() => onOpen(item)}
-              />
-            ))}
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-noir/40 backdrop-blur-sm px-4"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="glass-card w-full max-w-md max-h-[80vh] flex flex-col p-0 shadow-2xl">
+        <div className="px-5 py-4 border-b border-line flex items-center justify-between gap-2">
+          <div>
+            <div className="eyebrow text-or-dark">Créneau chargé</div>
+            <h3 className="font-black text-lg mt-0.5">{sorted.length} rendez-vous</h3>
           </div>
-        )
-      })}
-    </>
+          <button onClick={onClose} className="rounded-full p-1.5 text-muted hover:bg-cream hover:text-text" aria-label="Fermer">×</button>
+        </div>
+        <ul className="overflow-y-auto divide-y divide-line-soft">
+          {sorted.map((item) => {
+            const isGhl = item.source === 'ghl'
+            const lead = isGhl
+              ? (item.event.contactId ? leadByExternalId.get(item.event.contactId) : undefined)
+              : leadMap.get(item.rdv.leadId)
+            const name = isGhl ? ghlEventLabel(item.event) : (lead ? fullName(lead) : localRdvFallbackLabel(item.rdv))
+            const detail = isGhl ? ghlEventDetail(item.event) : localRdvFallbackDetail(item.rdv)
+            const sector = sectorForItem(item, lead)
+            const startTime = formatTime(item.scheduledAt)
+            const endTime = formatTime(new Date(new Date(item.scheduledAt).getTime() + RDV_DURATION_MIN * 60_000).toISOString())
+            return (
+              <li key={`${item.source}-${item.id}`}>
+                <button
+                  type="button"
+                  onClick={() => onPick(item)}
+                  className="w-full text-left px-5 py-3 hover:bg-cream/60 transition-colors flex items-start gap-3"
+                >
+                  <span className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 ${SECTOR_DOT[sector]}`} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <div className="font-bold truncate">{name}</div>
+                      <div className="text-[11px] text-muted tabular-nums shrink-0">{startTime}–{endTime}</div>
+                    </div>
+                    {detail && <div className="text-[11px] text-muted truncate mt-0.5">{detail}</div>}
+                    <div className="mt-1 inline-flex items-center gap-1 text-[10px]">
+                      <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 font-bold ${CARD_TONE}`}>{sector}</span>
+                      {isGhl && <span className="text-faint">GHL</span>}
+                    </div>
+                  </div>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+    </div>
   )
 }
 
@@ -332,31 +752,40 @@ function MonthView({
     <div className="flex-grow grid grid-rows-[auto_1fr] overflow-hidden">
       <div className="grid grid-cols-7 border-b border-line-soft bg-white/70">
         {DAY_LABELS.map((label) => (
-          <div key={label} className="p-3 text-center eyebrow border-l first:border-l-0 border-line-soft">{label}</div>
+          <div key={label} className="px-1 py-2 sm:p-3 text-center eyebrow text-[9px] sm:text-[10px] border-l first:border-l-0 border-line-soft">{label}</div>
         ))}
       </div>
-      <div className="grid grid-cols-7 grid-rows-6 overflow-hidden">
+      <div className="grid grid-cols-7 grid-rows-6 overflow-y-auto">
         {days.map((d) => {
           const list = rdvByDay.get(d.key) ?? []
           const muted = !isSameReunionMonth(d.date, cursorDate)
           return (
-            <div key={d.key} className={`min-h-0 border-l border-t border-line-soft p-2 flex flex-col ${muted ? 'bg-white/30 text-faint' : 'bg-white/55'} ${d.today ? 'ring-2 ring-cuivre ring-inset' : ''}`}>
-              <button onClick={() => onOpenDay(d.date)} className={`w-8 h-8 rounded-full text-sm font-bold text-left pl-2 hover:bg-or-tint ${d.today ? 'bg-cuivre text-white hover:bg-cuivre' : ''}`}>
+            <div key={d.key} className={`min-h-0 border-l border-t border-line-soft p-1 sm:p-2 flex flex-col ${muted ? 'bg-white/30 text-faint' : 'bg-white/55'} ${d.today ? 'ring-2 ring-cuivre ring-inset' : ''}`}>
+              <button onClick={() => onOpenDay(d.date)} className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full text-xs sm:text-sm font-bold flex items-center justify-center hover:bg-or-tint ${d.today ? 'bg-cuivre text-white hover:bg-cuivre' : ''}`}>
                 {d.dayNum}
               </button>
-              <div className="mt-1 space-y-1 overflow-hidden">
-                {list.slice(0, 4).map((item) => (
-                  <RdvButton
-                    key={`${item.source}-${item.id}`}
-                    item={item}
-                    lead={item.source === 'local' ? leadMap.get(item.rdv.leadId) : item.event.contactId ? leadByExternalId.get(item.event.contactId) : undefined}
-                    compact
-                    onClick={() => onOpen(item)}
-                  />
-                ))}
-                {list.length > 4 && (
-                  <button onClick={() => onOpenDay(d.date)} className="text-[11px] font-semibold text-muted hover:text-or">+{list.length - 4} autres</button>
-                )}
+              <div className="mt-1 space-y-0.5 sm:space-y-1 overflow-hidden">
+                <div className="block sm:hidden">
+                  {list.length > 0 && (
+                    <button onClick={() => onOpenDay(d.date)} className="text-[10px] font-bold text-cuivre">
+                      ● {list.length}
+                    </button>
+                  )}
+                </div>
+                <div className="hidden sm:block space-y-1">
+                  {list.slice(0, 3).map((item) => (
+                    <RdvButton
+                      key={`${item.source}-${item.id}`}
+                      item={item}
+                      lead={item.source === 'local' ? leadMap.get(item.rdv.leadId) : item.event.contactId ? leadByExternalId.get(item.event.contactId) : undefined}
+                      compact
+                      onClick={() => onOpen(item)}
+                    />
+                  ))}
+                  {list.length > 3 && (
+                    <button onClick={() => onOpenDay(d.date)} className="text-[11px] font-semibold text-muted hover:text-or">+{list.length - 3} autres</button>
+                  )}
+                </div>
               </div>
             </div>
           )
@@ -366,18 +795,13 @@ function MonthView({
   )
 }
 
-function tileColumns(count: number): number {
-  if (count <= 1) return 1
-  if (count <= 4) return 2
-  return 3
-}
-
 function RdvButton({ item, lead, compact = false, onClick }: { item: CalendarItem; lead?: LeadResponse; compact?: boolean; onClick: () => void }) {
   const isGhl = item.source === 'ghl'
   const label = isGhl ? ghlEventLabel(item.event) : (lead ? fullName(lead) : localRdvFallbackLabel(item.rdv))
   const detail = isGhl ? ghlEventDetail(item.event) : localRdvFallbackDetail(item.rdv)
-  const tone = isGhl ? 'bg-info-tint text-info' : STATUS_TONE[item.rdv.status]
-  const title = `${formatTime(item.scheduledAt)} — ${label}${detail ? ` — ${detail}` : ''}${isGhl ? ' — GHL temps réel' : ''}`
+  const sector = sectorForItem(item, lead)
+  const tone = CARD_TONE
+  const title = `${formatTime(item.scheduledAt)} — ${sector} — ${label}${detail ? ` — ${detail}` : ''}${isGhl ? ' — GHL temps réel' : ''}`
   return (
     <button
       onClick={onClick}
@@ -550,6 +974,16 @@ function reunionHour(date: Date | string): number {
   return Number(parts.find((part) => part.type === 'hour')?.value ?? '0')
 }
 
+function reunionMinute(date: Date | string): number {
+  const parts = new Intl.DateTimeFormat('fr-FR', {
+    timeZone: REUNION_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(date))
+  return Number(parts.find((part) => part.type === 'minute')?.value ?? '0')
+}
+
 function reunionWeekday(year: number, month: number, day: number): number {
   return new Date(Date.UTC(year, month - 1, day, 12)).getUTCDay()
 }
@@ -578,6 +1012,20 @@ function formatHour(hour: number): string {
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: REUNION_TZ })
+}
+
+// Indicateur "maintenant" : retourne la position px verticale dans la colonne du jour
+// + le label horaire à afficher dans la pilule sombre. Null si hors de la fenêtre visible.
+function computeNowMarker(startHour: number, totalHours: number, hourHeightPx: number): { topPx: number; label: string } | null {
+  const now = new Date()
+  const hour = reunionHour(now)
+  const minute = reunionMinute(now)
+  const offsetMin = (hour - startHour) * 60 + minute
+  if (offsetMin < 0 || offsetMin > totalHours * 60) return null
+  return {
+    topPx: (offsetMin / 60) * hourHeightPx,
+    label: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,
+  }
 }
 
 

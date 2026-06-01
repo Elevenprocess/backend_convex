@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type TextareaHTMLAttributes } from 'react'
-import { Icon } from '../Icon'
+import { Icon, type IconName } from '../Icon'
 import { useIsReadOnlyImpersonation } from '../../lib/auth'
 import {
   fullName,
@@ -9,11 +9,20 @@ import {
   type RdvResult,
 } from '../../lib/types'
 import { useRdvList, updateRdv } from '../../lib/hooks'
+import { createLeadDebrief } from '../../lib/api'
 
 type Props = {
   lead: LeadResponse
   onClose: () => void
   onSaved?: () => void
+  onValidated?: (outcome: 'vente' | 'non_vente') => void
+  // Débrief SANS RDV depuis la fiche : on délègue au parent qui gère
+  // l'attribution du projet (auto / sélecteur / création) puis enregistre.
+  onSubmitFromFiche?: (
+    payload: ReturnType<typeof formToDebriefPayload>,
+    outcome: 'vente' | 'non_vente',
+  ) => void
+  onBack?: () => void
   className?: string
 }
 
@@ -147,11 +156,10 @@ const ACCEPTANCE_FACTORS: { value: AcceptanceFactor; label: string }[] = [
   { value: 'autre', label: 'Autre' },
 ]
 
-const PAYMENT_METHODS: { value: FinancingType; label: string }[] = [
-  { value: 'comptant', label: 'Comptant' },
-  { value: 'financement_sans_apport', label: 'Financement sans apport' },
-  { value: 'apport_financement', label: 'Apport + Financement' },
-  { value: 'paiement_10x', label: 'Paiement 10x' },
+const PAYMENT_METHODS: { value: FinancingType; label: string; icon: IconName }[] = [
+  { value: 'comptant', label: 'Comptant', icon: 'check' },
+  { value: 'financement', label: 'Financement', icon: 'chart' },
+  { value: 'paiement_10x', label: 'Paiement 10x', icon: 'calendar' },
 ]
 
 const EMPTY_FORM: FormState = {
@@ -170,7 +178,7 @@ const NON_SALE_REASON_SEPARATOR = ' — '
 const ACCEPTANCE_PREFIX_RE = /^\[Acceptation:\s*([^\]]+)\]\s*\n?/
 const PRECISION_PREFIX_RE = /^\[Précision:\s*([\s\S]*?)\]\s*(?:\n|$)/
 
-export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '' }: Props) {
+export function CommercialDebriefSidebar({ lead, onClose, onSaved, onValidated, onSubmitFromFiche, onBack, className = '' }: Props) {
   const { data: rdvs, loading: rdvsLoading, refetch: refetchRdvs } = useRdvList({ leadId: lead.id })
   const sortedRdvs = useMemo(() => sortRdvsForDebrief(rdvs ?? []), [rdvs])
   const hasReporteHistory = useMemo(() => sortedRdvs.some((r) => r.status === 'reporte' || r.result === 'reporte'), [sortedRdvs])
@@ -272,7 +280,6 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
     }))
 
   const canSubmit =
-    !!selectedRdv &&
     form.outcome !== '' &&
     (form.outcome === 'vente'
       ? form.quoteAmount.trim() !== '' && form.signedAt !== '' && form.kits.trim() !== '' && form.paymentMethod !== ''
@@ -301,7 +308,7 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
   }
 
   async function handleSubmit() {
-    if (!selectedRdv || !canSubmit) return
+    if (!canSubmit) return
     setSaving(true)
     setError(null)
     try {
@@ -309,24 +316,49 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
       if (form.outcome === 'vente' && (amount == null || Number.isNaN(amount))) {
         throw new Error('Valeur du devis invalide')
       }
-      const composedNonSaleReason =
-        form.outcome === 'non_vente' && form.nonSaleReason
-          ? composeNonSaleReason(form.nonSaleReason)
-          : null
-      const composedNotes = composeNotes(form)
-      await updateRdv(selectedRdv.id, {
-        result: outcomeToResult(form.outcome, form.nonSaleReason),
-        nonSaleReason: composedNonSaleReason,
-        objections: form.objection ? labelFromObjection(form.objection) : null,
-        notes: composedNotes,
-        montantTotal: form.outcome === 'vente' ? amount : null,
-        signatureAt: form.outcome === 'vente' && form.signedAt ? form.signedAt : null,
-        kits: form.outcome === 'vente' ? form.kits.trim() || null : null,
-        financingType: form.outcome === 'vente' && form.paymentMethod ? form.paymentMethod : null,
-        debriefFilledAt: new Date().toISOString(),
-      })
-      refetchRdvs()
+      const debriefPayload = formToDebriefPayload(form, selectedRdv?.id ?? null)
+
+      if (selectedRdv) {
+        // Chemin RDV inchangé : effets métier via PATCH /rdv/:id.
+        const composedNonSaleReason =
+          form.outcome === 'non_vente' && form.nonSaleReason
+            ? composeNonSaleReason(form.nonSaleReason)
+            : null
+        const composedNotes = composeNotes(form)
+        await updateRdv(selectedRdv.id, {
+          result: outcomeToResult(form.outcome, form.nonSaleReason),
+          nonSaleReason: composedNonSaleReason,
+          objections: form.objection ? labelFromObjection(form.objection) : null,
+          notes: composedNotes,
+          montantTotal: form.outcome === 'vente' ? amount : null,
+          signatureAt: form.outcome === 'vente' && form.signedAt ? form.signedAt : null,
+          kits: form.outcome === 'vente' ? form.kits.trim() || null : null,
+          financingType: form.outcome === 'vente' && form.paymentMethod ? form.paymentMethod : null,
+          debriefFilledAt: new Date().toISOString(),
+        })
+        // Enrichissement analytics « Débrief qualifié » — best-effort : ne pas
+        // faire échouer la sauvegarde du RDV si l'écriture du débrief échoue.
+        try {
+          await createLeadDebrief(lead.id, debriefPayload)
+        } catch {
+          /* noop : la donnée RDV reste la source pour ce cas */
+        }
+        refetchRdvs()
+      } else if (onSubmitFromFiche) {
+        // Pas de RDV, depuis la fiche : le parent gère l'attribution du projet
+        // (auto / sélecteur / création) puis l'enregistrement + le feedback.
+        onSubmitFromFiche(debriefPayload, form.outcome as 'vente' | 'non_vente')
+        onClose()
+        return
+      } else {
+        // Fallback : pas de RDV et pas de parent → débrief lead-level direct.
+        await createLeadDebrief(lead.id, debriefPayload)
+      }
+
       onSaved?.()
+      if (form.outcome === 'vente' || form.outcome === 'non_vente') {
+        onValidated?.(form.outcome)
+      }
       const successLabel =
         form.outcome === 'vente'
           ? 'Vente enregistrée'
@@ -342,9 +374,14 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
   }
 
   return (
-    <aside className={`relative flex flex-col w-full md:w-[460px] max-w-full md:max-w-[92vw] overflow-y-auto border-l border-line bg-white/95 backdrop-blur-2xl shadow-2xl ${className}`}>
+    <aside className={`flex flex-col w-full md:w-[460px] max-w-full md:max-w-[92vw] overflow-y-auto border-l border-line bg-white/95 backdrop-blur-2xl shadow-2xl ${className}`}>
       {successOverlay && <DebriefSuccessOverlay outcome={successOverlay.outcome} label={successOverlay.label} />}
       <header className="sticky top-0 z-10 border-b border-line bg-white/95 px-5 py-4 backdrop-blur-2xl">
+        {onBack && (
+          <button type="button" onClick={onBack} className="absolute left-3 top-3 rounded-full p-1.5 text-muted hover:bg-cream hover:text-text" aria-label="Retour">
+            <Icon name="arrow-left" size={16} />
+          </button>
+        )}
         <button type="button" onClick={onClose} className="absolute right-3 top-3 rounded-full p-1.5 text-muted hover:bg-cream hover:text-text" aria-label="Fermer le débriefing">
           <Icon name="x" size={16} />
         </button>
@@ -379,11 +416,17 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
             <div className="h-12 animate-pulse rounded-2xl bg-cream-darker" />
             <div className="h-32 animate-pulse rounded-2xl bg-cream-darker" />
           </div>
-        ) : sortedRdvs.length === 0 ? (
-          <EmptyDebrief />
         ) : (
           <>
-            <RdvSelector rdvs={sortedRdvs} selectedId={selectedRdv?.id ?? null} onSelect={setSelectedRdvId} />
+            {sortedRdvs.length > 0 && (
+              <RdvSelector rdvs={sortedRdvs} selectedId={selectedRdv?.id ?? null} onSelect={setSelectedRdvId} />
+            )}
+
+            {sortedRdvs.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-line bg-white/40 px-4 py-3 text-center text-xs text-muted">
+                Aucun RDV — débrief libre (rappel téléphonique, vente directe…).
+              </div>
+            )}
 
             {selectedRdv && form.outcome === 'non_vente' && form.nonSaleReason && RESCHEDULE_REASONS.has(form.nonSaleReason) && (
               <RescheduleCard
@@ -420,8 +463,7 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
         )}
       </div>
 
-      {sortedRdvs.length > 0 && (
-        <footer className="sticky bottom-0 z-10 border-t border-line bg-white/95 px-5 py-3 backdrop-blur-2xl space-y-2">
+      <footer className="sticky bottom-0 z-10 border-t border-line bg-white/95 px-5 py-3 backdrop-blur-2xl space-y-2">
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -464,7 +506,6 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, className = '
             )}
           </div>
         </footer>
-      )}
     </aside>
   )
 }
@@ -542,8 +583,25 @@ function Step3VAcceptance({ form, update, toggleAcceptance }: Step3VProps) {
 function Step4VDetails({ form, update }: StepProps) {
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <FieldGroup label="Valeur du devis signé (€)" required>
+      {/* Bandeau : on cadre l'étape comme le moment de la vente gagnée */}
+      <div className="flex items-center gap-3 rounded-2xl border border-success/30 bg-success-tint px-4 py-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-success text-white shadow-sm">
+          <Icon name="trophy" size={18} />
+        </span>
+        <div className="min-w-0">
+          <div className="text-[11px] font-black uppercase tracking-[0.14em] text-success">Vente signée</div>
+          <p className="text-xs font-bold text-text/70">Renseigne les détails du devis pour finaliser.</p>
+        </div>
+      </div>
+
+      {/* Champ hero : la valeur du devis, c'est le chiffre qui compte */}
+      <div className="rounded-2xl border border-success/40 bg-white p-4 shadow-sm">
+        <label className="flex items-center justify-between text-[11px] font-black uppercase tracking-[0.14em] text-muted">
+          <span>Valeur du devis signé <span className="text-rouille">*</span></span>
+          <Icon name="sparkles" size={14} className="text-success" />
+        </label>
+        <div className="mt-2 flex items-baseline gap-2 border-b-2 border-success/20 pb-1 focus-within:border-success">
+          <span className="text-2xl font-black text-success">€</span>
           <input
             type="number"
             inputMode="decimal"
@@ -552,37 +610,65 @@ function Step4VDetails({ form, update }: StepProps) {
             value={form.quoteAmount}
             onChange={(e) => update({ quoteAmount: e.target.value })}
             placeholder="0,00"
-            className="w-full rounded-xl border border-line bg-cream px-3 py-2 text-sm font-bold text-text outline-none focus:border-or"
+            className="w-full bg-transparent text-3xl font-black tracking-tight text-text outline-none placeholder:text-faint/40"
           />
-        </FieldGroup>
-        <FieldGroup label="Date signature devis" required>
+        </div>
+      </div>
+
+      <FieldGroup label="Date de signature" required>
+        <div className="relative">
+          <Icon name="calendar" size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-or-dark" />
           <input
             type="date"
             value={form.signedAt}
             onChange={(e) => update({ signedAt: e.target.value })}
-            className="w-full rounded-xl border border-line bg-cream px-3 py-2 text-sm font-bold text-text outline-none focus:border-or"
+            className="w-full rounded-xl border border-line bg-cream py-2 pl-9 pr-3 text-sm font-bold text-text outline-none focus:border-or"
           />
-        </FieldGroup>
-      </div>
+        </div>
+      </FieldGroup>
 
       <FieldGroup label="Kits vendus" required>
-        <input
-          type="text"
-          value={form.kits}
-          onChange={(e) => update({ kits: e.target.value })}
-          placeholder="Ex. : 8 PV + 1 onduleur + 1 batterie 5 kWh"
-          className="w-full rounded-xl border border-line bg-cream px-3 py-2 text-sm text-text outline-none focus:border-or"
-        />
+        <div className="relative">
+          <Icon name="tag" size={15} className="pointer-events-none absolute left-3 top-3 text-or-dark" />
+          <input
+            type="text"
+            value={form.kits}
+            onChange={(e) => update({ kits: e.target.value })}
+            placeholder="Ex. : 8 PV + 1 onduleur + 1 batterie 5 kWh"
+            className="w-full rounded-xl border border-line bg-cream py-2 pl-9 pr-3 text-sm text-text outline-none focus:border-or"
+          />
+        </div>
       </FieldGroup>
 
       <FieldGroup label="Type de paiement" required>
-        <div className="grid grid-cols-2 gap-1.5">
+        <div className="grid grid-cols-3 gap-1.5">
           {PAYMENT_METHODS.map((p) => (
-            <ChoiceChip key={p.value} active={form.paymentMethod === p.value} label={p.label} onClick={() => update({ paymentMethod: p.value })} />
+            <PaymentPill
+              key={p.value}
+              active={form.paymentMethod === p.value}
+              icon={p.icon}
+              label={p.label}
+              onClick={() => update({ paymentMethod: p.value })}
+            />
           ))}
         </div>
       </FieldGroup>
     </div>
+  )
+}
+
+function PaymentPill({ active, icon, label, onClick }: { active: boolean; icon: IconName; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border px-2 py-3 text-center transition ${
+        active ? 'border-success bg-success text-white shadow-md' : 'border-line bg-white text-muted hover:border-success/50'
+      }`}
+    >
+      <Icon name={icon} size={16} />
+      <span className="text-[11px] font-black leading-tight">{label}</span>
+    </button>
   )
 }
 
@@ -813,17 +899,6 @@ function ProgressDots({ total, currentIndex }: { total: number; currentIndex: nu
   )
 }
 
-function EmptyDebrief() {
-  return (
-    <div className="rounded-2xl border border-dashed border-line bg-cream/40 px-5 py-8 text-center">
-      <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-or-tint text-or-dark">
-        <Icon name="calendar" size={18} />
-      </div>
-      <p className="text-sm font-black text-text">Aucun RDV à débriefer</p>
-      <p className="mt-1 text-xs text-muted">Le débrief commercial s'active dès qu'un RDV est planifié sur ce lead.</p>
-    </div>
-  )
-}
 
 function RdvSelector({ rdvs, selectedId, onSelect }: { rdvs: RdvResponse[]; selectedId: string | null; onSelect: (id: string) => void }) {
   if (rdvs.length <= 1) {
@@ -988,6 +1063,28 @@ function outcomeToResult(outcome: Outcome, reason: NonSaleReason | ''): RdvResul
     return 'perdu'
   }
   return null
+}
+
+function formToDebriefPayload(form: FormState, rdvId: string | null) {
+  const isVente = form.outcome === 'vente'
+  const amount =
+    isVente && form.quoteAmount.trim() !== ''
+      ? form.quoteAmount.trim().replace(',', '.')
+      : null
+  return {
+    rdvId,
+    outcome: (isVente ? 'vente' : 'non_vente') as 'vente' | 'non_vente',
+    // nonSaleReason est conservé pour TOUS les motifs non-vente (y compris
+    // suivi_prevu) : c'est ce que lit la carte « Raisons non-vente ».
+    nonSaleReason: !isVente && form.nonSaleReason ? form.nonSaleReason : null,
+    objection: form.objection ? labelFromObjection(form.objection) : null,
+    acceptanceFactors: isVente ? form.acceptanceFactors : [],
+    notes: form.notes.trim() || null,
+    montantTotal: amount,
+    financingType: isVente && form.paymentMethod ? form.paymentMethod : null,
+    kits: isVente ? form.kits.trim() || null : null,
+    signedAt: isVente && form.signedAt ? form.signedAt : null,
+  }
 }
 
 function labelFromNonSaleReason(value: NonSaleReason): string {

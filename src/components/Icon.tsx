@@ -46,6 +46,7 @@ export type IconName =
   | 'trash'
   | 'filter'
   | 'more'
+  | 'download'
 
 const PATHS: Record<IconName, React.ReactNode> = {
   grid: (<><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></>),
@@ -88,6 +89,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
   trash: (<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></>),
   filter: (<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>),
   more: (<><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></>),
+  download: (<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>),
 }
 
 export function Icon({ name, size = 20, className, strokeWidth = 2 }: IconProps) {

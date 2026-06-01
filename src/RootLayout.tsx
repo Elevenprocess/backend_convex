@@ -10,6 +10,7 @@ import { useLeads, useRdvList } from './lib/hooks'
 import { useRealtimeSocket } from './lib/realtime'
 import { useTheme } from './lib/theme'
 import { fullName, type LeadResponse } from './lib/types'
+import { leadSearchPath } from './lib/leadPaths'
 import { buildCommercialNotifications, buildNotifications, useBrowserNotifications } from './pages/Notifications'
 
 export function RootLayout() {
@@ -204,6 +205,7 @@ function SetterCallbackToastStack() {
 }
 
 function CallbackToast({ lead, callbackAt, onDismiss }: { lead: LeadResponse; callbackAt: number; onDismiss: () => void }) {
+  const role = useAuth((s) => s.user?.role)
   const now = Date.now()
   const diffMs = callbackAt - now
   const isLate = diffMs <= 0
@@ -226,7 +228,7 @@ function CallbackToast({ lead, callbackAt, onDismiss }: { lead: LeadResponse; ca
           </div>
           <div className="mt-2 flex items-center justify-between text-xs">
             <span className={isLate ? 'text-rouille font-semibold' : 'text-muted'}>{countdown}</span>
-            <Link to={`/leads?search=${encodeURIComponent(fullName(lead))}`} className="text-or-dark font-semibold hover:underline">Ouvrir</Link>
+            <Link to={leadSearchPath(role, fullName(lead))} className="text-or-dark font-semibold hover:underline">Ouvrir</Link>
           </div>
           <div className="mt-2 text-[11px] text-faint">Heure d’appel : {scheduledTime}</div>
         </div>

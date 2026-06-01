@@ -22,7 +22,14 @@ export function SuiviDetail() {
     return buildDossiers(leads ?? [], rdvs ?? [], users ?? [], states).find((d) => d.id === id) ?? null
   }, [id, leads, rdvs, users])
 
-  if (role && role !== 'admin' && role !== 'delivrabilite') return <Navigate to="/overview" replace />
+  if (
+    role
+    && role !== 'admin'
+    && role !== 'delivrabilite'
+    && role !== 'responsable_technique'
+    && role !== 'back_office'
+    && role !== 'technicien'
+  ) return <Navigate to="/overview" replace />
   if (!id) return <Navigate to="/suivi" replace />
 
   const isLoading = leadsLoading || rdvLoading

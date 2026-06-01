@@ -7,6 +7,7 @@ import { LoadingBlock, Spinner } from '../components/Spinner'
 import { useLeads, useRdvList } from '../lib/hooks'
 import { useAuth } from '../lib/auth'
 import { fullName, type LeadResponse, type LeadStatus, type RdvResponse } from '../lib/types'
+import { leadListPath, leadSearchPath } from '../lib/leadPaths'
 
 type Notif = {
   id: string
@@ -46,7 +47,7 @@ export function Notifications() {
   return (
     <AppShell>
       <Topbar eyebrow="NOTIFICATIONS" title={isCommercial ? 'Notifications commerciales' : 'Notifications et rappels'} />
-      <div className="px-8 pt-4 flex items-center justify-between flex-shrink-0 gap-4">
+      <div className="px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 flex items-center justify-between flex-shrink-0 gap-2 sm:gap-4 flex-wrap">
         <div className="text-sm text-muted">
           {loading && notifs.length === 0 ? <Spinner size={16} stroke={3} label="Chargement des notifications…" /> : `${notifs.length} notification${notifs.length > 1 ? 's' : ''} active${notifs.length > 1 ? 's' : ''}`}
         </div>
@@ -59,7 +60,7 @@ export function Notifications() {
         </button>
       </div>
 
-      <main className="p-8 pt-4 max-w-3xl mx-auto w-full overflow-y-auto space-y-3 flex-grow">
+      <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 max-w-3xl mx-auto w-full overflow-y-auto space-y-3 flex-grow">
         {loading && notifs.length === 0 ? (
           <LoadingBlock label="Chargement des notifications…" />
         ) : notifs.length === 0 ? (
@@ -126,7 +127,8 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
 
   for (const lead of leads) {
     const name = fullName(lead)
-    const leadLink = `/leads?search=${encodeURIComponent(name)}`
+    // buildNotifications est appelée pour les rôles non-commerciaux (setter, admin…).
+    const leadLink = leadSearchPath(null, name)
     const callbackAt = lead.nextCallbackAt ? new Date(lead.nextCallbackAt).getTime() : null
 
     const callbackResolved = isCallbackResolved(lead, callbackAt)
@@ -244,7 +246,7 @@ export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvRes
         time: formatDateTime(rdv.scheduledAt),
         sortAt: updated,
         urgency: 'soon',
-        to: '/leads',
+        to: leadListPath('commercial'),
       })
     } else if (rdv.status === 'planifie' && scheduled > now && scheduled <= in24h) {
       notifications.push({
@@ -257,7 +259,7 @@ export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvRes
         time: formatDateTime(rdv.scheduledAt),
         sortAt: created,
         urgency: 'info',
-        to: '/leads',
+        to: leadListPath('commercial'),
       })
     }
 
@@ -272,7 +274,7 @@ export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvRes
         time: relativeTime(rdv.createdAt),
         sortAt: created,
         urgency: 'info',
-        to: '/leads',
+        to: leadListPath('commercial'),
       })
     } else if (updated >= since24h && stage !== 'RDV Planifié') {
       notifications.push({
@@ -285,7 +287,7 @@ export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvRes
         time: relativeTime(rdv.updatedAt),
         sortAt: updated,
         urgency: 'info',
-        to: '/leads',
+        to: leadListPath('commercial'),
       })
     }
   }

@@ -103,11 +103,11 @@ export function RdvDetail() {
         </div>
       </div>
 
-      <main className="p-8 pt-4 grid grid-cols-3 gap-6 overflow-y-auto flex-grow">
-        <div className="col-span-2 space-y-6">
-          <div className="glass-card p-6">
+      <main className="p-4 sm:p-6 lg:p-8 pt-4 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6 overflow-y-auto flex-grow">
+        <div className="lg:col-span-2 space-y-6">
+          <div className="glass-card p-4 sm:p-6">
             <h3 className="font-bold mb-4">Informations RDV</h3>
-            <div className="grid grid-cols-2 gap-y-4 gap-x-8 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-8 text-sm">
               <Field label="DATE & HEURE" value={formatDateLong(rdv.scheduledAt)} />
               <Field label="TYPE" value={LOCATION_LABEL[rdv.locationType]} />
               <Field label="STATUT" value={RDV_STATUS_LABEL[rdv.status]} />
@@ -135,9 +135,9 @@ export function RdvDetail() {
           )}
 
           {rdv.result && (
-            <div className="glass-card p-6">
+            <div className="glass-card p-4 sm:p-6">
               <h3 className="font-bold mb-3">Débrief</h3>
-              <div className="grid grid-cols-2 gap-y-3 gap-x-8 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-8 text-sm">
                 <Field label="RÉSULTAT" value={rdv.result} />
                 {rdv.financingType && <Field label="MODE" value={rdv.financingType} />}
                 {rdv.montantTotal && <Field label="MONTANT" value={`${Number(rdv.montantTotal).toLocaleString('fr-FR')} €`} />}

@@ -17,6 +17,8 @@ import {
 } from '../lib/types'
 import { useCall, type CallState } from '../lib/call'
 import { useCallLogs, useRdvList, createCallLog, createRdv, updateLead, useGhlCalendarConfig, useGhlFreeSlots, createGhlAppointment, syncLeadGhlCalendarEvents, type GhlCalendarEvent } from '../lib/hooks'
+import { useAuth } from '../lib/auth'
+import { leadDetailPath } from '../lib/leadPaths'
 
 type Tab = { id: string; label: string; icon?: IconName }
 
@@ -76,6 +78,7 @@ function notesTabStorageKey(leadId: string): string {
 }
 
 export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, children, onClose, onSaved, className }: SplitPanelProps) {
+  const role = useAuth((s) => s.user?.role)
   const [active, setActive] = useState(defaultTab ?? tabs[0].id)
   const callState = useCall()
   const isActiveCallForThisLead = callState.active && callState.leadId === lead.id
@@ -85,7 +88,7 @@ export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, chi
     : null
 
   return (
-    <aside className={`w-[420px] border-l border-line bg-white/65 backdrop-blur-md flex flex-col flex-shrink-0 overflow-hidden ${className ?? ''}`}>
+    <aside className={`w-full md:w-[420px] max-w-full border-l border-line bg-white/65 backdrop-blur-md flex flex-col flex-shrink-0 overflow-hidden ${className ?? ''}`}>
       {/* Header */}
       <div className="p-5 border-b border-line-soft flex items-center gap-3">
         <div className="w-12 h-12 rounded-full bg-cuivre-tint flex items-center justify-center text-sm font-bold">{leadInitials(lead)}</div>
@@ -108,13 +111,13 @@ export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, chi
             )}
           </div>
         </div>
-        <Link to={`/leads/${lead.id}`} className="text-xs font-semibold text-or hover:underline whitespace-nowrap">
+        <Link to={leadDetailPath(role, lead.id)} className="text-xs font-semibold text-or hover:underline whitespace-nowrap">
           Fiche →
         </Link>
         {onClose && (
           <button
             onClick={onClose}
-            className="w-7 h-7 rounded-full hover:bg-cream flex items-center justify-center text-faint hover:text-text"
+            className="w-10 h-10 rounded-full hover:bg-cream flex items-center justify-center text-faint hover:text-text shrink-0"
             title="Réduire le panneau"
           >
             <Icon name="x" size={14} />

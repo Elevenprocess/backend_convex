@@ -15,6 +15,9 @@ import type {
   AnalyticsSummaryResponse,
   AnalyticsFunnelResponse,
   AnalyticsCommercialSummary,
+  ProjectAttachmentResponse,
+  ProjectDetailResponse,
+  ProjectResponse,
 } from './types'
 
 type Async<T> = {
@@ -474,6 +477,27 @@ export function prefetchAnalyticsFunnel(filters?: {
   return prefetchFetchCache<AnalyticsFunnelResponse>('/analytics/funnel', filters, options)
 }
 
+// ─── Debrief analytics ──────────────────────────────────────
+// Agrégation des débriefs réels (table debriefs) — alimente les cartes
+// « Débrief qualifié » et « Raisons non-vente » de l'Overview.
+export type DebriefAnalyticsResponse = {
+  outcomeCounts: { vente: number; non_vente: number; en_reflexion: number; suivi_prevu: number }
+  acceptanceFactorCounts: Record<string, number>
+  nonSaleReasonCounts: Record<string, number>
+  total: number
+}
+
+export function useDebriefAnalytics(filters?: {
+  from?: string
+  to?: string
+  commercialId?: string
+}): Async<DebriefAnalyticsResponse> {
+  return useFetch<DebriefAnalyticsResponse>('/analytics/debriefs', filters, {
+    refreshCachedOnMount: true,
+    silentInitialLoading: true,
+  })
+}
+
 // ─── Pipeline analytics (admin) ─────────────────────────────
 export type PipelineDistributionEntry = {
   ghlStageName: string | null
@@ -861,6 +885,27 @@ export function useStartCall() {
       notifyClipboardCopied()
     },
     [],
+  )
+}
+
+// ─── Projects ─────────────────────────────────────────────
+export function useProjectsByLead(
+  leadId: string | undefined,
+): Async<ProjectResponse[]> {
+  return useFetch<ProjectResponse[]>(leadId ? `/projects/lead/${leadId}` : null)
+}
+
+export function useProjectDetail(
+  projectId: string | undefined,
+): Async<ProjectDetailResponse> {
+  return useFetch<ProjectDetailResponse>(projectId ? `/projects/${projectId}` : null)
+}
+
+export function useProjectAttachments(
+  projectId: string | undefined,
+): Async<ProjectAttachmentResponse[]> {
+  return useFetch<ProjectAttachmentResponse[]>(
+    projectId ? `/projects/${projectId}/attachments` : null,
   )
 }
 

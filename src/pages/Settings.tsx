@@ -68,7 +68,7 @@ const TEAM_BY_ROLE: Record<Role, NonNullable<Team>> = {
 export function Settings() {
   const role = useAuth((s) => s.user?.role)
 
-  if (role === 'admin') return <SettingsAdmin />
+  if (role === 'admin' || role === 'commercial_lead') return <SettingsAdmin />
   if (role === 'commercial') return <SettingsCommercial />
   return <Navigate to="/overview" replace />
 }
@@ -80,7 +80,7 @@ function SettingsCommercial() {
   return (
     <AppShell blobsKey="admin">
       <Topbar eyebrow="ÉQUIPE" title="Setters de l'équipe" />
-      <main className="p-8 pt-4 overflow-y-auto space-y-6 flex-grow">
+      <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 overflow-y-auto space-y-4 sm:space-y-6 flex-grow">
         <div className="glass-card p-6">
           <h3 className="font-bold mb-4">Setters</h3>
           {loading ? (
@@ -153,7 +153,7 @@ function SettingsAdmin() {
   return (
     <AppShell blobsKey="admin">
       <Topbar eyebrow="PARAMÈTRES" title="Gestion de l'équipe" />
-      <div className="px-8 pt-4 flex items-center justify-end flex-shrink-0">
+      <div className="px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 flex items-center justify-end flex-shrink-0">
         <button onClick={() => setInviteOpen(true)} className="btn-primary px-4 py-2 rounded-xl text-sm flex items-center gap-2">
           <Icon name="plus" size={14} />
           Inviter un membre
@@ -252,6 +252,8 @@ function SettingsAdmin() {
 }
 
 function InviteModal({ onClose, onInvited }: { onClose: () => void; onInvited: () => void }) {
+  const actorRole = useAuth((s) => s.user?.role)
+  const isCommercialLead = actorRole === 'commercial_lead'
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
@@ -314,15 +316,19 @@ function InviteModal({ onClose, onInvited }: { onClose: () => void; onInvited: (
               <option value="commercial">Commercial</option>
               <option value="commercial_lead">Commercial Lead</option>
             </optgroup>
-            <optgroup label="Délivrabilité">
-              <option value="responsable_technique">Responsable technique</option>
-              <option value="back_office">Back office</option>
-              <option value="technicien">Technicien</option>
-            </optgroup>
-            <optgroup label="Administration">
-              <option value="finances">Finances</option>
-              <option value="admin">Admin</option>
-            </optgroup>
+            {!isCommercialLead && (
+              <>
+                <optgroup label="Délivrabilité">
+                  <option value="responsable_technique">Responsable technique</option>
+                  <option value="back_office">Back office</option>
+                  <option value="technicien">Technicien</option>
+                </optgroup>
+                <optgroup label="Administration">
+                  <option value="finances">Finances</option>
+                  <option value="admin">Admin</option>
+                </optgroup>
+              </>
+            )}
           </select>
         </label>
 
@@ -362,14 +368,19 @@ function UserRow({ user, ghlUsers, onMapped, onEdit, compact = false }: { user: 
       ? `/team/setters/${user.id}`
       : null
 
-  // Impersonation : admin → tout user ; commercial → setter (en lecture seule).
+  // Impersonation : admin → tout user ; commercial_lead → équipe commercial/setter ;
+  // commercial → setter (en lecture seule).
   // Le back rejette les écritures (POST/PATCH/DELETE) en mode commercial→setter
   // via l'AuthGuard, donc même si l'UI affichait un bouton edit par erreur,
   // l'écriture serait bloquée 403 côté serveur.
   const canImpersonate = !!realUser
     && realUser.id !== user.id
     && user.active
-    && (realUser.role === 'admin' || (realUser.role === 'commercial' && user.role === 'setter'))
+    && (
+      realUser.role === 'admin'
+      || (realUser.role === 'commercial_lead' && (user.role === 'commercial' || user.role === 'commercial_lead' || user.role === 'setter' || user.role === 'setter_lead'))
+      || (realUser.role === 'commercial' && user.role === 'setter')
+    )
 
   async function saveGhlUser(ghlUserId: string) {
     setSavingGhl(true)
