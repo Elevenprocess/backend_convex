@@ -695,14 +695,14 @@ function AnalyticsInlineLoading() {
   )
 }
 
-function BigStatCard({ label, value, delta, sub, accent, icon, trend, progress, deltaTone }: {
+function BigStatCard({ label, value, delta, sub, accent, icon, progress, deltaTone }: {
   label: string; value: string; delta?: string; sub?: string;
   accent?: KpiAccent; icon?: IconName; trend?: number[]; progress?: number; deltaTone?: DeltaTone
 }) {
   return (
     <MagicKpi
       label={label} value={value} delta={delta} deltaTone={deltaTone} sub={sub}
-      accent={accent} icon={icon} trend={trend} progress={progress}
+      accent={accent} icon={icon} progress={progress}
     />
   )
 }
