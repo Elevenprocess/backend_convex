@@ -1,4 +1,5 @@
 import type {
+  ClientResponse,
   DebriefResponse,
   Devis,
   LeadResponse,
@@ -186,6 +187,16 @@ export function parseProjectMeta(filename: string): { name: string; address: str
 // Réservé admin / commercial_lead (garde @Roles côté API).
 export function assignLeadToCommercial(leadId: string, commercialId: string): Promise<LeadResponse> {
   return api<LeadResponse>(`/leads/${leadId}/assign`, { method: 'POST', body: { commercialId } })
+}
+
+export function assignTechnicienVt(
+  clientId: string,
+  technicienVtId: string | null,
+): Promise<ClientResponse> {
+  return api<ClientResponse>(`/clients/${clientId}`, {
+    method: 'PATCH',
+    body: { technicienVtId },
+  })
 }
 
 export function getDevis(devisId: string): Promise<Devis> {

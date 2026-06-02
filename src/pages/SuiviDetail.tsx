@@ -7,6 +7,7 @@ import { useAuth } from '../lib/auth'
 import { useLeads, useRdvList, useUsers } from '../lib/hooks'
 import { buildDossiers, readWorkflowState } from '../lib/suivi'
 import { DossierSidebar } from '../components/suivi/DossierSidebar'
+import { TechnicienVtPicker } from '../components/suivi/TechnicienVtPicker'
 import { WorkflowTimeline } from '../components/suivi/WorkflowTimeline'
 
 export function SuiviDetail() {
@@ -52,6 +53,7 @@ export function SuiviDetail() {
         ) : (
           <div className="suivi-split">
             <DossierSidebar dossier={dossier} />
+            <TechnicienVtPicker leadId={dossier.lead.id} />
             <section id="workflow" className="suivi-timeline-wrap glass-card">
               <header className="suivi-timeline-head">
                 <h2>Workflow installation</h2>

@@ -6,8 +6,10 @@ import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
 import { useDisplayUser } from '../lib/role'
-import { useCallLogs, useLeads, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary, useDebriefAnalytics, prefetchAnalyticsFunnel, prefetchAnalyticsSummary, type DebriefAnalyticsResponse } from '../lib/hooks'
+import { useCallLogs, useClients, useLeads, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary, useDebriefAnalytics, prefetchAnalyticsFunnel, prefetchAnalyticsSummary, type DebriefAnalyticsResponse } from '../lib/hooks'
 import { STATUS_LABEL, DEBRIEF_ACCEPTANCE_FACTOR_LABEL, DEBRIEF_NON_SALE_REASON_LABEL, fullName, initials, type AnalyticsFunnelResponse, type CallLogResponse, type DebriefAcceptanceFactor, type DebriefNonSaleReason, type LeadResponse, type LeadStatus, type RdvResponse, type UserResponse } from '../lib/types'
+import { computeTechnicienStats, computeTerrainPipeline, selectUnassignedVt, type TechnicienStat } from '../lib/technicienStats'
+import { buildSuiviPeriodRange, getDefaultSuiviPeriod, SUIVI_PERIOD_OPTIONS, type SuiviPeriodState } from '../lib/suivi'
 
 type FunnelPeriodMode = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'custom'
 type FunnelPeriodState = { mode: FunnelPeriodMode; customFrom: string; customTo: string }
@@ -55,8 +57,10 @@ export function Overview() {
   // toute l'équipe closing.
   if (role === 'commercial' || role === 'commercial_lead') return <OverviewCommercial />
   // Délivrabilité (legacy) + son split : responsable_technique / back_office / technicien.
-  // Tous voient la vue Suivi (basée sur /leads et /rdv, ouverts à tous les rôles).
-  if (role === 'delivrabilite' || role === 'responsable_technique' || role === 'back_office' || role === 'technicien') return <OverviewSuivi />
+  // responsable_technique a sa propre vue de pilotage techniciens.
+  if (role === 'responsable_technique') return <OverviewResponsableTechnique />
+  // back_office / technicien / délivrabilité voient la vue Suivi (basée sur /leads et /rdv).
+  if (role === 'delivrabilite' || role === 'back_office' || role === 'technicien') return <OverviewSuivi />
   return <OverviewSetter />
 }
 
@@ -112,6 +116,117 @@ function OverviewSuivi() {
                 </div>
               ))}
               {signedLeads.length === 0 && <div className="text-xs text-faint">Aucun dossier signé chargé.</div>}
+            </div>
+          </div>
+        </section>
+      </main>
+    </AppShell>
+  )
+}
+
+function OverviewResponsableTechnique() {
+  const navigate = useNavigate()
+  const [period, setPeriod] = useState<SuiviPeriodState>(getDefaultSuiviPeriod())
+  const { data: clients = [] } = useClients()
+  const { data: users = [] } = useUsers()
+
+  const techniciens = useMemo(
+    () => (users ?? []).filter((u) => u.role === 'technicien'),
+    [users],
+  )
+  const range = useMemo(() => buildSuiviPeriodRange(period), [period])
+
+  const stats = useMemo<TechnicienStat[]>(
+    () => computeTechnicienStats(clients ?? [], techniciens, { from: range.from, to: range.to }),
+    [clients, techniciens, range],
+  )
+  const pipeline = useMemo(() => computeTerrainPipeline(clients ?? []), [clients])
+  const unassigned = useMemo(() => selectUnassignedVt(clients ?? []), [clients])
+
+  const totalCharge = stats.reduce((s, t) => s + t.chargeEnCours, 0)
+  const totalRetard = stats.reduce((s, t) => s + t.retardOuProbleme, 0)
+  const installAVenir = pipeline.installation.a_faire + pipeline.installation.planifie
+
+  return (
+    <AppShell flat>
+      <Topbar eyebrow="RESPONSABLE TECHNIQUE" title="Pilotage technique" />
+      <main className="overview-shot-page flex-grow overflow-auto">
+        <div className="overview-air-header">
+          <div>
+            <span className="shot-eyebrow">Terrain · VT & Installation</span>
+            <h1>Suivi des techniciens</h1>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {SUIVI_PERIOD_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setPeriod((p) => ({ ...p, mode: opt.id }))}
+                className={`rounded-full px-3 py-1.5 text-xs font-black border transition ${period.mode === opt.id ? 'bg-text text-white border-text' : 'border-line-soft text-muted'}`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <section className="overview-air-grid">
+          <AirKpi icon="inbox" label="VT à attribuer" value={fmtCompact(unassigned.length)} sub="sans technicien" />
+          <AirKpi icon="settings" label="VT en cours" value={fmtCompact(totalCharge)} sub="charge active" />
+          <AirKpi icon="shield" label="VT en retard / problème" value={fmtCompact(totalRetard)} sub="à débloquer" />
+          <AirKpi icon="check" label="Installations à venir" value={fmtCompact(installAVenir)} sub="à faire + planifiées" />
+
+          <div className="overview-air-card overview-role-wide">
+            <CardHead title="Techniciens" icon="users" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+              {stats.length === 0 && <div className="text-xs text-faint">Aucun technicien.</div>}
+              {stats.map((s) => (
+                <div key={s.technicien.id} className="rounded-[18px] border border-line-soft bg-white/70 px-4 py-4">
+                  <div className="flex items-center justify-between">
+                    <strong className="text-sm">{s.technicien.name}</strong>
+                    <span className="text-[10px] font-black text-faint">{s.tauxValidation}% validées</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mt-3 text-center">
+                    <div><strong className="block text-lg tabular-nums">{s.chargeEnCours}</strong><small className="text-muted">en cours</small></div>
+                    <div><strong className="block text-lg tabular-nums text-danger">{s.retardOuProbleme}</strong><small className="text-muted">retard</small></div>
+                    <div><strong className="block text-lg tabular-nums">{s.realiseesPeriode}</strong><small className="text-muted">réalisées</small></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="overview-air-card overview-role-side">
+            <CardHead title="VT à attribuer" icon="bell" />
+            <div className="overview-role-list">
+              {unassigned.slice(0, 6).map((c) => (
+                <div key={c.id} className="overview-role-row">
+                  <div><strong>{c.lead.fullName ?? c.lead.phone ?? 'Dossier'}</strong><small>{c.lead.city ?? '—'}</small></div>
+                  <button onClick={() => navigate(`/suivi/${c.leadId}`)}>Attribuer</button>
+                </div>
+              ))}
+              {unassigned.length === 0 && <div className="text-xs text-faint">Tout est attribué 🎉</div>}
+            </div>
+          </div>
+
+          <div className="overview-air-card overview-role-wide">
+            <CardHead title="Pipeline terrain" icon="grid" />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+              {([
+                { label: 'VT à planifier', value: pipeline.vt.a_faire },
+                { label: 'VT planifiées', value: pipeline.vt.planifie },
+                { label: 'VT réalisées', value: pipeline.vt.en_cours },
+                { label: 'VT validées', value: pipeline.vt.fait },
+                { label: 'Install. à faire', value: pipeline.installation.a_faire },
+                { label: 'Install. planifiées', value: pipeline.installation.planifie },
+                { label: 'Install. en cours', value: pipeline.installation.en_cours },
+                { label: 'Install. posées', value: pipeline.installation.fait },
+              ]).map((stage) => (
+                <button key={stage.label} type="button" onClick={() => navigate('/suivi')} className="rounded-[18px] border border-line-soft bg-white/70 px-4 py-4 text-left hover:border-success/50 transition">
+                  <strong className="block text-2xl tabular-nums">{stage.value}</strong>
+                  <small className="text-muted">{stage.label}</small>
+                </button>
+              ))}
             </div>
           </div>
         </section>

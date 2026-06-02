@@ -5,6 +5,7 @@ import { notifyRealtimeRefresh, REALTIME_REFRESH_EVENT, type RealtimeRefreshPayl
 import { useNetworkActivity } from './networkActivity'
 import type {
   CallLogResponse,
+  ClientResponse,
   InvitationResponse,
   LeadResponse,
   LeadStatsResponse,
@@ -365,6 +366,22 @@ export async function updateRdv(id: string, input: UpdateRdvPayload): Promise<Rd
 // ─── Users ─────────────────────────────────────────────────
 export function useUsers(): Async<UserResponse[]> {
   return useFetch<UserResponse[]>('/users')
+}
+
+// ─── Clients ───────────────────────────────────────────────
+export function useClients(filters?: {
+  technicienVtId?: string
+  phase?: string
+  leadId?: string
+  unassignedVt?: boolean
+} | null): Async<ClientResponse[]> {
+  const query = filters === null ? undefined : {
+    technicienVtId: filters?.technicienVtId,
+    phase: filters?.phase,
+    leadId: filters?.leadId,
+    unassignedVt: filters?.unassignedVt ? 'true' : undefined,
+  }
+  return useFetch<ClientResponse[]>(filters === null ? null : '/clients', query)
 }
 
 export function useInvitations(enabled = true): Async<InvitationResponse[]> {

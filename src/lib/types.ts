@@ -778,3 +778,28 @@ export interface ProjectDetailResponse extends ProjectResponse {
   debriefs: DebriefResponse[];
   attachments: ProjectAttachmentResponse[];
 }
+
+export type WorkflowPhase = 'vt' | 'dp' | 'racco' | 'consuel' | 'installation' | 'mes'
+export type WorkflowStatus = 'a_faire' | 'planifie' | 'en_cours' | 'fait' | 'probleme' | 'en_attente' | 'annule'
+
+export type ClientPhaseStep = {
+  status: WorkflowStatus
+  datePlanifiee: string | null
+  dateRealisee: string | null
+  problemReason: string | null
+}
+
+export type ClientResponse = {
+  id: string
+  leadId: string
+  rdvId: string | null
+  lead: { fullName: string | null; city: string | null; phone: string | null }
+  technicienVtId: string | null
+  poseTeamLeadId: string | null
+  adminReferentId: string | null
+  statusGlobal: string
+  currentPhase: WorkflowPhase
+  blocked: boolean
+  signedAt: string | null
+  steps: Partial<Record<WorkflowPhase, ClientPhaseStep>>
+}
