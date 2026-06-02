@@ -96,6 +96,11 @@ export function useRealtimeSocket() {
       }
     })
 
+    socket.on('workflow_substep:updated', () =>
+      notifyRealtimeRefresh({ event: 'workflow_substep:updated', paths: ['/substeps'] }))
+    socket.on('workflow_substep:blocked', () =>
+      notifyRealtimeRefresh({ event: 'workflow_substep:blocked', paths: ['/substeps'] }))
+
     // Presence locks setter — un autre setter regarde ce lead
     socket.on('lead:locks-snapshot', (locks: LeadLockInfo[]) => {
       leadLocksStore.clear()

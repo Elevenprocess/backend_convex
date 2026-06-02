@@ -803,3 +803,45 @@ export type ClientResponse = {
   signedAt: string | null
   steps: Partial<Record<WorkflowPhase, ClientPhaseStep>>
 }
+
+export type WorkflowSubstepKey =
+  | 'vt_planifie' | 'vt_attribuee' | 'vt_validee' | 'vt_mandat'
+  | 'dp_a_faire' | 'dp_envoyee_mairie' | 'dp_validee' | 'dp_prolongation'
+  | 'racco_a_faire' | 'racco_envoye' | 'racco_validee' | 'racco_completude'
+  | 'consuel_a_faire' | 'consuel_valide'
+  | 'install_a_faire' | 'install_effectuee'
+  | 'enquete_satisfaction'
+
+export type SubstepResponse = {
+  id: string
+  stepId: string
+  clientId: string
+  key: WorkflowSubstepKey
+  position: number
+  label: string
+  actionLabel: string
+  phase: WorkflowPhase
+  status: WorkflowStatus
+  optional: boolean
+  dateRealisee: string | null
+  deadline: string | null
+  responsableId: string | null
+  notes: string | null
+  problemReason: string | null
+  problemNotes: string | null
+  problemResolvedAt: string | null
+  metadata: unknown
+  unlocked: boolean
+  missingDocument: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export type UpdateSubstepPatch = Partial<{
+  status: WorkflowStatus
+  dateRealisee: string | null
+  responsableId: string | null
+  notes: string | null
+  problemReason: string | null
+  problemNotes: string | null
+}>

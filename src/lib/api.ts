@@ -8,6 +8,8 @@ import type {
   ProjectDetailResponse,
   ProjectResponse,
   ProjectStatus,
+  SubstepResponse,
+  UpdateSubstepPatch,
 } from './types'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
@@ -197,6 +199,24 @@ export function assignTechnicienVt(
     method: 'PATCH',
     body: { technicienVtId },
   })
+}
+
+export function getSubsteps(clientId: string): Promise<SubstepResponse[]> {
+  return api<SubstepResponse[]>('/substeps', { query: { clientId } })
+}
+
+export function updateSubstep(
+  substepId: string,
+  patch: UpdateSubstepPatch,
+): Promise<SubstepResponse> {
+  return api<SubstepResponse>(`/substeps/${substepId}`, { method: 'PATCH', body: patch })
+}
+
+export function resolveSubstepProblem(
+  substepId: string,
+  status: SubstepResponse['status'],
+): Promise<SubstepResponse> {
+  return api<SubstepResponse>(`/substeps/${substepId}/resolve-problem`, { method: 'POST', body: { status } })
 }
 
 export function getDevis(devisId: string): Promise<Devis> {

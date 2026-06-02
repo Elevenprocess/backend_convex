@@ -19,6 +19,7 @@ import type {
   ProjectAttachmentResponse,
   ProjectDetailResponse,
   ProjectResponse,
+  SubstepResponse,
 } from './types'
 
 type Async<T> = {
@@ -382,6 +383,16 @@ export function useClients(filters?: {
     unassignedVt: filters?.unassignedVt ? 'true' : undefined,
   }
   return useFetch<ClientResponse[]>(filters === null ? null : '/clients', query)
+}
+
+export function useSubsteps(
+  filters?: { clientId?: string } | null,
+): Async<SubstepResponse[]> {
+  const query = filters === null ? undefined : { clientId: filters?.clientId }
+  return useFetch<SubstepResponse[]>(
+    filters === null || !filters?.clientId ? null : '/substeps',
+    query,
+  )
 }
 
 export function useInvitations(enabled = true): Async<InvitationResponse[]> {
