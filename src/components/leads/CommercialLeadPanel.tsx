@@ -85,6 +85,22 @@ export function CommercialLeadPanel({
     setRefreshKey((k) => k + 1)
   }
 
+  // Résout le projet cible d'une vente : 0 projet → création (adresse reprise du lead
+  // par le backend), 1 → réutilisation, ≥2 → nouveau projet. null si la création échoue.
+  async function resolveVenteProject(): Promise<ProjectResponse | null> {
+    if (projects.length === 1) return projects[0]
+    try {
+      const created = await createProject({ leadId: lead.id, name: `Projet ${fullName(lead)}` })
+      setProjects((prev) => [created, ...prev])
+      return created
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Échec de la création du projet')
+      return null
+    }
+  }
+
+  // Débrief SANS RDV (depuis la fiche du panel) : vente → résout/crée le projet,
+  // rattache le débrief, redirige ; non-vente → débrief lead-level + fermeture.
   async function handleDebriefSubmit(
     payload: any,
     outcome: 'vente' | 'non_vente',
@@ -92,16 +108,8 @@ export function CommercialLeadPanel({
     let projectToOpen: ProjectResponse | null = null
 
     if (outcome === 'vente') {
-      // Vente → créer le projet automatiquement
-      const defaultAddress = [lead.addressLine, lead.postalCode, lead.city]
-        .filter(Boolean)
-        .join(', ')
-      const projectName = `${lead.firstName || 'Prospect'} ${lead.lastName || ''} - ${new Date().toLocaleDateString('fr-FR')}`
-      projectToOpen = await createProject({
-        leadId: lead.id,
-        name: projectName.trim(),
-        addressLine: defaultAddress || null,
-      })
+      projectToOpen = await resolveVenteProject()
+      if (!projectToOpen) return
       payload.projectId = projectToOpen.id
     }
 
@@ -112,7 +120,7 @@ export function CommercialLeadPanel({
     refreshProjects()
 
     if (projectToOpen) {
-      // Vente → rediriger vers le projet créé
+      // Vente → rediriger vers le projet créé/réutilisé
       onClose()
       navigate(`/projects/${projectToOpen.id}`)
     } else {
@@ -132,6 +140,14 @@ export function CommercialLeadPanel({
           refreshProjects()
         }}
         onSubmitFromFiche={handleDebriefSubmit}
+        onResolveVenteProject={resolveVenteProject}
+        onValidated={(outcome, projectId) => {
+          // Chemin RDV : le projet vente est déjà résolu/rattaché par le sidebar.
+          if (outcome === 'vente' && projectId) {
+            onClose()
+            navigate(`/projects/${projectId}`)
+          }
+        }}
         className={className}
       />
     )
