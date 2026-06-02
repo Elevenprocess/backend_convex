@@ -106,20 +106,45 @@ export function Sidebar() {
     }
   }, [userMenu])
 
-  const sections = useMemo(
-    () =>
-      SECTIONS.map((s) => ({
-        ...s,
-        items: s.items
-          .filter((it) => !it.roles || it.roles.includes(role))
-          .map((it) =>
-            it.to === '/leads' && (role === 'commercial' || role === 'commercial_lead')
-              ? { ...it, to: '/client', label: 'Clients' }
-              : it,
-          ),
-      })).filter((s) => s.items.length > 0),
-    [role],
-  )
+  const sections = useMemo(() => {
+    const isOps =
+      role === 'delivrabilite' ||
+      role === 'responsable_technique' ||
+      role === 'back_office' ||
+      role === 'technicien'
+    const built = SECTIONS.map((s) => ({
+      ...s,
+      items: s.items
+        .filter((it) => !it.roles || it.roles.includes(role))
+        .map((it) => {
+          if (it.to !== '/leads') return it
+          // Commerciaux : « Clients ». Délivrabilité & ops : « Dossier client ».
+          if (role === 'commercial' || role === 'commercial_lead')
+            return { ...it, to: '/client', label: 'Clients' }
+          if (isOps)
+            return { ...it, to: '/client', icon: 'inbox' as const, label: 'Dossier client' }
+          return it
+        }),
+    }))
+    // Délivrabilité : remonter « Suivi » juste au-dessus de « Dossier client ».
+    if (isOps) {
+      let suivi: Item | undefined
+      for (const s of built) {
+        const idx = s.items.findIndex((it) => it.to === '/suivi')
+        if (idx !== -1) {
+          suivi = s.items[idx]
+          s.items.splice(idx, 1)
+          break
+        }
+      }
+      if (suivi) {
+        const espace = built.find((s) => s.id === 'espace')
+        const clientIdx = espace?.items.findIndex((it) => it.to === '/client') ?? -1
+        if (espace) espace.items.splice(clientIdx === -1 ? espace.items.length : clientIdx, 0, suivi)
+      }
+    }
+    return built.filter((s) => s.items.length > 0)
+  }, [role])
 
   const handleSignOut = async () => {
     setUserMenu(false)

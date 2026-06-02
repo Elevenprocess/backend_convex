@@ -4462,19 +4462,24 @@ body {
 }
 
 /* ── Table ──────────────────────────────────────────────────── */
-.settings-table-wrap { overflow-x: auto; }
+.settings-table-wrap { max-height: 500px; overflow: auto; }
 .settings-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .settings-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   text-align: left;
-  padding: 0 12px 10px;
+  padding: 8px 12px 10px;
+  background: #F1F6F0;
   font-size: 9.5px;
   font-weight: 750;
   letter-spacing: 0.13em;
   text-transform: uppercase;
   color: var(--color-faint);
-  border-bottom: 1px solid var(--color-line);
+  box-shadow: inset 0 -1px 0 var(--color-line);
   white-space: nowrap;
 }
+[data-theme="dark"] .settings-table thead th { background: #08110C; }
 .settings-table thead th.is-right { text-align: right; }
 .settings-table tbody td { border-bottom: 1px solid var(--color-line-soft); }
 .settings-table tbody tr:last-child td { border-bottom: 0; }

@@ -119,10 +119,19 @@ export function ClientsList() {
   // tout le portefeuille (comme un commercial_lead), pas seulement les clients qui
   // lui seraient assignés — sinon la liste est vide (« Aucun client assigné »).
   const isManager = me?.role === 'commercial_lead' || me?.role === 'admin'
+  // Délivrabilité & ops (RT / back-office / technicien) accèdent à cette page via
+  // « Dossier client » : ils voient TOUT le portefeuille (comme un manager) mais en
+  // lecture — pas de réattribution commerciale.
+  const isOps =
+    me?.role === 'delivrabilite' ||
+    me?.role === 'responsable_technique' ||
+    me?.role === 'back_office' ||
+    me?.role === 'technicien'
+  const seesFullPortfolio = isManager || isOps
   // Page client : on ne charge QUE les leads arrivés au RDV planifié et au-delà
   // (chemin positif), filtré côté backend via scope=clients. limit relevée car le
   // chemin positif dépasse 250 → sinon les compteurs du rail seraient tronqués.
-  const leadsFilter = isManager
+  const leadsFilter = seesFullPortfolio
     ? { scope: 'clients' as const, limit: 1000 }
     : me?.id
       ? { assignedToId: me.id, scope: 'clients' as const, limit: 1000 }
@@ -287,7 +296,7 @@ export function ClientsList() {
                   client={c}
                   selected={selectedId === c.id}
                   onClick={() => selectLead(c.id)}
-                  commercialName={isManager ? commercialNameForLead(c) : null}
+                  commercialName={seesFullPortfolio ? commercialNameForLead(c) : null}
                   onAssign={isManager ? () => setAssignTarget(c) : undefined}
                 />
               ))}
