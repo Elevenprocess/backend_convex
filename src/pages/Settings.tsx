@@ -104,7 +104,7 @@ function SettingsCommercial() {
   return (
     <AppShell flat>
       <Topbar />
-      <main className="settings-page flex-grow overflow-auto">
+      <main className="settings-page flex-grow min-h-0 overflow-auto">
         <header className="settings-header settings-reveal">
           <div>
             <span className="shot-eyebrow">Équipe</span>
@@ -195,7 +195,7 @@ function SettingsAdmin() {
   return (
     <AppShell flat>
       <Topbar />
-      <main className="settings-page flex-grow overflow-auto">
+      <main className="settings-page flex-grow min-h-0 overflow-auto">
         <header className="settings-header settings-reveal">
           <div>
             <span className="shot-eyebrow">Paramètres</span>
