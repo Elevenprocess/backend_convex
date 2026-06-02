@@ -4338,6 +4338,11 @@ body {
   flex-direction: column;
   gap: 16px;
 }
+/* Les sections gardent leur hauteur naturelle : sans ça, comme les cartes
+   ont overflow:hidden (min-height:auto => 0), le moteur flex les écrase à ~0
+   quand le contenu dépasse, et c'est le <main> (min-h-0 + overflow-auto) qui
+   doit scroller — pas les cartes qui doivent se compresser. */
+.settings-page > * { flex-shrink: 0; }
 [data-theme="dark"] .settings-page { background: var(--color-cream-darker); }
 
 .settings-header {
