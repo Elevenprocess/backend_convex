@@ -1,14 +1,17 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { LoadingBlock } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
-import { useLeads, useRdvList, useUsers } from '../lib/hooks'
-import { buildDossiers, readWorkflowState } from '../lib/suivi'
+import { useClients, useLeads, useRdvList, useSubsteps, useUsers } from '../lib/hooks'
+import { buildDossiers } from '../lib/suivi'
+import { updateSubstep } from '../lib/api'
+import { todayIso } from '../lib/suivi-board'
 import { DossierSidebar } from '../components/suivi/DossierSidebar'
 import { TechnicienVtPicker } from '../components/suivi/TechnicienVtPicker'
-import { WorkflowTimeline } from '../components/suivi/WorkflowTimeline'
+import { WorkflowBoard } from '../components/suivi/WorkflowBoard'
+import type { UpdateSubstepPatch } from '../lib/types'
 
 export function SuiviDetail() {
   const role = useAuth((s) => s.user?.role)
@@ -19,9 +22,24 @@ export function SuiviDetail() {
 
   const dossier = useMemo(() => {
     if (!id || !leads) return null
-    const states = { [id]: readWorkflowState(id) }
-    return buildDossiers(leads ?? [], rdvs ?? [], users ?? [], states).find((d) => d.id === id) ?? null
+    return buildDossiers(leads ?? [], rdvs ?? [], users ?? [], {}).find((d) => d.id === id) ?? null
   }, [id, leads, rdvs, users])
+
+  const { data: clients } = useClients(dossier ? { leadId: dossier.lead.id } : null)
+  const client = clients?.[0] ?? null
+  const { data: substeps, loading: substepsLoading, refetch } = useSubsteps(client ? { clientId: client.id } : null)
+  const [savingId, setSavingId] = useState<string | null>(null)
+  const today = todayIso()
+
+  const onMutate = useCallback(async (id: string, patch: UpdateSubstepPatch) => {
+    setSavingId(id)
+    try {
+      await updateSubstep(id, patch)
+      refetch()
+    } finally {
+      setSavingId(null)
+    }
+  }, [refetch])
 
   if (
     role
@@ -54,16 +72,18 @@ export function SuiviDetail() {
           <div className="suivi-split">
             <DossierSidebar dossier={dossier} />
             <TechnicienVtPicker leadId={dossier.lead.id} />
-            <section id="workflow" className="suivi-timeline-wrap glass-card">
+            <section id="workflow" className="suivi-timeline-wrap">
               <header className="suivi-timeline-head">
                 <h2>Workflow installation</h2>
-                <p>Cliquez une étape pour éditer son avancement. Sauvegarde automatique.</p>
+                <p>Chaque étape a son propre bouton ; DP et Racco/Consuel avancent en parallèle.</p>
               </header>
-              <WorkflowTimeline
-                dossierId={dossier.id}
-                initialState={dossier.state}
-                activeStep={dossier.activeStep}
-              />
+              {!client ? (
+                <p className="wf-empty">Dossier pas encore initialisé (aucun client lié à ce lead).</p>
+              ) : substepsLoading ? (
+                <p className="wf-empty">Chargement du workflow…</p>
+              ) : (
+                <WorkflowBoard substeps={substeps ?? []} onMutate={onMutate} today={today} savingId={savingId} />
+              )}
             </section>
           </div>
         )}
