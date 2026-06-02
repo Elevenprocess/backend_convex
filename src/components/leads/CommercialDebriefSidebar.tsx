@@ -5,6 +5,7 @@ import {
   fullName,
   type FinancingType,
   type LeadResponse,
+  type ProjectResponse,
   type RdvResponse,
   type RdvResult,
 } from '../../lib/types'
@@ -15,7 +16,12 @@ type Props = {
   lead: LeadResponse
   onClose: () => void
   onSaved?: () => void
-  onValidated?: (outcome: 'vente' | 'non_vente') => void
+  // projectId est renseigné quand une vente RDV a résolu/créé un projet : le parent
+  // l'utilise pour rediriger directement dans le projet.
+  onValidated?: (outcome: 'vente' | 'non_vente', projectId?: string | null) => void
+  // Vente sur le chemin RDV : résout (création/réutilisation) le projet cible AVANT
+  // l'écriture du débrief, pour qu'il naisse rattaché au projet (pas « lead-level »).
+  onResolveVenteProject?: () => Promise<ProjectResponse | null>
   // Débrief SANS RDV depuis la fiche : on délègue au parent qui gère
   // l'attribution du projet (auto / sélecteur / création) puis enregistre.
   onSubmitFromFiche?: (
@@ -178,7 +184,7 @@ const NON_SALE_REASON_SEPARATOR = ' — '
 const ACCEPTANCE_PREFIX_RE = /^\[Acceptation:\s*([^\]]+)\]\s*\n?/
 const PRECISION_PREFIX_RE = /^\[Précision:\s*([\s\S]*?)\]\s*(?:\n|$)/
 
-export function CommercialDebriefSidebar({ lead, onClose, onSaved, onValidated, onSubmitFromFiche, onBack, className = '' }: Props) {
+export function CommercialDebriefSidebar({ lead, onClose, onSaved, onValidated, onResolveVenteProject, onSubmitFromFiche, onBack, className = '' }: Props) {
   const { data: rdvs, loading: rdvsLoading, refetch: refetchRdvs } = useRdvList({ leadId: lead.id })
   const sortedRdvs = useMemo(() => sortRdvsForDebrief(rdvs ?? []), [rdvs])
   const hasReporteHistory = useMemo(() => sortedRdvs.some((r) => r.status === 'reporte' || r.result === 'reporte'), [sortedRdvs])
@@ -318,6 +324,14 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, onValidated, 
       }
       const debriefPayload = formToDebriefPayload(form, selectedRdv?.id ?? null)
 
+      // Vente sur le chemin RDV : on résout le projet cible (création si 0, réutilisation
+      // si 1, nouveau si ≥2) AVANT d'écrire le débrief, pour le rattacher directement.
+      let venteProjectId: string | null = null
+      if (selectedRdv && form.outcome === 'vente' && onResolveVenteProject) {
+        const project = await onResolveVenteProject()
+        venteProjectId = project?.id ?? null
+      }
+
       if (selectedRdv) {
         // Chemin RDV inchangé : effets métier via PATCH /rdv/:id.
         const composedNonSaleReason =
@@ -338,8 +352,12 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, onValidated, 
         })
         // Enrichissement analytics « Débrief qualifié » — best-effort : ne pas
         // faire échouer la sauvegarde du RDV si l'écriture du débrief échoue.
+        // Pour une vente, on rattache le débrief au projet résolu ci-dessus.
         try {
-          await createLeadDebrief(lead.id, debriefPayload)
+          await createLeadDebrief(
+            lead.id,
+            venteProjectId ? { ...debriefPayload, projectId: venteProjectId } : debriefPayload,
+          )
         } catch {
           /* noop : la donnée RDV reste la source pour ce cas */
         }
@@ -357,7 +375,7 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, onValidated, 
 
       onSaved?.()
       if (form.outcome === 'vente' || form.outcome === 'non_vente') {
-        onValidated?.(form.outcome)
+        onValidated?.(form.outcome, venteProjectId)
       }
       const successLabel =
         form.outcome === 'vente'

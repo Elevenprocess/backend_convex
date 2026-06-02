@@ -64,12 +64,12 @@ export function LeadDetail() {
   const [debriefs, setDebriefs] = useState<DebriefResponse[]>([])
   const [debriefRefreshKey, setDebriefRefreshKey] = useState(0)
   const [debriefOpen, setDebriefOpen] = useState(false)
-  const [postSaleModal, setPostSaleModal] = useState(false)
   const [assignOpen, setAssignOpen] = useState(false)
-  // Attribution d'un débrief fait depuis la fiche (sans RDV) : payload en attente
-  // + sélecteur de projet quand un choix est nécessaire.
-  const [pendingDebrief, setPendingDebrief] = useState<{ payload: DebriefDraft; outcome: 'vente' | 'non_vente' } | null>(null)
-  const [attributionMode, setAttributionMode] = useState<null | 'vente' | 'non_vente'>(null)
+  // Attribution d'un débrief NON-VENTE fait depuis la fiche (sans RDV) quand ≥2
+  // projets existent : payload en attente + sélecteur de projet. La vente ne passe
+  // plus par là (création/réutilisation auto, cf. resolveVenteProject).
+  const [pendingDebrief, setPendingDebrief] = useState<{ payload: DebriefDraft; outcome: 'non_vente' } | null>(null)
+  const [attributionMode, setAttributionMode] = useState<null | 'non_vente'>(null)
   useEffect(() => {
     if (!id) return
     void listProjectsByLead(id).then(setProjects).catch(() => undefined)
@@ -99,9 +99,25 @@ export function LeadDetail() {
     }
   }
 
+  // Résout le projet cible d'une vente puis le retourne (la redirection est faite
+  // par l'appelant). 0 projet → création ; 1 → réutilisation ; ≥2 → nouveau projet.
+  // L'adresse n'est pas fournie : le backend reprend celle du lead.
+  async function resolveVenteProject(): Promise<ProjectResponse | null> {
+    if (!lead) return null
+    if (projects.length === 1) return projects[0]
+    try {
+      const created = await createProject({ leadId: lead.id, name: `Projet ${fullName(lead)}` })
+      setProjects((prev) => [created, ...prev])
+      return created
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Échec de la création du projet')
+      return null
+    }
+  }
+
   // Débrief fait depuis la fiche (sans RDV) → décision d'attribution :
   //  non-vente : 0 projet → lead-level ; 1 → ce projet ; ≥2 → sélecteur
-  //  vente     : 0 projet → création ; ≥1 → choix (existant ou nouveau)
+  //  vente     : création/réutilisation auto du projet + rattachement + redirection
   function handleFicheDebrief(payload: DebriefDraft, outcome: 'vente' | 'non_vente') {
     setDebriefOpen(false)
     if (outcome === 'non_vente') {
@@ -115,13 +131,13 @@ export function LeadDetail() {
       }
       return
     }
-    // vente
-    setPendingDebrief({ payload, outcome })
-    if (projects.length === 0) {
-      setPostSaleModal(true)
-    } else {
-      setAttributionMode('vente')
-    }
+    // vente : création/réutilisation auto du projet + rattachement + redirection
+    void (async () => {
+      const project = await resolveVenteProject()
+      if (!project) return
+      await saveDebrief({ ...payload, projectId: project.id })
+      navigate(`/projects/${project.id}`)
+    })()
   }
 
   if (loading) {
@@ -353,14 +369,16 @@ export function LeadDetail() {
           <CommercialDebriefSidebar
             lead={lead}
             onSubmitFromFiche={handleFicheDebrief}
+            onResolveVenteProject={resolveVenteProject}
             onSaved={() => setDebriefRefreshKey((k) => k + 1)}
             onClose={() => setDebriefOpen(false)}
-            onValidated={(outcome) => {
+            onValidated={(outcome, projectId) => {
               // Chemin RDV uniquement (le sans-RDV passe par onSubmitFromFiche).
+              // Le projet vente est déjà résolu/rattaché par le sidebar : on redirige.
               setDebriefRefreshKey((k) => k + 1)
               if (outcome === 'vente') {
                 setDebriefOpen(false)
-                setPostSaleModal(true)
+                if (projectId) navigate(`/projects/${projectId}`)
               }
             }}
             className="fixed top-0 right-0 bottom-0 z-[140]"
@@ -371,15 +389,12 @@ export function LeadDetail() {
       {attributionMode && pendingDebrief && (
         <DebriefProjectPicker
           projects={projects}
-          allowCreate={attributionMode === 'vente'}
           onPick={(p) => {
             const draft = pendingDebrief
             setAttributionMode(null)
             setPendingDebrief(null)
             void saveDebrief({ ...draft.payload, projectId: p.id })
-            if (draft.outcome === 'vente') navigate(`/projects/${p.id}`)
           }}
-          onCreateNew={() => { setAttributionMode(null); setPostSaleModal(true) }}
           onClose={() => { setAttributionMode(null); setPendingDebrief(null) }}
         />
       )}
@@ -389,23 +404,6 @@ export function LeadDetail() {
           lead={lead}
           commerciaux={teamCommerciaux}
           onClose={() => setAssignOpen(false)}
-        />
-      )}
-
-      {postSaleModal && (
-        <PostSaleProjectModal
-          lead={lead}
-          onClose={() => { setPostSaleModal(false); setPendingDebrief(null) }}
-          onCreated={(p) => {
-            setPostSaleModal(false)
-            setProjects((prev) => [p, ...prev])
-            // Si un débrief « vente » attendait l'attribution, on le rattache au projet créé.
-            if (pendingDebrief) {
-              void saveDebrief({ ...pendingDebrief.payload, projectId: p.id })
-              setPendingDebrief(null)
-            }
-            navigate(`/projects/${p.id}`)
-          }}
         />
       )}
 
@@ -624,102 +622,14 @@ function CreateProjectInline(props: {
   )
 }
 
-// ─── Modal post-vente : capture nom + adresse, créé le projet, redirige ───
-function PostSaleProjectModal({ lead, onClose, onCreated }: { lead: LeadResponse; onClose: () => void; onCreated: (p: ProjectResponse) => void }) {
-  const defaultAddress = [lead.addressLine, lead.postalCode, lead.city].filter(Boolean).join(', ')
-  const [name, setName] = useState(`Projet ${fullName(lead)}`)
-  const [address, setAddress] = useState(lead.addressLine ?? '')
-  const [postalCode, setPostalCode] = useState(lead.postalCode ?? '')
-  const [city, setCity] = useState(lead.city ?? '')
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function submit() {
-    setError(null)
-    if (!name.trim()) return setError('Donne un nom au projet.')
-    if (!address.trim() && !city.trim()) return setError('Indique l’adresse de la maison.')
-    setSubmitting(true)
-    try {
-      const created = await createProject({
-        leadId: lead.id,
-        name: name.trim(),
-        addressLine: address.trim() || null,
-        postalCode: postalCode.trim() || null,
-        city: city.trim() || null,
-      })
-      onCreated(created)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Échec de la création.')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-[160] flex items-center justify-center bg-noir/50 backdrop-blur-sm px-4" onClick={(e) => e.target === e.currentTarget && !submitting && onClose()}>
-      <div className="glass-card w-full max-w-md max-h-[92vh] flex flex-col p-0 shadow-2xl">
-        <div className="px-6 py-4 border-b border-line">
-          <div className="eyebrow text-or-dark">Vente enregistrée 🎉</div>
-          <h3 className="text-xl font-black mt-1">Créer le projet</h3>
-          <p className="text-xs text-muted mt-1">Indique le nom et l’adresse pour ouvrir le dossier projet.</p>
-        </div>
-
-        <div className="px-6 py-4 space-y-3 overflow-y-auto">
-          <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-faint mb-1">Nom du projet</label>
-            <input
-              type="text"
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full bg-white border border-line rounded-[14px] px-3 py-2 text-sm focus:outline-none focus:border-or"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-faint mb-1">Adresse de la maison</label>
-            <input
-              type="text"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="Rue & numéro"
-              className="w-full bg-white border border-line rounded-[14px] px-3 py-2 text-sm focus:outline-none focus:border-or"
-            />
-            <div className="mt-2 grid grid-cols-3 gap-2">
-              <input type="text" value={postalCode} onChange={(e) => setPostalCode(e.target.value)} placeholder="CP" className="col-span-1 bg-white border border-line rounded-[14px] px-3 py-2 text-sm focus:outline-none focus:border-or" />
-              <input type="text" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ville" className="col-span-2 bg-white border border-line rounded-[14px] px-3 py-2 text-sm focus:outline-none focus:border-or" />
-            </div>
-            {defaultAddress && <div className="mt-1 text-[10px] text-faint">Adresse prospect : {defaultAddress}</div>}
-          </div>
-
-          {error && <div className="rounded-xl bg-rouille-tint px-3 py-2 text-sm text-rouille">{error}</div>}
-        </div>
-
-        <div className="px-6 py-4 border-t border-line flex items-center justify-between gap-2">
-          <button type="button" onClick={onClose} disabled={submitting} className="px-4 py-2 rounded-xl text-sm font-semibold text-muted hover:text-text disabled:opacity-50">
-            Plus tard
-          </button>
-          <button type="button" onClick={submit} disabled={submitting} className="btn-primary px-5 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2 disabled:opacity-60">
-            {submitting && <Spinner size={14} />}
-            {submitting ? 'Création…' : 'Créer & ouvrir le projet →'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Sélecteur de projet pour attribuer un débrief (fiche) ───
+// ─── Sélecteur de projet pour attribuer un débrief non-vente (fiche, ≥2 projets) ───
 function DebriefProjectPicker({
   projects,
-  allowCreate,
   onPick,
-  onCreateNew,
   onClose,
 }: {
   projects: ProjectResponse[]
-  allowCreate: boolean
   onPick: (p: ProjectResponse) => void
-  onCreateNew: () => void
   onClose: () => void
 }) {
   return (
@@ -757,12 +667,6 @@ function DebriefProjectPicker({
           <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-semibold text-muted hover:text-text">
             Annuler
           </button>
-          {allowCreate && (
-            <button type="button" onClick={onCreateNew} className="btn-primary px-5 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2">
-              <Icon name="plus" size={14} />
-              Créer un nouveau projet
-            </button>
-          )}
         </div>
       </div>
     </div>
