@@ -411,6 +411,14 @@ export async function inviteUser(input: InviteUserInput): Promise<InvitationResp
   return api<InvitationResponse>('/users/invitations', { method: 'POST', body: input })
 }
 
+export async function regenerateInvitation(id: string): Promise<InvitationResponse & { inviteUrl: string }> {
+  return api<InvitationResponse & { inviteUrl: string }>(`/users/invitations/${id}/regenerate`, { method: 'POST' })
+}
+
+export async function revokeInvitation(id: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/users/invitations/${id}`, { method: 'DELETE' })
+}
+
 export async function acceptInvitation(input: { token: string; password: string }): Promise<UserResponse> {
   return api<UserResponse>('/users/invitations/accept', { method: 'POST', body: input })
 }

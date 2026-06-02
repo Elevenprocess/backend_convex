@@ -8,7 +8,7 @@ import type { IconName } from '../components/Icon'
 import { UserEditModal } from '../components/UserEditModal'
 import { LoadingBlock, Spinner } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
-import { copyText, inviteUser, updateUser, useGhlUsers, useInvitations, useUsers } from '../lib/hooks'
+import { copyText, inviteUser, regenerateInvitation, revokeInvitation, updateUser, useGhlUsers, useInvitations, useUsers } from '../lib/hooks'
 import { notifyClipboardCopied } from '../lib/clipboardToast'
 import { useTheme } from '../lib/theme'
 import type { InvitationResponse, Role, Team, UserResponse } from '../lib/types'
@@ -262,7 +262,7 @@ function SettingsAdmin() {
               <span><Icon name="mail" size={16} /></span>
             </div>
             <div className="space-y-2">
-              {pendingInvitations.map((invitation) => <InvitationRow key={invitation.id} invitation={invitation} />)}
+              {pendingInvitations.map((invitation) => <InvitationRow key={invitation.id} invitation={invitation} onChanged={refetchInvitations} />)}
             </div>
           </section>
         )}
@@ -573,14 +573,73 @@ function UserRow({ user, ghlUsers, onMapped, onEdit, compact = false }: { user: 
   )
 }
 
-function InvitationRow({ invitation }: { invitation: InvitationResponse }) {
+function InvitationRow({ invitation, onChanged }: { invitation: InvitationResponse; onChanged: () => void }) {
+  const [busy, setBusy] = useState<'copy' | 'delete' | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  async function copyLink() {
+    if (busy) return
+    setBusy('copy')
+    try {
+      const refreshed = await regenerateInvitation(invitation.id)
+      await copyText(refreshed.inviteUrl)
+      notifyClipboardCopied({ message: "Lien d'invitation copié" })
+      onChanged()
+    } catch (err) {
+      console.error('regenerateInvitation a échoué', err)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function remove() {
+    if (busy) return
+    setBusy('delete')
+    try {
+      await revokeInvitation(invitation.id)
+      onChanged()
+    } catch {
+      setBusy(null)
+      setConfirmDelete(false)
+    }
+  }
+
   return (
     <div className="settings-invite-row">
       <div className="min-w-0">
         <div className="font-semibold text-sm truncate">{invitation.name} · {invitation.email}</div>
         <div className="text-xs text-faint mt-0.5">{ROLE_LABEL[invitation.role]} · expire le {new Date(invitation.expiresAt).toLocaleString('fr-FR')}</div>
       </div>
-      <span className="status-badge bg-or-tint text-or-dark flex-shrink-0">En attente</span>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <span className="status-badge bg-or-tint text-or-dark">En attente</span>
+        <button
+          type="button"
+          onClick={copyLink}
+          disabled={busy !== null}
+          title="Régénérer et copier le lien d'invitation"
+          className="inline-flex items-center justify-center h-8 w-8 rounded-lg border border-line text-muted hover:text-text hover:border-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {busy === 'copy' ? <Spinner size={14} stroke={3} /> : <Icon name="edit" size={14} />}
+        </button>
+        {confirmDelete ? (
+          <>
+            <button type="button" onClick={remove} disabled={busy !== null} className="inline-flex items-center justify-center min-w-[78px] h-8 px-2 rounded-lg border border-rouille text-xs font-semibold text-rouille hover:bg-rouille-tint transition-colors disabled:opacity-50">
+              {busy === 'delete' ? <Spinner size={14} stroke={3} /> : 'Confirmer'}
+            </button>
+            <button type="button" onClick={() => setConfirmDelete(false)} disabled={busy !== null} className="text-xs font-semibold text-muted px-2 py-1 rounded-lg hover:text-text transition-colors disabled:opacity-50">Annuler</button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            disabled={busy !== null}
+            title="Supprimer l'invitation"
+            className="inline-flex items-center justify-center h-8 w-8 rounded-lg border border-line text-muted hover:text-rouille hover:border-rouille transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Icon name="trash" size={14} />
+          </button>
+        )}
+      </div>
     </div>
   )
 }
