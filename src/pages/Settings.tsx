@@ -8,7 +8,8 @@ import type { IconName } from '../components/Icon'
 import { UserEditModal } from '../components/UserEditModal'
 import { LoadingBlock, Spinner } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
-import { inviteUser, updateUser, useGhlUsers, useInvitations, useUsers } from '../lib/hooks'
+import { copyText, inviteUser, updateUser, useGhlUsers, useInvitations, useUsers } from '../lib/hooks'
+import { notifyClipboardCopied } from '../lib/clipboardToast'
 import { useTheme } from '../lib/theme'
 import type { InvitationResponse, Role, Team, UserResponse } from '../lib/types'
 
@@ -327,7 +328,7 @@ function InviteModal({ onClose, onInvited }: { onClose: () => void; onInvited: (
   const [phone, setPhone] = useState('')
   const [role, setRole] = useState<Role>('setter')
   const [saving, setSaving] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
+  const [result, setResult] = useState<InvitationResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   async function submit(e: FormEvent) {
@@ -335,7 +336,6 @@ function InviteModal({ onClose, onInvited }: { onClose: () => void; onInvited: (
     if (saving) return
     setSaving(true)
     setError(null)
-    setMessage(null)
     try {
       const invitation = await inviteUser({
         name,
@@ -345,17 +345,56 @@ function InviteModal({ onClose, onInvited }: { onClose: () => void; onInvited: (
         team: TEAM_BY_ROLE[role],
       })
       onInvited()
-      setMessage(invitation.emailSent ? 'Invitation envoyée par email.' : `SMTP non configuré. Lien à copier : ${invitation.inviteUrl}`)
-      if (invitation.emailSent) {
-        setName('')
-        setEmail('')
-        setPhone('')
-      }
+      setResult(invitation)
+      setName('')
+      setEmail('')
+      setPhone('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invitation impossible')
     } finally {
       setSaving(false)
     }
+  }
+
+  async function copyLink() {
+    if (!result?.inviteUrl) return
+    await copyText(result.inviteUrl)
+    notifyClipboardCopied({ message: "Lien d'invitation copié" })
+  }
+
+  if (result) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-noir/40 px-4">
+        <div className="settings-modal w-full max-w-lg p-6 space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <span className="shot-eyebrow">Invitation créée</span>
+              <h3 className="text-xl font-bold mt-1">{result.name}</h3>
+            </div>
+            <button type="button" onClick={onClose} className="text-muted hover:text-text text-2xl leading-none -mt-1">×</button>
+          </div>
+
+          <div>
+            <div className="eyebrow text-faint mb-1">Lien d'invitation à copier</div>
+            <div className="flex gap-2">
+              <input readOnly value={result.inviteUrl ?? ''} onClick={(e) => e.currentTarget.select()} className="min-w-0 flex-grow rounded-xl border border-line bg-white/70 px-3 py-2 text-xs font-mono outline-none" />
+              <button type="button" onClick={copyLink} className="btn-primary rounded-xl px-3 py-2 text-xs inline-flex items-center gap-1">
+                <Icon name="edit" size={12} /> Copier
+              </button>
+            </div>
+          </div>
+
+          <div className={`rounded-xl px-3 py-2 text-sm ${result.emailSent ? 'bg-success-tint text-success' : 'bg-cuivre-tint text-cuivre'}`}>
+            {result.emailSent ? `Invitation aussi envoyée par email à ${result.email}.` : `Email non envoyé : copie le lien et envoie-le à ${result.email}.`}
+          </div>
+
+          <div className="flex justify-between gap-3 pt-2">
+            <button type="button" onClick={() => setResult(null)} className="px-4 py-2 rounded-lg text-sm font-semibold text-muted hover:text-text">Inviter un autre</button>
+            <button type="button" onClick={onClose} className="settings-invite justify-center min-w-[120px]">Fermer</button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -401,7 +440,6 @@ function InviteModal({ onClose, onInvited }: { onClose: () => void; onInvited: (
         </label>
 
         {error && <div className="rounded-lg bg-rouille-tint px-3 py-2 text-sm text-rouille">{error}</div>}
-        {message && <div className="rounded-lg bg-success-tint px-3 py-2 text-sm text-success break-words">{message}</div>}
 
         <div className="flex justify-end gap-3 pt-2">
           <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-semibold text-muted hover:text-text">Fermer</button>
