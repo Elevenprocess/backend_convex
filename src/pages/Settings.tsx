@@ -66,6 +66,28 @@ const TEAM_BY_ROLE: Record<Role, NonNullable<Team>> = {
   technicien: 'delivrabilite',
 }
 
+type TeamFilter = 'all' | 'setters' | 'commerciaux' | 'ops' | 'admins'
+
+const FILTER_ROLES: Record<Exclude<TeamFilter, 'all'>, Role[]> = {
+  setters: ['setter', 'setter_lead'],
+  commerciaux: ['commercial', 'commercial_lead'],
+  ops: ['delivrabilite', 'responsable_technique', 'back_office', 'technicien'],
+  admins: ['admin', 'finances'],
+}
+
+const FILTER_LABEL: Record<TeamFilter, string> = {
+  all: 'Tous les membres',
+  setters: 'Setters',
+  commerciaux: 'Commerciaux',
+  ops: 'Ops / Déliv.',
+  admins: 'Admin / Fin.',
+}
+
+function matchesFilter(role: Role, filter: TeamFilter): boolean {
+  if (filter === 'all') return true
+  return FILTER_ROLES[filter].includes(role)
+}
+
 export function Settings() {
   const role = useAuth((s) => s.user?.role)
 
@@ -137,12 +159,13 @@ function SettingsCommercial() {
 function SettingsAdmin() {
   const { data: users, loading, error, refetch: refetchUsers } = useUsers()
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [filter, setFilter] = useState<TeamFilter>('all')
   const [editingUser, setEditingUser] = useState<UserResponse | null>(null)
   const { data: invitations, refetch: refetchInvitations } = useInvitations()
   const { data: ghlUsers, error: ghlUsersError } = useGhlUsers()
   const isDark = useTheme((s) => s.isDark)
   const toggleTheme = useTheme((s) => s.toggleTheme)
-  const team = users ?? []
+  const team = useMemo(() => users ?? [], [users])
   const pendingInvitations = (invitations ?? []).filter((i) => i.status === 'pending')
   const pendingInvitationByUserId = useMemo(() => {
     const map = new Map<string, InvitationResponse>()
@@ -166,6 +189,9 @@ function SettingsAdmin() {
     admins: team.filter((m) => m.role === 'admin' || m.role === 'finances').length,
   }), [team])
 
+  const visibleTeam = useMemo(() => team.filter((m) => matchesFilter(m.role, filter)), [team, filter])
+  const selectFilter = (next: TeamFilter) => setFilter((prev) => (prev === next && next !== 'all' ? 'all' : next))
+
   return (
     <AppShell flat>
       <Topbar />
@@ -184,18 +210,23 @@ function SettingsAdmin() {
           </div>
         </header>
 
-        <section className="settings-stats settings-reveal" style={{ animationDelay: '60ms' }}>
-          <StatCard icon="users" value={counts.total} label="Utilisateurs" primary />
-          <StatCard icon="phone" value={counts.setters} label="Setters" />
-          <StatCard icon="target" value={counts.commerciaux} label="Commerciaux" />
-          <StatCard icon="grid" value={counts.ops} label="Ops / Déliv." />
-          <StatCard icon="shield" value={counts.admins} label="Admin / Fin." />
+        <section className="settings-stats settings-reveal" style={{ animationDelay: '60ms' }} aria-label="Filtrer les membres par type">
+          <StatCard icon="users" value={counts.total} label="Utilisateurs" primary active={filter === 'all'} onClick={() => selectFilter('all')} />
+          <StatCard icon="phone" value={counts.setters} label="Setters" active={filter === 'setters'} onClick={() => selectFilter('setters')} />
+          <StatCard icon="target" value={counts.commerciaux} label="Commerciaux" active={filter === 'commerciaux'} onClick={() => selectFilter('commerciaux')} />
+          <StatCard icon="grid" value={counts.ops} label="Ops / Déliv." active={filter === 'ops'} onClick={() => selectFilter('ops')} />
+          <StatCard icon="shield" value={counts.admins} label="Admin / Fin." active={filter === 'admins'} onClick={() => selectFilter('admins')} />
         </section>
 
         <section className="overview-air-card settings-reveal" style={{ animationDelay: '120ms', padding: 18 }}>
           <div className="shot-card-head">
-            <h3>Membres de l'équipe</h3>
-            <span><Icon name="users" size={16} /></span>
+            <h3>
+              {filter === 'all' ? 'Membres de l\'équipe' : `Membres · ${FILTER_LABEL[filter]}`}
+              {!loading && !error && <span className="settings-count-pill">{visibleTeam.length}</span>}
+            </h3>
+            {filter === 'all'
+              ? <span><Icon name="users" size={16} /></span>
+              : <button type="button" onClick={() => setFilter('all')} className="settings-filter-reset"><Icon name="x" size={12} /> Tout afficher</button>}
           </div>
           {loading ? (
             <LoadingBlock label="Chargement des membres…" />
@@ -203,6 +234,8 @@ function SettingsAdmin() {
             <div className="py-8 text-center text-rouille text-sm">Erreur : {error}</div>
           ) : team.length === 0 ? (
             <EmptyState label="Aucun utilisateur." />
+          ) : visibleTeam.length === 0 ? (
+            <EmptyState label={`Aucun membre dans « ${FILTER_LABEL[filter]} ».`} />
           ) : (
             <div className="settings-table-wrap">
               <table className="settings-table">
@@ -215,7 +248,7 @@ function SettingsAdmin() {
                     <Th right>Actions</Th>
                   </tr>
                 </thead>
-                <tbody>{team.map((m) => <UserRow key={m.id} user={m} ghlUsers={ghlUsers ?? []} onMapped={refetchUsers} onEdit={setEditingUser} />)}</tbody>
+                <tbody>{visibleTeam.map((m) => <UserRow key={m.id} user={m} ghlUsers={ghlUsers ?? []} onMapped={refetchUsers} onEdit={setEditingUser} />)}</tbody>
               </table>
             </div>
           )}
@@ -519,15 +552,20 @@ function userInitials(name: string): string {
   return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '··'
 }
 
-function StatCard({ icon, value, label, primary = false }: { icon: IconName; value: number | string; label: string; primary?: boolean }) {
+function StatCard({ icon, value, label, primary = false, active = false, onClick }: { icon: IconName; value: number | string; label: string; primary?: boolean; active?: boolean; onClick?: () => void }) {
   return (
-    <div className={`settings-stat${primary ? ' is-primary' : ''}`}>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`settings-stat${primary ? ' is-primary' : ''}${active ? ' is-active' : ''}`}
+    >
       <span className="settings-stat-icon"><Icon name={icon} size={18} /></span>
       <div className="settings-stat-body">
         <div className="settings-stat-value">{value}</div>
         <span className="settings-stat-label">{label}</span>
       </div>
-    </div>
+    </button>
   )
 }
 
