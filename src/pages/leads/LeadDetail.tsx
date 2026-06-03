@@ -534,70 +534,74 @@ function CreateProjectInline(props: {
 
   return (
     <section className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold">Créer un projet sur ce client</h3>
-        {projects.length > 0 && (
+      <CollapsibleSection
+        title="Créer un projet sur ce client"
+        storageKey="lead.createProject"
+        right={projects.length > 0 ? (
           <span className="text-[10px] font-black uppercase tracking-wider text-faint">{projects.length} projet{projects.length > 1 ? 's' : ''}</span>
-        )}
-      </div>
-
-      <div className="rounded-2xl border border-line bg-white/60 p-4 space-y-3">
-        <div>
-          <label className="block text-[11px] font-bold uppercase tracking-wider text-faint mb-1">Nom du projet</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Ex. Installation 6 kWc Valentin"
-            className="w-full bg-white border border-line rounded-[14px] px-3 py-2 text-sm focus:outline-none focus:border-or"
-          />
-        </div>
-        <div>
-          <label className="block text-[11px] font-bold uppercase tracking-wider text-faint mb-1">Adresse de la maison</label>
-          <input
-            type="text"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            placeholder="Rue & numéro"
-            className="w-full bg-white border border-line rounded-[14px] px-3 py-2 text-sm focus:outline-none focus:border-or"
-          />
-          <div className="mt-2 grid grid-cols-3 gap-2">
+        ) : undefined}
+      >
+        <div className="rounded-2xl border border-line bg-white/60 p-4 space-y-3">
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-faint mb-1">Nom du projet</label>
             <input
               type="text"
-              value={postalCode}
-              onChange={(e) => setPostalCode(e.target.value)}
-              placeholder="CP"
-              className="col-span-1 bg-white border border-line rounded-[14px] px-3 py-2 text-sm focus:outline-none focus:border-or"
-            />
-            <input
-              type="text"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              placeholder="Ville"
-              className="col-span-2 bg-white border border-line rounded-[14px] px-3 py-2 text-sm focus:outline-none focus:border-or"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ex. Installation 6 kWc Valentin"
+              className="w-full bg-white border border-line rounded-[14px] px-3 py-2 text-sm focus:outline-none focus:border-or"
             />
           </div>
-          {defaultAddress && (
-            <div className="mt-1 text-[10px] text-faint">Adresse prospect : {defaultAddress}</div>
-          )}
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-faint mb-1">Adresse de la maison</label>
+            <input
+              type="text"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="Rue & numéro"
+              className="w-full bg-white border border-line rounded-[14px] px-3 py-2 text-sm focus:outline-none focus:border-or"
+            />
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              <input
+                type="text"
+                value={postalCode}
+                onChange={(e) => setPostalCode(e.target.value)}
+                placeholder="CP"
+                className="col-span-1 bg-white border border-line rounded-[14px] px-3 py-2 text-sm focus:outline-none focus:border-or"
+              />
+              <input
+                type="text"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder="Ville"
+                className="col-span-2 bg-white border border-line rounded-[14px] px-3 py-2 text-sm focus:outline-none focus:border-or"
+              />
+            </div>
+            {defaultAddress && (
+              <div className="mt-1 text-[10px] text-faint">Adresse prospect : {defaultAddress}</div>
+            )}
+          </div>
+
+          {error && <div className="rounded-xl bg-rouille-tint px-3 py-2 text-sm text-rouille">{error}</div>}
+
+          <button
+            type="button"
+            onClick={submit}
+            disabled={submitting || !name.trim() || (!address.trim() && !city.trim())}
+            className="btn-primary w-full px-4 py-2.5 rounded-[14px] text-sm font-bold inline-flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {submitting && <Spinner size={14} />}
+            {submitting ? 'Création…' : 'Créer le projet'}
+          </button>
         </div>
-
-        {error && <div className="rounded-xl bg-rouille-tint px-3 py-2 text-sm text-rouille">{error}</div>}
-
-        <button
-          type="button"
-          onClick={submit}
-          disabled={submitting || !name.trim() || (!address.trim() && !city.trim())}
-          className="btn-primary w-full px-4 py-2.5 rounded-[14px] text-sm font-bold inline-flex items-center justify-center gap-2 disabled:opacity-60"
-        >
-          {submitting && <Spinner size={14} />}
-          {submitting ? 'Création…' : 'Créer le projet'}
-        </button>
-      </div>
+      </CollapsibleSection>
 
       {projects.length > 0 && (
-        <div className="space-y-2">
-          <div className="eyebrow text-faint text-[10px]">Projets existants</div>
+        <CollapsibleSection
+          title="Projets existants"
+          storageKey="lead.existingProjects"
+          right={<span className="text-[10px] font-black uppercase tracking-wider text-faint">{projects.length}</span>}
+        >
           <ul className="space-y-2">
             {projects.map((p, i) => {
               const projectAddress = [p.addressLine, p.postalCode, p.city].filter(Boolean).join(', ')
@@ -621,7 +625,7 @@ function CreateProjectInline(props: {
               )
             })}
           </ul>
-        </div>
+        </CollapsibleSection>
       )}
     </section>
   )
