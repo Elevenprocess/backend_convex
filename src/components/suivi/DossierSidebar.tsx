@@ -71,7 +71,13 @@ export function DossierSidebar({ dossier }: Props) {
       <div className="suivi-side-actions">
         {tel && <a className="suivi-side-cta" href={`tel:${tel}`}>Appeler</a>}
         {mail && <a className="suivi-side-cta" href={`mailto:${mail}`}>Email</a>}
-        <a className="suivi-side-cta secondary" href="#workflow">Aller au workflow</a>
+        <button
+          type="button"
+          className="suivi-side-cta secondary"
+          onClick={() => document.getElementById('workflow')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+        >
+          Aller au workflow
+        </button>
         {ghlId && (
           <a
             className="suivi-side-cta secondary"

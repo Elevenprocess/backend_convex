@@ -108,7 +108,7 @@ export function SuiviDetail() {
                     </>
                   )}
                 </div>
-              ) : substepsLoading ? (
+              ) : (substeps == null && substepsLoading) ? (
                 <p className="wf-empty">Chargement du workflow…</p>
               ) : (
                 <WorkflowBoard substeps={substeps ?? []} onMutate={onMutate} today={today} savingId={savingId} />

@@ -3748,6 +3748,7 @@ body {
 .suivi-side-cta:hover { background: var(--color-or-dark); }
 .suivi-side-cta.secondary { background: transparent; color: var(--color-or-dark); border: 1px solid var(--color-line); }
 .suivi-side-cta.secondary:hover { background: var(--color-or-tint); }
+button.suivi-side-cta { font-family: inherit; cursor: pointer; width: 100%; }
 
 /* Timeline */
 .suivi-timeline-wrap { padding: 22px; }
