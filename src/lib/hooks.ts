@@ -6,6 +6,7 @@ import { useNetworkActivity } from './networkActivity'
 import type {
   CallLogResponse,
   ClientResponse,
+  DebriefResponse,
   InvitationResponse,
   LeadResponse,
   LeadStatsResponse,
@@ -367,6 +368,11 @@ export async function updateRdv(id: string, input: UpdateRdvPayload): Promise<Rd
 // ─── Users ─────────────────────────────────────────────────
 export function useUsers(): Async<UserResponse[]> {
   return useFetch<UserResponse[]>('/users')
+}
+
+// ─── Débriefs d'un lead ────────────────────────────────────
+export function useLeadDebriefs(leadId?: string | null): Async<DebriefResponse[]> {
+  return useFetch<DebriefResponse[]>(leadId ? `/leads/${leadId}/debriefs` : null)
 }
 
 // ─── Clients ───────────────────────────────────────────────

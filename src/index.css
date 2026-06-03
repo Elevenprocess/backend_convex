@@ -3743,6 +3743,16 @@ body {
 .suivi-side-progress-head strong { color: var(--color-or-dark); font-size: 14px; }
 .suivi-side-progress-track { height: 6px; border-radius: 999px; background: var(--color-line); overflow: hidden; }
 .suivi-side-progress-fill { height: 100%; background: var(--color-or); border-radius: 999px; transition: width .4s ease; }
+/* Historique fiche : note setter + débriefs (timeline minimaliste) */
+.suivi-history { display: flex; flex-direction: column; gap: 14px; }
+.suivi-history-item { display: flex; flex-direction: column; gap: 4px; padding-left: 12px; border-left: 2px solid var(--color-line); }
+.suivi-history-item.is-setter { border-left-color: var(--color-cuivre); }
+.suivi-history-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.suivi-history-kind { font-size: 11px; font-weight: 800; color: var(--color-text); letter-spacing: .01em; }
+.suivi-history-date { font-size: 10px; font-weight: 700; color: var(--color-faint); white-space: nowrap; }
+.suivi-history-body { margin: 0; font-size: 12px; line-height: 1.5; color: var(--color-muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+.suivi-history-meta { margin: 0; font-size: 11px; font-weight: 600; color: var(--color-faint); }
+
 .suivi-side-actions { display: flex; flex-direction: column; gap: 8px; }
 .suivi-side-cta { padding: 10px 14px; border-radius: 12px; background: var(--color-or); color: #fff; text-decoration: none; font-size: 12px; font-weight: 850; text-align: center; transition: background .18s; }
 .suivi-side-cta:hover { background: var(--color-or-dark); }
@@ -4633,33 +4643,51 @@ button.suivi-side-cta { font-family: inherit; cursor: pointer; width: 100%; }
 }
 
 /* ── Workflow board (style air, minimaliste — pipeline à nœuds) ── */
-.wf-board { display: flex; flex-direction: column; gap: 30px; }
+.wf-board { display: flex; flex-direction: column; gap: 28px; }
 .wf-empty { color: var(--color-muted); font-size: 14px; padding: 8px 0; }
 .wf-init { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
 .wf-init .wf-empty { padding-bottom: 0; }
 .wf-init-error { color: var(--color-rouille); font-size: 13px; margin: 0; }
 
+/* Bandeau d'avancement global du dossier. */
+.wf-overall { display: flex; flex-direction: column; gap: 9px; padding: 14px 16px; border: 1px solid var(--color-line); border-radius: 14px; background: var(--color-cream); }
+.wf-overall-text { display: flex; align-items: baseline; gap: 10px; }
+.wf-overall-pct { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; color: var(--color-text); font-variant-numeric: tabular-nums; line-height: 1; }
+.wf-overall-label { font-size: 12px; font-weight: 600; color: var(--color-muted); }
+.wf-overall-track { height: 7px; border-radius: 999px; background: var(--color-line); overflow: hidden; }
+.wf-overall-fill { height: 100%; background: var(--color-or); border-radius: 999px; transition: width .35s ease; }
+
+/* Pastille d'avancement (par section / colonne). */
+.wf-progress { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.wf-progress-bar { width: 54px; height: 5px; border-radius: 999px; background: var(--color-line); overflow: hidden; }
+.wf-progress-fill { display: block; height: 100%; background: var(--color-or); border-radius: 999px; transition: width .3s ease; }
+.wf-progress-count { font-size: 11px; font-weight: 700; color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.wf-progress.is-complete .wf-progress-count { color: var(--color-or); }
+
 /* Sections : à plat, séparées par du blanc + un filet fin (plus de boîtes empilées). */
 .wf-section { padding: 0; }
 .wf-section + .wf-section { border-top: 1px solid var(--color-line-soft); padding-top: 26px; }
-.wf-section-head { display: flex; flex-direction: column; gap: 3px; margin-bottom: 18px; }
+.wf-section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-bottom: 18px; }
+.wf-section-titles { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .wf-section-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-cuivre); }
 .wf-section-head h3 { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; color: var(--color-text); margin: 0; }
 
 .wf-parallel { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
-.wf-col-title { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 14px; }
+.wf-col-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.wf-col-title { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-muted); }
 
 .wf-list { display: flex; flex-direction: column; gap: 4px; }
 
 /* Une sous-étape = un nœud relié au suivant par un filet vertical. */
 .wf-substep { position: relative; display: grid; grid-template-columns: 28px 1fr; gap: 14px; padding: 8px 10px 8px 0; }
 .wf-substep:not(:last-child)::before { content: ''; position: absolute; left: 13px; top: 22px; bottom: -26px; width: 2px; background: var(--color-line); }
+.wf-substep.is-done:not(:last-child)::before { background: var(--color-or); }
 .wf-substep.is-locked { opacity: 0.5; }
 
-.wf-substep-marker { position: relative; z-index: 1; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; background: #fff; border: 2px solid var(--color-line); color: var(--color-muted); }
-.wf-substep.is-active .wf-substep-marker { border-color: var(--color-cuivre); color: var(--color-cuivre); }
+.wf-substep-marker { position: relative; z-index: 1; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; background: var(--color-cream); border: 2px solid var(--color-line); color: var(--color-muted); transition: box-shadow .18s ease, border-color .18s ease; }
+.wf-substep.is-active .wf-substep-marker { border-color: var(--color-cuivre); color: var(--color-cuivre); box-shadow: 0 0 0 4px var(--color-cuivre-tint); }
 .wf-substep.is-done .wf-substep-marker { background: var(--color-or); border-color: var(--color-or); color: #fff; }
-.wf-substep.is-blocked .wf-substep-marker { background: var(--color-rouille); border-color: var(--color-rouille); color: #fff; }
+.wf-substep.is-blocked .wf-substep-marker { background: var(--color-rouille); border-color: var(--color-rouille); color: #fff; box-shadow: 0 0 0 4px var(--color-rouille-tint); }
 
 .wf-substep-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding-top: 3px; }
 .wf-substep-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
@@ -4675,8 +4703,8 @@ button.suivi-side-cta { font-family: inherit; cursor: pointer; width: 100%; }
 
 .wf-substep-fields { display: grid; grid-template-columns: 170px 1fr; gap: 12px; }
 .wf-field { display: flex; flex-direction: column; gap: 5px; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--color-faint); }
-.wf-field input, .wf-field textarea { border: 1px solid var(--color-line-soft); border-radius: 8px; padding: 7px 10px; font-size: 13px; font-weight: 400; letter-spacing: normal; text-transform: none; color: var(--color-text); background: #fff; transition: border-color .15s ease; }
-.wf-field input:focus, .wf-field textarea:focus { outline: none; border-color: var(--color-cuivre); }
+.wf-field input, .wf-field textarea { border: 1px solid var(--color-line); border-radius: 8px; padding: 7px 10px; font-size: 13px; font-weight: 400; letter-spacing: normal; text-transform: none; color: var(--color-text); background: var(--color-cream); transition: border-color .15s ease, box-shadow .15s ease; }
+.wf-field input:focus, .wf-field textarea:focus { outline: none; border-color: var(--color-cuivre); box-shadow: 0 0 0 3px var(--color-cuivre-tint); }
 .wf-field textarea { resize: vertical; min-height: 38px; }
 
 .wf-substep-foot { display: flex; align-items: center; gap: 10px; }

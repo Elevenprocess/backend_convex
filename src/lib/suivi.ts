@@ -130,7 +130,10 @@ export function buildDossiers(
     .map((lead) => {
       const rdv = rdvsByLead.get(lead.id)?.[0]
       const commercialId = rdv?.commercialId ?? lead.latestRdvCommercialId ?? lead.assignedToId
-      const setter = lead.setterId ? userMap.get(lead.setterId) : undefined
+      // Le setter « principal » (setterId) n'est pas toujours rempli ; on retombe
+      // sur le premier setter assigné (assignedSetterIds) pour rester visible.
+      const setterId = lead.setterId ?? lead.assignedSetterIds?.[0]
+      const setter = setterId ? userMap.get(setterId) : undefined
       return buildDossier(lead, rdv, commercialId ? userMap.get(commercialId) : undefined, setter, states[lead.id] ?? readWorkflowState(lead.id))
     })
 

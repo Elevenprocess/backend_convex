@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
 import type { Dossier } from '../../lib/suivi'
 import { formatCurrency, formatDate } from '../../lib/suivi'
-import { STATUS_LABEL, fieldOrDash, fullName, initials } from '../../lib/types'
+import { useLeadDebriefs } from '../../lib/hooks'
+import { DEBRIEF_OUTCOME_LABEL, STATUS_LABEL, fieldOrDash, fullName, initials } from '../../lib/types'
 
 type Props = {
   dossier: Dossier
@@ -12,6 +13,13 @@ export function DossierSidebar({ dossier }: Props) {
   const mail = dossier.lead.email
   // No ghlContactId on LeadResponse — GHL button omitted
   const ghlId: string | undefined = undefined
+
+  const { data: debriefs } = useLeadDebriefs(dossier.lead.id)
+  const setterNote = dossier.lead.latestCallComment
+  const sortedDebriefs = [...(debriefs ?? [])].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  )
+  const hasHistory = Boolean(setterNote) || sortedDebriefs.length > 0
 
   return (
     <aside className="suivi-side glass-card">
@@ -35,14 +43,13 @@ export function DossierSidebar({ dossier }: Props) {
         <Info label="Source" value={fieldOrDash(dossier.lead.source)} />
         <Info label="Canal" value={fieldOrDash(dossier.lead.canalAcquisition)} />
         <Info label="Campagne" value={fieldOrDash(dossier.lead.campaign)} />
-        <Info label="Setter" value={dossier.setter?.name ?? fieldOrDash(dossier.lead.setterId)} />
+        <Info label="Setter" value={dossier.setter?.name ?? '—'} />
         <Info label="Commercial" value={dossier.commercial?.name ?? fieldOrDash(dossier.lead.assignedToId)} />
         <Info label="Dernier appel" value={dossier.lead.latestCallAt ? formatDate(dossier.lead.latestCallAt) : '—'} />
-        <Info label="Note setter" value={fieldOrDash(dossier.lead.latestCallComment)} />
         <Info label="RDV" value={dossier.rdv?.scheduledAt ? formatDate(dossier.rdv.scheduledAt) : fieldOrDash(dossier.lead.latestRdvAt)} />
         <Info label="Montant" value={formatCurrency(dossier.amount)} />
         <Info label="Financement" value={dossier.rdv?.financingType ?? (dossier.state.payMode === 'financement' ? 'Financement' : 'Comptant')} />
-        <Info label="Signé le" value={dossier.rdv?.signatureAt ? formatDate(dossier.rdv.signatureAt) : '—'} />
+        <Info label="Signé le" value={dossier.rdv?.signatureAt ? formatDate(dossier.rdv.signatureAt) : (dossier.lead.status === 'signe' && dossier.signedAt ? formatDate(dossier.signedAt) : '—')} />
         <Info label="Objections" value={fieldOrDash(dossier.rdv?.objections)} />
         <Info label="Debrief commercial" value={fieldOrDash(dossier.rdv?.notes)} />
       </dl>
@@ -55,6 +62,33 @@ export function DossierSidebar({ dossier }: Props) {
               <Info key={`${field.fieldKey}-${field.fieldName}`} label={field.fieldName || field.fieldKey} value={fieldOrDash(field.value)} />
             ))}
           </dl>
+        </section>
+      ) : null}
+
+      {hasHistory ? (
+        <section className="suivi-side-section">
+          <h3>Historique</h3>
+          <div className="suivi-history">
+            {sortedDebriefs.map((d) => (
+              <article key={d.id} className="suivi-history-item">
+                <div className="suivi-history-head">
+                  <span className="suivi-history-kind">Débrief · {DEBRIEF_OUTCOME_LABEL[d.outcome] ?? d.outcome}</span>
+                  <span className="suivi-history-date">{formatDate(d.createdAt)}</span>
+                </div>
+                {d.notes ? <p className="suivi-history-body">{d.notes}</p> : null}
+                {d.objection ? <p className="suivi-history-meta">Objection : {d.objection}</p> : null}
+              </article>
+            ))}
+            {setterNote ? (
+              <article className="suivi-history-item is-setter">
+                <div className="suivi-history-head">
+                  <span className="suivi-history-kind">Note setter{dossier.setter?.name ? ` · ${dossier.setter.name}` : ''}</span>
+                  {dossier.lead.latestCallAt ? <span className="suivi-history-date">{formatDate(dossier.lead.latestCallAt)}</span> : null}
+                </div>
+                <p className="suivi-history-body">{setterNote}</p>
+              </article>
+            ) : null}
+          </div>
         </section>
       ) : null}
 
