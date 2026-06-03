@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Icon } from '../../Icon'
-import { Spinner } from '../../Spinner'
+import { FileDropzone } from '../../FileDropzone'
 import {
   ApiError,
   attachmentRawUrl,
@@ -20,12 +20,12 @@ export function ProjectPhotosTab({ project, attachments, onChanged }: Props) {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function handleFiles(files: FileList | null) {
-    if (!files || files.length === 0) return
+  async function handleFiles(files: File[]) {
+    if (files.length === 0) return
     setError(null)
     setUploading(true)
     try {
-      for (const file of Array.from(files)) {
+      for (const file of files) {
         if (!file.type.startsWith('image/')) {
           setError(`"${file.name}" n'est pas une image — ignoré.`)
           continue
@@ -56,35 +56,15 @@ export function ProjectPhotosTab({ project, attachments, onChanged }: Props) {
 
   return (
     <div className="space-y-4">
-      <label
-        htmlFor={`photos-upload-${project.id}`}
-        className={`block rounded-2xl border-2 border-dashed px-6 py-5 text-center cursor-pointer transition-colors ${
-          uploading ? 'border-or bg-or/10' : 'border-line bg-white/40 hover:bg-white/70'
-        }`}
-      >
-        <input
-          id={`photos-upload-${project.id}`}
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          disabled={uploading}
-          onChange={(e) => {
-            void handleFiles(e.target.files)
-            e.target.value = ''
-          }}
-        />
-        {uploading ? (
-          <div className="inline-flex items-center gap-2 text-or-dark text-sm font-bold">
-            <Spinner size={14} /> Upload en cours…
-          </div>
-        ) : (
-          <div>
-            <div className="font-bold text-sm">Déposer des photos</div>
-            <div className="text-xs text-muted mt-0.5">Multi-fichiers, jusqu'à 25 Mo chacune.</div>
-          </div>
-        )}
-      </label>
+      <FileDropzone
+        id={`photos-upload-${project.id}`}
+        accept="image/*"
+        multiple
+        uploading={uploading}
+        title="Déposer des photos"
+        subtitle="Multi-fichiers, jusqu'à 25 Mo chacune."
+        onFiles={(files) => void handleFiles(files)}
+      />
 
       {error && <div className="rounded-xl bg-rouille-tint px-3 py-2 text-xs text-rouille">{error}</div>}
 
