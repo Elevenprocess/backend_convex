@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react'
 import { PdfPreviewModal } from './PdfPreviewModal'
 
 vi.mock('../../lib/api', () => ({
@@ -9,13 +9,14 @@ vi.mock('../../lib/api', () => ({
 
 describe('PdfPreviewModal', () => {
   beforeEach(() => {
-    vi.stubGlobal('URL', Object.assign(URL, {
+    vi.stubGlobal('URL', { ...URL,
       createObjectURL: vi.fn(() => 'blob:mock-url'),
       revokeObjectURL: vi.fn(),
-    }))
+    })
   })
 
   afterEach(() => {
+    cleanup()
     vi.unstubAllGlobals()
   })
 

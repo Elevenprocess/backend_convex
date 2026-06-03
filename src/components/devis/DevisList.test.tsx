@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import { DevisList } from './DevisList'
 import type { Devis } from '../../lib/types'
 
@@ -31,13 +31,14 @@ function devis(over: Partial<Devis>): Devis {
 
 describe('DevisList — états de scan', () => {
   beforeEach(() => {
-    vi.stubGlobal('URL', Object.assign(URL, {
+    vi.stubGlobal('URL', { ...URL,
       createObjectURL: vi.fn(() => 'blob:mock-url'),
       revokeObjectURL: vi.fn(),
-    }))
+    })
   })
 
   afterEach(() => {
+    cleanup()
     vi.unstubAllGlobals()
   })
 
