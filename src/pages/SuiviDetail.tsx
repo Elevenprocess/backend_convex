@@ -89,12 +89,13 @@ export function SuiviDetail() {
         ) : (
           <div className="suivi-split">
             <DossierSidebar dossier={dossier} />
-            <TechnicienVtPicker leadId={dossier.lead.id} />
-            <section id="workflow" className="suivi-timeline-wrap">
-              <header className="suivi-timeline-head">
-                <h2>Workflow installation</h2>
-                <p>Chaque étape a son propre bouton ; DP et Racco/Consuel avancent en parallèle.</p>
-              </header>
+            <div className="suivi-main-col">
+              <TechnicienVtPicker leadId={dossier.lead.id} />
+              <section id="workflow" className="suivi-timeline-wrap">
+                <header className="suivi-timeline-head">
+                  <h2>Workflow installation</h2>
+                  <p>Chaque étape a son propre bouton ; DP et Racco/Consuel avancent en parallèle.</p>
+                </header>
               {!client ? (
                 <div className="wf-init">
                   <p className="wf-empty">Dossier pas encore initialisé (aucun client lié à ce lead).</p>
@@ -112,7 +113,8 @@ export function SuiviDetail() {
               ) : (
                 <WorkflowBoard substeps={substeps ?? []} onMutate={onMutate} today={today} savingId={savingId} />
               )}
-            </section>
+              </section>
+            </div>
           </div>
         )}
       </main>

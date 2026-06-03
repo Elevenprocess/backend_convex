@@ -3722,6 +3722,9 @@ body {
 .suivi-breadcrumb a:hover { color: var(--color-or); }
 
 .suivi-split { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 18px; align-items: start; }
+/* Colonne de droite : Technicien VT empilé au-dessus du workflow (plus de superposition). */
+.suivi-main-col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.suivi-main-col .suivi-side { position: static; max-height: none; overflow: visible; top: auto; }
 
 /* Sidebar dossier */
 .suivi-side { padding: 22px; position: sticky; top: 16px; display: flex; flex-direction: column; gap: 18px; max-height: calc(100vh - 120px); overflow-y: auto; }
@@ -4628,41 +4631,60 @@ body {
   .settings-page { padding: 16px 14px 26px; }
 }
 
-/* ── Workflow board (style air) ── */
-.wf-board { display: flex; flex-direction: column; gap: 22px; }
-.wf-empty { color: var(--color-muted); font-size: 14px; padding: 16px 0; }
+/* ── Workflow board (style air, minimaliste — pipeline à nœuds) ── */
+.wf-board { display: flex; flex-direction: column; gap: 30px; }
+.wf-empty { color: var(--color-muted); font-size: 14px; padding: 8px 0; }
 .wf-init { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
 .wf-init .wf-empty { padding-bottom: 0; }
-.wf-init-error { color: var(--color-danger, #c0392b); font-size: 13px; margin: 0; }
-.wf-section { border: 1px solid var(--color-line); border-radius: 14px; background: #fff; padding: 16px 18px; }
-.wf-section-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 14px; }
-.wf-section-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-cuivre); }
-.wf-section-head h3 { font-size: 16px; font-weight: 700; color: var(--color-text); margin: 0; }
-.wf-parallel { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.wf-col-title { font-size: 12px; font-weight: 700; color: var(--color-muted); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--color-line-soft); }
-.wf-list { display: flex; flex-direction: column; gap: 10px; }
-.wf-substep { display: grid; grid-template-columns: 30px 1fr; gap: 12px; padding: 12px; border: 1px solid var(--color-line); border-radius: 10px; background: var(--color-cream); }
-.wf-substep.is-done { background: var(--color-or-tint); border-color: var(--color-or-tint); }
-.wf-substep.is-blocked { background: var(--color-rouille-tint); border-color: var(--color-rouille-tint); }
-.wf-substep.is-locked { opacity: 0.6; }
-.wf-substep-marker { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; background: #fff; border: 1.5px solid var(--color-line); color: var(--color-muted); }
+.wf-init-error { color: var(--color-rouille); font-size: 13px; margin: 0; }
+
+/* Sections : à plat, séparées par du blanc + un filet fin (plus de boîtes empilées). */
+.wf-section { padding: 0; }
+.wf-section + .wf-section { border-top: 1px solid var(--color-line-soft); padding-top: 26px; }
+.wf-section-head { display: flex; flex-direction: column; gap: 3px; margin-bottom: 18px; }
+.wf-section-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-cuivre); }
+.wf-section-head h3 { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; color: var(--color-text); margin: 0; }
+
+.wf-parallel { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+.wf-col-title { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 14px; }
+
+.wf-list { display: flex; flex-direction: column; gap: 4px; }
+
+/* Une sous-étape = un nœud relié au suivant par un filet vertical. */
+.wf-substep { position: relative; display: grid; grid-template-columns: 28px 1fr; gap: 14px; padding: 8px 10px 8px 0; }
+.wf-substep:not(:last-child)::before { content: ''; position: absolute; left: 13px; top: 22px; bottom: -26px; width: 2px; background: var(--color-line); }
+.wf-substep.is-locked { opacity: 0.5; }
+
+.wf-substep-marker { position: relative; z-index: 1; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; background: #fff; border: 2px solid var(--color-line); color: var(--color-muted); }
+.wf-substep.is-active .wf-substep-marker { border-color: var(--color-cuivre); color: var(--color-cuivre); }
 .wf-substep.is-done .wf-substep-marker { background: var(--color-or); border-color: var(--color-or); color: #fff; }
 .wf-substep.is-blocked .wf-substep-marker { background: var(--color-rouille); border-color: var(--color-rouille); color: #fff; }
-.wf-substep-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.wf-substep-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
-.wf-substep-head strong { font-size: 13.5px; color: var(--color-text); }
+
+.wf-substep-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding-top: 3px; }
+.wf-substep-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.wf-substep-head strong { font-size: 13.5px; font-weight: 600; color: var(--color-text); }
+.wf-substep.is-done .wf-substep-head strong { color: var(--color-muted); }
 .wf-substep-tags { display: inline-flex; gap: 6px; flex-wrap: wrap; }
-.wf-gauge, .wf-badge-missing { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; font-size: 10.5px; font-weight: 700; }
+.wf-gauge, .wf-badge-missing { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: .02em; }
 .wf-gauge-ok { background: var(--color-info-tint); color: var(--color-info); }
 .wf-gauge-soon { background: var(--color-cuivre-tint); color: var(--color-cuivre); }
 .wf-gauge-late { background: var(--color-rouille-tint); color: var(--color-rouille); }
 .wf-badge-missing { background: var(--color-rouille-tint); color: var(--color-rouille); }
 .wf-locked-note { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--color-muted); }
-.wf-substep-fields { display: grid; grid-template-columns: 160px 1fr; gap: 10px; }
-.wf-field { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--color-muted); }
-.wf-field input, .wf-field textarea { border: 1px solid var(--color-line); border-radius: 7px; padding: 6px 8px; font-size: 13px; color: var(--color-text); background: #fff; }
+
+.wf-substep-fields { display: grid; grid-template-columns: 170px 1fr; gap: 12px; }
+.wf-field { display: flex; flex-direction: column; gap: 5px; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--color-faint); }
+.wf-field input, .wf-field textarea { border: 1px solid var(--color-line-soft); border-radius: 8px; padding: 7px 10px; font-size: 13px; font-weight: 400; letter-spacing: normal; text-transform: none; color: var(--color-text); background: #fff; transition: border-color .15s ease; }
+.wf-field input:focus, .wf-field textarea:focus { outline: none; border-color: var(--color-cuivre); }
+.wf-field textarea { resize: vertical; min-height: 38px; }
+
 .wf-substep-foot { display: flex; align-items: center; gap: 10px; }
-.wf-cta { background: var(--color-or); color: #fff; border: none; border-radius: 8px; padding: 7px 14px; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.wf-cta { background: var(--color-or); color: #fff; border: none; border-radius: 8px; padding: 7px 16px; font-size: 12.5px; font-weight: 700; cursor: pointer; transition: opacity .15s ease, transform .04s ease; }
+.wf-cta:hover:not(:disabled) { opacity: .9; }
+.wf-cta:active:not(:disabled) { transform: translateY(1px); }
 .wf-cta:disabled { background: var(--color-line); color: var(--color-faint); cursor: not-allowed; }
+.wf-substep.is-done .wf-cta { background: transparent; color: var(--color-muted); border: 1px solid var(--color-line); }
+.wf-substep.is-done .wf-cta:hover:not(:disabled) { background: var(--color-cream); opacity: 1; }
 .wf-saving { color: var(--color-muted); font-size: 12px; }
-@media (max-width: 860px) { .wf-parallel { grid-template-columns: 1fr; } .wf-substep-fields { grid-template-columns: 1fr; } }
+
+@media (max-width: 860px) { .wf-parallel { grid-template-columns: 1fr; gap: 24px; } .wf-substep-fields { grid-template-columns: 1fr; } }
