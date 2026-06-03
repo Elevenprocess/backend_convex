@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Spinner } from '../../Spinner'
+import { FileDropzone } from '../../FileDropzone'
 import { DevisList } from '../../devis/DevisList'
 import { ApiError, uploadDevis } from '../../../lib/api'
 import type { Devis, ProjectResponse } from '../../../lib/types'
@@ -37,35 +37,17 @@ export function ProjectDevisTab({ project, devis, onChanged }: Props) {
 
   return (
     <div className="space-y-5">
-      <label
-        htmlFor={`devis-upload-${project.id}`}
-        className={`block rounded-xl border-2 border-dashed px-6 py-6 text-center cursor-pointer transition-colors ${
-          uploading ? 'border-or bg-or-tint' : 'border-line hover:border-or hover:bg-cream'
-        }`}
-      >
-        <input
-          id={`devis-upload-${project.id}`}
-          type="file"
-          accept="application/pdf"
-          className="hidden"
-          disabled={uploading}
-          onChange={(e) => {
-            const f = e.target.files?.[0]
-            if (f) void handleFile(f)
-            e.target.value = ''
-          }}
-        />
-        {uploading ? (
-          <div className="inline-flex items-center gap-2 text-or-dark text-sm font-bold">
-            <Spinner size={14} /> Upload en cours…
-          </div>
-        ) : (
-          <div>
-            <div className="font-bold text-sm text-text">Déposer un devis Solteo (PDF)</div>
-            <div className="text-[12px] text-muted mt-1">L'IA analysera automatiquement le PDF.</div>
-          </div>
-        )}
-      </label>
+      <FileDropzone
+        id={`devis-upload-${project.id}`}
+        accept="application/pdf"
+        uploading={uploading}
+        title="Déposer un devis Solteo (PDF)"
+        subtitle="L'IA analysera automatiquement le PDF."
+        onFiles={(files) => {
+          const f = files[0]
+          if (f) void handleFile(f)
+        }}
+      />
 
       {error && (
         <div className="rounded-lg border border-rouille/30 bg-rouille-tint px-3 py-2 text-[12px] text-rouille">
