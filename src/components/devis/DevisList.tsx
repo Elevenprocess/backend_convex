@@ -10,6 +10,8 @@ import type {
   OcrStatus,
   UpdateDevisPatch,
 } from '../../lib/types';
+import { DevisScanLoader } from './DevisScanLoader';
+import { PdfPreviewModal } from './PdfPreviewModal';
 
 interface Props {
   devisList: Devis[];
@@ -246,6 +248,7 @@ function DevisCard({
   const [signing, setSigning] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [showPdf, setShowPdf] = useState(false);
 
   const locked = d.status === 'signe';
   const vendor: DevisVendor | undefined = d.extracted?.vendor;
@@ -303,6 +306,14 @@ function DevisCard({
     } finally {
       setRetrying(false);
     }
+  }
+
+  if (d.ocrStatus === 'pending' || d.ocrStatus === 'processing') {
+    return (
+      <li className="border border-stone-300 rounded-md bg-white overflow-hidden">
+        <DevisScanLoader ocrStatus={d.ocrStatus} />
+      </li>
+    );
   }
 
   return (
@@ -599,6 +610,13 @@ function DevisCard({
           </>
         ) : (
           <>
+            <button
+              type="button"
+              onClick={() => setShowPdf(true)}
+              className="px-3 py-1.5 text-xs border border-stone-300 text-stone-700 rounded"
+            >
+              Voir le PDF
+            </button>
             {d.ocrStatus === 'failed' && (
               <button
                 type="button"
@@ -631,6 +649,13 @@ function DevisCard({
           </>
         )}
       </footer>
+      {showPdf && (
+        <PdfPreviewModal
+          devisId={d.id}
+          filename={d.filename}
+          onClose={() => setShowPdf(false)}
+        />
+      )}
     </li>
   );
 }
