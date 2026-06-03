@@ -201,6 +201,14 @@ export function assignTechnicienVt(
   })
 }
 
+/** Initialise un dossier (client + workflow) pour un lead signé sans client. */
+export function bootstrapClient(leadId: string): Promise<ClientResponse> {
+  return api<ClientResponse>('/clients/bootstrap', {
+    method: 'POST',
+    body: { leadId },
+  })
+}
+
 export function getSubsteps(clientId: string): Promise<SubstepResponse[]> {
   return api<SubstepResponse[]>('/substeps', { query: { clientId } })
 }

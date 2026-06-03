@@ -6,7 +6,7 @@ import { LoadingBlock } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
 import { useClients, useLeads, useRdvList, useSubsteps, useUsers } from '../lib/hooks'
 import { buildDossiers } from '../lib/suivi'
-import { updateSubstep } from '../lib/api'
+import { bootstrapClient, updateSubstep } from '../lib/api'
 import { todayIso } from '../lib/suivi-board'
 import { DossierSidebar } from '../components/suivi/DossierSidebar'
 import { TechnicienVtPicker } from '../components/suivi/TechnicienVtPicker'
@@ -25,11 +25,29 @@ export function SuiviDetail() {
     return buildDossiers(leads ?? [], rdvs ?? [], users ?? [], {}).find((d) => d.id === id) ?? null
   }, [id, leads, rdvs, users])
 
-  const { data: clients } = useClients(dossier ? { leadId: dossier.lead.id } : null)
+  const { data: clients, refetch: refetchClients } = useClients(dossier ? { leadId: dossier.lead.id } : null)
   const client = clients?.[0] ?? null
   const { data: substeps, loading: substepsLoading, refetch } = useSubsteps(client ? { clientId: client.id } : null)
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [initializing, setInitializing] = useState(false)
+  const [initError, setInitError] = useState<string | null>(null)
   const today = todayIso()
+
+  const canInitDossier = role === 'admin' || role === 'responsable_technique' || role === 'back_office' || role === 'delivrabilite'
+
+  const onInitDossier = useCallback(async () => {
+    if (!dossier) return
+    setInitializing(true)
+    setInitError(null)
+    try {
+      await bootstrapClient(dossier.lead.id)
+      refetchClients()
+    } catch (e) {
+      setInitError(e instanceof Error ? e.message : 'Échec de l’initialisation du dossier')
+    } finally {
+      setInitializing(false)
+    }
+  }, [dossier, refetchClients])
 
   const onMutate = useCallback(async (id: string, patch: UpdateSubstepPatch) => {
     setSavingId(id)
@@ -78,7 +96,17 @@ export function SuiviDetail() {
                 <p>Chaque étape a son propre bouton ; DP et Racco/Consuel avancent en parallèle.</p>
               </header>
               {!client ? (
-                <p className="wf-empty">Dossier pas encore initialisé (aucun client lié à ce lead).</p>
+                <div className="wf-init">
+                  <p className="wf-empty">Dossier pas encore initialisé (aucun client lié à ce lead).</p>
+                  {canInitDossier && (
+                    <>
+                      <button type="button" className="btn-primary" onClick={onInitDossier} disabled={initializing}>
+                        {initializing ? 'Initialisation…' : 'Initialiser le dossier'}
+                      </button>
+                      {initError && <p className="wf-init-error">{initError}</p>}
+                    </>
+                  )}
+                </div>
               ) : substepsLoading ? (
                 <p className="wf-empty">Chargement du workflow…</p>
               ) : (

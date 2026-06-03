@@ -4631,6 +4631,9 @@ body {
 /* ── Workflow board (style air) ── */
 .wf-board { display: flex; flex-direction: column; gap: 22px; }
 .wf-empty { color: var(--color-muted); font-size: 14px; padding: 16px 0; }
+.wf-init { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.wf-init .wf-empty { padding-bottom: 0; }
+.wf-init-error { color: var(--color-danger, #c0392b); font-size: 13px; margin: 0; }
 .wf-section { border: 1px solid var(--color-line); border-radius: 14px; background: #fff; padding: 16px 18px; }
 .wf-section-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 14px; }
 .wf-section-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-cuivre); }
