@@ -9,6 +9,7 @@ import type {
   ProjectResponse,
   ProjectStatus,
   SubstepResponse,
+  SubstepDocument,
   UpdateSubstepPatch,
 } from './types'
 
@@ -404,6 +405,35 @@ export function attachmentRawUrl(attachmentId: string): string {
 
 export function deleteProjectAttachment(attachmentId: string): Promise<{ ok: true }> {
   return api<{ ok: true }>(`/attachments/${attachmentId}`, { method: 'DELETE' })
+}
+
+// ─── Documents de sous-étape (pièces du workflow) ─────────
+/** Upload multiple, tout type de fichier, sur une sous-étape. */
+export async function uploadSubstepDocuments(
+  substepId: string,
+  files: File[],
+): Promise<SubstepDocument[]> {
+  const fd = new FormData()
+  for (const file of files) fd.append('files', file)
+  const res = await fetch(buildApiUrl(`/substeps/${substepId}/documents`), {
+    method: 'POST',
+    credentials: 'include',
+    body: fd,
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, text || `Upload document échoué : ${res.status}`)
+  }
+  return res.json() as Promise<SubstepDocument[]>
+}
+
+export function deleteSubstepDocument(documentId: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/documents/${documentId}`, { method: 'DELETE' })
+}
+
+/** URL directe (streamée par l'API) pour ouvrir/télécharger un document. */
+export function substepDocumentRawUrl(documentId: string): string {
+  return buildApiUrl(`/documents/${documentId}/raw`)
 }
 
 export { API_BASE }

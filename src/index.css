@@ -4728,4 +4728,18 @@ button.suivi-side-cta { font-family: inherit; cursor: pointer; width: 100%; }
 .wf-substep.is-done .wf-cta:hover:not(:disabled) { background: var(--color-cream); opacity: 1; }
 .wf-saving { color: var(--color-muted); font-size: 12px; }
 
+/* Documents d'une sous-étape (pièces) */
+.wf-docs { display: flex; flex-direction: column; gap: 8px; }
+.wf-docs-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--color-faint); }
+.wf-docs-missing { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 999px; font-size: 10px; letter-spacing: .02em; background: var(--color-rouille-tint); color: var(--color-rouille); text-transform: none; }
+.wf-docs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.wf-doc { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--color-line-soft); border-radius: 8px; background: #fff; }
+.wf-doc-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex: 1; color: var(--color-text); text-decoration: none; font-size: 12.5px; font-weight: 600; }
+.wf-doc-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-doc-name:hover { color: var(--color-cuivre); }
+.wf-doc-size { font-size: 10.5px; color: var(--color-faint); white-space: nowrap; }
+.wf-doc-del { display: inline-flex; border: none; background: transparent; color: var(--color-muted); cursor: pointer; padding: 2px; border-radius: 6px; }
+.wf-doc-del:hover { background: var(--color-rouille-tint); color: var(--color-rouille); }
+.wf-docs-error { margin: 0; font-size: 11px; font-weight: 600; color: var(--color-rouille); }
+
 @media (max-width: 860px) { .wf-parallel { grid-template-columns: 1fr; gap: 24px; } .wf-substep-fields { grid-template-columns: 1fr; } }
