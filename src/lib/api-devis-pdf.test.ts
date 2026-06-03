@@ -7,7 +7,6 @@ describe('fetchDevisPdfObjectUrl', () => {
     vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn(() => 'blob:mock-url') })
   })
   afterEach(() => {
-    vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
 
@@ -18,6 +17,7 @@ describe('fetchDevisPdfObjectUrl', () => {
     })))
     const url = await fetchDevisPdfObjectUrl('dev-1')
     expect(url).toBe('blob:mock-url')
+    expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob))
   })
 
   it('lève une ApiError si la requête échoue', async () => {
@@ -27,5 +27,6 @@ describe('fetchDevisPdfObjectUrl', () => {
       text: async () => 'introuvable',
     })))
     await expect(fetchDevisPdfObjectUrl('dev-1')).rejects.toBeInstanceOf(ApiError)
+    await expect(fetchDevisPdfObjectUrl('dev-1')).rejects.toMatchObject({ status: 404 })
   })
 })
