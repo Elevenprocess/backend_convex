@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ApiError, fetchDevisPdfObjectUrl } from '../../lib/api'
 
 type Props = {
@@ -34,20 +34,24 @@ export function PdfPreviewModal({ devisId, filename, onClose }: Props) {
     }
   }, [devisId])
 
+  const onCloseRef = useRef(onClose)
+  useEffect(() => { onCloseRef.current = onClose })
+
   // Fermeture au clavier (Échap).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') onCloseRef.current()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [])
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-stone-900/70 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[160] bg-stone-900/70 flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="pdf-preview-title"
       onClick={onClose}
     >
       <div
@@ -55,7 +59,7 @@ export function PdfPreviewModal({ devisId, filename, onClose }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-2 border-b border-stone-200">
-          <span className="text-sm font-bold text-stone-900 truncate">{filename ?? 'Devis'}</span>
+          <span id="pdf-preview-title" className="text-sm font-bold text-stone-900 truncate">{filename ?? 'Devis'}</span>
           <button
             type="button"
             onClick={onClose}

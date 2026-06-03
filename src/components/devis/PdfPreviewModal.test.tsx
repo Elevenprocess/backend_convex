@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { PdfPreviewModal } from './PdfPreviewModal'
 
 vi.mock('../../lib/api', () => ({
@@ -21,7 +21,14 @@ describe('PdfPreviewModal', () => {
   it('appelle onClose sur la touche Échap', async () => {
     const onClose = vi.fn()
     render(<PdfPreviewModal devisId="dev-1" onClose={onClose} />)
-    fireEvent.keyDown(window, { key: 'Escape' })
+    await act(async () => { fireEvent.keyDown(window, { key: 'Escape' }) })
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('affiche un message d\'erreur si le chargement échoue', async () => {
+    const { fetchDevisPdfObjectUrl } = await import('../../lib/api')
+    vi.mocked(fetchDevisPdfObjectUrl).mockRejectedValueOnce(new Error('boom'))
+    render(<PdfPreviewModal devisId="dev-err" onClose={vi.fn()} />)
+    expect(await screen.findByText(/Chargement du PDF échoué/i)).toBeTruthy()
   })
 })
