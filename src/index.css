@@ -3743,6 +3743,18 @@ body {
 .suivi-side-progress-head strong { color: var(--color-or-dark); font-size: 14px; }
 .suivi-side-progress-track { height: 6px; border-radius: 999px; background: var(--color-line); overflow: hidden; }
 .suivi-side-progress-fill { height: 100%; background: var(--color-or); border-radius: 999px; transition: width .4s ease; }
+
+/* Édition inline de la fiche (admin / responsable_technique / back_office) */
+.suivi-edit-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.suivi-edit-btn { font-family: inherit; cursor: pointer; font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 9px; border: 1px solid var(--color-line); background: #fff; color: var(--color-text); transition: background .15s ease, opacity .15s ease; }
+.suivi-edit-btn:hover:not(:disabled) { background: var(--color-cream); }
+.suivi-edit-btn.primary { background: var(--color-or); border-color: var(--color-or); color: #fff; }
+.suivi-edit-btn.primary:hover:not(:disabled) { opacity: .9; background: var(--color-or); }
+.suivi-edit-btn:disabled { opacity: .55; cursor: not-allowed; }
+.suivi-edit-error { font-size: 11px; font-weight: 600; color: var(--color-rouille); }
+.suivi-side-list .suivi-edit-input { width: 100%; border: 1px solid var(--color-line-soft); border-radius: 7px; padding: 5px 8px; font-size: 13px; font-weight: 600; color: var(--color-text); background: #fff; }
+.suivi-side-list .suivi-edit-input:focus { outline: none; border-color: var(--color-cuivre); }
+
 /* Historique fiche : note setter + débriefs (timeline minimaliste) */
 .suivi-history { display: flex; flex-direction: column; gap: 14px; }
 .suivi-history-item { display: flex; flex-direction: column; gap: 4px; padding-left: 12px; border-left: 2px solid var(--color-line); }
