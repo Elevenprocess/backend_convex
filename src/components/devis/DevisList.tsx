@@ -10,6 +10,8 @@ import type {
   OcrStatus,
   UpdateDevisPatch,
 } from '../../lib/types';
+import { Icon } from '../Icon';
+import { useCollapsibleState } from '../../lib/useCollapsibleState';
 import { DevisScanLoader } from './DevisScanLoader';
 import { PdfPreviewModal } from './PdfPreviewModal';
 
@@ -249,6 +251,8 @@ function DevisCard({
   const [retrying, setRetrying] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [showPdf, setShowPdf] = useState(false);
+  const [collapsed, toggleCollapsed] = useCollapsibleState('devis.' + d.id, false);
+  const showBody = editing || !collapsed;
 
   const locked = d.status === 'signe';
   const vendor: DevisVendor | undefined = d.extracted?.vendor;
@@ -318,6 +322,35 @@ function DevisCard({
 
   return (
     <li className="border border-stone-300 rounded-md bg-white overflow-hidden">
+      {/* ─── BARRE-RÉSUMÉ (toujours visible) ─── */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-stone-200">
+        {!editing && (
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? 'Développer' : 'Réduire'}
+            className="shrink-0 text-stone-400 hover:text-stone-700"
+          >
+            <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={16} />
+          </button>
+        )}
+        <div className="min-w-0 flex-1 flex items-baseline gap-2 flex-wrap text-xs">
+          <span className="font-bold text-stone-900 truncate">
+            {d.devisNumber ? `N° ${d.devisNumber}` : d.filename}
+          </span>
+          {fullName(customer) && <span className="text-stone-500 truncate">· {fullName(customer)}</span>}
+          <span className="font-bold text-stone-900 tabular-nums">· {fmtEuro(d.montantTtc)}</span>
+        </div>
+        <span className={`shrink-0 text-[10px] px-2 py-0.5 rounded border ${STATUS_TONE[d.status]}`}>
+          {STATUS_LABEL[d.status]}
+        </span>
+        <span className="shrink-0 text-[10px] px-2 py-0.5 rounded border border-stone-200 bg-stone-50 text-stone-600">
+          {OCR_LABEL[d.ocrStatus]}
+        </span>
+      </div>
+
+      {showBody && (<>
       {/* ─── HERO : vendor (gauche) | identification devis (droite) ─── */}
       <header className="border-b border-stone-200 px-6 py-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -573,6 +606,7 @@ function DevisCard({
           </div>
         </section>
       )}
+      </>)}
 
       {/* ─── OCR error si présente ─── */}
       {d.ocrError && (
