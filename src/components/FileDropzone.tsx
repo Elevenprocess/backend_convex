@@ -16,6 +16,8 @@ type FileDropzoneProps = {
  * Zone d'upload réutilisable : clic (label + input caché) OU glisser-déposer.
  * Ne fait aucun appel réseau — délègue les fichiers via onFiles. Style « air »,
  * tokens or/line, sans dégradé.
+ * Remarque : `accept` filtre le sélecteur natif mais PAS le glisser-déposer —
+ * la validation de type des fichiers est à la charge de l'appelant dans onFiles.
  */
 export function FileDropzone({
   id,
@@ -33,6 +35,7 @@ export function FileDropzone({
 
   function handleDragEnter(e: DragEvent) {
     e.preventDefault()
+    if (uploading) return
     dragDepth.current += 1
     setIsDragging(true)
   }
@@ -79,7 +82,8 @@ export function FileDropzone({
         className="hidden"
         disabled={uploading}
         onChange={(e) => {
-          onFiles(Array.from(e.target.files ?? []))
+          const files = Array.from(e.target.files ?? [])
+          if (files.length > 0) onFiles(files)
           e.target.value = ''
         }}
       />

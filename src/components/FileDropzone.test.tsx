@@ -9,8 +9,8 @@ function makeFile(name = 'a.pdf', type = 'application/pdf') {
 describe('FileDropzone', () => {
   it('affiche le titre et le sous-titre au repos', () => {
     render(<FileDropzone id="z" title="Déposer un fichier" subtitle="PDF, etc." onFiles={vi.fn()} />)
-    expect(screen.getByText('Déposer un fichier')).toBeTruthy()
-    expect(screen.getByText('PDF, etc.')).toBeTruthy()
+    expect(screen.getByText('Déposer un fichier')).toBeInTheDocument()
+    expect(screen.getByText('PDF, etc.')).toBeInTheDocument()
   })
 
   it('appelle onFiles avec les fichiers déposés', () => {
@@ -27,15 +27,15 @@ describe('FileDropzone', () => {
     const { container } = render(<FileDropzone id="z" title="T" subtitle="Sous-titre repos" onFiles={vi.fn()} />)
     const label = container.querySelector('label')!
     fireEvent.dragEnter(label, { dataTransfer: { files: [] } })
-    expect(screen.getByText('Déposez ici')).toBeTruthy()
+    expect(screen.getByText('Déposez ici')).toBeInTheDocument()
     fireEvent.dragLeave(label, { dataTransfer: { files: [] } })
-    expect(screen.getByText('Sous-titre repos')).toBeTruthy()
+    expect(screen.getByText('Sous-titre repos')).toBeInTheDocument()
   })
 
   it('en upload : affiche le spinner et ignore le drop', () => {
     const onFiles = vi.fn()
     const { container } = render(<FileDropzone id="z" title="T" subtitle="S" uploading onFiles={onFiles} />)
-    expect(screen.getByText(/Upload en cours/i)).toBeTruthy()
+    expect(screen.getByText(/Upload en cours/i)).toBeInTheDocument()
     const label = container.querySelector('label')!
     fireEvent.drop(label, { dataTransfer: { files: [makeFile()] } })
     expect(onFiles).not.toHaveBeenCalled()
@@ -48,5 +48,16 @@ describe('FileDropzone', () => {
     const file = makeFile('b.png', 'image/png')
     fireEvent.change(input, { target: { files: [file] } })
     expect(onFiles).toHaveBeenCalledWith([file])
+  })
+
+  it("ne clignote pas lors du survol d'un enfant", () => {
+    const { container } = render(<FileDropzone id="z" title="T" subtitle="Sous-titre repos" onFiles={vi.fn()} />)
+    const label = container.querySelector('label')!
+    fireEvent.dragEnter(label, { dataTransfer: { files: [] } }) // depth 1
+    fireEvent.dragEnter(label, { dataTransfer: { files: [] } }) // entrée enfant, depth 2
+    fireEvent.dragLeave(label, { dataTransfer: { files: [] } }) // sortie enfant, depth 1
+    expect(screen.getByText('Déposez ici')).toBeInTheDocument()
+    fireEvent.dragLeave(label, { dataTransfer: { files: [] } }) // sortie parent, depth 0
+    expect(screen.queryByText('Déposez ici')).toBeNull()
   })
 })
