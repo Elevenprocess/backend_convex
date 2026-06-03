@@ -13,4 +13,9 @@ describe('DevisScanLoader', () => {
     render(<DevisScanLoader ocrStatus="pending" />)
     expect(screen.queryByText(/\.pdf/i)).toBeNull()
   })
+
+  it('affiche 100% quand l\'OCR est terminé', () => {
+    render(<DevisScanLoader ocrStatus="done" />)
+    expect(screen.getByText('100%')).toBeTruthy()
+  })
 })

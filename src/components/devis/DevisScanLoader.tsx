@@ -11,7 +11,7 @@ const TICK_MS = 250
  */
 export function DevisScanLoader({ ocrStatus }: { ocrStatus: OcrStatus }) {
   const [pct, setPct] = useState(0)
-  const startRef = useRef<number>(Date.now())
+  const startRef = useRef<number>(0)
 
   useEffect(() => {
     if (ocrStatus !== 'pending' && ocrStatus !== 'processing') {
@@ -31,8 +31,15 @@ export function DevisScanLoader({ ocrStatus }: { ocrStatus: OcrStatus }) {
 
   return (
     <div className="px-6 py-10 flex flex-col items-center justify-center gap-4 text-center">
-      <div className="relative" style={{ width: 72, height: 72 }}>
-        <svg width="72" height="72" viewBox="0 0 72 72" className="-rotate-90">
+      <div
+        className="relative size-18"
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Analyse OCR"
+      >
+        <svg width="72" height="72" viewBox="0 0 72 72" className="-rotate-90" aria-hidden="true">
           <circle cx="36" cy="36" r={R} fill="none" className="stroke-stone-200" strokeWidth="6" />
           <circle
             cx="36"
