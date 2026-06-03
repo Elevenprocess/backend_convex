@@ -272,6 +272,24 @@ export async function downloadDevisPdf(devisId: string, suggestedName?: string):
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
+/**
+ * Récupère le PDF d'un devis et renvoie un object URL (à révoquer par l'appelant
+ * via URL.revokeObjectURL). On passe par le blob de la route /devis/:id/pdf (binaire
+ * renvoyé directement) au lieu d'une URL signée, ce qui évite les URL file:// bloquées
+ * par le navigateur en dev.
+ */
+export async function fetchDevisPdfObjectUrl(devisId: string): Promise<string> {
+  const res = await fetch(buildApiUrl(`/devis/${devisId}/pdf`), {
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, text || `Chargement du PDF échoué : ${res.status}`)
+  }
+  const blob = await res.blob()
+  return URL.createObjectURL(blob)
+}
+
 // ─── Projects ─────────────────────────────────────────────
 export function createProject(input: {
   leadId: string
