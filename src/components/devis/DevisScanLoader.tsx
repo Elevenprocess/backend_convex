@@ -10,20 +10,20 @@ const TICK_MS = 250
  * (cf. scanProgress.ts). Style « air », tokens or/stone, sans dégradé.
  */
 export function DevisScanLoader({ ocrStatus }: { ocrStatus: OcrStatus }) {
-  const [pct, setPct] = useState(0)
+  const scanning = ocrStatus === 'pending' || ocrStatus === 'processing'
+  const [tickPct, setTickPct] = useState(0)
   const startRef = useRef<number>(0)
 
   useEffect(() => {
-    if (ocrStatus !== 'pending' && ocrStatus !== 'processing') {
-      setPct(100)
-      return
-    }
+    if (!scanning) return
     startRef.current = Date.now()
     const id = setInterval(() => {
-      setPct(simulatedProgress(Date.now() - startRef.current))
+      setTickPct(simulatedProgress(Date.now() - startRef.current))
     }, TICK_MS)
     return () => clearInterval(id)
-  }, [ocrStatus])
+  }, [scanning])
+
+  const pct = scanning ? tickPct : 100
 
   const R = 28
   const C = 2 * Math.PI * R
