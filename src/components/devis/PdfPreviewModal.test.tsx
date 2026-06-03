@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { PdfPreviewModal } from './PdfPreviewModal'
 
@@ -9,7 +9,14 @@ vi.mock('../../lib/api', () => ({
 
 describe('PdfPreviewModal', () => {
   beforeEach(() => {
-    vi.stubGlobal('URL', { ...URL, revokeObjectURL: vi.fn() })
+    vi.stubGlobal('URL', Object.assign(URL, {
+      createObjectURL: vi.fn(() => 'blob:mock-url'),
+      revokeObjectURL: vi.fn(),
+    }))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   it('charge puis affiche le PDF dans une iframe', async () => {

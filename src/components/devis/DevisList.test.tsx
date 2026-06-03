@@ -1,10 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { DevisList } from './DevisList'
 import type { Devis } from '../../lib/types'
 
 vi.mock('../../lib/api', () => ({
-  getDevis: vi.fn(),
+  getDevis: vi.fn(async () => ({
+    id: 'dev-1', leadId: 'lead-1', filename: 'x.pdf', status: 'en_attente',
+    ocrStatus: 'done', ocrError: null, devisNumber: null, devisDate: null,
+  })),
   markDevisSigned: vi.fn(),
   retryDevisOcr: vi.fn(),
   updateDevis: vi.fn(),
@@ -28,7 +31,14 @@ function devis(over: Partial<Devis>): Devis {
 
 describe('DevisList — états de scan', () => {
   beforeEach(() => {
-    vi.stubGlobal('URL', { ...URL, revokeObjectURL: vi.fn() })
+    vi.stubGlobal('URL', Object.assign(URL, {
+      createObjectURL: vi.fn(() => 'blob:mock-url'),
+      revokeObjectURL: vi.fn(),
+    }))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   it('affiche le loader pendant le scan, pas la carte vide', () => {

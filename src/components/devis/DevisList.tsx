@@ -610,10 +610,11 @@ function DevisCard({
           </>
         ) : (
           <>
+            {/* Le PDF existe quel que soit le résultat OCR — toujours proposable */}
             <button
               type="button"
               onClick={() => setShowPdf(true)}
-              className="px-3 py-1.5 text-xs border border-stone-300 text-stone-700 rounded"
+              className="px-3 py-1.5 text-xs border border-stone-300 text-stone-700 rounded hover:bg-stone-50"
             >
               Voir le PDF
             </button>
