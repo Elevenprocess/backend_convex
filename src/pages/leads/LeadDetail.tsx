@@ -29,6 +29,7 @@ import { leadListPath } from '../../lib/leadPaths'
 import { CommercialDebriefSidebar } from '../../components/leads/CommercialDebriefSidebar'
 import { DebriefRow } from '../../components/leads/project/ProjectDebriefsTab'
 import { AssignCommercialModal } from '../../components/leads/AssignCommercialModal'
+import { CollapsibleSection } from '../../components/CollapsibleSection'
 
 type TimelineItem = {
   icon: IconName
@@ -296,56 +297,6 @@ export function LeadDetail() {
               </div>
             </div>
           )}
-        </div>
-
-        {/* Right col */}
-        <div className="lg:col-span-2 space-y-4 lg:space-y-6">
-          <div className="glass-card p-6">
-            <h3 className="font-bold mb-4">Historique</h3>
-            {timeline.length === 0 ? (
-              <p className="text-sm text-faint">Aucun événement enregistré pour ce lead.</p>
-            ) : (
-              <div className="space-y-4">
-                {timeline.map((t, i) => (
-                  <div key={i} className="flex gap-3">
-                    <div className={`w-8 h-8 rounded-full ${t.iconBg} flex items-center justify-center shrink-0`}>
-                      <Icon name={t.icon} size={14} className={t.iconColor} />
-                    </div>
-                    <div className="flex-grow">
-                      <div className="flex justify-between gap-3">
-                        <span className="font-semibold text-sm">{t.title}</span>
-                        <span className="text-xs text-faint shrink-0">{t.date}</span>
-                      </div>
-                      {t.desc && <p className="text-xs text-muted mt-1">{t.desc}</p>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="glass-card p-6">
-            <div className="flex items-center justify-between gap-2 mb-4">
-              <h3 className="font-bold">Débriefs</h3>
-              {debriefs.length > 0 && (
-                <span className="text-[10px] font-black uppercase tracking-wider text-faint">{debriefs.length} débrief{debriefs.length > 1 ? 's' : ''}</span>
-              )}
-            </div>
-            {debriefs.length === 0 ? (
-              <p className="text-sm text-faint">Aucun débrief enregistré pour ce client.</p>
-            ) : (
-              <ul className="space-y-2">
-                {debriefs.map((d) => (
-                  <DebriefRow
-                    key={d.id}
-                    debrief={d}
-                    projectName={d.projectId ? (projects.find((p) => p.id === d.projectId)?.name ?? 'Projet') : 'Débrief libre'}
-                    onDelete={() => void handleDeleteDebrief(d.id)}
-                  />
-                ))}
-              </ul>
-            )}
-          </div>
 
           <div className="glass-card p-6">
             <CreateProjectInline
@@ -354,6 +305,60 @@ export function LeadDetail() {
               onCreated={(p) => { setProjects((prev) => [p, ...prev]); navigate(`/projects/${p.id}`) }}
               onOpenProject={(p) => navigate(`/projects/${p.id}`)}
             />
+          </div>
+        </div>
+
+        {/* Right col */}
+        <div className="lg:col-span-2 space-y-4 lg:space-y-6">
+          <div className="glass-card p-6">
+            <CollapsibleSection title="Historique" storageKey="lead.historique" defaultCollapsed>
+              {timeline.length === 0 ? (
+                <p className="text-sm text-faint">Aucun événement enregistré pour ce lead.</p>
+              ) : (
+                <div className="space-y-4">
+                  {timeline.map((t, i) => (
+                    <div key={i} className="flex gap-3">
+                      <div className={`w-8 h-8 rounded-full ${t.iconBg} flex items-center justify-center shrink-0`}>
+                        <Icon name={t.icon} size={14} className={t.iconColor} />
+                      </div>
+                      <div className="flex-grow">
+                        <div className="flex justify-between gap-3">
+                          <span className="font-semibold text-sm">{t.title}</span>
+                          <span className="text-xs text-faint shrink-0">{t.date}</span>
+                        </div>
+                        {t.desc && <p className="text-xs text-muted mt-1">{t.desc}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CollapsibleSection>
+          </div>
+
+          <div className="glass-card p-6">
+            <CollapsibleSection
+              title="Débriefs"
+              storageKey="lead.debriefs"
+              defaultCollapsed
+              right={debriefs.length > 0 ? (
+                <span className="text-[10px] font-black uppercase tracking-wider text-faint">{debriefs.length} débrief{debriefs.length > 1 ? 's' : ''}</span>
+              ) : undefined}
+            >
+              {debriefs.length === 0 ? (
+                <p className="text-sm text-faint">Aucun débrief enregistré pour ce client.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {debriefs.map((d) => (
+                    <DebriefRow
+                      key={d.id}
+                      debrief={d}
+                      projectName={d.projectId ? (projects.find((p) => p.id === d.projectId)?.name ?? 'Projet') : 'Débrief libre'}
+                      onDelete={() => void handleDeleteDebrief(d.id)}
+                    />
+                  ))}
+                </ul>
+              )}
+            </CollapsibleSection>
           </div>
         </div>
       </main>
