@@ -1,6 +1,7 @@
 // Vue commercial — 100% indépendante de pages/leads/LeadsList.tsx.
 // Côté commercial, un "lead qualifié" est appelé un "client".
 import { useMemo, useState } from 'react'
+import { Navigate } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon, type IconName } from '../../components/Icon'
@@ -113,20 +114,21 @@ function rdvLabel(l: Pick<LeadResponse, 'latestRdvAt'>): string {
 // ─── Page ─────────────────────────────────────────────────
 export function ClientsList() {
   const me = useAuth((s) => s.user)
+  const redirectTech = me?.role === 'technicien'
   const selectedId = useLeadSidebar((s) => s.selectedLeadId)
   const selectLead = useLeadSidebar((s) => s.selectLead)
   // L'admin accède à cette page via le lien « Clients » de la sidebar et doit voir
   // tout le portefeuille (comme un commercial_lead), pas seulement les clients qui
   // lui seraient assignés — sinon la liste est vide (« Aucun client assigné »).
   const isManager = me?.role === 'commercial_lead' || me?.role === 'admin'
-  // Délivrabilité & ops (RT / back-office / technicien) accèdent à cette page via
+  // Délivrabilité & ops (RT / back-office) accèdent à cette page via
   // « Dossier client » : ils voient TOUT le portefeuille (comme un manager) mais en
-  // lecture — pas de réattribution commerciale.
+  // lecture — pas de réattribution commerciale. Le technicien, lui, est redirigé
+  // vers « Mes interventions » (voir redirectTech ci-dessus).
   const isOps =
     me?.role === 'delivrabilite' ||
     me?.role === 'responsable_technique' ||
-    me?.role === 'back_office' ||
-    me?.role === 'technicien'
+    me?.role === 'back_office'
   const seesFullPortfolio = isManager || isOps
   // Page client : on ne charge QUE les leads arrivés au RDV planifié et au-delà
   // (chemin positif), filtré côté backend via scope=clients. limit relevée car le
@@ -239,6 +241,8 @@ export function ClientsList() {
     }
     return base
   }, [allClients, filter, docFilter, dateFilter, dateFieldFilter, commercialFilter, query])
+
+  if (redirectTech) return <Navigate to="/mes-interventions" replace />
 
   return (
     <AppShell>

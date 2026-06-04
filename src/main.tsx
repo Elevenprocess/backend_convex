@@ -12,6 +12,7 @@ import { LeadsList } from './pages/leads/LeadsList'
 import { LeadDetail } from './pages/leads/LeadDetail'
 import { LeadsSplit } from './pages/leads/LeadsSplit'
 import { ClientsList } from './pages/clients/ClientsList'
+import { MesInterventions } from './pages/technicien/MesInterventions'
 import { ProjectDetail } from './pages/projects/ProjectDetail'
 import { RdvCalendar } from './pages/rdv/RdvCalendar'
 import { RdvDetail } from './pages/rdv/RdvDetail'
@@ -51,6 +52,7 @@ const router = createHashRouter([
           { path: '/analytics', element: <Analytics /> },
           { path: '/suivi', element: <Suivi /> },
           { path: '/suivi/:id', element: <SuiviDetail /> },
+          { path: '/mes-interventions', element: <MesInterventions /> },
           { path: '/team/setters/:id', element: <ProfilSetter /> },
           { path: '/team/commerciaux/:id', element: <ProfilCommercial /> },
           { path: '/settings', element: <Settings /> },
