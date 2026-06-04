@@ -1,4 +1,4 @@
-import { StrictMode } from 'react'
+import { StrictMode, type ReactElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createHashRouter, RouterProvider, Navigate } from 'react-router-dom'
 import './index.css'
@@ -27,6 +27,20 @@ import { AcceptInvitation } from './pages/AcceptInvitation'
 import { Notifications } from './pages/Notifications'
 import { CallFullScreen } from './pages/call/CallFullScreen'
 import { CallSplit } from './pages/call/CallSplit'
+import { TechnicienPlanning } from './pages/technicien/TechnicienPlanning'
+import { TechnicienDossiers } from './pages/technicien/TechnicienDossiers'
+import { useAuth } from './lib/auth'
+
+function RoleHome() {
+  const role = useAuth((s) => s.user?.role)
+  return <Navigate to={role === 'technicien' ? '/planning' : '/overview'} replace />
+}
+
+function NoTechnicien({ children }: { children: ReactElement }) {
+  const role = useAuth((s) => s.user?.role)
+  if (role === 'technicien') return <Navigate to="/planning" replace />
+  return children
+}
 
 const router = createHashRouter([
   {
@@ -38,27 +52,29 @@ const router = createHashRouter([
       {
         element: <RequireAuth />,
         children: [
-          { path: '/overview', element: <Overview /> },
-          { path: '/leads', element: <LeadsList /> },
+          { path: '/planning', element: <TechnicienPlanning /> },
+          { path: '/mes-dossiers', element: <TechnicienDossiers /> },
+          { path: '/overview', element: <NoTechnicien><Overview /></NoTechnicien> },
+          { path: '/leads', element: <NoTechnicien><LeadsList /></NoTechnicien> },
           { path: '/leads/split', element: <LeadsSplit /> },
           { path: '/leads/:id', element: <LeadDetail /> },
           { path: '/client', element: <ClientsList /> },
           { path: '/client/:id', element: <LeadDetail /> },
           { path: '/projects/:id', element: <ProjectDetail /> },
-          { path: '/rdv', element: <RdvCalendar /> },
+          { path: '/rdv', element: <NoTechnicien><RdvCalendar /></NoTechnicien> },
           { path: '/rdv/split', element: <RdvSplit /> },
           { path: '/rdv/:id', element: <RdvDetail /> },
-          { path: '/analytics', element: <Analytics /> },
-          { path: '/suivi', element: <Suivi /> },
+          { path: '/analytics', element: <NoTechnicien><Analytics /></NoTechnicien> },
+          { path: '/suivi', element: <NoTechnicien><Suivi /></NoTechnicien> },
           { path: '/suivi/:id', element: <SuiviDetail /> },
           { path: '/team/setters/:id', element: <ProfilSetter /> },
           { path: '/team/commerciaux/:id', element: <ProfilCommercial /> },
           { path: '/settings', element: <Settings /> },
           { path: '/profile', element: <MyProfile /> },
-          { path: '/notifications', element: <Notifications /> },
+          { path: '/notifications', element: <NoTechnicien><Notifications /></NoTechnicien> },
           { path: '/call/:id', element: <CallFullScreen /> },
           { path: '/call/split', element: <CallSplit /> },
-          { path: '*', element: <Navigate to="/overview" replace /> },
+          { path: '*', element: <RoleHome /> },
         ],
       },
     ],
