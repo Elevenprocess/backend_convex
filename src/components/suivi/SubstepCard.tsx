@@ -11,9 +11,10 @@ type Props = {
   today: string
   saving?: boolean
   onDocsChanged?: () => void
+  readOnly?: boolean
 }
 
-export function SubstepCard({ substep, onMutate, today, saving, onDocsChanged }: Props) {
+export function SubstepCard({ substep, onMutate, today, saving, onDocsChanged, readOnly }: Props) {
   const [date, setDate] = useState(substep.dateRealisee ?? '')
   const [notes, setNotes] = useState(substep.notes ?? '')
   const [uploading, setUploading] = useState(false)
@@ -84,6 +85,12 @@ export function SubstepCard({ substep, onMutate, today, saving, onDocsChanged }:
 
         {locked ? (
           <p className="wf-locked-note"><Icon name="shield" size={13} /> En attente d'une étape précédente</p>
+        ) : readOnly ? (
+          <div className="wf-substep-fields wf-readonly">
+            {substep.dateRealisee && <p className="wf-field-ro"><span>Date</span> {substep.dateRealisee}</p>}
+            {substep.notes && <p className="wf-field-ro"><span>Notes</span> {substep.notes}</p>}
+            <p className="wf-field-ro wf-field-ro-status"><span>Statut</span> {substep.status}</p>
+          </div>
         ) : (
           <div className="wf-substep-fields">
             <label className="wf-field">
@@ -112,31 +119,37 @@ export function SubstepCard({ substep, onMutate, today, saving, onDocsChanged }:
                       <Icon name="check" size={12} /> <span>{d.filename}</span>
                     </a>
                     <span className="wf-doc-size">{Math.max(1, Math.round(d.sizeBytes / 1024))} Ko</span>
-                    <button type="button" className="wf-doc-del" onClick={() => void onDeleteDoc(d.id)} aria-label="Supprimer le document">
-                      <Icon name="x" size={12} />
-                    </button>
+                    {!readOnly && (
+                      <button type="button" className="wf-doc-del" onClick={() => void onDeleteDoc(d.id)} aria-label="Supprimer le document">
+                        <Icon name="x" size={12} />
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
             )}
-            <FileDropzone
-              id={`docs-${substep.id}`}
-              multiple
-              uploading={uploading}
-              title="Déposer un ou plusieurs fichiers"
-              subtitle="Tout type · 25 Mo / fichier"
-              onFiles={(files) => void onUploadFiles(files)}
-            />
+            {!readOnly && (
+              <FileDropzone
+                id={`docs-${substep.id}`}
+                multiple
+                uploading={uploading}
+                title="Déposer un ou plusieurs fichiers"
+                subtitle="Tout type · 25 Mo / fichier"
+                onFiles={(files) => void onUploadFiles(files)}
+              />
+            )}
             {docError && <p className="wf-docs-error">{docError}</p>}
           </div>
         )}
 
-        <footer className="wf-substep-foot">
-          <button type="button" className="wf-cta" disabled={locked || saving} onClick={onAction}>
-            {done ? 'Rouvrir' : substep.actionLabel}
-          </button>
-          {saving && <span className="wf-saving">…</span>}
-        </footer>
+        {!readOnly && (
+          <footer className="wf-substep-foot">
+            <button type="button" className="wf-cta" disabled={locked || saving} onClick={onAction}>
+              {done ? 'Rouvrir' : substep.actionLabel}
+            </button>
+            {saving && <span className="wf-saving">…</span>}
+          </footer>
+        )}
       </div>
     </article>
   )

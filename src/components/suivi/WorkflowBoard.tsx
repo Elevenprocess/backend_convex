@@ -1,6 +1,6 @@
 import { SubstepCard } from './SubstepCard'
 import { groupSubsteps, SUIVI_SECTIONS } from '../../lib/suivi-board'
-import type { SubstepResponse, UpdateSubstepPatch } from '../../lib/types'
+import type { SubstepResponse, UpdateSubstepPatch, WorkflowPhase } from '../../lib/types'
 
 type Props = {
   substeps: SubstepResponse[]
@@ -8,6 +8,7 @@ type Props = {
   today: string
   savingId?: string | null
   onDocsChanged?: () => void
+  canEditPhase?: (phase: WorkflowPhase) => boolean
 }
 
 function countDone(list: SubstepResponse[]) {
@@ -29,7 +30,7 @@ function Progress({ list }: { list: SubstepResponse[] }) {
   )
 }
 
-export function WorkflowBoard({ substeps, onMutate, today, savingId, onDocsChanged }: Props) {
+export function WorkflowBoard({ substeps, onMutate, today, savingId, onDocsChanged, canEditPhase }: Props) {
   const grouped = groupSubsteps(substeps)
   const overallDone = countDone(substeps)
   const overallTotal = substeps.length
@@ -38,7 +39,7 @@ export function WorkflowBoard({ substeps, onMutate, today, savingId, onDocsChang
   const renderList = (list: SubstepResponse[]) => (
     <div className="wf-list">
       {list.map((s) => (
-        <SubstepCard key={s.id} substep={s} onMutate={onMutate} today={today} saving={savingId === s.id} onDocsChanged={onDocsChanged} />
+        <SubstepCard key={s.id} substep={s} onMutate={onMutate} today={today} saving={savingId === s.id} onDocsChanged={onDocsChanged} readOnly={canEditPhase ? !canEditPhase(s.phase) : false} />
       ))}
     </div>
   )

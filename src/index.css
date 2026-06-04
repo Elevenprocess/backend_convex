@@ -4714,6 +4714,9 @@ button.suivi-side-cta { font-family: inherit; cursor: pointer; width: 100%; }
 .wf-locked-note { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--color-muted); }
 
 .wf-substep-fields { display: grid; grid-template-columns: 170px 1fr; gap: 12px; }
+.wf-substep-fields.wf-readonly { display: block; }
+.wf-field-ro { font-size: 12px; color: var(--color-muted); margin: 2px 0; }
+.wf-field-ro span { font-weight: 700; margin-right: 6px; text-transform: uppercase; font-size: 10px; letter-spacing: .04em; }
 .wf-field { display: flex; flex-direction: column; gap: 5px; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--color-faint); }
 .wf-field input, .wf-field textarea { border: 1px solid var(--color-line); border-radius: 8px; padding: 7px 10px; font-size: 13px; font-weight: 400; letter-spacing: normal; text-transform: none; color: var(--color-text); background: var(--color-cream); transition: border-color .15s ease, box-shadow .15s ease; }
 .wf-field input:focus, .wf-field textarea:focus { outline: none; border-color: var(--color-cuivre); box-shadow: 0 0 0 3px var(--color-cuivre-tint); }
