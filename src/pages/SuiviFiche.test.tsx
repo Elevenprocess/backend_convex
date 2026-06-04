@@ -53,7 +53,7 @@ const project: ProjectResponse = {
   addressLine: null,
   postalCode: null,
   city: null,
-  status: 'en_cours' as ProjectResponse['status'],
+  status: 'devis_en_cours' as ProjectResponse['status'],
   notes: null,
   createdAt: '2026-05-01T10:00:00.000Z',
   updatedAt: '2026-05-01T10:00:00.000Z',
@@ -106,5 +106,11 @@ describe('FicheCompletePage', () => {
   it('affiche « Dossier introuvable » pour un id inconnu', async () => {
     renderAt('/suivi/inconnu/fiche')
     expect(await screen.findByText('Dossier introuvable.')).toBeInTheDocument()
+  })
+
+  it('redirige un rôle non autorisé vers /overview', async () => {
+    authStateRef.user = { id: 'com-1', name: 'Alice', role: 'commercial', active: true } as UserResponse
+    renderAt('/suivi/lead-1/fiche')
+    expect(await screen.findByText('OVERVIEW')).toBeInTheDocument()
   })
 })
