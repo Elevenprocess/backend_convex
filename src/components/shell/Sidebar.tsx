@@ -107,11 +107,22 @@ export function Sidebar() {
   }, [userMenu])
 
   const sections = useMemo(() => {
+    if (role === 'technicien') {
+      return [
+        {
+          id: 'technicien',
+          label: 'Espace',
+          items: [
+            { to: '/planning', icon: 'calendar' as const, label: 'Planning' },
+            { to: '/mes-dossiers', icon: 'inbox' as const, label: 'Mes dossiers' },
+          ],
+        },
+      ]
+    }
     const isOps =
       role === 'delivrabilite' ||
       role === 'responsable_technique' ||
-      role === 'back_office' ||
-      role === 'technicien'
+      role === 'back_office'
     const built = SECTIONS.map((s) => ({
       ...s,
       items: s.items
