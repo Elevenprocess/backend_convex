@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildPeriodRange, lastNDaysPeriod, previousRange, type PeriodState } from './period'
+import { buildPeriodRange, lastNDaysPeriod, previousRange } from './period'
 
 describe('lastNDaysPeriod', () => {
   it('génère un mode last_n_days avec includeToday par défaut', () => {
