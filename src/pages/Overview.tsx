@@ -31,6 +31,7 @@ const FUNNEL_PERIOD_OPTIONS: { id: FunnelPeriodMode; label: string }[] = [
   { id: 'last_month', label: 'Mois dernier' },
   { id: 'this_year', label: 'Cette année' },
   { id: 'last_year', label: "L'année dernière" },
+  { id: 'last_n_days', label: 'Période personnalisée' },
   { id: 'custom', label: 'Plage de dates' },
 ]
 
