@@ -1,5 +1,8 @@
+import { type ReactNode } from 'react'
 import { SubstepCard } from './SubstepCard'
 import { groupSubsteps, SUIVI_SECTIONS } from '../../lib/suivi-board'
+import { useCollapsibleState } from '../../lib/useCollapsibleState'
+import { Icon } from '../Icon'
 import type { SubstepResponse, UpdateSubstepPatch } from '../../lib/types'
 
 type Props = {
@@ -26,6 +29,31 @@ function Progress({ list }: { list: SubstepResponse[] }) {
       </span>
       <span className="wf-progress-count">{done}/{total}</span>
     </span>
+  )
+}
+
+function allDone(list: SubstepResponse[]): boolean {
+  return list.length > 0 && list.every((s) => s.status === 'fait')
+}
+
+function CollapsibleWfSection({
+  section, sectionList, children,
+}: { section: typeof SUIVI_SECTIONS[number]; sectionList: SubstepResponse[]; children: ReactNode }) {
+  const [collapsed, toggle] = useCollapsibleState(`wf.section.${section.key}`, allDone(sectionList))
+  return (
+    <section className={`wf-section wf-section-${section.key}`}>
+      <header className="wf-section-head">
+        <button type="button" className="wf-section-toggle" onClick={toggle} aria-expanded={!collapsed}>
+          <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={15} className="text-faint" />
+          <span className="wf-section-titles">
+            <span className="wf-section-eyebrow">{section.eyebrow}</span>
+            <span className="wf-section-title-text">{section.title}</span>
+          </span>
+        </button>
+        <Progress list={sectionList} />
+      </header>
+      {!collapsed && children}
+    </section>
   )
 }
 
@@ -65,15 +93,7 @@ export function WorkflowBoard({ substeps, onMutate, today, savingId, onDocsChang
               ? grouped.aval
               : [...grouped.backoffice.dp, ...grouped.backoffice.racco_consuel]
         return (
-          <section key={section.key} className={`wf-section wf-section-${section.key}`}>
-            <header className="wf-section-head">
-              <div className="wf-section-titles">
-                <span className="wf-section-eyebrow">{section.eyebrow}</span>
-                <h3>{section.title}</h3>
-              </div>
-              <Progress list={sectionList} />
-            </header>
-
+          <CollapsibleWfSection key={section.key} section={section} sectionList={sectionList}>
             {section.layout === 'parallel' && section.columns ? (
               <div className="wf-parallel">
                 {section.columns.map((col) => {
@@ -92,7 +112,7 @@ export function WorkflowBoard({ substeps, onMutate, today, savingId, onDocsChang
             ) : (
               renderList(section.key === 'amont' ? grouped.amont : grouped.aval)
             )}
-          </section>
+          </CollapsibleWfSection>
         )
       })}
     </div>

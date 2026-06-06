@@ -9,6 +9,7 @@ function sub(over: Partial<SubstepResponse>): SubstepResponse {
     label: over.key ?? 'L', actionLabel: 'A', phase: 'vt', status: 'a_faire', optional: false,
     dateRealisee: null, deadline: null, responsableId: null, notes: null, problemReason: null,
     problemNotes: null, problemResolvedAt: null, metadata: {}, unlocked: true, missingDocument: false,
+    expectedDocs: [], documents: [],
     createdAt: '', updatedAt: '', ...over,
   } as SubstepResponse
 }
@@ -36,5 +37,16 @@ describe('WorkflowBoard', () => {
     expect(screen.getByText('vt_planifie')).toBeInTheDocument()
     expect(screen.getByText('dp_a_faire')).toBeInTheDocument()
     expect(screen.getByText('consuel_valide')).toBeInTheDocument()
+  })
+
+  it('replie une section 100% terminée (sous-étapes cachées par défaut)', () => {
+    const allDone = [
+      sub({ key: 'vt_planifie', phase: 'vt', position: 1, status: 'fait' }),
+      sub({ key: 'vt_validee', phase: 'vt', position: 2, status: 'fait' }),
+      sub({ key: 'dp_a_faire', phase: 'dp', position: 1 }),
+    ]
+    render(<WorkflowBoard substeps={allDone} onMutate={vi.fn()} today="2026-06-02" />)
+    expect(screen.getByText(/Préparation/i)).toBeInTheDocument()
+    expect(screen.queryByText('vt_planifie')).not.toBeInTheDocument()
   })
 })
