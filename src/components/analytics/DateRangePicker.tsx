@@ -73,15 +73,19 @@ export function DateRangePicker({ value, onChange, align = 'left' }: Props) {
       && t <= endOfDay(new Date(draftRange.to)).getTime()
   }
 
-  function renderCal(viewDate: Date) {
+  function renderCal(viewDate: Date, side: 'left' | 'right') {
     return (
       <div className="drp-cal">
         <div className="drp-cal-head">
-          <button type="button" className="drp-nav" aria-label="Mois précédent"
-            onClick={() => setView(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))}>‹</button>
+          {side === 'left' ? (
+            <button type="button" className="drp-nav" aria-label="Mois précédent"
+              onClick={() => setView((v) => new Date(v.getFullYear(), v.getMonth() - 1, 1))}>‹</button>
+          ) : <span className="drp-nav" aria-hidden style={{ visibility: 'hidden' }}>‹</span>}
           <strong>{viewDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</strong>
-          <button type="button" className="drp-nav" aria-label="Mois suivant"
-            onClick={() => setView(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))}>›</button>
+          {side === 'right' ? (
+            <button type="button" className="drp-nav" aria-label="Mois suivant"
+              onClick={() => setView((v) => new Date(v.getFullYear(), v.getMonth() + 1, 1))}>›</button>
+          ) : <span className="drp-nav" aria-hidden style={{ visibility: 'hidden' }}>›</span>}
         </div>
         <div className="drp-grid">
           {DOW.map((d) => <span key={d} className="drp-dow">{d}</span>)}
@@ -133,8 +137,8 @@ export function DateRangePicker({ value, onChange, align = 'left' }: Props) {
               </label>
             </div>
             <div className="drp-cals">
-              {renderCal(prevView)}
-              {renderCal(view)}
+              {renderCal(prevView, 'left')}
+              {renderCal(view, 'right')}
             </div>
             <div className="drp-foot">
               <span className="drp-foot-label">
