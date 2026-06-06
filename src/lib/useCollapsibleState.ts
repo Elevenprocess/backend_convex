@@ -1,17 +1,22 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 
 const PREFIX = 'ecoi.collapse.'
 
 /**
  * État replié/déplié persistant dans localStorage (best-effort).
  * '1' = replié, '0' = déplié ; valeur absente/illisible → defaultCollapsed.
+ *
+ * Renvoie [collapsed, toggle, setCollapsed]. `setCollapsed` (valeur explicite)
+ * sert au pliage groupé « Tout réduire / Tout développer ». `toggle` et
+ * `setCollapsed` sont stables (useCallback) pour pouvoir figurer sans risque
+ * dans les dépendances d'un useEffect côté consommateur.
  */
 export function useCollapsibleState(
   storageKey: string,
   defaultCollapsed: boolean,
-): [boolean, () => void] {
+): [boolean, () => void, (value: boolean) => void] {
   const fullKey = PREFIX + storageKey
-  const [collapsed, setCollapsed] = useState<boolean>(() => {
+  const [collapsed, setCollapsedState] = useState<boolean>(() => {
     try {
       const raw = window.localStorage.getItem(fullKey)
       if (raw === '1') return true
@@ -22,17 +27,32 @@ export function useCollapsibleState(
     return defaultCollapsed
   })
 
-  function toggle() {
-    setCollapsed((prev) => {
-      const next = !prev
+  const persist = useCallback(
+    (next: boolean) => {
       try {
         window.localStorage.setItem(fullKey, next ? '1' : '0')
       } catch {
         // best-effort
       }
+    },
+    [fullKey],
+  )
+
+  const toggle = useCallback(() => {
+    setCollapsedState((prev) => {
+      const next = !prev
+      persist(next)
       return next
     })
-  }
+  }, [persist])
 
-  return [collapsed, toggle]
+  const setCollapsed = useCallback(
+    (value: boolean) => {
+      setCollapsedState(value)
+      persist(value)
+    },
+    [persist],
+  )
+
+  return [collapsed, toggle, setCollapsed]
 }

@@ -175,7 +175,24 @@ function buildPatch(d: Devis, draft: Draft): UpdateDevisPatch {
   return p;
 }
 
+/** Commande de pliage groupé : le nonce force la (re)synchronisation de toutes
+ *  les cartes, même celles rouvertes/refermées individuellement depuis. */
+type BulkCommand = { collapsed: boolean; nonce: number };
+
 export function DevisList({ devisList, onChange }: Props) {
+  // Dès 2 devis, on replie par défaut pour éviter le mur de cartes ; le plus
+  // récent est en tête (tri backend createdAt DESC).
+  const defaultCollapsed = devisList.length >= 2;
+  // `allCollapsed` = cible de la dernière action groupée → pilote le libellé.
+  const [allCollapsed, setAllCollapsed] = useState(defaultCollapsed);
+  const [command, setCommand] = useState<BulkCommand | null>(null);
+
+  function bulkToggle() {
+    const next = !allCollapsed;
+    setAllCollapsed(next);
+    setCommand((prev) => ({ collapsed: next, nonce: (prev?.nonce ?? 0) + 1 }));
+  }
+
   if (devisList.length === 0) {
     return (
       <div className="border border-dashed border-stone-300 rounded p-6 text-center text-sm text-stone-500">
@@ -185,20 +202,45 @@ export function DevisList({ devisList, onChange }: Props) {
   }
 
   return (
-    <ul className="space-y-4">
-      {devisList.map((d) => (
-        <DevisCard key={d.id} devis={d} onChange={onChange} />
-      ))}
-    </ul>
+    <div className="space-y-3">
+      {devisList.length >= 2 && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={bulkToggle}
+            aria-expanded={!allCollapsed}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-stone-500 hover:text-stone-800"
+          >
+            <Icon name={allCollapsed ? 'chevron-down' : 'chevron-right'} size={14} />
+            {allCollapsed ? 'Tout développer' : 'Tout réduire'}
+          </button>
+        </div>
+      )}
+      <ul className="space-y-4">
+        {devisList.map((d) => (
+          <DevisCard
+            key={d.id}
+            devis={d}
+            onChange={onChange}
+            defaultCollapsed={defaultCollapsed}
+            command={command}
+          />
+        ))}
+      </ul>
+    </div>
   );
 }
 
 function DevisCard({
   devis,
   onChange,
+  defaultCollapsed = false,
+  command,
 }: {
   devis: Devis;
   onChange: (d: Devis) => void;
+  defaultCollapsed?: boolean;
+  command?: BulkCommand | null;
 }) {
   // The OCR ("scan IA") runs asynchronously server-side and takes several
   // seconds. The parent only refetches once, right after upload, while the
@@ -251,8 +293,20 @@ function DevisCard({
   const [retrying, setRetrying] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [showPdf, setShowPdf] = useState(false);
-  const [collapsed, toggleCollapsed] = useCollapsibleState('devis.' + d.id, false);
+  const [collapsed, toggleCollapsed, setCollapsed] = useCollapsibleState(
+    'devis.' + d.id,
+    defaultCollapsed,
+  );
   const showBody = editing || !collapsed;
+
+  // Applique le bouton global « Tout réduire / Tout développer ». On compare le
+  // nonce pour n'agir qu'au clic, sans écraser un pliage individuel fait après.
+  const lastBulkNonce = useRef(0);
+  useEffect(() => {
+    if (!command || command.nonce === lastBulkNonce.current) return;
+    lastBulkNonce.current = command.nonce;
+    setCollapsed(command.collapsed);
+  }, [command, setCollapsed]);
 
   const locked = d.status === 'signe';
   const vendor: DevisVendor | undefined = d.extracted?.vendor;
