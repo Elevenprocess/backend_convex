@@ -4743,3 +4743,67 @@ button.suivi-side-cta { font-family: inherit; cursor: pointer; width: 100%; }
 .wf-docs-error { margin: 0; font-size: 11px; font-weight: 600; color: var(--color-rouille); }
 
 @media (max-width: 860px) { .wf-parallel { grid-template-columns: 1fr; gap: 24px; } .wf-substep-fields { grid-template-columns: 1fr; } }
+
+/* --- Cartes vue d'ensemble : tags --- */
+.suivi-card-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.suivi-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 700; letter-spacing: .01em; }
+.suivi-tag-phase { background: var(--color-cuivre-tint); color: var(--color-cuivre); }
+.suivi-tag-blocked { background: var(--color-rouille-tint); color: var(--color-rouille); }
+.suivi-tag-missing { background: var(--color-rouille-tint); color: var(--color-rouille); }
+.suivi-tag-done { background: var(--color-or-tint); color: var(--color-or-dark); }
+
+/* --- Détail dossier : onglets + en-tête sticky --- */
+.suivi-detail-sticky { position: sticky; top: 0; z-index: 5; background: var(--color-cream-darker); padding-top: 6px; padding-bottom: 10px; }
+.suivi-detail-tabs { display: inline-flex; gap: 3px; padding: 3px; background: #fff; border: 1px solid var(--color-line); border-radius: 12px; }
+.suivi-detail-tabs button { display: inline-flex; align-items: center; gap: 7px; padding: 7px 16px; border: none; background: transparent; border-radius: 9px; font-size: 13px; font-weight: 700; color: var(--color-muted); cursor: pointer; transition: background .15s, color .15s; }
+.suivi-detail-tabs button.is-active { background: var(--color-or); color: #fff; }
+.suivi-tab-count { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: rgba(255,255,255,.25); }
+.suivi-detail-tabs button:not(.is-active) .suivi-tab-count { background: var(--color-line-soft); color: var(--color-muted); }
+
+/* --- Workflow : section repliable + résumé pièces --- */
+.wf-section-toggle { display: inline-flex; align-items: center; gap: 9px; border: none; background: transparent; cursor: pointer; padding: 0; text-align: left; }
+.wf-section-title-text { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; color: var(--color-text); }
+.wf-docs-summary { display: inline-flex; align-items: center; gap: 10px; }
+.wf-docs-count { font-size: 11.5px; font-weight: 700; color: var(--color-muted); }
+.wf-docs-count.is-missing { color: var(--color-rouille); }
+.wf-docs-link { border: none; background: transparent; color: var(--color-or); font-size: 11.5px; font-weight: 700; cursor: pointer; padding: 0; }
+.wf-docs-link:hover { color: var(--color-or-dark); text-decoration: underline; }
+
+/* --- Hub documentaire --- */
+.dochub { display: flex; flex-direction: column; gap: 18px; }
+.dochub-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.dochub-count { display: flex; align-items: baseline; gap: 8px; }
+.dochub-count strong { font-size: 22px; font-weight: 800; color: var(--color-text); font-variant-numeric: tabular-nums; }
+.dochub-count span { font-size: 12px; color: var(--color-muted); }
+.dochub-filter { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--color-line); border-radius: 999px; background: #fff; font-size: 12px; font-weight: 700; color: var(--color-muted); cursor: pointer; }
+.dochub-filter.is-on { background: var(--color-rouille-tint); color: var(--color-rouille); border-color: var(--color-rouille-tint); }
+.dochub-section h4 { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--color-cuivre); margin: 0 0 8px; }
+.dochub-list { list-style: none; margin: 0 0 4px; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.dochub-doc { display: grid; grid-template-columns: 34px 1fr auto auto; align-items: center; gap: 10px; padding: 8px 11px; border: 1px solid var(--color-line-soft); border-radius: 10px; background: #fff; }
+.dochub-doc.is-missing { border-style: dashed; background: var(--color-cream); }
+.dochub-thumb { width: 34px; height: 40px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; }
+.dochub-thumb.kind-pdf { background: var(--color-rouille-tint); color: var(--color-rouille); }
+.dochub-thumb.kind-image { background: var(--color-or-tint); color: var(--color-or-dark); }
+.dochub-thumb.kind-doc { background: var(--color-info-tint); color: var(--color-info); }
+.dochub-thumb.kind-missing { background: var(--color-line-soft); color: var(--color-faint); }
+.dochub-doc-name { min-width: 0; color: var(--color-text); text-decoration: none; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dochub-doc-name:hover { color: var(--color-cuivre); }
+.dochub-doc-meta { font-size: 11px; color: var(--color-faint); white-space: nowrap; }
+.dochub-missing-pill { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--color-rouille-tint); color: var(--color-rouille); }
+.dochub-doc-del { border: none; background: transparent; color: var(--color-muted); cursor: pointer; padding: 3px; border-radius: 6px; }
+.dochub-doc-del:hover { background: var(--color-rouille-tint); color: var(--color-rouille); }
+
+/* --- Dépôt en masse : affectation --- */
+.mass-assign { border: 1px solid var(--color-cuivre-tint); background: var(--color-cuivre-tint); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.mass-assign-title { margin: 0; font-size: 12.5px; font-weight: 700; color: var(--color-text); }
+.mass-assign-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.mass-assign-row { display: flex; align-items: center; gap: 10px; }
+.mass-assign-file { flex: 1; font-size: 12.5px; font-weight: 600; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mass-assign-row select { border: 1px solid var(--color-line); border-radius: 8px; padding: 6px 9px; font-size: 12.5px; background: #fff; min-width: 190px; }
+.mass-assign-error { margin: 0; font-size: 11.5px; font-weight: 600; color: var(--color-rouille); }
+.mass-assign-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* --- Bouton secondaire --- */
+.btn-ghost { border: 1px solid var(--color-line); background: #fff; color: var(--color-muted); border-radius: 8px; padding: 7px 16px; font-size: 12.5px; font-weight: 700; cursor: pointer; transition: background .15s, color .15s; }
+.btn-ghost:hover:not(:disabled) { background: var(--color-cream); color: var(--color-text); }
+.btn-ghost:disabled { opacity: .5; cursor: not-allowed; }
