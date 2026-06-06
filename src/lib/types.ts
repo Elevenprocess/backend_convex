@@ -787,6 +787,7 @@ export type ClientPhaseStep = {
   datePlanifiee: string | null
   dateRealisee: string | null
   problemReason: string | null
+  responsableId: string | null
 }
 
 export type ClientResponse = {

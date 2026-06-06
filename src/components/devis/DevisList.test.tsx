@@ -56,4 +56,20 @@ describe('DevisList — états de scan', () => {
     const iframe = await waitFor(() => screen.getByTitle(/Aperçu du devis/i))
     expect(iframe.getAttribute('src')).toBe('blob:mock-url')
   })
+
+  it('replie la carte devis : masque le corps, garde résumé (TTC) + footer', () => {
+    window.localStorage.clear()
+    render(<DevisList devisList={[devis({
+      ocrStatus: 'done',
+      devisNumber: 'D-123',
+      montantTtc: '12000',
+      extracted: { customer: { firstName: 'Jean', lastName: 'Test' } },
+    } as Partial<Devis>)]} onChange={vi.fn()} />)
+    expect(screen.getByText(/Émetteur/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Réduire/i }))
+    expect(screen.queryByText(/Émetteur/i)).toBeNull()
+    expect(screen.getByText(/D-123/)).toBeInTheDocument()
+    expect(screen.getByText((t) => t.replace(/\s/g, '').includes('12000'))).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Voir le PDF/i })).toBeInTheDocument()
+  })
 })
