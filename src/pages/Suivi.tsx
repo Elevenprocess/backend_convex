@@ -4,8 +4,8 @@ import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { LoadingBlock } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
-import { useLeads, useRdvList, useUsers } from '../lib/hooks'
-import { fullName } from '../lib/types'
+import { useClients, useLeads, useRdvList, useUsers } from '../lib/hooks'
+import { fullName, type ClientResponse } from '../lib/types'
 import {
   buildDossiers,
   buildSuiviPeriodRange,
@@ -26,6 +26,12 @@ export function Suivi() {
   const { data: leads, loading: leadsLoading } = useLeads({ limit: 500 })
   const { data: rdvs, loading: rdvLoading } = useRdvList({ limit: 200 })
   const { data: users } = useUsers()
+  const { data: clients } = useClients()
+  const clientByLead = useMemo(() => {
+    const map = new Map<string, ClientResponse>()
+    for (const c of clients ?? []) map.set(c.leadId, c)
+    return map
+  }, [clients])
   const [query, setQuery] = useState('')
   const [states, setStates] = useState<Record<string, SuiviState>>({})
   const [period, setPeriod] = useState<SuiviPeriodState>(getDefaultSuiviPeriod)
@@ -69,7 +75,9 @@ export function Suivi() {
   ) return <Navigate to="/overview" replace />
 
   const isLoading = leadsLoading || rdvLoading
-  const blockedCount = signedDossiers.filter((d) => d.state.statuses[d.activeStep] === 'blocked').length
+  const blockedCount = (clients && clients.length)
+    ? signedDossiers.filter((d) => clientByLead.get(d.id)?.blocked).length
+    : signedDossiers.filter((d) => d.state.statuses[d.activeStep] === 'blocked').length
   const progressAvg = Math.round(avg(signedDossiers.map((d) => d.progress)))
   const deliveredCount = signedDossiers.filter((d) => d.progress >= 100).length
 
@@ -123,7 +131,7 @@ export function Suivi() {
         ) : (
           <section className="suivi-grid">
             {filtered.map((d) => (
-              <DossierCard key={d.id} dossier={d} onClick={() => navigate(`/suivi/${d.id}`)} />
+              <DossierCard key={d.id} dossier={d} client={clientByLead.get(d.id)} onClick={() => navigate(`/suivi/${d.id}`)} />
             ))}
           </section>
         )}
