@@ -3,15 +3,13 @@ import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Spinner } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
-import { useAnalyticsSummary, prefetchAnalyticsSummary, prefetchAnalyticsFunnel, useLeads, useRdvList } from '../lib/hooks'
+import { useAnalyticsSummary, prefetchAnalyticsSummary, useLeads, useRdvList } from '../lib/hooks'
 import type { AnalyticsAdminSummary, AnalyticsCommercialPerf, AnalyticsCommercialSummary, AnalyticsSegment, AnalyticsSetterSummary } from '../lib/types'
 import { DebriefAnalytics } from '../components/analytics/DebriefAnalytics'
 import { MagicKpi, type KpiAccent, type DeltaTone } from '../components/kpi/MagicKpi'
 import type { IconName } from '../components/Icon'
-import { DEFAULT_PERIOD, buildPeriodRange, previousRange, type PeriodState, type PeriodMode, type PeriodRange } from '../lib/period'
+import { DEFAULT_PERIOD, buildPeriodRange, type PeriodState, type PeriodMode, type PeriodRange } from '../lib/period'
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
-import { KpiComparisonRow } from '../components/analytics/KpiComparisonRow'
-import { usePeriodComparison } from '../components/analytics/usePeriodComparison'
 
 type Segment = AnalyticsSegment
 
@@ -135,17 +133,14 @@ function useWarmAnalyticsPresetRanges() {
     const timer = window.setTimeout(() => {
       if (cancelled) return
       const initialRange = buildPeriodRange(DEFAULT_PERIOD)
-      const previous = previousRange(initialRange)
       const currentKey = `${initialRange.from}|${initialRange.to}`
       const warmRanges = getAnalyticsWarmupRanges()
-      void Promise.allSettled([
-        ...warmRanges.map((range) => {
+      void Promise.allSettled(
+        warmRanges.map((range) => {
           const force = `${range.from}|${range.to}` !== currentKey
           return prefetchAnalyticsSummary({ from: range.from, to: range.to }, { force })
         }),
-        prefetchAnalyticsSummary({ from: previous.from, to: previous.to }, { force: true }),
-        prefetchAnalyticsFunnel({ from: previous.from, to: previous.to }, { force: true }),
-      ])
+      )
     }, 180)
     return () => {
       cancelled = true
@@ -281,7 +276,6 @@ function AnalyticsAdmin() {
   useWarmAnalyticsPresetRanges()
   const [period, setPeriod] = useState<PeriodState>(DEFAULT_PERIOD)
   const range = buildPeriodRange(period)
-  const comparison = usePeriodComparison(range)
   const { data, loading, error } = useAnalyticsSummary({ from: range.from, to: range.to })
   const stats = data?.admin ?? EMPTY_ADMIN_STATS
   const commercialStats = stats
@@ -294,7 +288,6 @@ function AnalyticsAdmin() {
         <DateRangePicker value={period} onChange={setPeriod} align="right" />
       </div>
       <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 overflow-y-auto space-y-4 sm:space-y-6 flex-grow">
-        <KpiComparisonRow comparison={comparison} series={{ leads: [], calls: [], rdv: [], ventes: [] }} />
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
           <BigStatCard label="LEADS TRAITÉS" value={fmtInt(stats.classified)} delta={`${stats.qualificationRate}%`} deltaTone="info" sub={`${stats.qualificationRate}% deviennent qualifiés`} accent="info" icon="users" progress={stats.qualificationRate} />
           <BigStatCard label="RDV / QUALIFIÉS" value={fmtInt(stats.rdvPris)} delta={`${stats.scheduledRdv} calendrier`} deltaTone="info" sub={`${stats.rdvRate}% de conversion`} accent="success" icon="calendar" trend={stats.dailyEvolution.map((d) => d.rdv)} />
