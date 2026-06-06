@@ -949,9 +949,10 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, rangeLabe
   const [hover, setHover] = useState<{ index: number; cursorX: number } | null>(null)
   const rawPoints = points.length > 0 ? points : [{ key: 'empty', date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }]
   const sampleStep = rawPoints.length > 56 ? Math.ceil(rawPoints.length / 56) : 1
-  const safePoints = sampleStep > 1 ? rawPoints.filter((_, index) => index % sampleStep === 0 || index === rawPoints.length - 1) : rawPoints
+  const keepIdx = sampleStep > 1 ? rawPoints.map((_, index) => index).filter((index) => index % sampleStep === 0 || index === rawPoints.length - 1) : rawPoints.map((_, index) => index)
+  const safePoints = keepIdx.map((index) => rawPoints[index])
   const comparePts = comparePoints.length > 0
-    ? safePoints.map((_, index) => comparePoints[Math.min(index, comparePoints.length - 1)])
+    ? keepIdx.map((index) => comparePoints[Math.min(index, comparePoints.length - 1)]).filter(Boolean)
     : []
   const activeSeries = LEAD_EVOLUTION_SERIES.find((series) => series.key === activeKey) ?? LEAD_EVOLUTION_SERIES[0]
   const subtitle = GRANULARITY_SUBTITLE[granularity]
