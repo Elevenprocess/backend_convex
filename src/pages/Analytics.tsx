@@ -3,12 +3,12 @@ import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Spinner } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
-import { useAnalyticsSummary, prefetchAnalyticsSummary, useLeads, useRdvList } from '../lib/hooks'
+import { useAnalyticsSummary, prefetchAnalyticsSummary, prefetchAnalyticsFunnel, useLeads, useRdvList } from '../lib/hooks'
 import type { AnalyticsAdminSummary, AnalyticsCommercialPerf, AnalyticsCommercialSummary, AnalyticsSegment, AnalyticsSetterSummary } from '../lib/types'
 import { DebriefAnalytics } from '../components/analytics/DebriefAnalytics'
 import { MagicKpi, type KpiAccent, type DeltaTone } from '../components/kpi/MagicKpi'
 import type { IconName } from '../components/Icon'
-import { DEFAULT_PERIOD, buildPeriodRange, type PeriodState, type PeriodMode, type PeriodRange } from '../lib/period'
+import { DEFAULT_PERIOD, buildPeriodRange, previousRange, type PeriodState, type PeriodMode, type PeriodRange } from '../lib/period'
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
 import { KpiComparisonRow } from '../components/analytics/KpiComparisonRow'
 import { usePeriodComparison } from '../components/analytics/usePeriodComparison'
@@ -135,14 +135,17 @@ function useWarmAnalyticsPresetRanges() {
     const timer = window.setTimeout(() => {
       if (cancelled) return
       const initialRange = buildPeriodRange(DEFAULT_PERIOD)
+      const previous = previousRange(initialRange)
       const currentKey = `${initialRange.from}|${initialRange.to}`
       const warmRanges = getAnalyticsWarmupRanges()
-      void Promise.allSettled(
-        warmRanges.map((range) => {
+      void Promise.allSettled([
+        ...warmRanges.map((range) => {
           const force = `${range.from}|${range.to}` !== currentKey
           return prefetchAnalyticsSummary({ from: range.from, to: range.to }, { force })
         }),
-      )
+        prefetchAnalyticsSummary({ from: previous.from, to: previous.to }, { force: true }),
+        prefetchAnalyticsFunnel({ from: previous.from, to: previous.to }, { force: true }),
+      ])
     }, 180)
     return () => {
       cancelled = true
