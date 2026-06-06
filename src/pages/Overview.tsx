@@ -11,8 +11,6 @@ import { STATUS_LABEL, DEBRIEF_ACCEPTANCE_FACTOR_LABEL, DEBRIEF_NON_SALE_REASON_
 import { computeTechnicienStats, computeTerrainPipeline, selectUnassignedVt, type TechnicienStat } from '../lib/technicienStats'
 import { buildSuiviPeriodRange, getDefaultSuiviPeriod, SUIVI_PERIOD_OPTIONS, type SuiviPeriodState } from '../lib/suivi'
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
-import { KpiComparisonRow } from '../components/analytics/KpiComparisonRow'
-import { usePeriodComparison } from '../components/analytics/usePeriodComparison'
 import { previousRange } from '../lib/period'
 
 type FunnelPeriodMode = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'last_n_days' | 'custom'
@@ -650,7 +648,6 @@ function OverviewAdmin() {
   const [tab, setTab] = useState('overview')
   const [funnelPeriod, setFunnelPeriod] = useState<FunnelPeriodState>(DEFAULT_FUNNEL_PERIOD)
   const funnelRange = buildFunnelPeriodRange(funnelPeriod)
-  const comparison = usePeriodComparison(funnelRange)
 
   useEffect(() => {
     let cancelled = false
@@ -709,6 +706,23 @@ function OverviewAdmin() {
     rdv: adminSummary?.rdvPris ?? funnelTotals.rdv,
     signed: adminSummary?.signed ?? 0,
   })
+
+  const prevRange = previousRange(funnelRange)
+  const { data: prevFunnel } = useAnalyticsFunnel({ from: prevRange.from, to: prevRange.to })
+  const { data: prevSummary } = useAnalyticsSummary({ from: prevRange.from, to: prevRange.to })
+  const prevAdmin = prevSummary?.admin ?? null
+  const comparePoints = buildLeadEvolutionPoints(
+    prevAdmin?.dailyEvolution ?? [],
+    prevFunnel?.daily ?? [],
+    prevAdmin?.hourlyCalls ?? [],
+    prevRange,
+    evolutionGranularity,
+    {
+      leads: prevAdmin?.classified ?? prevFunnel?.totals?.qualified ?? 0,
+      rdv: prevAdmin?.rdvPris ?? prevFunnel?.totals?.rdv ?? 0,
+      signed: prevAdmin?.signed ?? 0,
+    },
+  )
 
   const stats = useMemo(() => {
     const calls = adminSummary?.calls ?? funnelTotals.calls
@@ -814,23 +828,13 @@ function OverviewAdmin() {
             </div>
           </div>
 
-          <div className="overview-air-card" style={{ gridColumn: '1 / -1' }}>
-            <KpiComparisonRow
-              comparison={comparison}
-              series={{
-                leads: evolutionPoints.map((p) => p.leads),
-                calls: [],
-                rdv: evolutionPoints.map((p) => p.rdv),
-                ventes: evolutionPoints.map((p) => p.signed),
-              }}
-            />
-          </div>
-
           <div className="overview-air-card overview-air-chart overview-lead-evolution-card">
             <LeadEvolutionChart
               points={evolutionPoints}
+              comparePoints={comparePoints}
               granularity={evolutionGranularity}
-              rangeLabel={funnelRange.days === 1 ? "Aujourd'hui" : `${funnelRange.days} jours`}
+              rangeLabel={`Du ${formatShortDate(new Date(funnelRange.from))} au ${formatShortDate(new Date(funnelRange.to))}`}
+              compareLabel={`Du ${formatShortDate(new Date(prevRange.from))} au ${formatShortDate(new Date(prevRange.to))}`}
               totals={{ leads: stats.leads, rdv: stats.rdvPris, signed: stats.ventes }}
             />
           </div>
@@ -922,146 +926,160 @@ const GRANULARITY_SUBTITLE: Record<EvolutionGranularity, string> = {
   month: 'Leads traités par mois',
 }
 
-const LAST_BUCKET_LABEL: Record<EvolutionGranularity, string> = {
-  hour: 'Dernière heure',
-  day: 'Dernier jour',
-  week: 'Dernière semaine',
-  month: 'Dernier mois',
+function smoothPath(coords: { x: number; y: number }[]): string {
+  if (coords.length === 0) return ''
+  if (coords.length === 1) return `M ${coords[0].x.toFixed(1)} ${coords[0].y.toFixed(1)}`
+  let d = `M ${coords[0].x.toFixed(1)} ${coords[0].y.toFixed(1)}`
+  for (let i = 0; i < coords.length - 1; i += 1) {
+    const p0 = coords[i - 1] ?? coords[i]
+    const p1 = coords[i]
+    const p2 = coords[i + 1]
+    const p3 = coords[i + 2] ?? p2
+    const cp1x = p1.x + (p2.x - p0.x) / 6
+    const cp1y = p1.y + (p2.y - p0.y) / 6
+    const cp2x = p2.x - (p3.x - p1.x) / 6
+    const cp2y = p2.y - (p3.y - p1.y) / 6
+    d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`
+  }
+  return d
 }
 
-function LeadEvolutionChart({ points, granularity, rangeLabel, totals }: { points: LeadEvolutionPoint[]; granularity: EvolutionGranularity; rangeLabel: string; totals: { leads: number; rdv: number; signed: number } }) {
-  const rawPoints = points.length > 0 ? points : [{ key: 'empty', date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }]
-  const safePoints = rawPoints.length > 56 ? rawPoints.filter((_, index) => index % Math.ceil(rawPoints.length / 56) === 0 || index === rawPoints.length - 1) : rawPoints
-  const subtitle = GRANULARITY_SUBTITLE[granularity]
+function LeadEvolutionChart({ points, comparePoints = [], granularity, rangeLabel, compareLabel, totals }: { points: LeadEvolutionPoint[]; comparePoints?: LeadEvolutionPoint[]; granularity: EvolutionGranularity; rangeLabel: string; compareLabel?: string; totals: { leads: number; rdv: number; signed: number } }) {
   const [activeKey, setActiveKey] = useState<LeadEvolutionSeriesKey>('leads')
-  const [hover, setHover] = useState<{ x: number; y: number; cursorX: number; cursorY: number; cursorValue: number; index: number } | null>(null)
-  const width = 620
-  const height = 260
-  const padX = 44
-  const padTop = 24
-  const padBottom = 42
+  const [hover, setHover] = useState<{ index: number; cursorX: number } | null>(null)
+  const rawPoints = points.length > 0 ? points : [{ key: 'empty', date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }]
+  const sampleStep = rawPoints.length > 56 ? Math.ceil(rawPoints.length / 56) : 1
+  const safePoints = sampleStep > 1 ? rawPoints.filter((_, index) => index % sampleStep === 0 || index === rawPoints.length - 1) : rawPoints
+  const comparePts = comparePoints.length > 0
+    ? safePoints.map((_, index) => comparePoints[Math.min(index, comparePoints.length - 1)])
+    : []
+  const activeSeries = LEAD_EVOLUTION_SERIES.find((series) => series.key === activeKey) ?? LEAD_EVOLUTION_SERIES[0]
+  const subtitle = GRANULARITY_SUBTITLE[granularity]
+
+  const width = 640
+  const height = 240
+  const padX = 40
+  const padTop = 18
+  const padBottom = 34
   const chartWidth = width - padX * 2
   const chartHeight = height - padTop - padBottom
-  const activeSeries = LEAD_EVOLUTION_SERIES.find((series) => series.key === activeKey) ?? LEAD_EVOLUTION_SERIES[0]
-  const max = Math.max(1, ...safePoints.map((point) => point[activeKey]))
-  const ghostMax = Math.max(1, ...safePoints.flatMap((point) => LEAD_EVOLUTION_SERIES.map((series) => point[series.key])))
-  const last = safePoints[safePoints.length - 1]
-  const first = safePoints[0]
-  const activeValue = last[activeKey]
-  const delta = activeValue - first[activeKey]
-  const total = totals[activeKey]
-  const peak = safePoints.reduce((best, point) => point[activeKey] > best[activeKey] ? point : best, safePoints[0])
   const clamp = (value: number, min: number, maxValue: number) => Math.min(maxValue, Math.max(min, value))
+  const max = Math.max(1, ...safePoints.map((point) => point[activeKey]), ...comparePts.map((point) => point[activeKey]))
   const xFor = (index: number) => padX + (safePoints.length === 1 ? chartWidth / 2 : (index / (safePoints.length - 1)) * chartWidth)
-  const yFor = (value: number, baseMax = max) => padTop + chartHeight - (value / baseMax) * chartHeight
-  const pathFor = (key: LeadEvolutionSeriesKey, baseMax = max) => safePoints.map((point, index) => `${index === 0 ? 'M' : 'L'} ${xFor(index).toFixed(1)} ${yFor(point[key], baseMax).toFixed(1)}`).join(' ')
-  const activePath = pathFor(activeKey)
-  const activeHover = hover ? safePoints[hover.index] : null
+  const yFor = (value: number) => padTop + chartHeight - (value / max) * chartHeight
+
+  const currentCoords = safePoints.map((point, index) => ({ x: xFor(index), y: yFor(point[activeKey]) }))
+  const compareCoords = comparePts.map((point, index) => ({ x: xFor(index), y: yFor(point[activeKey]) }))
+  const currentPath = smoothPath(currentCoords)
+  const comparePath = compareCoords.length >= 2 ? smoothPath(compareCoords) : ''
+  const areaPath = currentPath ? `${currentPath} L ${xFor(safePoints.length - 1).toFixed(1)} ${(height - padBottom).toFixed(1)} L ${xFor(0).toFixed(1)} ${(height - padBottom).toFixed(1)} Z` : ''
+
+  const gridRatios = [0, 0.25, 0.5, 0.75, 1]
+  const xLabelStep = Math.max(1, Math.ceil((safePoints.length - 1) / 5))
+  const xLabelIndexes = safePoints.length <= 1 ? [0] : safePoints.map((_, index) => index).filter((index) => index % xLabelStep === 0 || index === safePoints.length - 1)
 
   const onMove = (event: MouseEvent<SVGSVGElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
     const cursorX = clamp(((event.clientX - rect.left) / rect.width) * width, padX, width - padX)
-    const cursorY = clamp(((event.clientY - rect.top) / rect.height) * height, padTop, height - padBottom)
     const ratio = chartWidth === 0 ? 0 : (cursorX - padX) / chartWidth
     const index = safePoints.length <= 1 ? 0 : clamp(Math.round(ratio * (safePoints.length - 1)), 0, safePoints.length - 1)
-    const point = safePoints[index]
-    const x = xFor(index)
-    const y = yFor(point[activeKey])
-    const cursorRatio = (padTop + chartHeight - cursorY) / chartHeight
-    const cursorValue = Math.round(clamp(cursorRatio, 0, 1) * max)
-    setHover({ x, y, cursorX, cursorY, cursorValue, index })
+    setHover({ index, cursorX: xFor(index) })
   }
+
+  const hoverPoint = hover ? safePoints[hover.index] : null
+  const hoverCompare = hover ? comparePts[hover.index] : undefined
+  const curVal = hoverPoint ? hoverPoint[activeKey] : 0
+  const prevVal = hoverCompare ? hoverCompare[activeKey] : 0
+  const deltaPct = hover && hoverCompare ? (prevVal ? Math.round(((curVal - prevVal) / prevVal) * 100) : null) : null
 
   return (
     <div className="lead-evolution">
       <div className="lead-evolution-head">
         <div>
-          <h3>Courbes d’évolution des leads</h3>
+          <h3>Évolution</h3>
           <p>{subtitle} — {rangeLabel}</p>
         </div>
-        <span>évolution</span>
       </div>
-      <div className="lead-evolution-tabs" aria-label="Courbe active">
+      <div className="lead-evolution-tabs" aria-label="Métrique active">
         {LEAD_EVOLUTION_SERIES.map((series) => (
-          <button key={series.key} type="button" className={activeKey === series.key ? 'active' : ''} onClick={() => setActiveKey(series.key)} style={{ ['--series-color' as string]: series.color }}>
+          <button key={series.key} type="button" className={activeKey === series.key ? 'active' : ''} onClick={() => setActiveKey(series.key)}>
             <small><i style={{ background: series.color }} />{series.label}</small>
             <strong>{fmtCompact(totals[series.key])}</strong>
           </button>
         ))}
       </div>
       <div className="lead-evolution-svg-wrap">
-        <div className="lead-evolution-last-card">
-          <small>{LAST_BUCKET_LABEL[granularity]}</small>
-          <strong style={{ color: activeSeries.color }}>{fmtCompact(activeValue)}</strong>
-          <span className={delta >= 0 ? 'positive' : 'negative'}>{delta >= 0 ? '+' : ''}{fmtCompact(delta)} vs début</span>
-        </div>
-        <svg viewBox={`0 0 ${width} ${height}`} onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img" aria-label="Évolution leads RDV ventes">
+        <svg viewBox={`0 0 ${width} ${height}`} onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img" aria-label="Évolution de la métrique sélectionnée">
           <defs>
             <linearGradient id="leadEvolutionFill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor={activeSeries.color} stopOpacity="0.12" />
-              <stop offset="100%" stopColor={activeSeries.color} stopOpacity="0.12" />
+              <stop offset="0%" stopColor="var(--color-or)" stopOpacity="0.14" />
+              <stop offset="100%" stopColor="var(--color-or)" stopOpacity="0" />
             </linearGradient>
           </defs>
-          {[0, 0.5, 1].map((ratio) => {
+          {gridRatios.map((ratio) => {
             const y = padTop + ratio * chartHeight
             const label = Math.round(max * (1 - ratio))
+            const showLabel = ratio === 0 || ratio === 0.5 || ratio === 1
             return (
               <g key={ratio}>
                 <line x1={padX} x2={width - padX} y1={y} y2={y} className="lead-evolution-grid" />
-                <text x="10" y={y + 4} className="lead-evolution-yaxis">{fmtCompact(label)}</text>
+                {showLabel ? <text x={padX - 8} y={y + 3} className="lead-evolution-yaxis" textAnchor="end">{fmtCompact(label)}</text> : null}
               </g>
             )
           })}
-          {LEAD_EVOLUTION_SERIES.filter((series) => series.key !== activeKey).map((series) => <path key={series.key} d={pathFor(series.key, ghostMax)} className="lead-evolution-ghost" style={{ stroke: series.color }} />)}
-          <path d={`${activePath} L ${xFor(safePoints.length - 1)} ${height - padBottom} L ${xFor(0)} ${height - padBottom} Z`} fill="url(#leadEvolutionFill)" />
-          <path d={activePath} className="lead-evolution-line" style={{ stroke: activeSeries.color }} />
-          {hover ? (
+          {areaPath ? <path d={areaPath} fill="url(#leadEvolutionFill)" stroke="none" /> : null}
+          {comparePath ? <path d={comparePath} className="lead-evolution-compare" /> : null}
+          {currentPath ? <path d={currentPath} className="lead-evolution-line" /> : null}
+          {xLabelIndexes.map((index) => (
+            <text
+              key={`x-${index}`}
+              x={xFor(index)}
+              y={height - 10}
+              className="lead-evolution-axis"
+              textAnchor={index === 0 ? 'start' : index === safePoints.length - 1 ? 'end' : 'middle'}
+            >{safePoints[index].label}</text>
+          ))}
+          {hover && hoverPoint ? (
             <g pointerEvents="none">
-              <line x1={hover.cursorX} x2={hover.cursorX} y1={padTop} y2={height - padBottom} className="lead-evolution-guide" style={{ stroke: activeSeries.color }} />
-              <line x1={padX} x2={width - padX} y1={hover.cursorY} y2={hover.cursorY} className="lead-evolution-guide subtle" style={{ stroke: activeSeries.color }} />
-              <circle cx={hover.cursorX} cy={hover.cursorY} r="4" className="lead-evolution-cursor-dot" style={{ fill: activeSeries.color }} />
-              <text x={Math.min(width - 70, hover.cursorX + 8)} y={Math.max(16, hover.cursorY - 8)} className="lead-evolution-cursor-label" style={{ fill: activeSeries.color }}>{fmtCompact(hover.cursorValue)}</text>
+              <line x1={hover.cursorX} x2={hover.cursorX} y1={padTop} y2={height - padBottom} className="lead-evolution-guide" />
+              {hoverCompare ? <circle cx={xFor(hover.index)} cy={yFor(prevVal)} r="3.5" className="lead-evolution-compare-dot" /> : null}
+              <circle cx={xFor(hover.index)} cy={yFor(curVal)} r="5" className="lead-evolution-dot" />
             </g>
           ) : null}
-          {safePoints.map((point, index) => {
-            const x = xFor(index)
-            const y = yFor(point[activeKey])
-            const isPeak = point.key === peak.key && peak[activeKey] > 0
-            const isHovered = hover?.index === index
-            const hour = Number(point.key.split('-').at(-1))
-            const showHourLabel = granularity === 'hour' && Number.isFinite(hour) && (hour === 8 || hour === 12 || hour === 16 || hour === 20)
-            const showLabel = showHourLabel || safePoints.length <= 8 || index === 0 || index === safePoints.length - 1 || index === Math.floor((safePoints.length - 1) / 2) || isPeak
-            return (
-              <g key={point.key}>
-                <circle cx={x} cy={y} r="14" fill="transparent" />
-                <circle cx={x} cy={y} r={isHovered ? 7 : isPeak ? 6 : 4} className="lead-evolution-dot" style={{ stroke: activeSeries.color }} />
-                {isPeak ? <text x={x} y={Math.max(13, y - 12)} className="lead-evolution-peak" style={{ fill: activeSeries.color }}>pic {fmtCompact(point[activeKey])}</text> : null}
-                {showLabel ? <text x={x} y={height - 13} className="lead-evolution-axis" textAnchor={index === 0 ? 'start' : index === safePoints.length - 1 ? 'end' : 'middle'}>{point.label}</text> : null}
-              </g>
-            )
-          })}
         </svg>
-        {activeHover && hover ? (
+        {hover && hoverPoint ? (
           <div
             className="lead-evolution-tooltip"
             style={{
-              left: hover.cursorX > width * 0.58 ? 'auto' : `${Math.min(58, Math.max(2, (hover.cursorX / width) * 100))}%`,
-              right: hover.cursorX > width * 0.58 ? `${Math.min(58, Math.max(2, ((width - hover.cursorX) / width) * 100))}%` : 'auto',
-              top: `${Math.min(64, Math.max(5, (hover.cursorY / height) * 100))}%`,
-              transform: hover.cursorY > height * 0.62 ? 'translateY(-100%)' : 'translateY(10px)',
+              left: hover.cursorX > width * 0.6 ? 'auto' : `${clamp((hover.cursorX / width) * 100, 2, 60)}%`,
+              right: hover.cursorX > width * 0.6 ? `${clamp(((width - hover.cursorX) / width) * 100, 2, 60)}%` : 'auto',
+              top: '8%',
             }}
           >
-            <small>{activeHover.label}</small>
-            <strong style={{ color: activeSeries.color }}>{fmtCompact(activeHover[activeKey])} {activeSeries.label}</strong>
-            <div className="lead-evolution-tooltip-level"><span>niveau souris</span><b style={{ color: activeSeries.color }}>{fmtCompact(hover.cursorValue)}</b></div>
-            <em>{fmtCompact(activeHover.leads)} leads · {fmtCompact(activeHover.rdv)} RDV · {fmtCompact(activeHover.signed)} ventes</em>
+            <small>{activeSeries.label}</small>
+            <strong>{hoverPoint.label}</strong>
+            <b className="lead-evolution-tooltip-value">{fmtCompact(curVal)}</b>
+            <div className="lead-evolution-tooltip-delta">
+              {deltaPct === null ? (
+                <span className="neutral">—</span>
+              ) : deltaPct > 0 ? (
+                <span className="up">↗ {fmtCompact(deltaPct)} %</span>
+              ) : deltaPct < 0 ? (
+                <span className="down">↘ {fmtCompact(Math.abs(deltaPct))} %</span>
+              ) : (
+                <span className="neutral">→ 0 %</span>
+              )}
+              <span className="muted"> de la comparaison</span>
+            </div>
+            {hoverCompare ? (
+              <em>{hoverCompare.label} · {fmtCompact(prevVal)}</em>
+            ) : null}
           </div>
         ) : null}
       </div>
-      <div className="lead-evolution-footer">
-        <div><small>Total période</small><strong>{fmtCompact(total)}</strong></div>
-        <div><small>Pic</small><strong>{fmtCompact(peak?.[activeKey] ?? 0)}</strong></div>
-        <div><small>Tendance</small><strong className={delta >= 0 ? 'positive' : 'negative'}>{delta >= 0 ? 'Hausse' : 'Baisse'}</strong></div>
+      <div className="lead-evolution-legend">
+        <span><i className="swatch-solid" />{rangeLabel}</span>
+        {compareLabel ? <span><i className="swatch-dashed" />{compareLabel}</span> : null}
       </div>
     </div>
   )
