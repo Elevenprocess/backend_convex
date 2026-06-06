@@ -1,5 +1,5 @@
 import type { IconName } from '../components/Icon'
-import type { SubstepResponse, WorkflowPhase } from './types'
+import type { ClientResponse, SubstepDocument, SubstepResponse, WorkflowPhase } from './types'
 
 export type BoardColumn = { key: string; title: string; phases: WorkflowPhase[] }
 export type BoardSection = {
@@ -74,4 +74,51 @@ export function todayIso(): string {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${d.getFullYear()}-${m}-${day}`
+}
+
+export const PHASE_LABEL: Record<WorkflowPhase, string> = {
+  vt: 'Visite technique',
+  dp: 'Déclaration préalable',
+  racco: 'Raccordement',
+  consuel: 'Consuel',
+  installation: 'Installation',
+  mes: 'Mise en service',
+}
+
+export type CardSummary = {
+  phaseLabel: string
+  blocked: boolean
+  missingDocsCount: number
+  delivered: boolean
+}
+
+/** Résumé pour la carte de la vue d'ensemble, dérivé du ClientResponse backend. */
+export function clientCardSummary(client: ClientResponse | undefined): CardSummary | null {
+  if (!client) return null
+  return {
+    phaseLabel: PHASE_LABEL[client.currentPhase],
+    blocked: client.blocked,
+    missingDocsCount: client.missingDocsCount ?? 0,
+    delivered: client.steps?.mes?.status === 'fait',
+  }
+}
+
+export type FileKind = 'pdf' | 'image' | 'doc'
+
+/** Catégorie d'aperçu déduite du mimeType (vignette du hub documentaire). */
+export function fileKind(mimeType: string): FileKind {
+  if (mimeType === 'application/pdf') return 'pdf'
+  if (mimeType.startsWith('image/')) return 'image'
+  return 'doc'
+}
+
+export type DocStatus = { present: SubstepDocument[]; missingTypes: string[] }
+
+/** Pour une sous-étape : pièces présentes + types attendus encore absents. */
+export function substepDocStatus(substep: SubstepResponse): DocStatus {
+  const presentTypes = new Set(substep.documents.map((d) => d.type))
+  return {
+    present: substep.documents,
+    missingTypes: substep.expectedDocs.filter((t) => !presentTypes.has(t)),
+  }
 }

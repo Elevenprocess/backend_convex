@@ -801,6 +801,7 @@ export type ClientResponse = {
   statusGlobal: string
   currentPhase: WorkflowPhase
   blocked: boolean
+  missingDocsCount: number
   signedAt: string | null
   steps: Partial<Record<WorkflowPhase, ClientPhaseStep>>
 }

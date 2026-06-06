@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { groupSubsteps, slaGaugeInfo, SUIVI_SECTIONS } from './suivi-board'
-import type { SubstepResponse } from './types'
+import { groupSubsteps, slaGaugeInfo, SUIVI_SECTIONS, PHASE_LABEL, clientCardSummary, fileKind, substepDocStatus } from './suivi-board'
+import type { ClientResponse, SubstepResponse } from './types'
 
 function sub(over: Partial<SubstepResponse>): SubstepResponse {
   return {
@@ -61,5 +61,69 @@ describe('slaGaugeInfo', () => {
   })
   it('retard', () => {
     expect(slaGaugeInfo('2026-05-30', '2026-06-02')).toMatchObject({ daysLeft: -3, label: 'Retard J+3', tone: 'late' })
+  })
+})
+
+describe('PHASE_LABEL', () => {
+  it('donne un libellé lisible par phase', () => {
+    expect(PHASE_LABEL.consuel).toBe('Consuel')
+    expect(PHASE_LABEL.vt).toMatch(/visite/i)
+  })
+})
+
+function client(over: Partial<ClientResponse>): ClientResponse {
+  return {
+    id: 'c1', leadId: 'l1', rdvId: null,
+    lead: { fullName: 'Jean', city: 'Lyon', phone: null },
+    technicienVtId: null, poseTeamLeadId: null, adminReferentId: null,
+    statusGlobal: 'en_cours', currentPhase: 'consuel', blocked: false,
+    signedAt: null, steps: {}, missingDocsCount: 2, ...over,
+  } as ClientResponse
+}
+
+describe('clientCardSummary', () => {
+  it('retourne null sans client', () => {
+    expect(clientCardSummary(undefined)).toBeNull()
+  })
+  it('mappe phase, bloqué et pièces manquantes', () => {
+    const s = clientCardSummary(client({}))!
+    expect(s.phaseLabel).toBe('Consuel')
+    expect(s.blocked).toBe(false)
+    expect(s.missingDocsCount).toBe(2)
+    expect(s.delivered).toBe(false)
+  })
+  it('delivered=true quand la phase MES est faite', () => {
+    const s = clientCardSummary(client({ steps: { mes: { status: 'fait', datePlanifiee: null, dateRealisee: null, problemReason: null, responsableId: null } } }))!
+    expect(s.delivered).toBe(true)
+  })
+})
+
+describe('fileKind', () => {
+  it('classe par mimeType', () => {
+    expect(fileKind('application/pdf')).toBe('pdf')
+    expect(fileKind('image/jpeg')).toBe('image')
+    expect(fileKind('application/msword')).toBe('doc')
+  })
+})
+
+function subForDocs(over: Partial<SubstepResponse>): SubstepResponse {
+  return {
+    id: 'x', stepId: 's', clientId: 'c', key: 'consuel_valide', position: 1,
+    label: 'L', actionLabel: 'A', phase: 'consuel', status: 'a_faire', optional: false,
+    dateRealisee: null, deadline: null, responsableId: null, notes: null, problemReason: null,
+    problemNotes: null, problemResolvedAt: null, metadata: {}, unlocked: true, missingDocument: false,
+    expectedDocs: [], documents: [], createdAt: '', updatedAt: '', ...over,
+  } as SubstepResponse
+}
+
+describe('substepDocStatus', () => {
+  it('sépare présentes et types manquants', () => {
+    const sub = subForDocs({
+      expectedDocs: ['consuel', 'autre'],
+      documents: [{ id: 'd1', type: 'consuel', filename: 'a.pdf', mimeType: 'application/pdf', sizeBytes: 1024, uploadedAt: '' }],
+    })
+    const r = substepDocStatus(sub)
+    expect(r.present).toHaveLength(1)
+    expect(r.missingTypes).toEqual(['autre'])
   })
 })

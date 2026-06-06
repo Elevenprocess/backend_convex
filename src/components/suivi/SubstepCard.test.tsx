@@ -43,4 +43,13 @@ describe('SubstepCard', () => {
     expect(screen.getByText(/en attente/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Marquer envoyée' })).toBeDisabled()
   })
+
+  it('affiche un résumé pièces et un lien vers le hub', () => {
+    const onGoToDocs = vi.fn()
+    const s = sub({ expectedDocs: ['consuel', 'autre'], documents: [{ id: 'd', type: 'consuel', filename: 'a.pdf', mimeType: 'application/pdf', sizeBytes: 1024, uploadedAt: '' }] })
+    render(<SubstepCard substep={s} onMutate={vi.fn()} today="2026-06-02" onGoToDocs={onGoToDocs} />)
+    expect(screen.getByText(/1\/2 pièces/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /voir les pièces/i }))
+    expect(onGoToDocs).toHaveBeenCalled()
+  })
 })
