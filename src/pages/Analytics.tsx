@@ -8,28 +8,12 @@ import type { AnalyticsAdminSummary, AnalyticsCommercialPerf, AnalyticsCommercia
 import { DebriefAnalytics } from '../components/analytics/DebriefAnalytics'
 import { MagicKpi, type KpiAccent, type DeltaTone } from '../components/kpi/MagicKpi'
 import type { IconName } from '../components/Icon'
+import { DEFAULT_PERIOD, buildPeriodRange, type PeriodState, type PeriodMode, type PeriodRange } from '../lib/period'
+import { DateRangePicker } from '../components/analytics/DateRangePicker'
+import { KpiComparisonRow } from '../components/analytics/KpiComparisonRow'
+import { usePeriodComparison } from '../components/analytics/usePeriodComparison'
 
 type Segment = AnalyticsSegment
-
-type PeriodMode = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'custom'
-type PeriodState = { mode: PeriodMode; customFrom: string; customTo: string }
-type PeriodRange = { from: string; to: string; label: string; days: number }
-
-const PERIOD_OPTIONS: { id: PeriodMode; label: string }[] = [
-  { id: 'today', label: "Aujourd'hui" },
-  { id: 'yesterday', label: 'Hier' },
-  { id: 'this_week', label: 'Cette semaine' },
-  { id: 'last_week', label: 'Semaine dernière' },
-  { id: 'this_month', label: 'Ce mois-ci' },
-  { id: 'last_month', label: 'Mois dernier' },
-  { id: 'this_year', label: 'Cette année' },
-  { id: 'last_year', label: "L'année dernière" },
-  { id: 'custom', label: 'Plage de dates' },
-]
-
-const todayInput = toDateInputValue(new Date())
-const DEFAULT_PERIOD: PeriodState = { mode: 'today', customFrom: todayInput, customTo: todayInput }
-
 
 const EMPTY_SETTER_STATS: AnalyticsSetterSummary = {
   newLeads: 0,
@@ -182,7 +166,7 @@ function AnalyticsSetter({ name }: { name: string }) {
         <div className="text-xs text-faint font-semibold">
           Moteur OLAP/ETL backend : {range.label}.{loading && <AnalyticsInlineLoading />}{error ? ` Erreur: ${error}` : ''}
         </div>
-        <PeriodSelector value={period} onChange={setPeriod} />
+        <DateRangePicker value={period} onChange={setPeriod} align="right" />
       </div>
       <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 overflow-y-auto space-y-4 sm:space-y-6 flex-grow">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
@@ -251,7 +235,7 @@ function AnalyticsCommercial({ name }: { name: string }) {
       <Topbar eyebrow="ANALYTICS / COMMERCIAL" title={`Mes performances — ${name}`} />
       <div className="px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 flex items-center justify-between gap-2 sm:gap-4 flex-shrink-0 flex-wrap">
         <div className="text-xs text-faint font-semibold">OLAP/ETL backend sur {range.label}.{loading && <AnalyticsInlineLoading />}{error ? ` Erreur: ${error}` : ''}</div>
-        <PeriodSelector value={period} onChange={setPeriod} />
+        <DateRangePicker value={period} onChange={setPeriod} align="right" />
       </div>
       <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 overflow-y-auto space-y-4 sm:space-y-6 flex-grow">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
@@ -294,6 +278,7 @@ function AnalyticsAdmin() {
   useWarmAnalyticsPresetRanges()
   const [period, setPeriod] = useState<PeriodState>(DEFAULT_PERIOD)
   const range = buildPeriodRange(period)
+  const comparison = usePeriodComparison(range)
   const { data, loading, error } = useAnalyticsSummary({ from: range.from, to: range.to })
   const stats = data?.admin ?? EMPTY_ADMIN_STATS
   const commercialStats = stats
@@ -303,9 +288,10 @@ function AnalyticsAdmin() {
       <Topbar eyebrow="ANALYTICS / ADMIN" title="Performance globale équipe" />
       <div className="px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 flex items-center justify-between gap-2 sm:gap-4 flex-shrink-0 flex-wrap">
         <div className="text-xs text-faint font-semibold">Requête unique backend /analytics/summary : {range.label}.{loading && <AnalyticsInlineLoading />}{error ? ` Erreur: ${error}` : ''}</div>
-        <PeriodSelector value={period} onChange={setPeriod} />
+        <DateRangePicker value={period} onChange={setPeriod} align="right" />
       </div>
       <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 overflow-y-auto space-y-4 sm:space-y-6 flex-grow">
+        <KpiComparisonRow comparison={comparison} series={{ leads: [], calls: [], rdv: [], ventes: [] }} />
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
           <BigStatCard label="LEADS TRAITÉS" value={fmtInt(stats.classified)} delta={`${stats.qualificationRate}%`} deltaTone="info" sub={`${stats.qualificationRate}% deviennent qualifiés`} accent="info" icon="users" progress={stats.qualificationRate} />
           <BigStatCard label="RDV / QUALIFIÉS" value={fmtInt(stats.rdvPris)} delta={`${stats.scheduledRdv} calendrier`} deltaTone="info" sub={`${stats.rdvRate}% de conversion`} accent="success" icon="calendar" trend={stats.dailyEvolution.map((d) => d.rdv)} />
@@ -547,45 +533,6 @@ function fmtFullEur(val: number | null | undefined): string {
   return `${Math.round(val ?? 0).toLocaleString('fr-FR')} €`
 }
 
-function buildPeriodRange(period: PeriodState): PeriodRange {
-  const now = new Date()
-  const today = startOfDay(now)
-  let from = today
-  let to = endOfDay(today)
-
-  if (period.mode === 'yesterday') {
-    from = addDays(today, -1)
-    to = endOfDay(from)
-  } else if (period.mode === 'this_week') {
-    from = startOfWeek(today)
-    to = endOfDay(today)
-  } else if (period.mode === 'last_week') {
-    const thisWeek = startOfWeek(today)
-    from = addDays(thisWeek, -7)
-    to = endOfDay(addDays(thisWeek, -1))
-  } else if (period.mode === 'this_month') {
-    from = new Date(today.getFullYear(), today.getMonth(), 1)
-    to = endOfDay(today)
-  } else if (period.mode === 'last_month') {
-    from = new Date(today.getFullYear(), today.getMonth() - 1, 1)
-    to = endOfDay(new Date(today.getFullYear(), today.getMonth(), 0))
-  } else if (period.mode === 'this_year') {
-    from = new Date(today.getFullYear(), 0, 1)
-    to = endOfDay(today)
-  } else if (period.mode === 'last_year') {
-    from = new Date(today.getFullYear() - 1, 0, 1)
-    to = endOfDay(new Date(today.getFullYear() - 1, 11, 31))
-  } else if (period.mode === 'custom') {
-    from = parseDateInput(period.customFrom)
-    to = endOfDay(parseDateInput(period.customTo))
-    if (from > to) [from, to] = [startOfDay(to), endOfDay(from)]
-  }
-
-  const days = Math.max(1, Math.round((endOfDay(to).getTime() - startOfDay(from).getTime()) / 86_400_000) + 1)
-  const option = PERIOD_OPTIONS.find((p) => p.id === period.mode)?.label ?? 'Période'
-  return { from: startOfDay(from).toISOString(), to: endOfDay(to).toISOString(), label: `${option} · ${formatShortDate(from)} → ${formatShortDate(to)}`, days }
-}
-
 function getAnalyticsWarmupRanges(): PeriodRange[] {
   const modes: PeriodMode[] = ['today', 'yesterday', 'this_week', 'this_month', 'this_year']
   const unique = new Map<string, PeriodRange>()
@@ -594,49 +541,6 @@ function getAnalyticsWarmupRanges(): PeriodRange[] {
     unique.set(`${range.from}|${range.to}`, range)
   })
   return Array.from(unique.values())
-}
-
-function toDateInputValue(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function parseDateInput(value: string): Date {
-  const today = startOfDay(new Date())
-  if (!value) return today
-  const [year, month, day] = value.split('-').map(Number)
-  const parsed = new Date(year, (month || 1) - 1, day || 1)
-  return parsed > today ? today : startOfDay(parsed)
-}
-
-function startOfDay(date: Date): Date {
-  const next = new Date(date)
-  next.setHours(0, 0, 0, 0)
-  return next
-}
-
-function endOfDay(date: Date): Date {
-  const next = new Date(date)
-  next.setHours(23, 59, 59, 999)
-  return next
-}
-
-function addDays(date: Date, days: number): Date {
-  const next = new Date(date)
-  next.setDate(next.getDate() + days)
-  return next
-}
-
-function startOfWeek(date: Date): Date {
-  const d = startOfDay(date)
-  const day = d.getDay() || 7
-  return addDays(d, 1 - day)
-}
-
-function formatShortDate(date: Date): string {
-  return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
 function setterTableRows(stats: AnalyticsSetterSummary) {
@@ -839,39 +743,6 @@ function AnalyticsStatsTable({ title, rows }: { title: string; rows: string[][] 
           </tbody>
         </table>
       </div>
-    </div>
-  )
-}
-
-function PeriodSelector({ value, onChange }: { value: PeriodState; onChange: (v: PeriodState) => void }) {
-  return (
-    <div className="flex flex-wrap items-center justify-end gap-2">
-      <select
-        value={value.mode}
-        onChange={(e) => onChange({ ...value, mode: e.target.value as PeriodMode })}
-        className="px-3 py-2 rounded-xl bg-white border border-line-soft text-xs font-bold text-text shadow-sm"
-      >
-        {PERIOD_OPTIONS.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
-      </select>
-      {value.mode === 'custom' && (
-        <>
-          <input
-            type="date"
-            max={todayInput}
-            value={value.customFrom}
-            onChange={(e) => onChange({ ...value, customFrom: e.target.value > todayInput ? todayInput : e.target.value })}
-            className="px-3 py-2 rounded-xl bg-white border border-line-soft text-xs font-semibold"
-          />
-          <span className="text-xs text-faint font-bold">à</span>
-          <input
-            type="date"
-            max={todayInput}
-            value={value.customTo}
-            onChange={(e) => onChange({ ...value, customTo: e.target.value > todayInput ? todayInput : e.target.value })}
-            className="px-3 py-2 rounded-xl bg-white border border-line-soft text-xs font-semibold"
-          />
-        </>
-      )}
     </div>
   )
 }
