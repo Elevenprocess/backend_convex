@@ -7,6 +7,7 @@ type Props = {
   onMutate: (id: string, patch: UpdateSubstepPatch) => void
   today: string
   savingId?: string | null
+  onDocsChanged?: () => void
 }
 
 function countDone(list: SubstepResponse[]) {
@@ -28,7 +29,7 @@ function Progress({ list }: { list: SubstepResponse[] }) {
   )
 }
 
-export function WorkflowBoard({ substeps, onMutate, today, savingId }: Props) {
+export function WorkflowBoard({ substeps, onMutate, today, savingId, onDocsChanged }: Props) {
   const grouped = groupSubsteps(substeps)
   const overallDone = countDone(substeps)
   const overallTotal = substeps.length
@@ -37,7 +38,7 @@ export function WorkflowBoard({ substeps, onMutate, today, savingId }: Props) {
   const renderList = (list: SubstepResponse[]) => (
     <div className="wf-list">
       {list.map((s) => (
-        <SubstepCard key={s.id} substep={s} onMutate={onMutate} today={today} saving={savingId === s.id} />
+        <SubstepCard key={s.id} substep={s} onMutate={onMutate} today={today} saving={savingId === s.id} onDocsChanged={onDocsChanged} />
       ))}
     </div>
   )

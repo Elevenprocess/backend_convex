@@ -813,6 +813,15 @@ export type WorkflowSubstepKey =
   | 'install_a_faire' | 'install_effectuee'
   | 'enquete_satisfaction'
 
+export type SubstepDocument = {
+  id: string
+  type: string
+  filename: string
+  mimeType: string
+  sizeBytes: number
+  uploadedAt: string
+}
+
 export type SubstepResponse = {
   id: string
   stepId: string
@@ -834,6 +843,8 @@ export type SubstepResponse = {
   metadata: unknown
   unlocked: boolean
   missingDocument: boolean
+  expectedDocs: string[]
+  documents: SubstepDocument[]
   createdAt: string
   updatedAt: string
 }

@@ -16,7 +16,7 @@ import type { UpdateSubstepPatch } from '../lib/types'
 export function SuiviDetail() {
   const role = useAuth((s) => s.user?.role)
   const { id } = useParams<{ id: string }>()
-  const { data: leads, loading: leadsLoading } = useLeads({ limit: 500 })
+  const { data: leads, loading: leadsLoading, refetch: refetchLeads } = useLeads({ limit: 500 })
   const { data: rdvs, loading: rdvLoading } = useRdvList({ limit: 200 })
   const { data: users } = useUsers()
 
@@ -88,7 +88,7 @@ export function SuiviDetail() {
           </div>
         ) : (
           <div className="suivi-split">
-            <DossierSidebar dossier={dossier} />
+            <DossierSidebar dossier={dossier} onLeadUpdated={refetchLeads} />
             <div className="suivi-main-col">
               <TechnicienVtPicker leadId={dossier.lead.id} />
               <section id="workflow" className="suivi-timeline-wrap">
@@ -111,7 +111,7 @@ export function SuiviDetail() {
               ) : (substeps == null && substepsLoading) ? (
                 <p className="wf-empty">Chargement du workflow…</p>
               ) : (
-                <WorkflowBoard substeps={substeps ?? []} onMutate={onMutate} today={today} savingId={savingId} />
+                <WorkflowBoard substeps={substeps ?? []} onMutate={onMutate} today={today} savingId={savingId} onDocsChanged={refetch} />
               )}
               </section>
             </div>
