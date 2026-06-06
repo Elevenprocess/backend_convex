@@ -12,9 +12,18 @@ export type PeriodMode =
   | 'last_month'
   | 'this_year'
   | 'last_year'
+  | 'last_n_days'
   | 'custom'
 
-export type PeriodState = { mode: PeriodMode; customFrom: string; customTo: string }
+export type PeriodState = {
+  mode: PeriodMode
+  customFrom: string
+  customTo: string
+  /** Utilisé par le mode 'last_n_days' (défaut 30). */
+  lastN?: number
+  /** Utilisé par le mode 'last_n_days' (défaut true). */
+  includeToday?: boolean
+}
 export type PeriodRange = { from: string; to: string; label: string; days: number }
 
 export const PERIOD_OPTIONS: { id: PeriodMode; label: string }[] = [
@@ -26,6 +35,7 @@ export const PERIOD_OPTIONS: { id: PeriodMode; label: string }[] = [
   { id: 'last_month', label: 'Mois dernier' },
   { id: 'this_year', label: 'Cette année' },
   { id: 'last_year', label: "L'année dernière" },
+  { id: 'last_n_days', label: 'Période personnalisée' },
   { id: 'custom', label: 'Plage de dates' },
 ]
 
@@ -46,6 +56,7 @@ export function buildPeriodRange(period: PeriodState): PeriodRange {
   const today = startOfDay(now)
   let from = today
   let to = endOfDay(today)
+  let forcedDays: number | null = null
 
   if (period.mode === 'yesterday') {
     from = addDays(today, -1)
@@ -69,13 +80,19 @@ export function buildPeriodRange(period: PeriodState): PeriodRange {
   } else if (period.mode === 'last_year') {
     from = new Date(today.getFullYear() - 1, 0, 1)
     to = endOfDay(new Date(today.getFullYear() - 1, 11, 31))
+  } else if (period.mode === 'last_n_days') {
+    const n = Math.max(1, period.lastN ?? 30)
+    const includeToday = period.includeToday ?? true
+    to = includeToday ? endOfDay(today) : endOfDay(addDays(today, -1))
+    from = startOfDay(addDays(startOfDay(to), -(n - 1)))
+    forcedDays = n
   } else if (period.mode === 'custom') {
     from = parseDateInput(period.customFrom)
     to = endOfDay(parseDateInput(period.customTo))
     if (from > to) [from, to] = [startOfDay(to), endOfDay(from)]
   }
 
-  const days = Math.max(
+  const days = forcedDays ?? Math.max(
     1,
     Math.round((endOfDay(to).getTime() - startOfDay(from).getTime()) / 86_400_000) + 1,
   )
@@ -126,6 +143,23 @@ export function startOfWeek(date: Date): Date {
 
 export function formatShortDate(date: Date): string {
   return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+export function lastNDaysPeriod(n: number, includeToday = true): PeriodState {
+  return { mode: 'last_n_days', customFrom: todayInputValue, customTo: todayInputValue, lastN: n, includeToday }
+}
+
+/** Plage précédente : même nombre de jours, se terminant la veille du `from`. */
+export function previousRange(range: PeriodRange): PeriodRange {
+  const from = startOfDay(new Date(range.from))
+  const prevTo = endOfDay(addDays(from, -1))
+  const prevFrom = startOfDay(addDays(from, -range.days))
+  return {
+    from: prevFrom.toISOString(),
+    to: prevTo.toISOString(),
+    label: `${formatShortDate(prevFrom)} → ${formatShortDate(prevTo)}`,
+    days: range.days,
+  }
 }
 
 export function PeriodSelector({
