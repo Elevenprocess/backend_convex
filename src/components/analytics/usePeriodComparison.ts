@@ -48,6 +48,6 @@ export function usePeriodComparison(range: PeriodRange): PeriodComparison {
     rdv: computeDelta(c.rdv, p.rdv),
     ventes: computeDelta(c.ventes, p.ventes),
     ca: computeDelta(c.ca, p.ca),
-    loading: curSummary.loading || curFunnel.loading,
+    loading: curSummary.loading || curFunnel.loading || prevSummary.loading || prevFunnel.loading,
   }
 }
