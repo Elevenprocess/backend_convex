@@ -10,6 +10,7 @@ function sub(over: Partial<SubstepResponse>): SubstepResponse {
     status: 'a_faire', optional: false, dateRealisee: null, deadline: null,
     responsableId: null, notes: null, problemReason: null, problemNotes: null,
     problemResolvedAt: null, metadata: {}, unlocked: true, missingDocument: false,
+    expectedDocs: [], documents: [],
     createdAt: '', updatedAt: '', ...over,
   } as SubstepResponse
 }
