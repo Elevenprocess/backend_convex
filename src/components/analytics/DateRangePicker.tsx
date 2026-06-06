@@ -27,7 +27,11 @@ export function DateRangePicker({ value, onChange, align = 'left' }: Props) {
   const [view, setView] = useState(() => new Date())
   const ref = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { if (open) setDraft(value) }, [open, value])
+  const wasOpen = useRef(false)
+  useEffect(() => {
+    if (open && !wasOpen.current) setDraft(value)
+    wasOpen.current = open
+  }, [open, value])
 
   useEffect(() => {
     if (!open) return
