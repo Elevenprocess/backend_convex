@@ -10,9 +10,13 @@ import { useCallLogs, useClients, useLeads, useRdvList, useUsers, useStartCall, 
 import { STATUS_LABEL, DEBRIEF_ACCEPTANCE_FACTOR_LABEL, DEBRIEF_NON_SALE_REASON_LABEL, fullName, initials, type AnalyticsFunnelResponse, type CallLogResponse, type DebriefAcceptanceFactor, type DebriefNonSaleReason, type LeadResponse, type LeadStatus, type RdvResponse, type UserResponse } from '../lib/types'
 import { computeTechnicienStats, computeTerrainPipeline, selectUnassignedVt, type TechnicienStat } from '../lib/technicienStats'
 import { buildSuiviPeriodRange, getDefaultSuiviPeriod, SUIVI_PERIOD_OPTIONS, type SuiviPeriodState } from '../lib/suivi'
+import { DateRangePicker } from '../components/analytics/DateRangePicker'
+import { KpiComparisonRow } from '../components/analytics/KpiComparisonRow'
+import { usePeriodComparison } from '../components/analytics/usePeriodComparison'
+import { previousRange } from '../lib/period'
 
-type FunnelPeriodMode = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'custom'
-type FunnelPeriodState = { mode: FunnelPeriodMode; customFrom: string; customTo: string }
+type FunnelPeriodMode = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'last_n_days' | 'custom'
+type FunnelPeriodState = { mode: FunnelPeriodMode; customFrom: string; customTo: string; lastN?: number; includeToday?: boolean }
 type FunnelPeriodRange = { from: string; to: string; label: string; days: number }
 type EvolutionGranularity = 'hour' | 'day' | 'week' | 'month'
 
@@ -645,6 +649,7 @@ function OverviewAdmin() {
   const [tab, setTab] = useState('overview')
   const [funnelPeriod, setFunnelPeriod] = useState<FunnelPeriodState>(DEFAULT_FUNNEL_PERIOD)
   const funnelRange = buildFunnelPeriodRange(funnelPeriod)
+  const comparison = usePeriodComparison(funnelRange)
 
   useEffect(() => {
     let cancelled = false
@@ -653,8 +658,9 @@ function OverviewAdmin() {
       const initialRange = buildFunnelPeriodRange(DEFAULT_FUNNEL_PERIOD)
       const currentKey = `${initialRange.from}|${initialRange.to}`
       const warmupRanges = getOverviewWarmupRanges()
-      void Promise.allSettled(
-        warmupRanges.flatMap((range) => {
+      const previous = previousRange(initialRange)
+      void Promise.allSettled([
+        ...warmupRanges.flatMap((range) => {
           const filters = { from: range.from, to: range.to }
           const force = `${range.from}|${range.to}` !== currentKey
           return [
@@ -662,7 +668,9 @@ function OverviewAdmin() {
             prefetchAnalyticsFunnel(filters, { force }),
           ]
         }),
-      )
+        prefetchAnalyticsSummary({ from: previous.from, to: previous.to }, { force: true }),
+        prefetchAnalyticsFunnel({ from: previous.from, to: previous.to }, { force: true }),
+      ])
     }, 220)
     return () => {
       cancelled = true
@@ -771,18 +779,7 @@ function OverviewAdmin() {
             <p className="text-sm text-muted mt-2">{funnelRange.label}</p>
           </div>
           <div className="flex flex-col items-end gap-3">
-            <div className="overview-range-switch" aria-label="Période tableau de bord admin">
-              {FUNNEL_PERIOD_OPTIONS.filter((period) => period.id !== 'custom' && period.id !== 'last_week' && period.id !== 'last_month' && period.id !== 'last_year').map((period) => (
-                <button
-                  key={period.id}
-                  type="button"
-                  className={funnelPeriod.mode === period.id ? 'active' : ''}
-                  onClick={() => setFunnelPeriod((current) => ({ ...current, mode: period.id }))}
-                >
-                  {period.label}
-                </button>
-              ))}
-            </div>
+            <DateRangePicker value={funnelPeriod} onChange={setFunnelPeriod} align="right" />
             <div className="overview-profile-chip">
               <div className="overview-profile-photo">
                 {me?.image ? <img src={me.image} alt={me.name} /> : <span>{userInitials(me?.name)}</span>}
@@ -814,6 +811,18 @@ function OverviewAdmin() {
               <AirKpi icon="phone" label="Appels" value={fmtCompact(stats.appels)} sub={`${fmtCompact(stats.classified)} leads traités`} />
               <AirKpi icon="users" label="Leads traités" value={fmtCompact(stats.leads)} sub={`${fmtCompact(stats.qualified)} qualifiés`} />
             </div>
+          </div>
+
+          <div className="overview-air-card" style={{ gridColumn: '1 / -1' }}>
+            <KpiComparisonRow
+              comparison={comparison}
+              series={{
+                leads: evolutionPoints.map((p) => p.leads),
+                calls: [],
+                rdv: evolutionPoints.map((p) => p.rdv),
+                ventes: evolutionPoints.map((p) => p.signed),
+              }}
+            />
           </div>
 
           <div className="overview-air-card overview-air-chart overview-lead-evolution-card">
@@ -1591,13 +1600,19 @@ function buildFunnelPeriodRange(period: FunnelPeriodState): FunnelPeriodRange {
   } else if (period.mode === 'last_year') {
     from = new Date(today.getFullYear() - 1, 0, 1)
     to = endOfDay(new Date(today.getFullYear() - 1, 11, 31))
+  } else if (period.mode === 'last_n_days') {
+    const n = Math.max(1, period.lastN ?? 30)
+    const includeToday = period.includeToday ?? true
+    to = includeToday ? endOfDay(today) : endOfDay(addDays(today, -1))
+    from = startOfDay(addDays(startOfDay(to), -(n - 1)))
   } else if (period.mode === 'custom') {
     from = parseDateInput(period.customFrom)
     to = endOfDay(parseDateInput(period.customTo))
     if (from > to) [from, to] = [startOfDay(to), endOfDay(from)]
   }
 
-  const days = Math.max(1, Math.round((endOfDay(to).getTime() - startOfDay(from).getTime()) / 86_400_000) + 1)
+  const forcedDays = period.mode === 'last_n_days' ? Math.max(1, period.lastN ?? 30) : null
+  const days = forcedDays ?? Math.max(1, Math.round((endOfDay(to).getTime() - startOfDay(from).getTime()) / 86_400_000) + 1)
   const option = FUNNEL_PERIOD_OPTIONS.find((p) => p.id === period.mode)?.label ?? 'Période'
   return { from: startOfDay(from).toISOString(), to: endOfDay(to).toISOString(), label: `${option} · ${formatShortDate(from)} → ${formatShortDate(to)}`, days }
 }
