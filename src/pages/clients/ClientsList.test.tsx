@@ -99,3 +99,22 @@ describe('ClientsList — verrouillage technicien', () => {
     expect(screen.getByText('VUE TECHNICIEN')).toBeInTheDocument()
   })
 })
+
+describe('ClientsList — replier une section = exclure le filtre', () => {
+  it('réactive les clients exclus quand on replie la section Statut', () => {
+    window.localStorage.clear()
+    authStateRef.user = makeUser('u-alice', 'Alice Martin', 'commercial')
+    render(<ClientsList />)
+
+    // Le client (statut « en_attente ») est visible au départ.
+    expect(screen.getByText('Jean Dupont')).toBeInTheDocument()
+
+    // On filtre sur un autre statut → le client disparaît.
+    fireEvent.click(screen.getByText('En cours de signature'))
+    expect(screen.queryByText('Jean Dupont')).not.toBeInTheDocument()
+
+    // Replier la section Statut remet le filtre à « Tout » → le client revient.
+    fireEvent.click(screen.getByRole('button', { name: 'Statut' }))
+    expect(screen.getByText('Jean Dupont')).toBeInTheDocument()
+  })
+})
