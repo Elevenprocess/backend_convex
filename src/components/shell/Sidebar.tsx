@@ -31,6 +31,12 @@ const SECTIONS: Section[] = [
     items: [
       { to: '/overview', icon: 'home', label: 'Overview' },
       { to: '/notifications', icon: 'bell', label: 'Rappels' },
+    ],
+  },
+  {
+    id: 'analytics',
+    label: 'Analytics',
+    items: [
       { to: '/analytics', icon: 'chart', label: 'Analytics' },
     ],
   },
@@ -38,16 +44,16 @@ const SECTIONS: Section[] = [
     id: 'acquisition',
     label: 'Acquisition',
     items: [
-      { to: '/leads', icon: 'users', label: 'Étape setter', roles: ['admin', 'setter', 'setter_lead'] },
-      { to: '/client', icon: 'inbox', label: 'Étape commercial', roles: ACQUISITION_ROLES },
+      { to: '/leads', icon: 'users', label: 'Leads', roles: ['admin', 'setter', 'setter_lead'] },
+      { to: '/client', icon: 'inbox', label: 'Client', roles: ACQUISITION_ROLES },
     ],
   },
   {
     id: 'delivrabilite',
     label: 'Délivrabilité',
     items: [
-      { to: '/suivi', icon: 'grid', label: 'Suivi dossiers', roles: DELIVERY_ROLES },
-      { to: '/client', icon: 'inbox', label: 'Tech & backoffice', roles: OPS_ROLES },
+      { to: '/suivi', icon: 'grid', label: 'Delivery', roles: DELIVERY_ROLES },
+      { to: '/client', icon: 'inbox', label: 'Client', roles: OPS_ROLES },
     ],
   },
   {
@@ -63,7 +69,7 @@ const SECTIONS: Section[] = [
     label: 'Administration',
     items: [
       { to: '/settings', icon: 'users', label: 'Équipe', roles: ['commercial'] },
-      { to: '/settings', icon: 'shield', label: 'Paramètres', roles: ['admin', 'commercial_lead'] },
+      { to: '/settings', icon: 'settings', label: 'Paramètres', roles: ['admin', 'commercial_lead'] },
     ],
   },
 ]

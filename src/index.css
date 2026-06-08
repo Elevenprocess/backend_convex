@@ -2051,8 +2051,16 @@ body {
   margin: 10px 14px 6px 14px;
 }
 .app-sidebar.sb-collapsed .sb-scroll { padding: 4px 12px 10px 12px; }
-.app-sidebar.sb-collapsed .sb-section { padding-top: 8px; }
-.app-sidebar.sb-collapsed .sb-section:first-child { padding-top: 4px; }
+.app-sidebar.sb-collapsed .sb-section {
+  padding-top: 10px;
+  margin-top: 8px;
+  border-top: 1px solid rgba(42, 37, 32, 0.1);
+}
+.app-sidebar.sb-collapsed .sb-section:first-child {
+  padding-top: 4px;
+  margin-top: 0;
+  border-top: 0;
+}
 .app-sidebar.sb-collapsed .sb-item {
   justify-content: center;
   padding: 0;
@@ -2076,6 +2084,10 @@ body {
   width: 100%;
   padding: 0;
   justify-content: center;
+}
+
+[data-theme="dark"] .app-sidebar.sb-collapsed .sb-section {
+  border-top-color: rgba(255, 255, 255, 0.1);
 }
 
 /* Tooltip on hover when collapsed */
