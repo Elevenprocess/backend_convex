@@ -12,11 +12,11 @@ import { computeTechnicienStats, computeTerrainPipeline, selectUnassignedVt, typ
 import { buildSuiviPeriodRange, getDefaultSuiviPeriod, SUIVI_PERIOD_OPTIONS, type SuiviPeriodState } from '../lib/suivi'
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
 import { previousRange } from '../lib/period'
+import { buildEvolutionTicks, computeEvolutionDomain, type EvolutionGranularity } from '../lib/evolutionAxis'
 
 type FunnelPeriodMode = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'last_n_days' | 'custom'
 type FunnelPeriodState = { mode: FunnelPeriodMode; customFrom: string; customTo: string; lastN?: number; includeToday?: boolean }
 type FunnelPeriodRange = { from: string; to: string; label: string; days: number }
-type EvolutionGranularity = 'hour' | 'day' | 'week' | 'month'
 
 const funnelTodayInput = toDateInputValue(new Date())
 const DEFAULT_FUNNEL_PERIOD: FunnelPeriodState = { mode: 'today', customFrom: funnelTodayInput, customTo: funnelTodayInput }
@@ -833,6 +833,7 @@ function OverviewAdmin() {
               points={evolutionPoints}
               comparePoints={comparePoints}
               granularity={evolutionGranularity}
+              range={funnelRange}
               rangeLabel={`Du ${formatShortDate(new Date(funnelRange.from))} au ${formatShortDate(new Date(funnelRange.to))}`}
               compareLabel={`Du ${formatShortDate(new Date(prevRange.from))} au ${formatShortDate(new Date(prevRange.to))}`}
               totals={{ leads: stats.leads, rdv: stats.rdvPris, signed: stats.ventes }}
@@ -944,7 +945,7 @@ function smoothPath(coords: { x: number; y: number }[]): string {
   return d
 }
 
-function LeadEvolutionChart({ points, comparePoints = [], granularity, rangeLabel, compareLabel, totals }: { points: LeadEvolutionPoint[]; comparePoints?: LeadEvolutionPoint[]; granularity: EvolutionGranularity; rangeLabel: string; compareLabel?: string; totals: { leads: number; rdv: number; signed: number } }) {
+function LeadEvolutionChart({ points, comparePoints = [], granularity, range, rangeLabel, compareLabel, totals }: { points: LeadEvolutionPoint[]; comparePoints?: LeadEvolutionPoint[]; granularity: EvolutionGranularity; range: FunnelPeriodRange; rangeLabel: string; compareLabel?: string; totals: { leads: number; rdv: number; signed: number } }) {
   const [activeKey, setActiveKey] = useState<LeadEvolutionSeriesKey>('leads')
   const [hover, setHover] = useState<{ index: number; cursorX: number } | null>(null)
   const rawPoints = points.length > 0 ? points : [{ key: 'empty', t: 0, date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }]
@@ -966,24 +967,34 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, rangeLabe
   const chartHeight = height - padTop - padBottom
   const clamp = (value: number, min: number, maxValue: number) => Math.min(maxValue, Math.max(min, value))
   const max = Math.max(1, ...safePoints.map((point) => point[activeKey]), ...comparePts.map((point) => point[activeKey]))
-  const xFor = (index: number) => padX + (safePoints.length === 1 ? chartWidth / 2 : (index / (safePoints.length - 1)) * chartWidth)
+  const domain = computeEvolutionDomain(range, granularity)
+  const ticks = buildEvolutionTicks(domain, granularity)
+  const useTime = domain.end > domain.start && safePoints.every((point) => Number.isFinite(point.t) && point.t > 0)
+  const xForTime = (t: number) => padX + ((clamp(t, domain.start, domain.end) - domain.start) / (domain.end - domain.start)) * chartWidth
+  const xForIndex = (index: number) => padX + (safePoints.length === 1 ? chartWidth / 2 : (index / (safePoints.length - 1)) * chartWidth)
+  const xFor = (index: number) => (useTime ? xForTime(safePoints[index].t) : xForIndex(index))
+  const xForCompare = (index: number) => padX + (comparePts.length <= 1 ? chartWidth / 2 : (index / (comparePts.length - 1)) * chartWidth)
   const yFor = (value: number) => padTop + chartHeight - (value / max) * chartHeight
 
   const currentCoords = safePoints.map((point, index) => ({ x: xFor(index), y: yFor(point[activeKey]) }))
-  const compareCoords = comparePts.map((point, index) => ({ x: xFor(index), y: yFor(point[activeKey]) }))
+  const compareCoords = comparePts.map((point, index) => ({ x: xForCompare(index), y: yFor(point[activeKey]) }))
   const currentPath = smoothPath(currentCoords)
   const comparePath = compareCoords.length >= 2 ? smoothPath(compareCoords) : ''
   const areaPath = currentPath ? `${currentPath} L ${xFor(safePoints.length - 1).toFixed(1)} ${(height - padBottom).toFixed(1)} L ${xFor(0).toFixed(1)} ${(height - padBottom).toFixed(1)} Z` : ''
 
   const gridRatios = [0, 0.25, 0.5, 0.75, 1]
-  const xLabelStep = Math.max(1, Math.ceil((safePoints.length - 1) / 5))
-  const xLabelIndexes = safePoints.length <= 1 ? [0] : safePoints.map((_, index) => index).filter((index) => index % xLabelStep === 0 || index === safePoints.length - 1)
+  const fallbackLabelStep = Math.max(1, Math.ceil((safePoints.length - 1) / 5))
+  const fallbackLabelIndexes = safePoints.length <= 1 ? [0] : safePoints.map((_, index) => index).filter((index) => index % fallbackLabelStep === 0 || index === safePoints.length - 1)
 
   const onMove = (event: MouseEvent<SVGSVGElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
     const cursorX = clamp(((event.clientX - rect.left) / rect.width) * width, padX, width - padX)
-    const ratio = chartWidth === 0 ? 0 : (cursorX - padX) / chartWidth
-    const index = safePoints.length <= 1 ? 0 : clamp(Math.round(ratio * (safePoints.length - 1)), 0, safePoints.length - 1)
+    let index = 0
+    let best = Infinity
+    for (let i = 0; i < safePoints.length; i += 1) {
+      const dist = Math.abs(xFor(i) - cursorX)
+      if (dist < best) { best = dist; index = i }
+    }
     setHover({ index, cursorX: xFor(index) })
   }
 
@@ -1031,15 +1042,25 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, rangeLabe
           {areaPath ? <path d={areaPath} fill="url(#leadEvolutionFill)" stroke="none" /> : null}
           {comparePath ? <path d={comparePath} className="lead-evolution-compare" /> : null}
           {currentPath ? <path d={currentPath} className="lead-evolution-line" /> : null}
-          {xLabelIndexes.map((index) => (
-            <text
-              key={`x-${index}`}
-              x={xFor(index)}
-              y={height - 10}
-              className="lead-evolution-axis"
-              textAnchor={index === 0 ? 'start' : index === safePoints.length - 1 ? 'end' : 'middle'}
-            >{safePoints[index].label}</text>
-          ))}
+          {useTime
+            ? ticks.map((tick, index) => (
+                <text
+                  key={`x-${tick.t}`}
+                  x={xForTime(tick.t)}
+                  y={height - 10}
+                  className="lead-evolution-axis"
+                  textAnchor={index === 0 ? 'start' : index === ticks.length - 1 ? 'end' : 'middle'}
+                >{tick.label}</text>
+              ))
+            : fallbackLabelIndexes.map((index) => (
+                <text
+                  key={`x-${index}`}
+                  x={xForIndex(index)}
+                  y={height - 10}
+                  className="lead-evolution-axis"
+                  textAnchor={index === 0 ? 'start' : index === safePoints.length - 1 ? 'end' : 'middle'}
+                >{safePoints[index].label}</text>
+              ))}
           {hover && hoverPoint ? (
             <g pointerEvents="none">
               <line x1={hover.cursorX} x2={hover.cursorX} y1={padTop} y2={height - padBottom} className="lead-evolution-guide" />
