@@ -13,7 +13,7 @@ import { buildSuiviPeriodRange, getDefaultSuiviPeriod, SUIVI_PERIOD_OPTIONS, typ
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
 import { previousRange } from '../lib/period'
 import { buildEvolutionTicks, computeEvolutionDomain, type EvolutionGranularity } from '../lib/evolutionAxis'
-import { LEAD_METRICS, formatMetricValue, closingRate, type LeadEvolutionPoint, type LeadMetricKey } from '../lib/leadMetrics'
+import { LEAD_METRICS, formatMetricValue, closingRate, niceMax, type LeadEvolutionPoint, type LeadMetricKey } from '../lib/leadMetrics'
 
 type FunnelPeriodMode = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'last_n_days' | 'custom'
 type FunnelPeriodState = { mode: FunnelPeriodMode; customFrom: string; customTo: string; lastN?: number; includeToday?: boolean }
@@ -980,7 +980,8 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
   const chartWidth = width - padX * 2
   const chartHeight = height - padTop - padBottom
   const clamp = (value: number, min: number, maxValue: number) => Math.min(maxValue, Math.max(min, value))
-  const max = Math.max(1, ...safePoints.map((p) => metric.valueOf(p)), ...comparePts.map((p) => metric.valueOf(p)))
+  const rawMax = Math.max(1, ...safePoints.map((p) => metric.valueOf(p)), ...comparePts.map((p) => metric.valueOf(p)))
+  const max = niceMax(rawMax)
   const domain = computeEvolutionDomain(range, granularity)
   const ticks = buildEvolutionTicks(domain, granularity)
   const useTime = domain.end > domain.start && safePoints.every((point) => Number.isFinite(point.t) && point.t > 0)
