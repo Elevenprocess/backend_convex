@@ -8,10 +8,10 @@ export type EvolutionTick = { t: number; label: string }
 // Fenêtre horaire active du dashboard (cohérent avec le filtre hour 8h–21h côté data).
 const HOUR_WINDOW_START = 8
 const HOUR_WINDOW_END = 21
+const HOUR_TICKS = [8, 11, 14, 17, 20] as const // graduations toutes les 3h ; dernier label avant la fermeture 21h
 
-function dayLabel(day: string): string {
-  const d = new Date(`${day}T12:00:00`)
-  return d.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '')
+function dayLabel(date: Date): string {
+  return date.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '')
 }
 
 function formatDayMonth(date: Date): string {
@@ -59,7 +59,7 @@ export function buildEvolutionTicks(domain: EvolutionDomain, granularity: Evolut
   if (!(end > start)) return [{ t: start, label: '' }]
 
   if (granularity === 'hour') {
-    return [8, 11, 14, 17, 20].map((hour) => {
+    return HOUR_TICKS.map((hour) => {
       const d = new Date(start)
       d.setHours(hour, 0, 0, 0)
       return { t: d.getTime(), label: `${hour}h` }
@@ -96,7 +96,7 @@ export function buildEvolutionTicks(domain: EvolutionDomain, granularity: Evolut
   while (cursor.getTime() <= endDay.getTime()) {
     const mid = new Date(cursor)
     mid.setHours(12, 0, 0, 0)
-    days.push({ t: mid.getTime(), label: dayLabel(cursor.toISOString().slice(0, 10)) })
+    days.push({ t: mid.getTime(), label: dayLabel(cursor) })
     cursor = addDays(cursor, 1)
   }
   return sampleTicks(days)

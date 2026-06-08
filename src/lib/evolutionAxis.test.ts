@@ -31,9 +31,36 @@ describe('buildEvolutionTicks', () => {
   })
 
   it('day granularity yields at most ~6 ticks spanning the range', () => {
-    const domain = computeEvolutionDomain({ from: '2026-06-01T00:00:00.000Z', to: '2026-06-07T23:59:59.999Z' }, 'day')
+    const domain = computeEvolutionDomain({ from: '2026-06-01T00:00:00.000Z', to: '2026-06-14T23:59:59.999Z' }, 'day')
     const ticks = buildEvolutionTicks(domain, 'day')
     expect(ticks.length).toBeGreaterThanOrEqual(2)
     expect(ticks.length).toBeLessThanOrEqual(7)
+  })
+
+  it('week granularity yields ticks with sem. labels within the domain', () => {
+    const domain = computeEvolutionDomain({ from: '2026-06-01T00:00:00.000Z', to: '2026-06-21T23:59:59.999Z' }, 'week')
+    const ticks = buildEvolutionTicks(domain, 'week')
+    expect(ticks.length).toBeGreaterThanOrEqual(1)
+    expect(ticks.length).toBeLessThanOrEqual(6)
+    ticks.forEach((tick) => {
+      expect(tick.label.length).toBeGreaterThan(0)
+      expect(tick.label.startsWith('sem. ')).toBe(true)
+      expect(Number.isFinite(tick.t)).toBe(true)
+      expect(tick.t).toBeGreaterThanOrEqual(domain.start)
+      expect(tick.t).toBeLessThanOrEqual(domain.end)
+    })
+  })
+
+  it('month granularity spanning year rollover yields valid ticks within the domain', () => {
+    const domain = computeEvolutionDomain({ from: '2025-11-01T00:00:00.000Z', to: '2026-02-28T23:59:59.999Z' }, 'month')
+    const ticks = buildEvolutionTicks(domain, 'month')
+    expect(ticks.length).toBeGreaterThanOrEqual(1)
+    expect(ticks.length).toBeLessThanOrEqual(6)
+    ticks.forEach((tick) => {
+      expect(tick.label.length).toBeGreaterThan(0)
+      expect(Number.isFinite(tick.t)).toBe(true)
+      expect(tick.t).toBeGreaterThanOrEqual(domain.start)
+      expect(tick.t).toBeLessThanOrEqual(domain.end)
+    })
   })
 })
