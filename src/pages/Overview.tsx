@@ -700,7 +700,7 @@ function OverviewAdmin() {
     adminSummary?.qualified ?? 0,
     adminSummary?.rdvPris ?? 0,
   )
-  const evolutionGranularity = chooseGranularity(funnelPeriod.mode, funnelRange)
+  const evolutionGranularity = chooseGranularity(funnelRange)
   const evolutionPoints = buildLeadEvolutionPoints(adminSummary?.dailyEvolution ?? [], funnel?.daily ?? [], adminSummary?.hourlyCalls ?? [], funnelRange, evolutionGranularity, {
     leads: treatedLeadTotal,
     rdv: adminSummary?.rdvPris ?? funnelTotals.rdv,
@@ -1137,16 +1137,19 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
   )
 }
 
-function chooseGranularity(mode: FunnelPeriodMode, range: FunnelPeriodRange): EvolutionGranularity {
-  if (mode === 'today' || mode === 'yesterday') return 'hour'
-  if (mode === 'this_week' || mode === 'last_week') return 'day'
-  if (mode === 'this_month' || mode === 'last_month') return 'week'
-  if (mode === 'this_year' || mode === 'last_year') return 'month'
-  // custom: derive from span
-  if (range.days <= 1) return 'hour'
-  if (range.days <= 7) return 'day'
-  if (range.days <= 31) return 'week'
-  return 'month'
+// Granularité dérivée du nombre de JOURS CALENDAIRES réellement couverts par la plage (from → to),
+// pas du mode nominal. C'est ce qui évite la diagonale moche : ex. « cette semaine » consultée un lundi
+// ne couvre qu'1 jour → on bascule en heures au lieu d'afficher un point unique.
+// 'hour' n'est valide que sur UNE journée (le domaine horaire ne couvre qu'un jour 8h–21h) ;
+// dès 2 jours on reste en 'day' (axe en jours, sans horaire). Une semaine pleine = 7 jours → 'day'.
+function chooseGranularity(range: FunnelPeriodRange): EvolutionGranularity {
+  const startMs = startOfDay(new Date(range.from)).getTime()
+  const endMs = startOfDay(new Date(range.to)).getTime()
+  const dayCount = Math.round((endMs - startMs) / 86_400_000) + 1
+  if (dayCount <= 1) return 'hour'   // une seule journée → heures (sinon point unique / diagonale)
+  if (dayCount <= 35) return 'day'   // jusqu'à ~1 mois → jours, sans horaire dans l'axe
+  if (dayCount <= 120) return 'week' // jusqu'à ~4 mois → semaines
+  return 'month'                     // au-delà (année) → mois
 }
 
 function buildLeadEvolutionPoints(
