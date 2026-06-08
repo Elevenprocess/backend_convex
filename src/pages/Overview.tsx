@@ -1052,7 +1052,7 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
           </g>
           {showLive ? (
             <g key={`live-${animKey}`} className="lead-evolution-live" pointerEvents="none">
-              <line className="lead-evolution-live-spark" x1={liveX} x2={liveX} y1={liveY} y2={liveY - 26} />
+              <line className="lead-evolution-live-spark" x1={liveX} x2={liveX} y1={liveY} y2={Math.max(0, liveY - 26)} />
               <circle className="lead-evolution-live-halo" cx={liveX} cy={liveY} r="9" />
               <circle className="lead-evolution-live-dot" cx={liveX} cy={liveY} r="4.5" />
             </g>
