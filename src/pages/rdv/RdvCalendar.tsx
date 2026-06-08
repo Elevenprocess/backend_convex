@@ -37,6 +37,14 @@ type CalendarItem =
 type Sector = 'Nord' | 'Sud' | 'Est' | 'Ouest' | 'Autre'
 const SECTORS: Sector[] = ['Nord', 'Sud', 'Est', 'Ouest', 'Autre']
 
+// Rôles autorisés sur chaque feed calendrier — miroir des @Roles côté backend.
+// Appeler un feed hors périmètre renvoie 403 (ex. technicien sur /ghl-calendar/events),
+// donc on gate le fetch par rôle au lieu de laisser l'appel partir et échouer.
+// GHL events (/ghl-calendar/events) : admin + équipes sales (setter/commercial).
+const GHL_FEED_ROLES = ['admin', 'setter', 'setter_lead', 'commercial', 'commercial_lead']
+// VT (/clients/vt-calendar) : admin + ops/délivrabilité + technicien.
+const VT_FEED_ROLES = ['admin', 'delivrabilite', 'responsable_technique', 'back_office', 'technicien']
+
 // Toutes les cartes RDV ont le MÊME fond gris neutre (look "skeleton/chargement").
 // Le secteur est uniquement signifié par la couleur du point ● à l'intérieur —
 // les badges restent eux aussi neutres pour ne pas réintroduire la couleur du secteur.
@@ -132,20 +140,23 @@ export function RdvCalendar() {
 
   const period = useMemo(() => buildPeriod(cursorDate, view, continuousDays), [continuousDays, cursorDate, view])
 
+  const canSeeGhl = !!role && GHL_FEED_ROLES.includes(role)
+  const canSeeVt = !!role && VT_FEED_ROLES.includes(role)
+
   const { data: rdvs, loading, error } = useRdvList({
     fromDate: period.from.toISOString(),
     toDate: period.to.toISOString(),
     limit: 200,
   })
-  const { data: ghlEventsData, loading: ghlLoading, error: ghlError } = useGhlCalendarEvents({
-    from: period.from.toISOString(),
-    to: period.to.toISOString(),
-  })
+  // Feeds secondaires (overlay live) : gated par rôle pour éviter les 403, et
+  // leurs erreurs ne doivent jamais blanchir l'agenda (le feed primaire = /rdv).
+  const { data: ghlEventsData, loading: ghlLoading } = useGhlCalendarEvents(
+    canSeeGhl ? { from: period.from.toISOString(), to: period.to.toISOString() } : undefined,
+  )
   const { data: leads } = useLeads({ limit: 500 })
-  const { data: vtEntries } = useVtCalendar({
-    from: period.from.toISOString(),
-    to: period.to.toISOString(),
-  })
+  const { data: vtEntries } = useVtCalendar(
+    canSeeVt ? { from: period.from.toISOString(), to: period.to.toISOString() } : null,
+  )
 
   const leadMap = useMemo(() => {
     const m = new Map<string, LeadResponse>()
@@ -323,8 +334,8 @@ export function RdvCalendar() {
         >
           {loading && !rdvs ? (
             <LoadingBlock label="Chargement de l’agenda…" />
-          ) : error || ghlError ? (
-            <div className="flex-grow flex items-center justify-center text-rouille text-sm">Erreur : {error ?? ghlError}</div>
+          ) : error ? (
+            <div className="flex-grow flex items-center justify-center text-rouille text-sm">Erreur : {error}</div>
           ) : view === 'month' ? (
             <MonthView
               days={period.days}
@@ -355,7 +366,7 @@ export function RdvCalendar() {
           <div className="glass-card w-full max-w-sm p-0 shadow-2xl">
             <div className="px-5 py-4 border-b border-line flex items-center justify-between gap-2">
               <div>
-                <div className="eyebrow text-or-dark">Visite technique</div>
+                <div className="eyebrow text-or-dark">{vtPopup.kind === 'installation' ? 'Installation' : 'Visite technique'}</div>
                 <h3 className="font-black text-lg mt-0.5">{vtPopup.leadName}</h3>
               </div>
               <button onClick={() => setVtPopup(null)} className="rounded-full p-1.5 text-muted hover:bg-cream hover:text-text" aria-label="Fermer">×</button>
@@ -643,7 +654,7 @@ function RdvBlock({ item, lead, hourHeight, stackIndex, stackTotal, onClick, sty
   const isVt = item.source === 'vt'
   const isGhl = item.source === 'ghl'
   const label = isVt
-    ? `VT — ${item.vt.leadName}`
+    ? `${vtKindLabel(item.vt)} — ${item.vt.leadName}`
     : isGhl
       ? ghlEventLabel(item.event)
       : (lead ? fullName(lead) : localRdvFallbackLabel(item.rdv))
@@ -651,10 +662,10 @@ function RdvBlock({ item, lead, hourHeight, stackIndex, stackTotal, onClick, sty
     ? [item.vt.city, item.vt.phone].filter(Boolean).join(' · ')
     : isGhl ? ghlEventDetail(item.event) : localRdvFallbackDetail(item.rdv)
   const sector = sectorForItem(item, lead)
-  const tone = isVt ? 'bg-info-tint text-text border-info' : CARD_TONE
+  const tone = isVt ? vtKindTone(item.vt) : CARD_TONE
   const startTime = formatTime(item.scheduledAt)
   const endTime = formatTime(new Date(new Date(item.scheduledAt).getTime() + RDV_DURATION_MIN * 60_000).toISOString())
-  const title = `${startTime}–${endTime} — ${sector} — ${label}${detail ? ` — ${detail}` : ''}${isGhl ? ' — GHL temps réel' : ''}${isVt ? ' — Visite technique' : ''}`
+  const title = `${startTime}–${endTime} — ${sector} — ${label}${detail ? ` — ${detail}` : ''}${isGhl ? ' — GHL temps réel' : ''}${isVt ? ` — ${vtKindLabel(item.vt)}` : ''}`
 
   // Adaptation densité : à <40px on n'affiche que la ligne titre
   const compact = hourHeight < 40
@@ -753,7 +764,7 @@ function StackPopup({
               ? (item.event.contactId ? leadByExternalId.get(item.event.contactId) : undefined)
               : isVt ? undefined : leadMap.get(item.rdv.leadId)
             const name = isVt
-              ? `VT — ${item.vt.leadName}`
+              ? `${vtKindLabel(item.vt)} — ${item.vt.leadName}`
               : isGhl ? ghlEventLabel(item.event) : (lead ? fullName(lead) : localRdvFallbackLabel(item.rdv))
             const detail = isVt
               ? [item.vt.city, item.vt.phone].filter(Boolean).join(' · ')
@@ -778,7 +789,7 @@ function StackPopup({
                     <div className="mt-1 inline-flex items-center gap-1 text-[10px]">
                       <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 font-bold ${CARD_TONE}`}>{sector}</span>
                       {isGhl && <span className="text-faint">GHL</span>}
-                      {isVt && <span className="text-faint">VT</span>}
+                      {isVt && <span className="text-faint">{vtKindLabel(item.vt)}</span>}
                     </div>
                   </div>
                 </button>
@@ -859,14 +870,14 @@ function RdvButton({ item, lead, compact = false, onClick }: { item: CalendarIte
   const isVt = item.source === 'vt'
   const isGhl = item.source === 'ghl'
   const label = isVt
-    ? `VT — ${item.vt.leadName}`
+    ? `${vtKindLabel(item.vt)} — ${item.vt.leadName}`
     : isGhl ? ghlEventLabel(item.event) : (lead ? fullName(lead) : localRdvFallbackLabel(item.rdv))
   const detail = isVt
     ? [item.vt.city, item.vt.phone].filter(Boolean).join(' · ')
     : isGhl ? ghlEventDetail(item.event) : localRdvFallbackDetail(item.rdv)
   const sector = sectorForItem(item, lead)
-  const tone = isVt ? 'bg-info-tint text-text border-info' : CARD_TONE
-  const title = `${formatTime(item.scheduledAt)} — ${sector} — ${label}${detail ? ` — ${detail}` : ''}${isGhl ? ' — GHL temps réel' : ''}${isVt ? ' — Visite technique' : ''}`
+  const tone = isVt ? vtKindTone(item.vt) : CARD_TONE
+  const title = `${formatTime(item.scheduledAt)} — ${sector} — ${label}${detail ? ` — ${detail}` : ''}${isGhl ? ' — GHL temps réel' : ''}${isVt ? ` — ${vtKindLabel(item.vt)}` : ''}`
   return (
     <button
       onClick={onClick}
@@ -876,7 +887,7 @@ function RdvButton({ item, lead, compact = false, onClick }: { item: CalendarIte
       <span className="block truncate">{formatTime(item.scheduledAt)} — {label}</span>
       {!compact && detail && <span className="block text-[9px] opacity-75 truncate">{detail}</span>}
       {!compact && isGhl && <span className="block text-[9px] opacity-75 truncate">GHL live{item.event.sector ? ` · ${item.event.sector}` : ''}</span>}
-      {!compact && isVt && <span className="block text-[9px] opacity-75 truncate">Visite technique</span>}
+      {!compact && isVt && <span className="block text-[9px] opacity-75 truncate">{vtKindLabel(item.vt)}</span>}
     </button>
   )
 }
@@ -887,6 +898,17 @@ function ghlEventLabel(event: GhlCalendarEvent): string {
 
 function ghlEventDetail(event: GhlCalendarEvent): string {
   return [event.contactPhone, event.contactCity, event.contactEmail].filter(Boolean).join(' · ')
+}
+
+// Une entrée "vt" du calendrier peut être une visite technique OU une installation
+// (pose) — distinguées par `kind`. Label + ton couleur dédiés (cuivre = installation).
+function vtKindLabel(vt: VtCalendarEntry): string {
+  return vt.kind === 'installation' ? 'Installation' : 'VT'
+}
+function vtKindTone(vt: VtCalendarEntry): string {
+  return vt.kind === 'installation'
+    ? 'bg-cuivre-tint text-text border-cuivre'
+    : 'bg-info-tint text-text border-info'
 }
 
 function localRdvFallbackLabel(rdv: RdvResponse): string {
