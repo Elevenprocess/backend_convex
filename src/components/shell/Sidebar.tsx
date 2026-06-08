@@ -43,6 +43,11 @@ const SECTIONS: Section[] = [
 
 const SIDEBAR_STORAGE_KEY = 'ecoi.sidebar.expanded'
 
+// Le technicien n'a accès qu'à un sous-ensemble de pages : Overview, le
+// calendrier (RDV), les rappels (notifications) et ses interventions. On masque
+// tout le reste de son menu (Leads, Analytics…).
+const TECHNICIEN_PATHS = new Set(['/overview', '/rdv', '/notifications', '/mes-interventions'])
+
 const ROLE_TAG: Record<Role, string> = {
   admin: 'Administration',
   setter: 'Setter',
@@ -116,7 +121,11 @@ export function Sidebar() {
       ...s,
       items: s.items
         .filter((it) => !it.roles || it.roles.includes(role))
+        // Technicien : on restreint à sa liste blanche de pages.
+        .filter((it) => role !== 'technicien' || TECHNICIEN_PATHS.has(it.to))
         .map((it) => {
+          // Technicien : la page RDV est présentée comme « Calendrier ».
+          if (role === 'technicien' && it.to === '/rdv') return { ...it, label: 'Calendrier' }
           if (it.to !== '/leads') return it
           // Commerciaux : « Clients ». Délivrabilité & ops : « Dossier client ».
           if (role === 'commercial' || role === 'commercial_lead')
