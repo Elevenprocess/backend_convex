@@ -120,13 +120,42 @@ export function DateRangePicker({ value, onChange, align = 'left' }: Props) {
       {open && (
         <div className={`drp-panel ${align === 'right' ? 'drp-panel--right' : ''}`}>
           <div className="drp-presets">
-            {PERIOD_OPTIONS.map((opt) => (
-              <button key={opt.id} type="button"
-                className={`drp-preset ${draft.mode === opt.id ? 'active' : ''}`}
-                onClick={() => selectPreset(opt.id)}>
-                {opt.label}
-              </button>
-            ))}
+            <div className="drp-group">
+              <span className="drp-group-title">Période à ce jour</span>
+              {(['this_week', 'this_month', 'this_year'] as PeriodMode[]).map((mode) => (
+                <button key={mode} type="button"
+                  className={`drp-preset ${draft.mode === mode ? 'active' : ''}`}
+                  onClick={() => selectPreset(mode)}>
+                  {PERIOD_OPTIONS.find((o) => o.id === mode)?.label}
+                </button>
+              ))}
+            </div>
+            <div className="drp-group">
+              <span className="drp-group-title">Dernier</span>
+              {[7, 30, 90, 365].map((n) => (
+                <button key={n} type="button"
+                  className={`drp-preset ${draft.mode === 'last_n_days' && (draft.lastN ?? 30) === n ? 'active' : ''}`}
+                  onClick={() => setDraft((d) => ({ ...d, mode: 'last_n_days', lastN: n, includeToday: d.includeToday ?? true }))}>
+                  {n} derniers jours
+                </button>
+              ))}
+              {(['last_week', 'last_month', 'last_year'] as PeriodMode[]).map((mode) => (
+                <button key={mode} type="button"
+                  className={`drp-preset ${draft.mode === mode ? 'active' : ''}`}
+                  onClick={() => selectPreset(mode)}>
+                  {PERIOD_OPTIONS.find((o) => o.id === mode)?.label}
+                </button>
+              ))}
+            </div>
+            <div className="drp-group">
+              {(['today', 'yesterday'] as PeriodMode[]).map((mode) => (
+                <button key={mode} type="button"
+                  className={`drp-preset ${draft.mode === mode ? 'active' : ''}`}
+                  onClick={() => selectPreset(mode)}>
+                  {PERIOD_OPTIONS.find((o) => o.id === mode)?.label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="drp-body">
             <div className="drp-lastn">

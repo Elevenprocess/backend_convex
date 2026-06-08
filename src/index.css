@@ -5008,3 +5008,8 @@ button.suivi-side-cta { font-family: inherit; cursor: pointer; width: 100%; }
 .btn-ghost { border: 1px solid var(--color-line); background: #fff; color: var(--color-muted); border-radius: 8px; padding: 7px 16px; font-size: 12.5px; font-weight: 700; cursor: pointer; transition: background .15s, color .15s; }
 .btn-ghost:hover:not(:disabled) { background: var(--color-cream); color: var(--color-text); }
 .btn-ghost:disabled { opacity: .5; cursor: not-allowed; }
+
+/* --- DateRangePicker grouped presets --- */
+.drp-group { display: flex; flex-direction: column; gap: 2px; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--color-line-soft); }
+.drp-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+.drp-group-title { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--color-faint); font-weight: 800; padding: 2px 4px; }

@@ -33,4 +33,14 @@ describe('DateRangePicker', () => {
     expect(onChange).not.toHaveBeenCalled()
     expect(screen.queryByText('Appliquer')).not.toBeInTheDocument()
   })
+
+  it('le bouton « 30 derniers jours » applique last_n_days N=30', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(<DateRangePicker value={defaultPeriod()} onChange={onChange} />)
+    await user.click(screen.getByRole('button', { name: /période/i }))
+    await user.click(screen.getByRole('button', { name: '30 derniers jours' }))
+    await user.click(screen.getByText('Appliquer'))
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ mode: 'last_n_days', lastN: 30 }))
+  })
 })
