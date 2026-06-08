@@ -982,6 +982,11 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
   const currentPath = smoothPath(currentCoords)
   const comparePath = compareCoords.length >= 2 ? smoothPath(compareCoords) : ''
   const areaPath = currentPath ? `${currentPath} L ${xFor(safePoints.length - 1).toFixed(1)} ${(height - padBottom).toFixed(1)} L ${xFor(0).toFixed(1)} ${(height - padBottom).toFixed(1)} Z` : ''
+  const animKey = `${range.from}|${range.to}|${granularity}|${activeKey}`
+  const lastIndex = safePoints.length - 1
+  const liveX = xFor(lastIndex)
+  const liveY = yFor(safePoints[lastIndex][activeKey])
+  const showLive = useTime && currentPath !== ''
 
   const gridRatios = [0, 0.25, 0.5, 0.75, 1]
   const fallbackLabelStep = Math.max(1, Math.ceil((safePoints.length - 1) / 5))
@@ -1040,9 +1045,18 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
               </g>
             )
           })}
-          {areaPath ? <path d={areaPath} fill="url(#leadEvolutionFill)" stroke="none" /> : null}
           {comparePath ? <path d={comparePath} className="lead-evolution-compare" /> : null}
-          {currentPath ? <path d={currentPath} className="lead-evolution-line" /> : null}
+          <g key={animKey} className="lead-evolution-anim">
+            {areaPath ? <path d={areaPath} fill="url(#leadEvolutionFill)" stroke="none" /> : null}
+            {currentPath ? <path d={currentPath} className="lead-evolution-line lead-evolution-line--draw" /> : null}
+          </g>
+          {showLive ? (
+            <g key={`live-${animKey}`} className="lead-evolution-live" pointerEvents="none">
+              <line className="lead-evolution-live-spark" x1={liveX} x2={liveX} y1={liveY} y2={liveY - 26} />
+              <circle className="lead-evolution-live-halo" cx={liveX} cy={liveY} r="9" />
+              <circle className="lead-evolution-live-dot" cx={liveX} cy={liveY} r="4.5" />
+            </g>
+          ) : null}
           {useTime
             ? ticks.map((tick, index) => (
                 <text
