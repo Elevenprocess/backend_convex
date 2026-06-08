@@ -22,29 +22,43 @@ beforeEach(() => {
   useAuth.setState({ user: null })
 })
 
-describe('Sidebar — menu du technicien', () => {
-  it('ne montre que Overview, Calendrier, Rappels et Mes interventions', () => {
+describe('Sidebar — navigation par rôle', () => {
+  it('limite le menu technicien au planning et à ses dossiers', () => {
     setUser('technicien')
     renderSidebar()
     const nav = screen.getByRole('button', { name: /Rechercher/i }).parentElement!
 
-    // Pages attribuées au technicien.
-    expect(within(nav).getByRole('link', { name: /Overview/i })).toBeInTheDocument()
-    expect(within(nav).getByRole('link', { name: /Calendrier/i })).toBeInTheDocument()
-    expect(within(nav).getByRole('link', { name: /Rappels/i })).toBeInTheDocument()
-    expect(within(nav).getByRole('link', { name: /Mes interventions/i })).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: /Planning/i })).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: /Mes dossiers/i })).toBeInTheDocument()
 
-    // Pages masquées pour le technicien.
-    expect(within(nav).queryByRole('link', { name: /Leads/i })).not.toBeInTheDocument()
+    expect(within(nav).queryByRole('link', { name: /Overview/i })).not.toBeInTheDocument()
     expect(within(nav).queryByRole('link', { name: /Analytics/i })).not.toBeInTheDocument()
-    expect(within(nav).queryByRole('link', { name: 'RDV' })).not.toBeInTheDocument()
+    expect(within(nav).queryByRole('link', { name: /Calendrier RDV/i })).not.toBeInTheDocument()
   })
 
-  it('garde le libellé « RDV » pour un autre rôle (ex. setter)', () => {
+  it('groupe le setter par Acquisition et Calendriers', () => {
     setUser('setter')
     renderSidebar()
-    expect(screen.getByRole('link', { name: 'RDV' })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /Calendrier/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Analytics/i })).toBeInTheDocument()
+
+    expect(screen.getByRole('navigation', { name: 'Acquisition' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Calendriers' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Étape setter' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Étape commercial' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Calendrier RDV' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Planning' })).not.toBeInTheDocument()
+  })
+
+  it('affiche à l’admin Acquisition, Délivrabilité et les deux calendriers', () => {
+    setUser('admin')
+    renderSidebar()
+
+    expect(screen.getByRole('navigation', { name: 'Acquisition' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Délivrabilité' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Calendriers' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Étape setter' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Étape commercial' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Suivi dossiers' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Calendrier RDV' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Planning' })).toBeInTheDocument()
   })
 })

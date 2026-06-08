@@ -10,25 +10,52 @@ import { leadListPath } from '../../lib/leadPaths'
 type Item = { to: string; icon: IconName; label: string; roles?: Role[] }
 type Section = { id: string; label: string; items: Item[] }
 
+const ACQUISITION_ROLES: Role[] = ['admin', 'setter', 'setter_lead', 'commercial', 'commercial_lead']
+const DELIVERY_ROLES: Role[] = ['admin', 'delivrabilite', 'responsable_technique', 'back_office']
+const OPS_ROLES: Role[] = ['delivrabilite', 'responsable_technique', 'back_office']
+const CALENDAR_ROLES: Role[] = [
+  'admin',
+  'setter',
+  'setter_lead',
+  'commercial',
+  'commercial_lead',
+  'delivrabilite',
+  'responsable_technique',
+  'back_office',
+]
+
 const SECTIONS: Section[] = [
   {
     id: 'espace',
     label: 'Espace',
     items: [
       { to: '/overview', icon: 'home', label: 'Overview' },
-      { to: '/leads', icon: 'users', label: 'Leads' },
-      { to: '/client', icon: 'inbox', label: 'Clients', roles: ['admin'] },
-      { to: '/rdv', icon: 'calendar', label: 'RDV' },
+      { to: '/notifications', icon: 'bell', label: 'Rappels' },
+      { to: '/analytics', icon: 'chart', label: 'Analytics' },
     ],
   },
   {
-    id: 'activite',
-    label: 'Activité',
+    id: 'acquisition',
+    label: 'Acquisition',
     items: [
-      { to: '/notifications', icon: 'bell', label: 'Rappels' },
-      { to: '/analytics', icon: 'chart', label: 'Analytics' },
-      { to: '/suivi', icon: 'grid', label: 'Suivi', roles: ['admin', 'delivrabilite', 'responsable_technique', 'back_office'] },
-      { to: '/mes-interventions', icon: 'target', label: 'Mes interventions', roles: ['technicien'] },
+      { to: '/leads', icon: 'users', label: 'Étape setter', roles: ['admin', 'setter', 'setter_lead'] },
+      { to: '/client', icon: 'inbox', label: 'Étape commercial', roles: ACQUISITION_ROLES },
+    ],
+  },
+  {
+    id: 'delivrabilite',
+    label: 'Délivrabilité',
+    items: [
+      { to: '/suivi', icon: 'grid', label: 'Suivi dossiers', roles: DELIVERY_ROLES },
+      { to: '/client', icon: 'inbox', label: 'Tech & backoffice', roles: OPS_ROLES },
+    ],
+  },
+  {
+    id: 'calendriers',
+    label: 'Calendriers',
+    items: [
+      { to: '/rdv', icon: 'calendar', label: 'Calendrier RDV', roles: CALENDAR_ROLES },
+      { to: '/planning', icon: 'clock', label: 'Planning', roles: DELIVERY_ROLES },
     ],
   },
   {
@@ -120,41 +147,10 @@ export function Sidebar() {
         },
       ]
     }
-    const isOps =
-      role === 'delivrabilite' ||
-      role === 'responsable_technique' ||
-      role === 'back_office'
     const built = SECTIONS.map((s) => ({
       ...s,
-      items: s.items
-        .filter((it) => !it.roles || it.roles.includes(role))
-        .map((it) => {
-          if (it.to !== '/leads') return it
-          // Commerciaux : « Clients ». Délivrabilité & ops : « Dossier client ».
-          if (role === 'commercial' || role === 'commercial_lead')
-            return { ...it, to: '/client', label: 'Clients' }
-          if (isOps)
-            return { ...it, to: '/client', icon: 'inbox' as const, label: 'Dossier client' }
-          return it
-        }),
+      items: s.items.filter((it) => !it.roles || it.roles.includes(role)),
     }))
-    // Délivrabilité : remonter « Suivi » juste au-dessus de « Dossier client ».
-    if (isOps) {
-      let suivi: Item | undefined
-      for (const s of built) {
-        const idx = s.items.findIndex((it) => it.to === '/suivi')
-        if (idx !== -1) {
-          suivi = s.items[idx]
-          s.items.splice(idx, 1)
-          break
-        }
-      }
-      if (suivi) {
-        const espace = built.find((s) => s.id === 'espace')
-        const clientIdx = espace?.items.findIndex((it) => it.to === '/client') ?? -1
-        if (espace) espace.items.splice(clientIdx === -1 ? espace.items.length : clientIdx, 0, suivi)
-      }
-    }
     return built.filter((s) => s.items.length > 0)
   }, [role])
 
