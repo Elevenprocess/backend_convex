@@ -4,8 +4,8 @@ import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
 import { LoadingBlock, Spinner } from '../../components/Spinner'
-import { useGhlCalendarEvents, useRdvList, useLeads, type GhlCalendarEvent } from '../../lib/hooks'
-import { fullName, type LeadResponse, type RdvResponse, type RdvStatus } from '../../lib/types'
+import { useGhlCalendarEvents, useRdvList, useLeads, useVtCalendar, type GhlCalendarEvent } from '../../lib/hooks'
+import { fullName, type LeadResponse, type RdvResponse, type RdvStatus, type VtCalendarEntry } from '../../lib/types'
 import { useAuth } from '../../lib/auth'
 import { leadSearchPath } from '../../lib/leadPaths'
 
@@ -32,6 +32,7 @@ type CalendarView = 'day' | 'week' | 'month'
 type CalendarItem =
   | { source: 'local'; id: string; scheduledAt: string; status: RdvStatus; rdv: RdvResponse }
   | { source: 'ghl'; id: string; scheduledAt: string; status: 'ghl'; event: GhlCalendarEvent }
+  | { source: 'vt'; id: string; scheduledAt: string; status: 'vt'; vt: VtCalendarEntry }
 
 type Sector = 'Nord' | 'Sud' | 'Est' | 'Ouest' | 'Autre'
 const SECTORS: Sector[] = ['Nord', 'Sud', 'Est', 'Ouest', 'Autre']
@@ -65,6 +66,13 @@ const CITY_SECTOR_PREFIXES: Array<[string, Sector]> = [
   ['saint-pierre', 'Sud'], ['saint-joseph', 'Sud'], ['saint-louis', 'Sud'], ['le-tampon', 'Sud'], ['tampon', 'Sud'], ['cilaos', 'Sud'], ['etang-sale', 'Sud'], ['petite-ile', 'Sud'], ['petit-ile', 'Sud'], ['les-avirons', 'Sud'], ['entre-deux', 'Sud'],
 ]
 
+// La VT n'a pas d'heure en base : on la pose à 08:00 heure Réunion pour
+// l'afficher dans la grille horaire, sur la bonne journée.
+function vtScheduledAt(date: string): string {
+  // date = 'YYYY-MM-DD'. 08:00 Réunion = 04:00 UTC (UTC+4).
+  return `${date.slice(0, 10)}T04:00:00.000Z`
+}
+
 function normalizeCityKey(city: string | null | undefined): string {
   if (!city) return ''
   return city
@@ -85,6 +93,7 @@ function sectorFromCity(city: string | null | undefined): Sector {
 }
 
 function sectorForItem(item: CalendarItem, lead?: LeadResponse): Sector {
+  if (item.source === 'vt') return sectorFromCity(item.vt.city)
   if (item.source === 'ghl' && item.event.sector) {
     const s = item.event.sector
     if (s === 'Nord' || s === 'Sud' || s === 'Est' || s === 'Ouest') return s
@@ -107,6 +116,7 @@ export function RdvCalendar() {
     const raw = Number(window.localStorage.getItem(HOUR_HEIGHT_STORAGE_KEY) ?? '')
     return HOUR_HEIGHT_LEVELS.includes(raw as typeof HOUR_HEIGHT_LEVELS[number]) ? raw : HOUR_HEIGHT_DEFAULT
   })
+  const [vtPopup, setVtPopup] = useState<VtCalendarEntry | null>(null)
   const navigate = useNavigate()
 
   function changeHourHeight(direction: -1 | 1) {
@@ -132,6 +142,10 @@ export function RdvCalendar() {
     to: period.to.toISOString(),
   })
   const { data: leads } = useLeads({ limit: 500 })
+  const { data: vtEntries } = useVtCalendar({
+    from: period.from.toISOString(),
+    to: period.to.toISOString(),
+  })
 
   const leadMap = useMemo(() => {
     const m = new Map<string, LeadResponse>()
@@ -146,6 +160,14 @@ export function RdvCalendar() {
   }, [leads])
 
   const openCalendarItem = (item: CalendarItem) => {
+    if (item.source === 'vt') {
+      if (role === 'admin' || role === 'delivrabilite' || role === 'responsable_technique' || role === 'back_office') {
+        navigate(`/suivi/${item.vt.clientId}`)
+      } else {
+        setVtPopup(item.vt) // technicien : popup lecture seule
+      }
+      return
+    }
     if (item.source === 'local') {
       navigate(`/rdv/${item.id}`)
       return
@@ -174,8 +196,15 @@ export function RdvCalendar() {
         status: 'ghl',
         event,
       }))
-    return [...localItems, ...ghlItems].sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
-  }, [ghlEventsData?.events, rdvs])
+    const vtItems: CalendarItem[] = (vtEntries ?? []).map((vt) => ({
+      source: 'vt',
+      id: `vt-${vt.clientId}`,
+      scheduledAt: vtScheduledAt(vt.date),
+      status: 'vt',
+      vt,
+    }))
+    return [...localItems, ...ghlItems, ...vtItems].sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
+  }, [ghlEventsData?.events, rdvs, vtEntries])
 
   const visibleHours = useMemo(() => {
     const hours = new Set(DEFAULT_HOURS)
@@ -321,6 +350,24 @@ export function RdvCalendar() {
           )}
         </div>
       </main>
+      {vtPopup && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-noir/40 backdrop-blur-sm px-4" onClick={(e) => e.target === e.currentTarget && setVtPopup(null)}>
+          <div className="glass-card w-full max-w-sm p-0 shadow-2xl">
+            <div className="px-5 py-4 border-b border-line flex items-center justify-between gap-2">
+              <div>
+                <div className="eyebrow text-or-dark">Visite technique</div>
+                <h3 className="font-black text-lg mt-0.5">{vtPopup.leadName}</h3>
+              </div>
+              <button onClick={() => setVtPopup(null)} className="rounded-full p-1.5 text-muted hover:bg-cream hover:text-text" aria-label="Fermer">×</button>
+            </div>
+            <div className="px-5 py-4 space-y-1.5 text-sm text-muted">
+              <div>📅 {vtPopup.date.split('-').reverse().join('/')}</div>
+              {vtPopup.city && <div>📍 {vtPopup.city}</div>}
+              {vtPopup.phone && <div>📞 {vtPopup.phone}</div>}
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   )
 }
@@ -454,7 +501,7 @@ function TimeGridView({
                       <RdvBlock
                         key={`${item.source}-${item.id}`}
                         item={item}
-                        lead={item.source === 'local' ? leadMap.get(item.rdv.leadId) : item.event.contactId ? leadByExternalId.get(item.event.contactId) : undefined}
+                        lead={item.source === 'local' ? leadMap.get(item.rdv.leadId) : item.source === 'ghl' && item.event.contactId ? leadByExternalId.get(item.event.contactId) : undefined}
                         hourHeight={hourHeight}
                         stackIndex={stackIndex}
                         stackTotal={stackTotal}
@@ -593,18 +640,25 @@ type PositionedEntry =
   | { kind: 'more'; items: CalendarItem[]; top: number; height: number; stackIndex: number; hiddenCount: number }
 
 function RdvBlock({ item, lead, hourHeight, stackIndex, stackTotal, onClick, style }: { item: CalendarItem; lead?: LeadResponse; hourHeight: number; stackIndex: number; stackTotal: number; onClick: () => void; style?: CSSProperties }) {
+  const isVt = item.source === 'vt'
   const isGhl = item.source === 'ghl'
-  const label = isGhl ? ghlEventLabel(item.event) : (lead ? fullName(lead) : localRdvFallbackLabel(item.rdv))
-  const detail = isGhl ? ghlEventDetail(item.event) : localRdvFallbackDetail(item.rdv)
+  const label = isVt
+    ? `VT — ${item.vt.leadName}`
+    : isGhl
+      ? ghlEventLabel(item.event)
+      : (lead ? fullName(lead) : localRdvFallbackLabel(item.rdv))
+  const detail = isVt
+    ? [item.vt.city, item.vt.phone].filter(Boolean).join(' · ')
+    : isGhl ? ghlEventDetail(item.event) : localRdvFallbackDetail(item.rdv)
   const sector = sectorForItem(item, lead)
-  const tone = CARD_TONE
+  const tone = isVt ? 'bg-info-tint text-text border-info' : CARD_TONE
   const startTime = formatTime(item.scheduledAt)
   const endTime = formatTime(new Date(new Date(item.scheduledAt).getTime() + RDV_DURATION_MIN * 60_000).toISOString())
-  const title = `${startTime}–${endTime} — ${sector} — ${label}${detail ? ` — ${detail}` : ''}${isGhl ? ' — GHL temps réel' : ''}`
+  const title = `${startTime}–${endTime} — ${sector} — ${label}${detail ? ` — ${detail}` : ''}${isGhl ? ' — GHL temps réel' : ''}${isVt ? ' — Visite technique' : ''}`
 
   // Adaptation densité : à <40px on n'affiche que la ligne titre
   const compact = hourHeight < 40
-  const statusLabel = isGhl ? 'GHL' : STATUS_BADGE_LABEL[item.rdv.status] ?? null
+  const statusLabel = isVt ? 'VT' : isGhl ? 'GHL' : item.source === 'local' ? (STATUS_BADGE_LABEL[item.rdv.status] ?? null) : null
   const badgeTone = NEUTRAL_BADGE_TONE
 
   // Empilement type "deck" : chaque carte décalée de 22px (header visible)
@@ -693,12 +747,17 @@ function StackPopup({
         </div>
         <ul className="overflow-y-auto divide-y divide-line-soft">
           {sorted.map((item) => {
+            const isVt = item.source === 'vt'
             const isGhl = item.source === 'ghl'
             const lead = isGhl
               ? (item.event.contactId ? leadByExternalId.get(item.event.contactId) : undefined)
-              : leadMap.get(item.rdv.leadId)
-            const name = isGhl ? ghlEventLabel(item.event) : (lead ? fullName(lead) : localRdvFallbackLabel(item.rdv))
-            const detail = isGhl ? ghlEventDetail(item.event) : localRdvFallbackDetail(item.rdv)
+              : isVt ? undefined : leadMap.get(item.rdv.leadId)
+            const name = isVt
+              ? `VT — ${item.vt.leadName}`
+              : isGhl ? ghlEventLabel(item.event) : (lead ? fullName(lead) : localRdvFallbackLabel(item.rdv))
+            const detail = isVt
+              ? [item.vt.city, item.vt.phone].filter(Boolean).join(' · ')
+              : isGhl ? ghlEventDetail(item.event) : localRdvFallbackDetail(item.rdv)
             const sector = sectorForItem(item, lead)
             const startTime = formatTime(item.scheduledAt)
             const endTime = formatTime(new Date(new Date(item.scheduledAt).getTime() + RDV_DURATION_MIN * 60_000).toISOString())
@@ -719,6 +778,7 @@ function StackPopup({
                     <div className="mt-1 inline-flex items-center gap-1 text-[10px]">
                       <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 font-bold ${CARD_TONE}`}>{sector}</span>
                       {isGhl && <span className="text-faint">GHL</span>}
+                      {isVt && <span className="text-faint">VT</span>}
                     </div>
                   </div>
                 </button>
@@ -777,7 +837,7 @@ function MonthView({
                     <RdvButton
                       key={`${item.source}-${item.id}`}
                       item={item}
-                      lead={item.source === 'local' ? leadMap.get(item.rdv.leadId) : item.event.contactId ? leadByExternalId.get(item.event.contactId) : undefined}
+                      lead={item.source === 'local' ? leadMap.get(item.rdv.leadId) : item.source === 'ghl' && item.event.contactId ? leadByExternalId.get(item.event.contactId) : undefined}
                       compact
                       onClick={() => onOpen(item)}
                     />
@@ -796,12 +856,17 @@ function MonthView({
 }
 
 function RdvButton({ item, lead, compact = false, onClick }: { item: CalendarItem; lead?: LeadResponse; compact?: boolean; onClick: () => void }) {
+  const isVt = item.source === 'vt'
   const isGhl = item.source === 'ghl'
-  const label = isGhl ? ghlEventLabel(item.event) : (lead ? fullName(lead) : localRdvFallbackLabel(item.rdv))
-  const detail = isGhl ? ghlEventDetail(item.event) : localRdvFallbackDetail(item.rdv)
+  const label = isVt
+    ? `VT — ${item.vt.leadName}`
+    : isGhl ? ghlEventLabel(item.event) : (lead ? fullName(lead) : localRdvFallbackLabel(item.rdv))
+  const detail = isVt
+    ? [item.vt.city, item.vt.phone].filter(Boolean).join(' · ')
+    : isGhl ? ghlEventDetail(item.event) : localRdvFallbackDetail(item.rdv)
   const sector = sectorForItem(item, lead)
-  const tone = CARD_TONE
-  const title = `${formatTime(item.scheduledAt)} — ${sector} — ${label}${detail ? ` — ${detail}` : ''}${isGhl ? ' — GHL temps réel' : ''}`
+  const tone = isVt ? 'bg-info-tint text-text border-info' : CARD_TONE
+  const title = `${formatTime(item.scheduledAt)} — ${sector} — ${label}${detail ? ` — ${detail}` : ''}${isGhl ? ' — GHL temps réel' : ''}${isVt ? ' — Visite technique' : ''}`
   return (
     <button
       onClick={onClick}
@@ -811,6 +876,7 @@ function RdvButton({ item, lead, compact = false, onClick }: { item: CalendarIte
       <span className="block truncate">{formatTime(item.scheduledAt)} — {label}</span>
       {!compact && detail && <span className="block text-[9px] opacity-75 truncate">{detail}</span>}
       {!compact && isGhl && <span className="block text-[9px] opacity-75 truncate">GHL live{item.event.sector ? ` · ${item.event.sector}` : ''}</span>}
+      {!compact && isVt && <span className="block text-[9px] opacity-75 truncate">Visite technique</span>}
     </button>
   )
 }
