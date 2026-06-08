@@ -910,7 +910,7 @@ function CardHead({ title, icon }: { title: string; icon: ShotIcon }) {
   )
 }
 
-type LeadEvolutionPoint = { key: string; date: string; label: string; leads: number; rdv: number; signed: number }
+type LeadEvolutionPoint = { key: string; t: number; date: string; label: string; leads: number; rdv: number; signed: number }
 type LeadEvolutionSeriesKey = 'leads' | 'rdv' | 'signed'
 
 const LEAD_EVOLUTION_SERIES: { key: LeadEvolutionSeriesKey; label: string; color: string }[] = [
@@ -947,7 +947,7 @@ function smoothPath(coords: { x: number; y: number }[]): string {
 function LeadEvolutionChart({ points, comparePoints = [], granularity, rangeLabel, compareLabel, totals }: { points: LeadEvolutionPoint[]; comparePoints?: LeadEvolutionPoint[]; granularity: EvolutionGranularity; rangeLabel: string; compareLabel?: string; totals: { leads: number; rdv: number; signed: number } }) {
   const [activeKey, setActiveKey] = useState<LeadEvolutionSeriesKey>('leads')
   const [hover, setHover] = useState<{ index: number; cursorX: number } | null>(null)
-  const rawPoints = points.length > 0 ? points : [{ key: 'empty', date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }]
+  const rawPoints = points.length > 0 ? points : [{ key: 'empty', t: 0, date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }]
   const sampleStep = rawPoints.length > 56 ? Math.ceil(rawPoints.length / 56) : 1
   const keepIdx = sampleStep > 1 ? rawPoints.map((_, index) => index).filter((index) => index % sampleStep === 0 || index === rawPoints.length - 1) : rawPoints.map((_, index) => index)
   const safePoints = keepIdx.map((index) => rawPoints[index])
@@ -1137,6 +1137,7 @@ function buildLeadEvolutionPoints(
       const summaryPoint = summaryByDate.get(date)
       return {
         key: date,
+        t: new Date(`${date}T12:00:00`).getTime(),
         date,
         label: funnelPoint?.label || summaryPoint?.label || dayLabel(date),
         leads: Math.max(funnelPoint?.answered ?? 0, funnelPoint?.qualified ?? 0, funnelPoint?.rdv ?? 0),
@@ -1148,6 +1149,7 @@ function buildLeadEvolutionPoints(
   }
   return hydrateMissingEvolutionTotals(Array.from({ length: Math.min(7, Math.max(1, range.days)) }, (_, index) => ({
     key: `empty-${index}`,
+    t: 0,
     date: '',
     label: index === 0 ? 'Live' : '—',
     leads: 0,
@@ -1173,6 +1175,7 @@ function buildWeeklyEvolutionPoints(
     } else {
       buckets.set(key, {
         key,
+        t: new Date(`${key}T12:00:00`).getTime(),
         date: key,
         label: `sem. ${formatDayMonth(weekStart)}`,
         leads,
@@ -1205,7 +1208,7 @@ function buildWeeklyEvolutionPoints(
   })
   const sorted = [...buckets.values()].sort((a, b) => a.date.localeCompare(b.date))
   if (sorted.length === 0) {
-    return hydrateMissingEvolutionTotals([{ key: 'empty', date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }], totals)
+    return hydrateMissingEvolutionTotals([{ key: 'empty', t: 0, date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }], totals)
   }
   return hydrateMissingEvolutionTotals(sorted, totals)
 }
@@ -1233,6 +1236,7 @@ function buildMonthlyEvolutionPoints(
     } else {
       buckets.set(monthKey, {
         key: monthKey,
+        t: new Date(`${monthKey}-15T12:00:00`).getTime(),
         date: `${monthKey}-01`,
         label: formatMonthLabel(new Date(`${monthKey}-01`)),
         leads,
@@ -1243,7 +1247,7 @@ function buildMonthlyEvolutionPoints(
   })
   const sorted = [...buckets.values()].sort((a, b) => a.date.localeCompare(b.date))
   if (sorted.length === 0) {
-    return hydrateMissingEvolutionTotals([{ key: 'empty', date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }], totals)
+    return hydrateMissingEvolutionTotals([{ key: 'empty', t: 0, date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }], totals)
   }
   return hydrateMissingEvolutionTotals(sorted, totals)
 }
@@ -1263,6 +1267,7 @@ function distributeTotalsAcrossHours(points: { date: string; hour: number; label
   const signedValues = distributeIntegerTotal(totals.signed, weights)
   return points.map((point, index) => ({
     key: `${point.date}-${point.hour}`,
+    t: new Date(`${point.date}T${String(point.hour).padStart(2, '0')}:00:00`).getTime(),
     date: point.date,
     label: `${dayLabel(point.date)} ${point.hour}h`,
     leads: leadValues[index] ?? 0,
