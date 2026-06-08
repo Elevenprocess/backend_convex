@@ -4829,11 +4829,12 @@ button.suivi-side-cta { font-family: inherit; cursor: pointer; width: 100%; }
 @media (max-width: 860px) { .wf-parallel { grid-template-columns: 1fr; gap: 24px; } .wf-substep-fields { grid-template-columns: 1fr; } }
 
 /* === Graphe LeadEvolution — style Shopify ============================== */
+.lead-evolution { --series-color: var(--color-or); }
 .lead-evolution-svg-wrap svg { cursor: default; }
 .lead-evolution-grid { stroke: var(--color-line-soft); stroke-width: 1; stroke-dasharray: none; }
 .lead-evolution-line {
   fill: none;
-  stroke: var(--color-or);
+  stroke: var(--series-color);
   stroke-width: 2.5;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -4851,9 +4852,9 @@ button.suivi-side-cta { font-family: inherit; cursor: pointer; width: 100%; }
   opacity: .85;
 }
 /* Glide doux du marqueur entre deux points (façon Shopify) — cx/cy sont des propriétés CSS géométriques animables sur les navigateurs modernes. */
-.lead-evolution-dot { fill: var(--color-or); stroke: #fff; stroke-width: 2; transition: cx .1s ease-out, cy .1s ease-out; }
+.lead-evolution-dot { fill: var(--series-color); stroke: #fff; stroke-width: 2; transition: cx .1s ease-out, cy .1s ease-out; }
 .lead-evolution-compare-dot { fill: var(--color-faint); stroke: #fff; stroke-width: 1.5; transition: cx .1s ease-out, cy .1s ease-out; }
-.lead-evolution-guide { stroke: var(--color-line); stroke-width: 1.2; opacity: .9; stroke-dasharray: none; }
+.lead-evolution-guide { stroke: var(--series-color); stroke-width: 1.2; opacity: .72; stroke-dasharray: none; }
 .lead-evolution-axis { font-size: 10.5px; font-weight: 700; fill: var(--color-faint); }
 .lead-evolution-yaxis { font-size: 10px; font-weight: 700; fill: var(--color-faint); }
 .lead-evolution-tooltip { min-width: 150px; }
@@ -4866,8 +4867,45 @@ button.suivi-side-cta { font-family: inherit; cursor: pointer; width: 100%; }
 .lead-evolution-legend { display: flex; flex-wrap: wrap; gap: 18px; padding-top: 4px; }
 .lead-evolution-legend span { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 650; color: var(--color-muted); }
 .lead-evolution-legend i { width: 18px; height: 0; flex-shrink: 0; }
-.lead-evolution-legend i.swatch-solid { height: 3px; border-radius: 2px; background: var(--color-or); }
+.lead-evolution-legend i.swatch-solid { height: 3px; border-radius: 2px; background: var(--series-color); }
 .lead-evolution-legend i.swatch-dashed { height: 0; border-top: 2px dashed var(--color-faint); }
+.lead-evolution-insights {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.lead-evolution-insights span {
+  min-width: 0;
+  border: 1px solid rgba(42, 37, 32, 0.07);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--series-color) 5%, white);
+  padding: 8px 10px;
+}
+.lead-evolution-insights small,
+.lead-evolution-insights em {
+  display: block;
+  font-size: 9.5px;
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  font-style: normal;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lead-evolution-insights strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 17px;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+.lead-evolution-insights em { margin-top: 3px; font-size: 8.5px; letter-spacing: .04em; text-transform: none; }
 
 /* --- Entrée du graph (un seul reveal propre : fondu + tracé) -------- */
 /* Avant : un "rise" avec scaleY .7 sur le groupe (qui écrasait/distordait l'aire) EN PLUS du tracé → effet busy/clignote.
@@ -4889,8 +4927,8 @@ button.suivi-side-cta { font-family: inherit; cursor: pointer; width: 100%; }
 .lead-evolution-live { animation: leadEvoLiveIn .4s ease .7s both; }
 @keyframes leadEvoLiveIn { from { opacity: 0; } to { opacity: 1; } }
 
-.lead-evolution-live-dot { fill: var(--color-or); stroke: #fff; stroke-width: 2; }
-.lead-evolution-live-halo { fill: var(--color-or); opacity: .14; }
+.lead-evolution-live-dot { fill: var(--series-color); stroke: #fff; stroke-width: 2; }
+.lead-evolution-live-halo { fill: var(--series-color); opacity: .14; }
 .lead-evolution-live-spark { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -4899,6 +4937,13 @@ button.suivi-side-cta { font-family: inherit; cursor: pointer; width: 100%; }
   .lead-evolution-live { animation: none; }
   .lead-evolution-line--draw { stroke-dashoffset: 0; }
 }
+[data-theme="dark"] .lead-evolution-insights span {
+  background: color-mix(in srgb, var(--series-color) 14%, #10181E);
+  border-color: color-mix(in srgb, var(--series-color) 26%, rgba(220, 232, 222, 0.14));
+}
+[data-theme="dark"] .lead-evolution-insights strong { color: #ECF3EE; }
+[data-theme="dark"] .lead-evolution-insights small,
+[data-theme="dark"] .lead-evolution-insights em { color: #96A3AB; }
 
 /* --- Cartes vue d'ensemble : tags --- */
 .suivi-card-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }

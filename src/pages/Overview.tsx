@@ -1,4 +1,4 @@
-import { type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '../components/Icon'
 import { MagicKpi } from '../components/kpi/MagicKpi'
@@ -957,6 +957,7 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
     : []
   const activeSeries = LEAD_EVOLUTION_SERIES.find((series) => series.key === activeKey) ?? LEAD_EVOLUTION_SERIES[0]
   const subtitle = GRANULARITY_SUBTITLE[granularity]
+  const seriesStyle = { '--series-color': activeSeries.color } as CSSProperties
 
   const width = 640
   const height = 240
@@ -1023,29 +1024,44 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
   const curVal = hoverPoint ? hoverPoint[activeKey] : 0
   const prevVal = hoverCompare ? hoverCompare[activeKey] : 0
   const deltaPct = hover && hoverCompare ? (prevVal ? Math.round(((curVal - prevVal) / prevVal) * 100) : null) : null
+  const lastValue = safePoints[lastIndex]?.[activeKey] ?? 0
+  const firstValue = safePoints[0]?.[activeKey] ?? 0
+  const deltaFromStart = lastValue - firstValue
+  const peakPoint = safePoints.reduce((best, point) => point[activeKey] > best[activeKey] ? point : best, safePoints[0])
 
   return (
-    <div className="lead-evolution">
+    <div className="lead-evolution" style={seriesStyle}>
       <div className="lead-evolution-head">
         <div>
-          <h3>Évolution</h3>
+          <h3>Courbe d'évolution des leads</h3>
           <p>{subtitle} — {rangeLabel}</p>
         </div>
       </div>
       <div className="lead-evolution-tabs" aria-label="Métrique active">
         {LEAD_EVOLUTION_SERIES.map((series) => (
-          <button key={series.key} type="button" className={activeKey === series.key ? 'active' : ''} onClick={() => setActiveKey(series.key)}>
+          <button
+            key={series.key}
+            type="button"
+            className={activeKey === series.key ? 'active' : ''}
+            style={{ '--series-color': series.color } as CSSProperties}
+            onClick={() => setActiveKey(series.key)}
+          >
             <small><i style={{ background: series.color }} />{series.label}</small>
             <strong>{fmtCompact(totals[series.key])}</strong>
           </button>
         ))}
       </div>
+      <div className="lead-evolution-insights" aria-label="Résumé de la courbe active">
+        <span><small>Dernier point</small><strong>{fmtCompact(lastValue)}</strong></span>
+        <span><small>vs début</small><strong className={deltaFromStart > 0 ? 'positive' : deltaFromStart < 0 ? 'negative' : ''}>{deltaFromStart > 0 ? '+' : ''}{fmtCompact(deltaFromStart)}</strong></span>
+        <span><small>Pic</small><strong>{fmtCompact(peakPoint?.[activeKey] ?? 0)}</strong><em>{peakPoint?.label ?? '—'}</em></span>
+      </div>
       <div className="lead-evolution-svg-wrap">
         <svg viewBox={`0 0 ${width} ${height}`} onMouseMove={onMove} onMouseLeave={onLeave} role="img" aria-label="Évolution de la métrique sélectionnée">
           <defs>
             <linearGradient id="leadEvolutionFill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-or)" stopOpacity="0.14" />
-              <stop offset="100%" stopColor="var(--color-or)" stopOpacity="0" />
+              <stop offset="0%" stopColor="var(--series-color)" stopOpacity="0.14" />
+              <stop offset="100%" stopColor="var(--series-color)" stopOpacity="0" />
             </linearGradient>
           </defs>
           {gridRatios.map((ratio) => {
