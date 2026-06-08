@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import type { LeadResponse, UserResponse } from '../../lib/types'
 
 // La page tire AppShell (→ Blobs/WebGL via ogl) et Topbar : on les neutralise
@@ -80,5 +81,40 @@ describe('ClientsList — action « Donner à… »', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: /Donner le client/i }))
 
     await waitFor(() => expect(assignLeadMock).toHaveBeenCalledWith('lead-1', 'u-bob'))
+  })
+})
+
+describe('ClientsList — verrouillage technicien', () => {
+  it('redirige un technicien vers /mes-interventions', () => {
+    authStateRef.user = makeUser('tech-1', 'Tech Un', 'technicien')
+    useLeadsMock.mockReturnValue({ data: [], loading: false, error: null })
+    render(
+      <MemoryRouter initialEntries={['/client']}>
+        <Routes>
+          <Route path="/client" element={<ClientsList />} />
+          <Route path="/mes-interventions" element={<div>VUE TECHNICIEN</div>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('VUE TECHNICIEN')).toBeInTheDocument()
+  })
+})
+
+describe('ClientsList — replier une section = exclure le filtre', () => {
+  it('réactive les clients exclus quand on replie la section Statut', () => {
+    window.localStorage.clear()
+    authStateRef.user = makeUser('u-alice', 'Alice Martin', 'commercial')
+    render(<ClientsList />)
+
+    // Le client (statut « en_attente ») est visible au départ.
+    expect(screen.getByText('Jean Dupont')).toBeInTheDocument()
+
+    // On filtre sur un autre statut → le client disparaît.
+    fireEvent.click(screen.getByText('En cours de signature'))
+    expect(screen.queryByText('Jean Dupont')).not.toBeInTheDocument()
+
+    // Replier la section Statut remet le filtre à « Tout » → le client revient.
+    fireEvent.click(screen.getByRole('button', { name: 'Statut' }))
+    expect(screen.getByText('Jean Dupont')).toBeInTheDocument()
   })
 })

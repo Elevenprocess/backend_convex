@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../Icon'
-import { FileDropzone } from '../FileDropzone'
 import type { SubstepResponse, UpdateSubstepPatch } from '../../lib/types'
 import { slaGaugeInfo } from '../../lib/suivi-board'
-import { deleteSubstepDocument, substepDocumentRawUrl, uploadSubstepDocuments } from '../../lib/api'
 
 type Props = {
   substep: SubstepResponse
@@ -11,39 +9,14 @@ type Props = {
   today: string
   saving?: boolean
   onDocsChanged?: () => void
+  onGoToDocs?: () => void
   readOnly?: boolean
 }
 
-export function SubstepCard({ substep, onMutate, today, saving, onDocsChanged, readOnly }: Props) {
+export function SubstepCard({ substep, onMutate, today, saving, onGoToDocs, readOnly }: Props) {
   const [date, setDate] = useState(substep.dateRealisee ?? '')
   const [notes, setNotes] = useState(substep.notes ?? '')
-  const [uploading, setUploading] = useState(false)
-  const [docError, setDocError] = useState<string | null>(null)
   const debounceRef = useRef<number | null>(null)
-
-  const onUploadFiles = async (files: File[]) => {
-    if (!files.length) return
-    setUploading(true)
-    setDocError(null)
-    try {
-      await uploadSubstepDocuments(substep.id, files)
-      onDocsChanged?.()
-    } catch (e) {
-      setDocError(e instanceof Error ? e.message : 'Échec de l’upload')
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  const onDeleteDoc = async (docId: string) => {
-    setDocError(null)
-    try {
-      await deleteSubstepDocument(docId)
-      onDocsChanged?.()
-    } catch (e) {
-      setDocError(e instanceof Error ? e.message : 'Suppression échouée')
-    }
-  }
 
   useEffect(() => {
     setDate(substep.dateRealisee ?? '')
@@ -105,42 +78,21 @@ export function SubstepCard({ substep, onMutate, today, saving, onDocsChanged, r
           </div>
         )}
 
-        {!locked && substep.expectedDocs.length > 0 && (
-          <div className="wf-docs">
-            <div className="wf-docs-head">
-              <span>Documents</span>
-              {substep.missingDocument && <span className="wf-docs-missing"><Icon name="tag" size={11} /> pièce manquante</span>}
+        {!locked && substep.expectedDocs.length > 0 && (() => {
+          const presentTypes = new Set(substep.documents.map((d) => d.type))
+          const present = substep.expectedDocs.filter((t) => presentTypes.has(t)).length
+          const total = substep.expectedDocs.length
+          return (
+            <div className="wf-docs-summary">
+              <span className={`wf-docs-count${present < total ? ' is-missing' : ''}`}>
+                {present}/{total} pièces{present < total ? ` · ${total - present} manquante${total - present > 1 ? 's' : ''}` : ''}
+              </span>
+              {onGoToDocs && (
+                <button type="button" className="wf-docs-link" onClick={onGoToDocs}>Voir les pièces →</button>
+              )}
             </div>
-            {substep.documents.length > 0 && (
-              <ul className="wf-docs-list">
-                {substep.documents.map((d) => (
-                  <li key={d.id} className="wf-doc">
-                    <a className="wf-doc-name" href={substepDocumentRawUrl(d.id)} target="_blank" rel="noreferrer" title={d.filename}>
-                      <Icon name="check" size={12} /> <span>{d.filename}</span>
-                    </a>
-                    <span className="wf-doc-size">{Math.max(1, Math.round(d.sizeBytes / 1024))} Ko</span>
-                    {!readOnly && (
-                      <button type="button" className="wf-doc-del" onClick={() => void onDeleteDoc(d.id)} aria-label="Supprimer le document">
-                        <Icon name="x" size={12} />
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {!readOnly && (
-              <FileDropzone
-                id={`docs-${substep.id}`}
-                multiple
-                uploading={uploading}
-                title="Déposer un ou plusieurs fichiers"
-                subtitle="Tout type · 25 Mo / fichier"
-                onFiles={(files) => void onUploadFiles(files)}
-              />
-            )}
-            {docError && <p className="wf-docs-error">{docError}</p>}
-          </div>
-        )}
+          )
+        })()}
 
         {!readOnly && (
           <footer className="wf-substep-foot">

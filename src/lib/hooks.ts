@@ -11,6 +11,7 @@ import type {
   LeadResponse,
   LeadStatsResponse,
   LeadStatus,
+  NotificationResponse,
   RdvLocation,
   RdvResponse,
   UserResponse,
@@ -21,6 +22,7 @@ import type {
   ProjectDetailResponse,
   ProjectResponse,
   SubstepResponse,
+  VtCalendarEntry,
 } from './types'
 
 type Async<T> = {
@@ -985,4 +987,21 @@ export async function copyText(text: string): Promise<void> {
   } finally {
     document.body.removeChild(textarea)
   }
+}
+
+// ─── Notifications ─────────────────────────────────────────
+export function useNotifications(filters?: { unreadOnly?: boolean; limit?: number }): Async<NotificationResponse[]> {
+  return useFetch<NotificationResponse[]>('/notifications', {
+    unreadOnly: filters?.unreadOnly ? 'true' : undefined,
+    limit: filters?.limit,
+  })
+}
+
+// ─── Calendrier VT ─────────────────────────────────────────
+export function useVtCalendar(filters?: { from?: string; to?: string } | null): Async<VtCalendarEntry[]> {
+  return useFetch<VtCalendarEntry[]>(
+    filters === null ? null : '/clients/vt-calendar',
+    filters === null ? undefined : { from: filters?.from, to: filters?.to },
+    { refreshCachedOnMount: true, silentInitialLoading: true },
+  )
 }

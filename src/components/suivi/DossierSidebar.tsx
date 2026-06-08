@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react'
 import { useCallback, useState } from 'react'
+import { Link } from 'react-router-dom'
 import type { Dossier } from '../../lib/suivi'
 import { formatCurrency, formatDate } from '../../lib/suivi'
-import { useLeadDebriefs, updateLead, type UpdateLeadInput } from '../../lib/hooks'
+import { updateLead, type UpdateLeadInput } from '../../lib/hooks'
 import { useAuth } from '../../lib/auth'
-import { DEBRIEF_OUTCOME_LABEL, STATUS_LABEL, fieldOrDash, fullName, initials } from '../../lib/types'
+import { STATUS_LABEL, fieldOrDash, fullName, initials } from '../../lib/types'
 
 type Props = {
   dossier: Dossier
@@ -26,15 +27,6 @@ type EditForm = {
 export function DossierSidebar({ dossier, onLeadUpdated }: Props) {
   const tel = dossier.lead.phone
   const mail = dossier.lead.email
-  // No ghlContactId on LeadResponse — GHL button omitted
-  const ghlId: string | undefined = undefined
-
-  const { data: debriefs } = useLeadDebriefs(dossier.lead.id)
-  const setterNote = dossier.lead.latestCallComment
-  const sortedDebriefs = [...(debriefs ?? [])].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  )
-  const hasHistory = Boolean(setterNote) || sortedDebriefs.length > 0
 
   const role = useAuth((s) => s.user?.role)
   const canEdit = role === 'admin' || role === 'responsable_technique' || role === 'back_office'
@@ -68,6 +60,7 @@ export function DossierSidebar({ dossier, onLeadUpdated }: Props) {
   }, [dossier.lead.id, form, onLeadUpdated])
 
   return (
+    <>
     <aside className="suivi-side glass-card">
       <header className="suivi-side-head">
         <span className="suivi-side-avatar" aria-hidden>{initials(dossier.lead)}</span>
@@ -135,33 +128,6 @@ export function DossierSidebar({ dossier, onLeadUpdated }: Props) {
         </section>
       ) : null}
 
-      {hasHistory ? (
-        <section className="suivi-side-section">
-          <h3>Historique</h3>
-          <div className="suivi-history">
-            {sortedDebriefs.map((d) => (
-              <article key={d.id} className="suivi-history-item">
-                <div className="suivi-history-head">
-                  <span className="suivi-history-kind">Débrief · {DEBRIEF_OUTCOME_LABEL[d.outcome] ?? d.outcome}</span>
-                  <span className="suivi-history-date">{formatDate(d.createdAt)}</span>
-                </div>
-                {d.notes ? <p className="suivi-history-body">{d.notes}</p> : null}
-                {d.objection ? <p className="suivi-history-meta">Objection : {d.objection}</p> : null}
-              </article>
-            ))}
-            {setterNote ? (
-              <article className="suivi-history-item is-setter">
-                <div className="suivi-history-head">
-                  <span className="suivi-history-kind">Note setter{dossier.setter?.name ? ` · ${dossier.setter.name}` : ''}</span>
-                  {dossier.lead.latestCallAt ? <span className="suivi-history-date">{formatDate(dossier.lead.latestCallAt)}</span> : null}
-                </div>
-                <p className="suivi-history-body">{setterNote}</p>
-              </article>
-            ) : null}
-          </div>
-        </section>
-      ) : null}
-
       <div className="suivi-side-progress" aria-label={`Avancement global ${dossier.progress} pour cent`}>
         <div className="suivi-side-progress-head">
           <span>Avancement</span>
@@ -173,27 +139,12 @@ export function DossierSidebar({ dossier, onLeadUpdated }: Props) {
       </div>
 
       <div className="suivi-side-actions">
-        {tel && <a className="suivi-side-cta" href={`tel:${tel}`}>Appeler</a>}
-        {mail && <a className="suivi-side-cta" href={`mailto:${mail}`}>Email</a>}
-        <button
-          type="button"
-          className="suivi-side-cta secondary"
-          onClick={() => document.getElementById('workflow')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-        >
-          Aller au workflow
-        </button>
-        {ghlId && (
-          <a
-            className="suivi-side-cta secondary"
-            href={`https://app.gohighlevel.com/v2/location/_/contacts/detail/${ghlId}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Voir dans GHL
-          </a>
-        )}
+        <Link to={`/suivi/${dossier.id}/fiche`} className="suivi-side-cta">
+          Fiche complète
+        </Link>
       </div>
     </aside>
+    </>
   )
 }
 

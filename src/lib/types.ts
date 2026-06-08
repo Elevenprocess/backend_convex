@@ -787,6 +787,7 @@ export type ClientPhaseStep = {
   datePlanifiee: string | null
   dateRealisee: string | null
   problemReason: string | null
+  responsableId: string | null
 }
 
 export type ClientResponse = {
@@ -800,6 +801,7 @@ export type ClientResponse = {
   statusGlobal: string
   currentPhase: WorkflowPhase
   blocked: boolean
+  missingDocsCount: number
   signedAt: string | null
   steps: Partial<Record<WorkflowPhase, ClientPhaseStep>>
 }
@@ -856,3 +858,25 @@ export type UpdateSubstepPatch = Partial<{
   problemReason: string | null
   problemNotes: string | null
 }>
+
+export type NotificationResponse = {
+  id: string
+  type: string
+  title: string
+  body: string | null
+  payload: unknown
+  readAt: string | null
+  createdAt: string
+}
+
+export type VtCalendarEntry = {
+  clientId: string
+  leadId: string
+  leadName: string
+  city: string | null
+  phone: string | null
+  date: string // YYYY-MM-DD
+  status: string
+  technicienVtId: string | null
+  notes: string | null
+}

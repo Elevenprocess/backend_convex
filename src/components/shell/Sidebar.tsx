@@ -27,7 +27,8 @@ const SECTIONS: Section[] = [
     items: [
       { to: '/notifications', icon: 'bell', label: 'Rappels' },
       { to: '/analytics', icon: 'chart', label: 'Analytics' },
-      { to: '/suivi', icon: 'grid', label: 'Suivi', roles: ['admin', 'delivrabilite', 'responsable_technique', 'back_office', 'technicien'] },
+      { to: '/suivi', icon: 'grid', label: 'Suivi', roles: ['admin', 'delivrabilite', 'responsable_technique', 'back_office'] },
+      { to: '/mes-interventions', icon: 'target', label: 'Mes interventions', roles: ['technicien'] },
     ],
   },
   {

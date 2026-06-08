@@ -1,6 +1,8 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { io, type Socket } from 'socket.io-client'
 import { API_BASE } from './api'
+import { shouldSurfaceNotification } from './realtimeNotify'
+import { useAuth } from './auth'
 
 export const REALTIME_REFRESH_EVENT = 'ecoi:realtime-refresh'
 
@@ -85,8 +87,10 @@ export function useRealtimeSocket() {
     socket.on('lead:updated', () => notifyRealtimeRefresh({ event: 'lead:updated', paths: ['/leads', '/analytics/summary', '/analytics/funnel'] }))
     socket.on('call-log:new', () => notifyRealtimeRefresh({ event: 'call-log:new', paths: ['/call-logs', '/leads', '/analytics/summary', '/analytics/funnel'] }))
     socket.on('rdv:new', () => notifyRealtimeRefresh({ event: 'rdv:new', paths: ['/rdv', '/leads', '/ghl-calendar/free-slots', '/ghl-calendar/events', '/analytics/summary', '/analytics/funnel'] }))
-    socket.on('notification:new', (notification: { title?: string; body?: string; id?: string }) => {
-      notifyRealtimeRefresh({ event: 'notification:new', paths: ['/leads', '/rdv', '/call-logs', '/analytics/summary', '/analytics/funnel'] })
+    socket.on('notification:new', (notification: { title?: string; body?: string; id?: string; userId?: string }) => {
+      const me = useAuth.getState().user?.id ?? null
+      if (!shouldSurfaceNotification(notification.userId, me)) return
+      notifyRealtimeRefresh({ event: 'notification:new', paths: ['/notifications', '/leads', '/rdv', '/call-logs', '/analytics/summary', '/analytics/funnel'] })
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && notification.title) {
         try {
           new Notification(notification.title, { body: notification.body, tag: notification.id, requireInteraction: true, silent: false } as NotificationOptions)
