@@ -457,27 +457,8 @@ body {
   align-items: stretch;
 }
 .overview-admin-summary > .overview-profile-panel { grid-column: auto; }
-.overview-admin-kpis {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  align-items: stretch;
-}
-.overview-admin-kpis > .overview-air-kpi {
-  grid-column: auto;
-  min-height: 100px;
-  padding: 14px;
-  gap: 8px;
-}
-.overview-admin-kpis > .overview-air-kpi > span { width: 26px; height: 26px; border-radius: 6px; }
-.overview-admin-kpis > .overview-air-kpi small { font-size: 9px; letter-spacing: 0.13em; }
-.overview-admin-kpis > .overview-air-kpi strong { font-size: clamp(22px, 2.1vw, 26px); line-height: 1; letter-spacing: -0.024em; margin-top: 5px; }
-.overview-admin-kpis > .overview-air-kpi p { margin-top: 5px; font-size: 11px; }
 @media (max-width: 1080px) {
   .overview-admin-summary { grid-template-columns: 1fr; }
-}
-@media (max-width: 540px) {
-  .overview-admin-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .overview-admin-side-rail {
   position: sticky;
@@ -906,48 +887,6 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.lead-evolution-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.lead-evolution-tabs button {
-  position: relative;
-  border: 1px solid rgba(42, 37, 32, 0.08);
-  border-radius: 10px;
-  padding: 10px 12px;
-  background: #FFFFFF;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease;
-  overflow: hidden;
-}
-.lead-evolution-tabs button:hover {
-  border-color: rgba(42, 37, 32, 0.18);
-  background: rgba(248, 244, 235, 0.5);
-}
-.lead-evolution-tabs button.active {
-  border-color: var(--series-color);
-  background: color-mix(in srgb, var(--series-color) 6%, white);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--series-color) 18%, transparent);
-}
-.lead-evolution-tabs small {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: #64748B;
-}
-.lead-evolution-tabs small i { width: 7px; height: 7px; border-radius: 2px; }
-.lead-evolution-tabs strong {
-  display: block;
-  margin-top: 6px;
-  font-size: 22px;
-  line-height: 1;
-  font-weight: 700;
-  letter-spacing: -0.022em;
-  color: var(--color-text);
-  font-variant-numeric: tabular-nums;
-}
 
 .lead-metric-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 14px; }
 .lead-metric-card { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 10px 12px;
@@ -1007,9 +946,7 @@ body {
 .lead-evolution-yaxis { font-size: 10.5px; font-weight: 850; fill: var(--color-muted); }
 .lead-evolution-peak { text-anchor: middle; font-size: 11px; font-weight: 950; }
 .lead-evolution-tooltip { position: absolute; z-index: 4; min-width: 172px; padding: 10px 11px; border-radius: 18px; border: 1px solid var(--color-line-soft); background: rgba(255,255,255,.95); box-shadow: 0 18px 42px rgba(42,37,32,.16); pointer-events: none; backdrop-filter: blur(12px); }
-.lead-evolution-tooltip small,
-.lead-evolution-tooltip em { display: block; font-size: 10.5px; font-style: normal; font-weight: 780; color: var(--color-muted); }
-.lead-evolution-tooltip strong { display: block; margin: 3px 0 7px; font-size: 16px; font-weight: 950; color: var(--color-text); }
+.lead-evolution-tooltip small { display: block; font-size: 10.5px; font-style: normal; font-weight: 780; color: var(--color-muted); }
 .lead-evolution-tooltip-level { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-radius: 12px; background: var(--color-or-tint); padding: 6px 8px; margin-bottom: 7px; font-size: 11px; font-weight: 850; color: var(--color-muted); }
 .lead-evolution-footer { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .lead-evolution-footer div {
@@ -1537,7 +1474,6 @@ body {
 [data-theme="dark"] .interactive-pie-center strong,
 [data-theme="dark"] .overview-role-closing,
 [data-theme="dark"] .shot-onboarding-top strong,
-[data-theme="dark"] .lead-evolution-tabs strong,
 [data-theme="dark"] .lead-evolution-head h3,
 [data-theme="dark"] .shot-card-head h3,
 [data-theme="dark"] .shot-calendar-head strong,
@@ -1590,8 +1526,6 @@ body {
 [data-theme="dark"] .overview-role-action:hover { background: #D8E3DC; }
 [data-theme="dark"] .lead-evolution-svg-wrap { background: #091a04; border: 1px solid rgba(9, 26, 4, 0.9); }
 [data-theme="dark"] .lead-evolution-last-card { background: #091a04; border: 1px solid rgba(9, 26, 4, 0.9); }
-[data-theme="dark"] .lead-evolution-tabs button { background: #091a04; border: 1px solid rgba(9, 26, 4, 0.9); }
-[data-theme="dark"] .lead-evolution-tabs button:hover { background: #0c2106; border-color: rgba(212, 184, 90, 0.28); }
 [data-theme="dark"] .lead-evolution-footer div { background: #091a04; border: 1px solid rgba(9, 26, 4, 0.9); }
 [data-theme="dark"] .interactive-pie-center { background: #1A2E22; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06); }
 [data-theme="dark"] .interactive-pie-tooltip { background: #1A2E22; border-color: rgba(255, 255, 255, 0.1); color: rgba(255, 255, 255, 0.9); }
@@ -3194,12 +3128,10 @@ body {
 }
 
 [data-theme="dark"] .lead-evolution-head p,
-[data-theme="dark"] .lead-evolution-tabs small,
 [data-theme="dark"] .lead-evolution-last-card small,
 [data-theme="dark"] .lead-evolution-last-card span,
 [data-theme="dark"] .lead-evolution-footer small,
 [data-theme="dark"] .lead-evolution-tooltip small,
-[data-theme="dark"] .lead-evolution-tooltip em,
 [data-theme="dark"] .lead-evolution-tooltip-level {
   color: #96A3AB;
 }
@@ -3210,7 +3142,6 @@ body {
   border: 1px solid rgba(9, 26, 4, 0.9);
 }
 
-[data-theme="dark"] .lead-evolution-tabs button,
 [data-theme="dark"] .lead-evolution-footer div,
 [data-theme="dark"] .lead-evolution-last-card,
 [data-theme="dark"] .lead-evolution-tooltip {
@@ -3219,15 +3150,7 @@ body {
   box-shadow: inset 0 1px 0 rgba(220, 232, 222, 0.03), 0 8px 18px rgba(0, 0, 0, 0.32);
 }
 
-[data-theme="dark"] .lead-evolution-tabs button.active,
-[data-theme="dark"] .lead-evolution-tabs button:hover {
-  background: color-mix(in srgb, var(--series-color) 16%, #10181E);
-  border-color: color-mix(in srgb, var(--series-color) 58%, rgba(220, 232, 222, 0.16));
-}
-
-[data-theme="dark"] .lead-evolution-tabs strong,
-[data-theme="dark"] .lead-evolution-footer strong,
-[data-theme="dark"] .lead-evolution-tooltip strong {
+[data-theme="dark"] .lead-evolution-footer strong {
   color: #ECF3EE;
 }
 
