@@ -13,6 +13,7 @@ import { buildSuiviPeriodRange, getDefaultSuiviPeriod, SUIVI_PERIOD_OPTIONS, typ
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
 import { previousRange } from '../lib/period'
 import { buildEvolutionTicks, computeEvolutionDomain, type EvolutionGranularity } from '../lib/evolutionAxis'
+import { type LeadEvolutionPoint } from '../lib/leadMetrics'
 
 type FunnelPeriodMode = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'last_n_days' | 'custom'
 type FunnelPeriodState = { mode: FunnelPeriodMode; customFrom: string; customTo: string; lastN?: number; includeToday?: boolean }
@@ -703,6 +704,7 @@ function OverviewAdmin() {
   const evolutionGranularity = chooseGranularity(funnelPeriod.mode, funnelRange)
   const evolutionPoints = buildLeadEvolutionPoints(adminSummary?.dailyEvolution ?? [], funnel?.daily ?? [], adminSummary?.hourlyCalls ?? [], funnelRange, evolutionGranularity, {
     leads: treatedLeadTotal,
+    calls: adminSummary?.calls ?? funnelTotals.calls,
     rdv: adminSummary?.rdvPris ?? funnelTotals.rdv,
     signed: adminSummary?.signed ?? 0,
   })
@@ -719,6 +721,7 @@ function OverviewAdmin() {
     evolutionGranularity,
     {
       leads: prevAdmin?.classified ?? prevFunnel?.totals?.qualified ?? 0,
+      calls: prevAdmin?.calls ?? prevFunnel?.totals?.calls ?? 0,
       rdv: prevAdmin?.rdvPris ?? prevFunnel?.totals?.rdv ?? 0,
       signed: prevAdmin?.signed ?? 0,
     },
@@ -911,7 +914,6 @@ function CardHead({ title, icon }: { title: string; icon: ShotIcon }) {
   )
 }
 
-type LeadEvolutionPoint = { key: string; t: number; date: string; label: string; leads: number; rdv: number; signed: number }
 type LeadEvolutionSeriesKey = 'leads' | 'rdv' | 'signed'
 
 const LEAD_EVOLUTION_SERIES: { key: LeadEvolutionSeriesKey; label: string; color: string }[] = [
@@ -948,7 +950,7 @@ function smoothPath(coords: { x: number; y: number }[]): string {
 function LeadEvolutionChart({ points, comparePoints = [], granularity, range, rangeLabel, compareLabel, totals }: { points: LeadEvolutionPoint[]; comparePoints?: LeadEvolutionPoint[]; granularity: EvolutionGranularity; range: FunnelPeriodRange; rangeLabel: string; compareLabel?: string; totals: { leads: number; rdv: number; signed: number } }) {
   const [activeKey, setActiveKey] = useState<LeadEvolutionSeriesKey>('leads')
   const [hover, setHover] = useState<{ index: number; cursorX: number } | null>(null)
-  const rawPoints = points.length > 0 ? points : [{ key: 'empty', t: 0, date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }]
+  const rawPoints = points.length > 0 ? points : [{ key: 'empty', t: 0, date: '', label: 'Live', leads: 0, calls: 0, rdv: 0, signed: 0 }]
   const sampleStep = rawPoints.length > 56 ? Math.ceil(rawPoints.length / 56) : 1
   const keepIdx = sampleStep > 1 ? rawPoints.map((_, index) => index).filter((index) => index % sampleStep === 0 || index === rawPoints.length - 1) : rawPoints.map((_, index) => index)
   const safePoints = keepIdx.map((index) => rawPoints[index])
@@ -1140,7 +1142,7 @@ function buildLeadEvolutionPoints(
   hourlyCalls: { date: string; hour: number; label: string; calls: number }[],
   range: FunnelPeriodRange,
   granularity: EvolutionGranularity,
-  totals: { leads: number; rdv: number; signed: number },
+  totals: { leads: number; calls: number; rdv: number; signed: number },
 ): LeadEvolutionPoint[] {
   if (granularity === 'hour') {
     const rangeStart = startOfDay(new Date(range.from)).getTime()
@@ -1177,6 +1179,7 @@ function buildLeadEvolutionPoints(
         date,
         label: funnelPoint?.label || summaryPoint?.label || dayLabel(date),
         leads: Math.max(funnelPoint?.answered ?? 0, funnelPoint?.qualified ?? 0, funnelPoint?.rdv ?? 0),
+        calls: funnelPoint?.calls ?? 0,
         rdv: summaryPoint?.rdv ?? funnelPoint?.rdv ?? 0,
         signed: summaryPoint?.signed ?? 0,
       }
@@ -1189,6 +1192,7 @@ function buildLeadEvolutionPoints(
     date: '',
     label: index === 0 ? 'Live' : '—',
     leads: 0,
+    calls: 0,
     rdv: 0,
     signed: 0,
   })), totals)
@@ -1197,15 +1201,16 @@ function buildLeadEvolutionPoints(
 function buildWeeklyEvolutionPoints(
   summaryDaily: { date: string; label: string; rdv: number; signed: number }[],
   funnelDaily: AnalyticsFunnelResponse['daily'],
-  totals: { leads: number; rdv: number; signed: number },
+  totals: { leads: number; calls: number; rdv: number; signed: number },
 ): LeadEvolutionPoint[] {
   const buckets = new Map<string, LeadEvolutionPoint>()
-  const addToBucket = (date: string, leads: number, rdv: number, signed: number) => {
+  const addToBucket = (date: string, leads: number, calls: number, rdv: number, signed: number) => {
     const weekStart = startOfWeek(new Date(date))
     const key = weekStart.toISOString().slice(0, 10)
     const existing = buckets.get(key)
     if (existing) {
       existing.leads = Math.max(existing.leads, leads) // leads use max (already aggregated upstream)
+      existing.calls += calls
       existing.rdv += rdv
       existing.signed += signed
     } else {
@@ -1215,6 +1220,7 @@ function buildWeeklyEvolutionPoints(
         date: key,
         label: `sem. ${formatDayMonth(weekStart)}`,
         leads,
+        calls,
         rdv,
         signed,
       })
@@ -1226,9 +1232,10 @@ function buildWeeklyEvolutionPoints(
     const funnelPoint = funnelDaily.find((point) => point.date === date)
     const summaryPoint = summaryByDate.get(date)
     const leads = Math.max(funnelPoint?.answered ?? 0, funnelPoint?.qualified ?? 0, funnelPoint?.rdv ?? 0)
+    const calls = funnelPoint?.calls ?? 0
     const rdv = summaryPoint?.rdv ?? funnelPoint?.rdv ?? 0
     const signed = summaryPoint?.signed ?? 0
-    addToBucket(date, leads, rdv, signed)
+    addToBucket(date, leads, calls, rdv, signed)
   })
   // For weekly leads aggregation, sum instead of max if we accumulated per day already.
   // Recompute leads as sum across days within each week to avoid undercounting.
@@ -1244,7 +1251,7 @@ function buildWeeklyEvolutionPoints(
   })
   const sorted = [...buckets.values()].sort((a, b) => a.date.localeCompare(b.date))
   if (sorted.length === 0) {
-    return hydrateMissingEvolutionTotals([{ key: 'empty', t: 0, date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }], totals)
+    return hydrateMissingEvolutionTotals([{ key: 'empty', t: 0, date: '', label: 'Live', leads: 0, calls: 0, rdv: 0, signed: 0 }], totals)
   }
   return hydrateMissingEvolutionTotals(sorted, totals)
 }
@@ -1252,7 +1259,7 @@ function buildWeeklyEvolutionPoints(
 function buildMonthlyEvolutionPoints(
   summaryDaily: { date: string; label: string; rdv: number; signed: number }[],
   funnelDaily: AnalyticsFunnelResponse['daily'],
-  totals: { leads: number; rdv: number; signed: number },
+  totals: { leads: number; calls: number; rdv: number; signed: number },
 ): LeadEvolutionPoint[] {
   const buckets = new Map<string, LeadEvolutionPoint>()
   const summaryByDate = new Map(summaryDaily.map((point) => [point.date, point]))
@@ -1261,12 +1268,14 @@ function buildMonthlyEvolutionPoints(
     const funnelPoint = funnelDaily.find((point) => point.date === date)
     const summaryPoint = summaryByDate.get(date)
     const leads = Math.max(funnelPoint?.answered ?? 0, funnelPoint?.qualified ?? 0, funnelPoint?.rdv ?? 0)
+    const calls = funnelPoint?.calls ?? 0
     const rdv = summaryPoint?.rdv ?? funnelPoint?.rdv ?? 0
     const signed = summaryPoint?.signed ?? 0
     const monthKey = date.slice(0, 7) // YYYY-MM
     const existing = buckets.get(monthKey)
     if (existing) {
       existing.leads += leads
+      existing.calls += calls
       existing.rdv += rdv
       existing.signed += signed
     } else {
@@ -1276,6 +1285,7 @@ function buildMonthlyEvolutionPoints(
         date: `${monthKey}-01`,
         label: formatMonthLabel(new Date(`${monthKey}-01`)),
         leads,
+        calls,
         rdv,
         signed,
       })
@@ -1283,7 +1293,7 @@ function buildMonthlyEvolutionPoints(
   })
   const sorted = [...buckets.values()].sort((a, b) => a.date.localeCompare(b.date))
   if (sorted.length === 0) {
-    return hydrateMissingEvolutionTotals([{ key: 'empty', t: 0, date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }], totals)
+    return hydrateMissingEvolutionTotals([{ key: 'empty', t: 0, date: '', label: 'Live', leads: 0, calls: 0, rdv: 0, signed: 0 }], totals)
   }
   return hydrateMissingEvolutionTotals(sorted, totals)
 }
@@ -1296,7 +1306,7 @@ function formatMonthLabel(date: Date): string {
   return date.toLocaleDateString('fr-FR', { month: 'short' }).replace('.', '')
 }
 
-function distributeTotalsAcrossHours(points: { date: string; hour: number; label: string; calls: number }[], totals: { leads: number; rdv: number; signed: number }): LeadEvolutionPoint[] {
+function distributeTotalsAcrossHours(points: { date: string; hour: number; label: string; calls: number }[], totals: { leads: number; calls: number; rdv: number; signed: number }): LeadEvolutionPoint[] {
   const weights = points.map((point) => Math.max(0, point.calls))
   const leadValues = distributeIntegerTotal(totals.leads, weights)
   const rdvValues = distributeIntegerTotal(totals.rdv, weights)
@@ -1307,6 +1317,7 @@ function distributeTotalsAcrossHours(points: { date: string; hour: number; label
     date: point.date,
     label: `${dayLabel(point.date)} ${point.hour}h`,
     leads: leadValues[index] ?? 0,
+    calls: Math.max(0, point.calls),
     rdv: rdvValues[index] ?? 0,
     signed: signedValues[index] ?? 0,
   }))
@@ -1334,16 +1345,17 @@ function distributeIntegerTotal(total: number, weights: number[]): number[] {
   return values
 }
 
-function hydrateMissingEvolutionTotals(points: LeadEvolutionPoint[], totals: { leads: number; rdv: number; signed: number }): LeadEvolutionPoint[] {
+function hydrateMissingEvolutionTotals(points: LeadEvolutionPoint[], totals: { leads: number; calls: number; rdv: number; signed: number }): LeadEvolutionPoint[] {
   if (points.length === 0) return points
   const lastIndex = points.length - 1
   const sums = points.reduce(
-    (acc, point) => ({ leads: acc.leads + point.leads, rdv: acc.rdv + point.rdv, signed: acc.signed + point.signed }),
-    { leads: 0, rdv: 0, signed: 0 },
+    (acc, point) => ({ leads: acc.leads + point.leads, calls: acc.calls + point.calls, rdv: acc.rdv + point.rdv, signed: acc.signed + point.signed }),
+    { leads: 0, calls: 0, rdv: 0, signed: 0 },
   )
   return points.map((point, index) => index === lastIndex ? {
     ...point,
     leads: point.leads + Math.max(0, totals.leads - sums.leads),
+    calls: point.calls + Math.max(0, totals.calls - sums.calls),
     rdv: point.rdv + Math.max(0, totals.rdv - sums.rdv),
     signed: point.signed + Math.max(0, totals.signed - sums.signed),
   } : point)
