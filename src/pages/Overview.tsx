@@ -1,4 +1,4 @@
-import { type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '../components/Icon'
 import { MagicKpi } from '../components/kpi/MagicKpi'
@@ -13,7 +13,7 @@ import { buildSuiviPeriodRange, getDefaultSuiviPeriod, SUIVI_PERIOD_OPTIONS, typ
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
 import { previousRange } from '../lib/period'
 import { buildEvolutionTicks, computeEvolutionDomain, type EvolutionGranularity } from '../lib/evolutionAxis'
-import { type LeadEvolutionPoint } from '../lib/leadMetrics'
+import { LEAD_METRICS, formatMetricValue, closingRate, type LeadEvolutionPoint, type LeadMetricKey } from '../lib/leadMetrics'
 
 type FunnelPeriodMode = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'last_n_days' | 'custom'
 type FunnelPeriodState = { mode: FunnelPeriodMode; customFrom: string; customTo: string; lastN?: number; includeToday?: boolean }
@@ -754,6 +754,31 @@ function OverviewAdmin() {
       funnelProspects: adminFunnelProspects(allRdvs ?? [], allLeads ?? [], usersList ?? []),
     }
   }, [adminSummary, funnelTotals, treatedLeadTotal, usersList, allLeads, allRdvs, funnelRange.from, funnelRange.to])
+
+  const prevFunnelTotals = prevFunnel?.totals ?? EMPTY_FUNNEL_TOTALS
+  const prevStats = {
+    // Même calcul que treatedLeadTotal (max sur les mêmes champs) pour un delta homogène.
+    leads: Math.max(
+      funnelTreatedLeads(prevFunnelTotals),
+      prevAdmin?.classified ?? 0,
+      prevAdmin?.qualified ?? 0,
+      prevAdmin?.rdvPris ?? 0,
+    ),
+    calls: prevAdmin?.calls ?? prevFunnelTotals.calls,
+    rdv: prevAdmin?.rdvPris ?? prevFunnelTotals.rdv,
+    signed: prevAdmin?.signed ?? 0,
+  }
+  const metricDeltaPct = (cur: number, prev: number): number | null => (prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null)
+  const curClosing = closingRate(stats.ventes, stats.rdvPris)
+  const prevClosing = closingRate(prevStats.signed, prevStats.rdv)
+  const metricCards = [
+    { key: 'leads' as const, total: stats.leads, delta: metricDeltaPct(stats.leads, prevStats.leads) },
+    { key: 'calls' as const, total: stats.appels, delta: metricDeltaPct(stats.appels, prevStats.calls) },
+    { key: 'rdv' as const, total: stats.rdvPris, delta: metricDeltaPct(stats.rdvPris, prevStats.rdv) },
+    { key: 'signed' as const, total: stats.ventes, delta: metricDeltaPct(stats.ventes, prevStats.signed) },
+    { key: 'closing' as const, total: curClosing, delta: metricDeltaPct(curClosing, prevClosing) },
+  ]
+
   const funnelNoAnswer = Math.min(funnelTotals.noAnswer, stats.leads)
   const funnelAnswered = Math.max(
     funnelTotals.answered,
@@ -823,12 +848,6 @@ function OverviewAdmin() {
                 <p>{me?.role ?? 'admin'} · {stats.teamActive}/{stats.teamTotal} actifs</p>
               </div>
             </div>
-            <div className="overview-admin-kpis">
-              <AirKpi icon="inbox" label={leadsKpiLabelFor(funnelPeriod.mode)} value={fmtCompact(stats.leadsToday)} sub="leads arrivés" />
-              <AirKpi icon="target" label="Closing" value={`${stats.closing}%`} sub={`${fmtCompact(stats.rdvPris)} RDV suivis`} />
-              <AirKpi icon="phone" label="Appels" value={fmtCompact(stats.appels)} sub={`${fmtCompact(stats.classified)} leads traités`} />
-              <AirKpi icon="users" label="Leads traités" value={fmtCompact(stats.leads)} sub={`${fmtCompact(stats.qualified)} qualifiés`} />
-            </div>
           </div>
 
           <div className="overview-air-card overview-air-chart overview-lead-evolution-card">
@@ -839,7 +858,7 @@ function OverviewAdmin() {
               range={funnelRange}
               rangeLabel={`Du ${formatShortDate(new Date(funnelRange.from))} au ${formatShortDate(new Date(funnelRange.to))}`}
               compareLabel={`Du ${formatShortDate(new Date(prevRange.from))} au ${formatShortDate(new Date(prevRange.to))}`}
-              totals={{ leads: stats.leads, rdv: stats.rdvPris, signed: stats.ventes }}
+              cards={metricCards}
             />
           </div>
 
@@ -914,14 +933,6 @@ function CardHead({ title, icon }: { title: string; icon: ShotIcon }) {
   )
 }
 
-type LeadEvolutionSeriesKey = 'leads' | 'rdv' | 'signed'
-
-const LEAD_EVOLUTION_SERIES: { key: LeadEvolutionSeriesKey; label: string; color: string }[] = [
-  { key: 'leads', label: 'Leads', color: '#1F7857' },
-  { key: 'rdv', label: 'RDV', color: '#3DA86A' },
-  { key: 'signed', label: 'Ventes', color: '#3E9A6F' },
-]
-
 const GRANULARITY_SUBTITLE: Record<EvolutionGranularity, string> = {
   hour: 'Leads traités par heure',
   day: 'Leads traités par jour',
@@ -947,8 +958,9 @@ function smoothPath(coords: { x: number; y: number }[]): string {
   return d
 }
 
-function LeadEvolutionChart({ points, comparePoints = [], granularity, range, rangeLabel, compareLabel, totals }: { points: LeadEvolutionPoint[]; comparePoints?: LeadEvolutionPoint[]; granularity: EvolutionGranularity; range: FunnelPeriodRange; rangeLabel: string; compareLabel?: string; totals: { leads: number; rdv: number; signed: number } }) {
-  const [activeKey, setActiveKey] = useState<LeadEvolutionSeriesKey>('leads')
+type MetricCard = { key: LeadMetricKey; total: number; delta: number | null }
+function LeadEvolutionChart({ points, comparePoints = [], granularity, range, rangeLabel, compareLabel, cards }: { points: LeadEvolutionPoint[]; comparePoints?: LeadEvolutionPoint[]; granularity: EvolutionGranularity; range: FunnelPeriodRange; rangeLabel: string; compareLabel?: string; cards: MetricCard[] }) {
+  const [activeKey, setActiveKey] = useState<LeadMetricKey>('leads')
   const [hover, setHover] = useState<{ index: number; cursorX: number } | null>(null)
   const rawPoints = points.length > 0 ? points : [{ key: 'empty', t: 0, date: '', label: 'Live', leads: 0, calls: 0, rdv: 0, signed: 0 }]
   const sampleStep = rawPoints.length > 56 ? Math.ceil(rawPoints.length / 56) : 1
@@ -957,7 +969,7 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
   const comparePts = comparePoints.length > 0
     ? keepIdx.map((index) => comparePoints[Math.min(index, comparePoints.length - 1)]).filter(Boolean)
     : []
-  const activeSeries = LEAD_EVOLUTION_SERIES.find((series) => series.key === activeKey) ?? LEAD_EVOLUTION_SERIES[0]
+  const metric = LEAD_METRICS[activeKey]
   const subtitle = GRANULARITY_SUBTITLE[granularity]
 
   const width = 640
@@ -968,7 +980,7 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
   const chartWidth = width - padX * 2
   const chartHeight = height - padTop - padBottom
   const clamp = (value: number, min: number, maxValue: number) => Math.min(maxValue, Math.max(min, value))
-  const max = Math.max(1, ...safePoints.map((point) => point[activeKey]), ...comparePts.map((point) => point[activeKey]))
+  const max = Math.max(1, ...safePoints.map((p) => metric.valueOf(p)), ...comparePts.map((p) => metric.valueOf(p)))
   const domain = computeEvolutionDomain(range, granularity)
   const ticks = buildEvolutionTicks(domain, granularity)
   const useTime = domain.end > domain.start && safePoints.every((point) => Number.isFinite(point.t) && point.t > 0)
@@ -979,15 +991,15 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
   const xForCompare = (index: number) => padX + (comparePts.length <= 1 ? chartWidth / 2 : (index / (comparePts.length - 1)) * chartWidth)
   const yFor = (value: number) => padTop + chartHeight - (value / max) * chartHeight
 
-  const currentCoords = safePoints.map((point, index) => ({ x: xFor(index), y: yFor(point[activeKey]) }))
-  const compareCoords = comparePts.map((point, index) => ({ x: xForCompare(index), y: yFor(point[activeKey]) }))
+  const currentCoords = safePoints.map((point, index) => ({ x: xFor(index), y: yFor(metric.valueOf(point)) }))
+  const compareCoords = comparePts.map((point, index) => ({ x: xForCompare(index), y: yFor(metric.valueOf(point)) }))
   const currentPath = smoothPath(currentCoords)
   const comparePath = compareCoords.length >= 2 ? smoothPath(compareCoords) : ''
   const areaPath = currentPath ? `${currentPath} L ${xFor(safePoints.length - 1).toFixed(1)} ${(height - padBottom).toFixed(1)} L ${xFor(0).toFixed(1)} ${(height - padBottom).toFixed(1)} Z` : ''
   const animKey = `${range.from}|${range.to}|${granularity}|${activeKey}`
   const lastIndex = safePoints.length - 1
   const liveX = xFor(lastIndex)
-  const liveY = yFor(safePoints[lastIndex][activeKey])
+  const liveY = yFor(metric.valueOf(safePoints[lastIndex]))
   const showLive = useTime && currentPath !== ''
 
   const gridRatios = [0, 0.25, 0.5, 0.75, 1]
@@ -1008,8 +1020,8 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
 
   const hoverPoint = hover ? safePoints[hover.index] : null
   const hoverCompare = hover ? comparePts[hover.index] : undefined
-  const curVal = hoverPoint ? hoverPoint[activeKey] : 0
-  const prevVal = hoverCompare ? hoverCompare[activeKey] : 0
+  const curVal = hoverPoint ? metric.valueOf(hoverPoint) : 0
+  const prevVal = hoverCompare ? metric.valueOf(hoverCompare) : 0
   const deltaPct = hover && hoverCompare ? (prevVal ? Math.round(((curVal - prevVal) / prevVal) * 100) : null) : null
 
   return (
@@ -1020,13 +1032,28 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
           <p>{subtitle} — {rangeLabel}</p>
         </div>
       </div>
-      <div className="lead-evolution-tabs" aria-label="Métrique active">
-        {LEAD_EVOLUTION_SERIES.map((series) => (
-          <button key={series.key} type="button" className={activeKey === series.key ? 'active' : ''} onClick={() => setActiveKey(series.key)}>
-            <small><i style={{ background: series.color }} />{series.label}</small>
-            <strong>{fmtCompact(totals[series.key])}</strong>
-          </button>
-        ))}
+      <div className="lead-metric-cards" role="tablist" aria-label="Métrique active">
+        {cards.map((card) => {
+          const m = LEAD_METRICS[card.key]
+          const active = activeKey === card.key
+          return (
+            <button
+              key={card.key}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              className={`lead-metric-card${active ? ' is-active' : ''}`}
+              style={active ? ({ ['--metric-accent']: m.color } as CSSProperties) : undefined}
+              onClick={() => setActiveKey(card.key)}
+            >
+              <small><i style={{ background: m.color }} />{m.label}</small>
+              <strong>{formatMetricValue(card.total, m.format)}</strong>
+              <span className={`lead-metric-delta ${card.delta === null ? 'neutral' : card.delta > 0 ? 'up' : card.delta < 0 ? 'down' : 'neutral'}`}>
+                {card.delta === null ? '—' : card.delta > 0 ? `↗ ${card.delta} %` : card.delta < 0 ? `↘ ${Math.abs(card.delta)} %` : '→ 0 %'}
+              </span>
+            </button>
+          )
+        })}
       </div>
       <div className="lead-evolution-svg-wrap">
         <svg viewBox={`0 0 ${width} ${height}`} onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img" aria-label="Évolution de la métrique sélectionnée">
@@ -1095,7 +1122,7 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
               top: '8%',
             }}
           >
-            <small>{activeSeries.label}</small>
+            <small>{metric.label}</small>
             <strong>{hoverPoint.label}</strong>
             <b className="lead-evolution-tooltip-value">{fmtCompact(curVal)}</b>
             <div className="lead-evolution-tooltip-delta">

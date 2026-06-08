@@ -948,6 +948,20 @@ body {
   color: var(--color-text);
   font-variant-numeric: tabular-nums;
 }
+
+.lead-metric-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 14px; }
+.lead-metric-card { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 10px 12px;
+  border: 1px solid var(--color-line-soft); border-radius: 14px; background: rgba(255,255,255,0.6);
+  cursor: pointer; transition: border-color .18s, box-shadow .18s, background .18s; }
+.lead-metric-card:hover { background: rgba(255,255,255,0.85); }
+.lead-metric-card small { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--color-muted); font-weight: 700; }
+.lead-metric-card small i { width: 8px; height: 8px; border-radius: 50%; }
+.lead-metric-card strong { font-size: 18px; color: var(--color-text); }
+.lead-metric-card.is-active { border-color: var(--metric-accent, var(--color-or)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--metric-accent, var(--color-or)) 22%, transparent); background: #fff; }
+.lead-metric-delta { font-size: 11px; font-weight: 700; }
+.lead-metric-delta.up { color: var(--color-success); }
+.lead-metric-delta.down { color: var(--color-rouille); }
+.lead-metric-delta.neutral { color: var(--color-faint); }
 .lead-evolution-svg-wrap { position: relative; min-height: 274px; border-radius: 10px; border: 1px solid rgba(42, 37, 32, 0.07); background: rgba(255, 255, 255, 0.85); overflow: hidden; }
 .lead-evolution-svg-wrap svg { width: 100%; height: 274px; display: block; cursor: crosshair; overflow: visible; }
 .lead-evolution-last-card {
