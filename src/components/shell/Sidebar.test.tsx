@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import type { UserResponse } from '../../lib/types'
 import { useAuth } from '../../lib/auth'
@@ -62,5 +62,17 @@ describe('Sidebar — navigation par rôle', () => {
     expect(screen.getByRole('link', { name: 'Delivery' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Calendrier RDV' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Planning' })).toBeInTheDocument()
+  })
+
+  it('permet de replier une section métier sans masquer les autres groupes', () => {
+    setUser('admin')
+    renderSidebar()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Acquisition' }))
+
+    expect(screen.queryByRole('link', { name: 'Leads' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Client' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Delivery' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Calendrier RDV' })).toBeInTheDocument()
   })
 })

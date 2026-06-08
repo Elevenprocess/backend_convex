@@ -1814,6 +1814,7 @@ body {
 .sb-section-collapsible.is-collapsed .sb-section-chevron { transform: rotate(-90deg); }
 .sb-section-collapsible .sb-section-header:hover .sb-section-chevron { color: rgba(42, 37, 32, 0.7); }
 .sb-section-body { display: flex; flex-direction: column; gap: 1px; }
+.sb-section-body[hidden] { display: none; }
 
 [data-theme="dark"] .sb-section-collapsible .sb-section-header:hover { background: rgba(255, 255, 255, 0.05); }
 [data-theme="dark"] .sb-section-chevron { color: rgba(255, 255, 255, 0.42); }

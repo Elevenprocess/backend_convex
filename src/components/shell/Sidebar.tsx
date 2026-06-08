@@ -8,7 +8,7 @@ import { useTheme } from '../../lib/theme'
 import { leadListPath } from '../../lib/leadPaths'
 
 type Item = { to: string; icon: IconName; label: string; roles?: Role[] }
-type Section = { id: string; label: string; items: Item[] }
+type Section = { id: string; label: string; items: Item[]; collapsible?: boolean }
 
 const ACQUISITION_ROLES: Role[] = ['admin', 'setter', 'setter_lead', 'commercial', 'commercial_lead']
 const DELIVERY_ROLES: Role[] = ['admin', 'delivrabilite', 'responsable_technique', 'back_office']
@@ -43,6 +43,7 @@ const SECTIONS: Section[] = [
   {
     id: 'acquisition',
     label: 'Acquisition',
+    collapsible: true,
     items: [
       { to: '/leads', icon: 'users', label: 'Leads', roles: ['admin', 'setter', 'setter_lead'] },
       { to: '/client', icon: 'inbox', label: 'Client', roles: ACQUISITION_ROLES },
@@ -51,6 +52,7 @@ const SECTIONS: Section[] = [
   {
     id: 'delivrabilite',
     label: 'Délivrabilité',
+    collapsible: true,
     items: [
       { to: '/suivi', icon: 'grid', label: 'Delivery', roles: DELIVERY_ROLES },
       { to: '/client', icon: 'inbox', label: 'Client', roles: OPS_ROLES },
@@ -59,6 +61,7 @@ const SECTIONS: Section[] = [
   {
     id: 'calendriers',
     label: 'Calendriers',
+    collapsible: true,
     items: [
       { to: '/rdv', icon: 'calendar', label: 'Calendrier RDV', roles: CALENDAR_ROLES },
       { to: '/planning', icon: 'clock', label: 'Planning', roles: DELIVERY_ROLES },
@@ -67,6 +70,7 @@ const SECTIONS: Section[] = [
   {
     id: 'admin',
     label: 'Administration',
+    collapsible: true,
     items: [
       { to: '/settings', icon: 'users', label: 'Équipe', roles: ['commercial'] },
       { to: '/settings', icon: 'settings', label: 'Paramètres', roles: ['admin', 'commercial_lead'] },
@@ -75,6 +79,7 @@ const SECTIONS: Section[] = [
 ]
 
 const SIDEBAR_STORAGE_KEY = 'ecoi.sidebar.expanded'
+const SIDEBAR_SECTIONS_STORAGE_KEY = 'ecoi.sidebar.collapsedSections'
 
 const ROLE_TAG: Record<Role, string> = {
   admin: 'Administration',
@@ -117,12 +122,27 @@ export function Sidebar() {
     const stored = window.localStorage.getItem(SIDEBAR_STORAGE_KEY)
     return stored === null ? true : stored === 'true'
   })
+  const [collapsedSections, setCollapsedSections] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return []
+    const stored = window.localStorage.getItem(SIDEBAR_SECTIONS_STORAGE_KEY)
+    if (!stored) return []
+    try {
+      const parsed = JSON.parse(stored)
+      return Array.isArray(parsed) ? parsed.filter((id) => typeof id === 'string') : []
+    } catch {
+      return []
+    }
+  })
   const [userMenu, setUserMenu] = useState(false)
   const userRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(expanded))
   }, [expanded])
+
+  useEffect(() => {
+    window.localStorage.setItem(SIDEBAR_SECTIONS_STORAGE_KEY, JSON.stringify(collapsedSections))
+  }, [collapsedSections])
 
   useEffect(() => {
     if (!userMenu) return
@@ -159,6 +179,18 @@ export function Sidebar() {
     }))
     return built.filter((s) => s.items.length > 0)
   }, [role])
+
+  useEffect(() => {
+    const activeSection = sections.find((section) => section.items.some((item) => item.to === location.pathname))
+    if (!activeSection?.collapsible || !collapsedSections.includes(activeSection.id)) return
+    setCollapsedSections((current) => current.filter((id) => id !== activeSection.id))
+  }, [collapsedSections, location.pathname, sections])
+
+  const toggleSection = (sectionId: string) => {
+    setCollapsedSections((current) =>
+      current.includes(sectionId) ? current.filter((id) => id !== sectionId) : [...current, sectionId],
+    )
+  }
 
   const handleSignOut = async () => {
     setUserMenu(false)
@@ -205,25 +237,48 @@ export function Sidebar() {
       </button>
 
       <div className="sb-scroll">
-        {sections.map((section) => (
-          <nav key={section.id} className="sb-section" aria-label={section.label}>
-            <div className="sb-section-label">{section.label}</div>
-            {section.items.map((item) => (
-              <NavLink
-                key={section.id + item.to + item.label}
-                to={item.to}
-                className={({ isActive }) => `sb-item ${isActive ? 'is-active' : ''}`}
-                data-tip={item.label}
-                title={item.label}
-              >
-                <span className="sb-item-icon">
-                  <Icon name={item.icon} size={16} strokeWidth={1.75} />
-                </span>
-                <span className="sb-item-label">{item.label}</span>
-              </NavLink>
-            ))}
-          </nav>
-        ))}
+        {sections.map((section) => {
+          const isSectionCollapsed = expanded && section.collapsible && collapsedSections.includes(section.id)
+          const bodyId = `sidebar-section-${section.id}`
+          return (
+            <nav
+              key={section.id}
+              className={`sb-section ${section.collapsible ? 'sb-section-collapsible' : ''} ${isSectionCollapsed ? 'is-collapsed' : ''}`}
+              aria-label={section.label}
+            >
+              {section.collapsible && expanded ? (
+                <button
+                  type="button"
+                  className="sb-section-header"
+                  onClick={() => toggleSection(section.id)}
+                  aria-expanded={!isSectionCollapsed}
+                  aria-controls={bodyId}
+                >
+                  <span className="sb-section-label">{section.label}</span>
+                  <Icon name="chevron-down" size={12} className="sb-section-chevron" />
+                </button>
+              ) : (
+                <div className="sb-section-label">{section.label}</div>
+              )}
+              <div className="sb-section-body" id={bodyId} hidden={isSectionCollapsed}>
+                {section.items.map((item) => (
+                  <NavLink
+                    key={section.id + item.to + item.label}
+                    to={item.to}
+                    className={({ isActive }) => `sb-item ${isActive ? 'is-active' : ''}`}
+                    data-tip={item.label}
+                    title={item.label}
+                  >
+                    <span className="sb-item-icon">
+                      <Icon name={item.icon} size={16} strokeWidth={1.75} />
+                    </span>
+                    <span className="sb-item-label">{item.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            </nav>
+          )
+        })}
       </div>
 
       <div className="sb-user" ref={userRef}>
