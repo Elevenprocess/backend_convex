@@ -23,6 +23,9 @@ type Notif = {
   urgency: 'now' | 'soon' | 'info'
   to?: string
   reminderKey?: string
+  // true => le système a détecté que le rappel a déjà été traité (lead rappelé, même en avance).
+  // La carte s'affiche barrée automatiquement, sans clic sur "Barrer comme appelé".
+  resolved?: boolean
 }
 
 export function Notifications() {
@@ -81,7 +84,10 @@ export function Notifications() {
 
 function NotificationCard({ notif }: { notif: Notif }) {
   const [calledReminders, setCalledReminders] = useCalledReminders()
-  const isCalled = notif.reminderKey ? calledReminders.has(notif.reminderKey) : false
+  // Barré = détecté automatiquement (lead rappelé, même en avance) OU barré à la main.
+  const autoResolved = notif.resolved === true
+  const manualCalled = notif.reminderKey ? calledReminders.has(notif.reminderKey) : false
+  const isCalled = autoResolved || manualCalled
   const toggleCalled = () => {
     if (!notif.reminderKey) return
     const next = new Set(calledReminders)
@@ -104,7 +110,11 @@ function NotificationCard({ notif }: { notif: Notif }) {
         <p className={`text-sm text-muted mt-1 ${isCalled ? 'line-through' : ''}`}>{notif.body}</p>
         <div className="mt-3 flex items-center gap-2">
           {notif.to && <Link to={notif.to} className="text-xs font-semibold text-or-dark hover:underline">Ouvrir</Link>}
-          {notif.reminderKey && (
+          {autoResolved ? (
+            <span className="text-xs font-semibold rounded-full border border-success/40 bg-success-tint text-success px-3 py-1 inline-flex items-center gap-1">
+              <Icon name="check" size={12} /> Déjà appelé
+            </span>
+          ) : notif.reminderKey && (
             <button
               type="button"
               onClick={toggleCalled}
@@ -132,8 +142,25 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
     const callbackAt = lead.nextCallbackAt ? new Date(lead.nextCallbackAt).getTime() : null
 
     const callbackResolved = isCallbackResolved(lead, callbackAt)
+    const isCallbackLead = lead.status === 'a_rappeler' || lead.status === 'relance' || lead.nextCallbackAt
 
-    if (callbackAt && callbackAt <= now && (lead.status === 'a_rappeler' || lead.status === 'relance' || lead.nextCallbackAt) && !callbackResolved) {
+    if (callbackAt && callbackResolved && isCallbackLead && resolvedCallbackStillVisible(lead, now)) {
+      // Rappel déjà traité (lead rappelé, même en avance) → on le garde BARRÉ 24h puis il sort du feed.
+      notifications.push({
+        id: `callback-done-${lead.id}`,
+        group: 'RAPPELS TRAITÉS',
+        icon: 'check',
+        ...NOTIF_COLOR.done,
+        title: 'Appel à rappeler maintenant',
+        body: <><strong>{name}</strong>{lead.phone ? ` · ${lead.phone}` : ''}</>,
+        time: formatDateTime(lead.nextCallbackAt!),
+        sortAt: new Date(lead.latestCallAt!).getTime(),
+        urgency: 'info',
+        to: leadLink,
+        reminderKey: reminderKey(lead),
+        resolved: true,
+      })
+    } else if (callbackAt && callbackAt <= now && (lead.status === 'a_rappeler' || lead.status === 'relance' || lead.nextCallbackAt) && !callbackResolved) {
       notifications.push({
         id: `callback-late-${lead.id}`,
         group: 'RAPPELS EN RETARD',
@@ -330,6 +357,12 @@ const NOTIF_COLOR = {
     iconColor: 'text-[#D97706]',
     borderColor: 'border-l-[#D97706]',
   },
+  // Rappel déjà traité (appelé, même en avance) → VERT doux, carte barrée
+  done: {
+    iconBg: 'bg-[#DCFCE7]',
+    iconColor: 'text-[#16A34A]',
+    borderColor: 'border-l-[#16A34A]',
+  },
   // Rappel programmé → BLEU CIEL info
   planned: {
     iconBg: 'bg-[#E0F2FE]',
@@ -509,15 +542,32 @@ function reminderKey(lead: LeadResponse): string {
 // "Barrer comme appelé" sur 50 leads qu'il a clairement déjà appelés.
 //
 // Conditions :
-// - le lead a été appelé APRÈS l'heure du rappel (latestCallAt >= nextCallbackAt)
+// - un appel PLUS RÉCENT que celui qui a posé le rappel existe (latestCallAt > callbackSetAt).
+//   Couvre le cas "rappelé EN AVANCE" : le commercial appelle avant l'heure prévue du rappel,
+//   donc latestCallAt reste < nextCallbackAt — mais il est > callbackSetAt, ce qui suffit.
+// - OU (fallback, anciens leads sans callbackSetAt) le lead a été appelé APRÈS l'heure du rappel
 // - OU le statut a évolué hors de la file d'attente d'appels (qualifié, RDV, signé, perdu, pas qualifié)
 function isCallbackResolved(lead: LeadResponse, callbackAt: number | null): boolean {
   const resolvedStatuses: LeadStatus[] = ['qualifie', 'rdv_pris', 'rdv_honore', 'signe', 'perdu', 'pas_qualifie']
   if (resolvedStatuses.includes(lead.status)) return true
+  if (lead.callbackSetAt && lead.latestCallAt) {
+    const setAt = new Date(lead.callbackSetAt).getTime()
+    const latestCall = new Date(lead.latestCallAt).getTime()
+    // strictement > : si le rappel a été posé PAR le dernier appel, les deux sont égaux → non résolu.
+    if (Number.isFinite(setAt) && Number.isFinite(latestCall) && latestCall > setAt) return true
+  }
   if (callbackAt && lead.latestCallAt) {
     const latestCall = new Date(lead.latestCallAt).getTime()
     if (Number.isFinite(latestCall) && latestCall >= callbackAt) return true
   }
+  return false
+}
+
+// Un rappel traité reste affiché BARRÉ pendant 24h (ancré sur l'heure de l'appel qui l'a résolu),
+// puis sort du feed pour éviter l'accumulation de vieux rappels barrés.
+function resolvedCallbackStillVisible(lead: LeadResponse, now: number): boolean {
+  const calledAt = lead.latestCallAt ? new Date(lead.latestCallAt).getTime() : null
+  if (calledAt && Number.isFinite(calledAt)) return calledAt >= now - 24 * 60 * 60 * 1000
   return false
 }
 
