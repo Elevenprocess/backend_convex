@@ -1088,9 +1088,10 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
           <div
             className="lead-evolution-tooltip"
             style={{
-              left: hover.cursorX > width * 0.6 ? 'auto' : `${clamp((hover.cursorX / width) * 100, 2, 60)}%`,
-              right: hover.cursorX > width * 0.6 ? `${clamp(((width - hover.cursorX) / width) * 100, 2, 60)}%` : 'auto',
+              left: `${(hover.cursorX / width) * 100}%`,
               top: '8%',
+              // Décalage continu : 0 % au bord gauche → -100 % au bord droit (suit le curseur sans jamais sortir ni sauter).
+              transform: `translateX(-${clamp((hover.cursorX - padX) / chartWidth, 0, 1) * 100}%)`,
             }}
           >
             <small>{activeSeries.label}</small>
