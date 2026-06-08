@@ -1123,22 +1123,29 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
             }}
           >
             <small>{metric.label}</small>
-            <strong>{hoverPoint.label}</strong>
-            <b className="lead-evolution-tooltip-value">{fmtCompact(curVal)}</b>
+            <div className="lead-evolution-tooltip-row">
+              <span className="dot dot-current" style={{ background: metric.color }} />
+              <span className="lbl">{hoverPoint.label}</span>
+              <b>{formatMetricValue(curVal, metric.format)}</b>
+            </div>
             <div className="lead-evolution-tooltip-delta">
               {deltaPct === null ? (
                 <span className="neutral">—</span>
               ) : deltaPct > 0 ? (
-                <span className="up">↗ {fmtCompact(deltaPct)} %</span>
+                <span className="up">↗ {Math.abs(deltaPct)} %</span>
               ) : deltaPct < 0 ? (
-                <span className="down">↘ {fmtCompact(Math.abs(deltaPct))} %</span>
+                <span className="down">↘ {Math.abs(deltaPct)} %</span>
               ) : (
                 <span className="neutral">→ 0 %</span>
               )}
               <span className="muted"> de la comparaison</span>
             </div>
             {hoverCompare ? (
-              <em>{hoverCompare.label} · {fmtCompact(prevVal)}</em>
+              <div className="lead-evolution-tooltip-row compare">
+                <span className="dot dot-compare" />
+                <span className="lbl">{hoverCompare.label}</span>
+                <b>{formatMetricValue(prevVal, metric.format)}</b>
+              </div>
             ) : null}
           </div>
         ) : null}
