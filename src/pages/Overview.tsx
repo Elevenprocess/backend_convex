@@ -973,6 +973,7 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
   const xForTime = (t: number) => padX + ((clamp(t, domain.start, domain.end) - domain.start) / (domain.end - domain.start)) * chartWidth
   const xForIndex = (index: number) => padX + (safePoints.length === 1 ? chartWidth / 2 : (index / (safePoints.length - 1)) * chartWidth)
   const xFor = (index: number) => (useTime ? xForTime(safePoints[index].t) : xForIndex(index))
+  // comparePts.length === safePoints.length by construction (same keepIdx mapping)
   const xForCompare = (index: number) => padX + (comparePts.length <= 1 ? chartWidth / 2 : (index / (comparePts.length - 1)) * chartWidth)
   const yFor = (value: number) => padTop + chartHeight - (value / max) * chartHeight
 
@@ -1064,7 +1065,7 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
           {hover && hoverPoint ? (
             <g pointerEvents="none">
               <line x1={hover.cursorX} x2={hover.cursorX} y1={padTop} y2={height - padBottom} className="lead-evolution-guide" />
-              {hoverCompare ? <circle cx={xFor(hover.index)} cy={yFor(prevVal)} r="3.5" className="lead-evolution-compare-dot" /> : null}
+              {hoverCompare ? <circle cx={xForCompare(hover.index)} cy={yFor(prevVal)} r="3.5" className="lead-evolution-compare-dot" /> : null}
               <circle cx={xFor(hover.index)} cy={yFor(curVal)} r="5" className="lead-evolution-dot" />
             </g>
           ) : null}
