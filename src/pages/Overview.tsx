@@ -1175,7 +1175,7 @@ function buildWeeklyEvolutionPoints(
     } else {
       buckets.set(key, {
         key,
-        t: new Date(`${key}T12:00:00`).getTime(),
+        t: new Date(weekStart).setHours(12, 0, 0, 0),
         date: key,
         label: `sem. ${formatDayMonth(weekStart)}`,
         leads,
