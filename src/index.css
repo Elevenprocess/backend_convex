@@ -4837,8 +4837,9 @@ button.suivi-side-cta { font-family: inherit; cursor: pointer; width: 100%; }
   stroke-dasharray: 2 4;
   opacity: .85;
 }
-.lead-evolution-dot { fill: var(--color-or); stroke: #fff; stroke-width: 2; }
-.lead-evolution-compare-dot { fill: var(--color-faint); stroke: #fff; stroke-width: 1.5; }
+/* Glide doux du marqueur entre deux points (façon Shopify) — cx/cy sont des propriétés CSS géométriques animables sur les navigateurs modernes. */
+.lead-evolution-dot { fill: var(--color-or); stroke: #fff; stroke-width: 2; transition: cx .1s ease-out, cy .1s ease-out; }
+.lead-evolution-compare-dot { fill: var(--color-faint); stroke: #fff; stroke-width: 1.5; transition: cx .1s ease-out, cy .1s ease-out; }
 .lead-evolution-guide { stroke: var(--color-line); stroke-width: 1.2; opacity: .9; stroke-dasharray: none; }
 .lead-evolution-axis { font-size: 10.5px; font-weight: 700; fill: var(--color-faint); }
 .lead-evolution-yaxis { font-size: 10px; font-weight: 700; fill: var(--color-faint); }
@@ -4855,78 +4856,35 @@ button.suivi-side-cta { font-family: inherit; cursor: pointer; width: 100%; }
 .lead-evolution-legend i.swatch-solid { height: 3px; border-radius: 2px; background: var(--color-or); }
 .lead-evolution-legend i.swatch-dashed { height: 0; border-top: 2px dashed var(--color-faint); }
 
-/* --- Animations pointe live (façon Shopify) ------------------------- */
-.lead-evolution-anim {
-  transform-box: fill-box;
-  transform-origin: bottom;
-  animation: leadEvoRise .9s cubic-bezier(.22,.61,.36,1) both;
-}
-@keyframes leadEvoRise {
-  from { transform: translateY(14px) scaleY(.7); opacity: .35; }
-  to { transform: none; opacity: 1; }
-}
+/* --- Entrée du graph (un seul reveal propre : fondu + tracé) -------- */
+/* Avant : un "rise" avec scaleY .7 sur le groupe (qui écrasait/distordait l'aire) EN PLUS du tracé → effet busy/clignote.
+   Maintenant : simple fondu du groupe pendant que la ligne se trace. */
+.lead-evolution-anim { animation: leadEvoFade .5s ease both; }
+@keyframes leadEvoFade { from { opacity: 0; } to { opacity: 1; } }
 
 .lead-evolution-line--draw {
   /* 2000 = surestimation de la longueur du tracé (viewBox 640 de large) ; couvre les courbes très ondulées */
   stroke-dasharray: 2000;
   stroke-dashoffset: 2000;
-  animation: leadEvoDraw 1.1s ease forwards;
+  animation: leadEvoDraw .8s ease forwards;
 }
 @keyframes leadEvoDraw { to { stroke-dashoffset: 0; } }
 
-.lead-evolution-live { animation: leadEvoLiveIn .45s ease .95s both; }
+/* --- Pointe "live" (dernier point) — statique et discrète ----------- */
+/* Avant : pulse + halo qui s'étend + spark vertical, tous en boucle infinie → distrayant.
+   Maintenant : point or fixe + halo doux statique, pas d'animation en boucle. */
+.lead-evolution-live { animation: leadEvoLiveIn .4s ease .7s both; }
 @keyframes leadEvoLiveIn { from { opacity: 0; } to { opacity: 1; } }
 
-.lead-evolution-live-dot {
-  fill: var(--color-or);
-  stroke: #fff;
-  stroke-width: 2;
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: leadEvoPulse 1.8s ease-in-out 1.1s infinite;
-}
-@keyframes leadEvoPulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.35); }
-}
-
-.lead-evolution-live-halo {
-  fill: var(--color-or);
-  opacity: .25;
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: leadEvoHalo 1.8s ease-out 1.1s infinite;
-}
-@keyframes leadEvoHalo {
-  0% { transform: scale(.6); opacity: .35; }
-  70% { opacity: 0; }
-  100% { transform: scale(2.4); opacity: 0; }
-}
-
-.lead-evolution-live-spark {
-  stroke: var(--color-or);
-  stroke-width: 2;
-  stroke-linecap: round;
-  transform-box: fill-box;
-  transform-origin: bottom;
-  animation: leadEvoSpark 1.8s ease-out 1.1s infinite;
-}
-@keyframes leadEvoSpark {
-  0% { transform: scaleY(0); opacity: 0; }
-  35% { transform: scaleY(1); opacity: .9; }
-  100% { transform: scaleY(1); opacity: 0; }
-}
+.lead-evolution-live-dot { fill: var(--color-or); stroke: #fff; stroke-width: 2; }
+.lead-evolution-live-halo { fill: var(--color-or); opacity: .14; }
+.lead-evolution-live-spark { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .lead-evolution-anim,
   .lead-evolution-line--draw,
-  .lead-evolution-live,
-  .lead-evolution-live-dot,
-  .lead-evolution-live-halo,
-  .lead-evolution-live-spark { animation: none; }
+  .lead-evolution-live { animation: none; }
   .lead-evolution-line--draw { stroke-dashoffset: 0; }
-  .lead-evolution-live-halo,
-  .lead-evolution-live-spark { opacity: 0; }
 }
 
 /* --- Cartes vue d'ensemble : tags --- */

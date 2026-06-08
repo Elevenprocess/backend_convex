@@ -992,17 +992,31 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
   const fallbackLabelStep = Math.max(1, Math.ceil((safePoints.length - 1) / 5))
   const fallbackLabelIndexes = safePoints.length <= 1 ? [0] : safePoints.map((_, index) => index).filter((index) => index % fallbackLabelStep === 0 || index === safePoints.length - 1)
 
+  // rAF-throttlé : 1 setState par frame max (évite le re-render à chaque pixel = jank).
+  // cursorX = position brute du curseur (la ligne-guide suit la souris en continu, sans snapper).
+  // index = point le plus proche (le marqueur snappe dessus mais glisse via transition CSS).
+  const moveRaf = useRef<number | null>(null)
   const onMove = (event: MouseEvent<SVGSVGElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
-    const cursorX = clamp(((event.clientX - rect.left) / rect.width) * width, padX, width - padX)
-    let index = 0
-    let best = Infinity
-    for (let i = 0; i < safePoints.length; i += 1) {
-      const dist = Math.abs(xFor(i) - cursorX)
-      if (dist < best) { best = dist; index = i }
-    }
-    setHover({ index, cursorX: xFor(index) })
+    const clientX = event.clientX
+    if (moveRaf.current !== null) return
+    moveRaf.current = requestAnimationFrame(() => {
+      moveRaf.current = null
+      const cursorX = clamp(((clientX - rect.left) / rect.width) * width, padX, width - padX)
+      let index = 0
+      let best = Infinity
+      for (let i = 0; i < safePoints.length; i += 1) {
+        const dist = Math.abs(xFor(i) - cursorX)
+        if (dist < best) { best = dist; index = i }
+      }
+      setHover({ index, cursorX })
+    })
   }
+  const onLeave = () => {
+    if (moveRaf.current !== null) { cancelAnimationFrame(moveRaf.current); moveRaf.current = null }
+    setHover(null)
+  }
+  useEffect(() => () => { if (moveRaf.current !== null) cancelAnimationFrame(moveRaf.current) }, [])
 
   const hoverPoint = hover ? safePoints[hover.index] : null
   const hoverCompare = hover ? comparePts[hover.index] : undefined
@@ -1027,7 +1041,7 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
         ))}
       </div>
       <div className="lead-evolution-svg-wrap">
-        <svg viewBox={`0 0 ${width} ${height}`} onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img" aria-label="Évolution de la métrique sélectionnée">
+        <svg viewBox={`0 0 ${width} ${height}`} onMouseMove={onMove} onMouseLeave={onLeave} role="img" aria-label="Évolution de la métrique sélectionnée">
           <defs>
             <linearGradient id="leadEvolutionFill" x1="0" x2="0" y1="0" y2="1">
               <stop offset="0%" stopColor="var(--color-or)" stopOpacity="0.14" />
@@ -1079,7 +1093,7 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
           {hover && hoverPoint ? (
             <g pointerEvents="none">
               <line x1={hover.cursorX} x2={hover.cursorX} y1={padTop} y2={height - padBottom} className="lead-evolution-guide" />
-              {hoverCompare ? <circle cx={hover.cursorX} cy={yFor(prevVal)} r="3.5" className="lead-evolution-compare-dot" /> : null}
+              {hoverCompare ? <circle cx={xForCompare(hover.index)} cy={yFor(prevVal)} r="3.5" className="lead-evolution-compare-dot" /> : null}
               <circle cx={xFor(hover.index)} cy={yFor(curVal)} r="5" className="lead-evolution-dot" />
             </g>
           ) : null}
