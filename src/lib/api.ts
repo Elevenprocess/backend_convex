@@ -3,6 +3,7 @@ import type {
   DebriefResponse,
   Devis,
   LeadResponse,
+  NotificationResponse,
   ProjectAttachmentKind,
   ProjectAttachmentResponse,
   ProjectDetailResponse,
@@ -434,6 +435,15 @@ export function deleteSubstepDocument(documentId: string): Promise<{ ok: true }>
 /** URL directe (streamée par l'API) pour ouvrir/télécharger un document. */
 export function substepDocumentRawUrl(documentId: string): string {
   return buildApiUrl(`/documents/${documentId}/raw`)
+}
+
+// ─── Notifications ─────────────────────────────────────────
+export function markNotificationRead(id: string): Promise<NotificationResponse> {
+  return api<NotificationResponse>(`/notifications/${id}/read`, { method: 'PATCH' })
+}
+
+export function markAllNotificationsRead(): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/notifications/read-all', { method: 'POST' })
 }
 
 export { API_BASE }
