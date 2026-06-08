@@ -1079,7 +1079,7 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
           {hover && hoverPoint ? (
             <g pointerEvents="none">
               <line x1={hover.cursorX} x2={hover.cursorX} y1={padTop} y2={height - padBottom} className="lead-evolution-guide" />
-              {hoverCompare ? <circle cx={xForCompare(hover.index)} cy={yFor(prevVal)} r="3.5" className="lead-evolution-compare-dot" /> : null}
+              {hoverCompare ? <circle cx={hover.cursorX} cy={yFor(prevVal)} r="3.5" className="lead-evolution-compare-dot" /> : null}
               <circle cx={xFor(hover.index)} cy={yFor(curVal)} r="5" className="lead-evolution-dot" />
             </g>
           ) : null}

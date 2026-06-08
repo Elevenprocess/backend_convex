@@ -4864,6 +4864,7 @@ button.suivi-side-cta { font-family: inherit; cursor: pointer; width: 100%; }
 }
 
 .lead-evolution-line--draw {
+  /* 2000 = surestimation de la longueur du tracé (viewBox 640 de large) ; couvre les courbes très ondulées */
   stroke-dasharray: 2000;
   stroke-dashoffset: 2000;
   animation: leadEvoDraw 1.1s ease forwards;
