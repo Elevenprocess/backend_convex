@@ -279,6 +279,7 @@ function AnalyticsAdmin() {
   const { data, loading, error } = useAnalyticsSummary({ from: range.from, to: range.to })
   const stats = data?.admin ?? EMPTY_ADMIN_STATS
   const commercialStats = stats
+  const qualifRate = stats.classified > 0 ? Math.round((stats.qualified / stats.classified) * 100) : 0
 
   return (
     <AppShell blobsKey="admin" flat>
@@ -289,8 +290,8 @@ function AnalyticsAdmin() {
       </div>
       <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 overflow-y-auto space-y-4 sm:space-y-6 flex-grow">
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
-          <BigStatCard label="LEADS TRAITÉS" value={fmtInt(stats.classified)} delta={`${stats.qualificationRate}%`} deltaTone="info" sub={`${stats.qualificationRate}% deviennent qualifiés`} accent="info" icon="users" progress={stats.qualificationRate} />
-          <BigStatCard label="RDV / QUALIFIÉS" value={fmtInt(stats.rdvPris)} delta={`${stats.scheduledRdv} calendrier`} deltaTone="info" sub={`${stats.rdvRate}% de conversion`} accent="success" icon="calendar" trend={stats.dailyEvolution.map((d) => d.rdv)} />
+          <BigStatCard label="LEADS TRAITÉS" value={fmtInt(stats.classified)} delta={`${stats.loggedCalls} appels`} deltaTone="info" sub={`Leads avec un vrai statut sur ${stats.loggedCalls} appels réels`} accent="info" icon="users" />
+          <BigStatCard label="QUALIFIÉS" value={fmtInt(stats.qualified)} delta={`${qualifRate}%`} deltaTone="info" sub={`${qualifRate}% des leads traités deviennent qualifiés`} accent="success" icon="target" progress={qualifRate} trend={stats.dailyEvolution.map((d) => d.rdv)} />
           <BigStatCard label="CA SIGNÉ" value={fmtKEur(stats.ca)} delta={`${stats.signed} ventes signées`} sub={fmtFullEur(stats.ca)} accent="gold" icon="trophy" trend={stats.dailyEvolution.map((d) => d.ca)} />
         </div>
 
@@ -569,15 +570,14 @@ function commercialTableRows(stats: AnalyticsCommercialSummary) {
 }
 
 function adminTableRows(stats: AnalyticsAdminSummary) {
+  const qualifOnTreated = stats.classified > 0 ? Math.round((stats.qualified / stats.classified) * 100) : 0
   return [
     ['Appels réels enregistrés', fmtInt(stats.loggedCalls), 'Appels réellement créés dans les logs sur la période'],
     ['Leads traités', fmtInt(stats.classified), 'Leads qui ont eu un vrai statut : qualifié, relance, refus ou RDV'],
-    ['Leads qualifiés', fmtInt(stats.qualified), `${stats.qualificationRate}% des leads traités deviennent qualifiés`],
+    ['Leads qualifiés', fmtInt(stats.qualified), `${qualifOnTreated}% des leads traités deviennent qualifiés`],
     ['RDV calendrier', fmtInt(stats.scheduledRdv), 'RDV réellement présents dans le calendrier/CRM sur la période'],
-    ['RDV / qualifiés opérationnels', fmtInt(stats.rdvPris), `${stats.rdvRate}% appel → RDV ou qualification`],
     ['Ventes signées', fmtInt(stats.signed), 'Nombre de dossiers signés après RDV honoré'],
     ['Chiffre d’affaires signé', fmtKEur(stats.ca), stats.signed > 0 ? `Panier moyen estimé : ${fmtKEur(stats.ca / stats.signed)}` : 'Aucune vente signée sur cette période'],
-    ['Leads à traiter', fmtInt(stats.unclassified), 'Leads encore sans qualification claire dans le CRM'],
   ]
 }
 
