@@ -180,6 +180,7 @@ export type AnalyticsDailyPoint = {
   rdv: number
   signed: number
   ca: number
+  classified: number
 }
 
 export type AnalyticsHourlyCallPoint = {
