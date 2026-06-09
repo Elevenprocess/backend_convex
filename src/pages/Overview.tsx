@@ -647,48 +647,7 @@ function OverviewCommercialManager() {
             <p className="text-sm text-muted mt-2">{commercialRange.label}</p>
           </div>
           <div className="overview-commercial-toolbar">
-            <div className="overview-range-switch" aria-label="Période tableau de bord commercial">
-              {FUNNEL_PERIOD_OPTIONS.filter((period) => period.id === 'today' || period.id === 'yesterday' || period.id === 'this_week' || period.id === 'this_month' || period.id === 'this_year').map((period) => (
-                <button
-                  key={period.id}
-                  type="button"
-                  className={commercialPeriod.mode === period.id ? 'active' : ''}
-                  onClick={() => setCommercialPeriod((current) => ({ ...current, mode: period.id }))}
-                >
-                  {period.label}
-                </button>
-              ))}
-            </div>
-            <div className="overview-commercial-date-range">
-              <label>
-                <span>Du</span>
-                <input
-                  type="date"
-                  value={toDateInputValue(new Date(commercialRange.from))}
-                  max={funnelTodayInput}
-                  onChange={(event) => setCommercialPeriod((current) => ({
-                    ...current,
-                    mode: 'custom',
-                    customFrom: event.target.value,
-                    customTo: current.mode === 'custom' ? current.customTo : toDateInputValue(new Date(commercialRange.to)),
-                  }))}
-                />
-              </label>
-              <label>
-                <span>Au</span>
-                <input
-                  type="date"
-                  value={toDateInputValue(new Date(commercialRange.to))}
-                  max={funnelTodayInput}
-                  onChange={(event) => setCommercialPeriod((current) => ({
-                    ...current,
-                    mode: 'custom',
-                    customFrom: current.mode === 'custom' ? current.customFrom : toDateInputValue(new Date(commercialRange.from)),
-                    customTo: event.target.value,
-                  }))}
-                />
-              </label>
-            </div>
+            <DateRangePicker value={commercialPeriod} onChange={setCommercialPeriod} align="right" />
             <div className="overview-profile-chip">
               <div className="overview-profile-photo">
                 {me?.image ? <img src={me.image} alt={me.name ?? 'Profil'} /> : <span>{userInitials(me?.name ?? display.firstName)}</span>}
