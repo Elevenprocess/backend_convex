@@ -2225,6 +2225,33 @@ body {
   background: rgba(31, 120, 87, 0.18);
 }
 
+/* Filtre "À rappeler" : clignotement d'alerte quand un rappel est imminent (≤ 3 min). */
+@keyframes leads-rail-blink {
+  0%, 100% {
+    background: rgba(214, 137, 16, 0.10);
+    box-shadow: 0 0 0 0 rgba(214, 137, 16, 0);
+  }
+  50% {
+    background: rgba(214, 137, 16, 0.30);
+    box-shadow: 0 0 0 3px rgba(214, 137, 16, 0.22);
+  }
+}
+.leads-rail-item.is-blinking,
+.leads-rail-mini.is-blinking {
+  animation: leads-rail-blink 1s ease-in-out infinite;
+  border-radius: 10px;
+  color: var(--color-or-dark);
+  font-weight: 700;
+}
+@media (prefers-reduced-motion: reduce) {
+  .leads-rail-item.is-blinking,
+  .leads-rail-mini.is-blinking {
+    animation: none;
+    background: rgba(214, 137, 16, 0.24);
+    box-shadow: 0 0 0 2px rgba(214, 137, 16, 0.32);
+  }
+}
+
 /* === Lead table polish === */
 .lead-table {
   border-collapse: separate;

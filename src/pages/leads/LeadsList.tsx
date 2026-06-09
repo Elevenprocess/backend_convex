@@ -243,6 +243,42 @@ function LeadsSetter() {
 
   const categoryLeads = mine
 
+  // Horloge interne rafraîchie toutes les 15 s pour réévaluer la fenêtre "rappel imminent"
+  // sans recharger la page.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 15_000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  // Leads "à rappeler" dont l'heure de rappel tombe dans les 3 prochaines minutes
+  // (futur proche uniquement ; les rappels déjà dépassés ne déclenchent pas).
+  const imminentCallbackIds = useMemo(() => {
+    const horizon = now + 3 * 60 * 1000
+    return categoryLeads
+      .filter((l) => isCallbackLead(l) && l.nextCallbackAt)
+      .filter((l) => {
+        const t = new Date(l.nextCallbackAt as string).getTime()
+        return t > now && t <= horizon
+      })
+      .map((l) => l.id)
+  }, [categoryLeads, now])
+
+  // Accusé de réception : on mémorise les leads dont le sidebar dynamique a été ouvert.
+  const [acknowledgedCallbackIds, setAcknowledgedCallbackIds] = useState<Set<string>>(() => new Set())
+  useEffect(() => {
+    if (!selectedId) return
+    setAcknowledgedCallbackIds((prev) => {
+      if (prev.has(selectedId)) return prev
+      const next = new Set(prev)
+      next.add(selectedId)
+      return next
+    })
+  }, [selectedId])
+
+  // Le filtre "À rappeler" clignote tant qu'il reste au moins un rappel imminent non ouvert.
+  const blinkRappel = imminentCallbackIds.some((id) => !acknowledgedCallbackIds.has(id))
+
   const counts = useMemo(() => ({
     all: categoryLeads.length,
     nouveau: categoryLeads.filter(isNouveauLead).length,
@@ -305,6 +341,7 @@ function LeadsSetter() {
           onMissingFilter={setMissingFilter}
           counts={counts}
           missingCounts={missingCounts}
+          blinkRappel={blinkRappel}
         />
 
         <div className="flex-grow flex flex-col min-w-0">
@@ -1106,6 +1143,7 @@ function LeadsRail({
   onMissingFilter,
   counts,
   missingCounts,
+  blinkRappel = false,
 }: {
   statusFilters: typeof SETTER_STATUS_FILTERS
   missingFilters: typeof SETTER_MISSING_FILTERS
@@ -1115,6 +1153,7 @@ function LeadsRail({
   onMissingFilter: (f: SetterMissingFilter) => void
   counts: Record<string, number>
   missingCounts: Record<SetterMissingFilter, number>
+  blinkRappel?: boolean
 }) {
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false
@@ -1153,7 +1192,7 @@ function LeadsRail({
                 key={item.key}
                 type="button"
                 onClick={() => onFilter(item.key)}
-                className={`leads-rail-mini ${filter === item.key ? 'is-active' : ''}`}
+                className={`leads-rail-mini ${filter === item.key ? 'is-active' : ''} ${blinkRappel && item.key === 'rappel' ? 'is-blinking' : ''}`}
                 title={`${item.label} (${counts[item.countKey]})`}
                 aria-label={item.label}
               >
@@ -1191,7 +1230,7 @@ function LeadsRail({
                 key={item.key}
                 type="button"
                 onClick={() => onFilter(item.key)}
-                className={`sb-item leads-rail-item ${filter === item.key ? 'is-active' : ''}`}
+                className={`sb-item leads-rail-item ${filter === item.key ? 'is-active' : ''} ${blinkRappel && item.key === 'rappel' ? 'is-blinking' : ''}`}
               >
                 <span className="sb-item-icon"><Icon name={item.icon} size={15} strokeWidth={1.75} /></span>
                 <span className="sb-item-label">{item.label}</span>
