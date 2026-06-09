@@ -1,15 +1,24 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useChat } from '@ai-sdk/react'
-import { DefaultChatTransport, type UIMessage } from 'ai'
+import { DefaultChatTransport, isToolUIPart, getToolName, lastAssistantMessageIsCompleteWithToolCalls, type UIMessage } from 'ai'
 import { buildApiUrl } from '../../lib/api'
 import { getAssistantConversation, useChatWidget } from '../../lib/chatWidget'
 import { useAuth } from '../../lib/auth'
+import { updateLead, assignLead } from '../../lib/hooks'
+import { ToolConfirmation } from './ToolConfirmation'
+
+const WRITE_TOOLS = new Set(['updateLeadStatus', 'assignLead'])
 
 function messageText(message: UIMessage): string {
   return (message.parts ?? [])
     .map((part: any) => {
       if (part?.type === 'text') return part.text
-      if (part?.type?.startsWith('tool-')) return part.state === 'output-available' ? '✓ Données consultées' : 'Recherche en cours…'
+      if (part?.type?.startsWith('tool-')) {
+        // Les outils d'écriture sont rendus via la carte de confirmation puis
+        // résumés par le modèle — pas de texte d'état générique pour eux.
+        if (WRITE_TOOLS.has(part.type.slice('tool-'.length))) return ''
+        return part.state === 'output-available' ? '✓ Données consultées' : 'Recherche en cours…'
+      }
       return ''
     })
     .filter(Boolean)
@@ -45,8 +54,29 @@ export function ChatPanel() {
     }),
   }), [setConversationId])
 
-  const { messages, setMessages, sendMessage, status: chatStatus, error, stop } = useChat({ transport })
+  const { messages, setMessages, sendMessage, addToolResult, status: chatStatus, error, stop } = useChat({
+    transport,
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+  })
   const busy = chatStatus === 'submitted' || chatStatus === 'streaming'
+
+  const runWriteTool = async (toolName: string, toolCallId: string, toolInput: any) => {
+    try {
+      if (toolName === 'updateLeadStatus') {
+        await updateLead(String(toolInput.leadId), { status: toolInput.status })
+      } else if (toolName === 'assignLead') {
+        await assignLead(String(toolInput.leadId), String(toolInput.commercialId))
+      }
+      await addToolResult({ tool: toolName, toolCallId, output: { ok: true } })
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Échec de l’action'
+      await addToolResult({ tool: toolName, toolCallId, output: { error: message } })
+    }
+  }
+
+  const cancelWriteTool = async (toolName: string, toolCallId: string) => {
+    await addToolResult({ tool: toolName, toolCallId, output: { cancelled: true } })
+  }
 
   useEffect(() => {
     if (status === 'authed') void loadConversations().catch(() => undefined)
@@ -143,10 +173,31 @@ export function ChatPanel() {
                   </div>
                 )}
                 {messages.map((message) => {
-                  const text = messageText(message)
-                  if (!text) return null
                   const isUser = message.role === 'user'
-                  return <div key={message.id} className={`assistant-message ${isUser ? 'user' : 'assistant'}`}>{text}</div>
+                  const text = messageText(message)
+                  const pendingWrites = (message.parts ?? []).filter(
+                    (p: any) =>
+                      isToolUIPart(p) &&
+                      WRITE_TOOLS.has(getToolName(p) as string) &&
+                      p.state === 'input-available',
+                  )
+                  if (!text && pendingWrites.length === 0) return null
+                  return (
+                    <div key={message.id}>
+                      {text && (
+                        <div className={`assistant-message ${isUser ? 'user' : 'assistant'}`}>{text}</div>
+                      )}
+                      {pendingWrites.map((p: any) => (
+                        <ToolConfirmation
+                          key={p.toolCallId}
+                          toolName={getToolName(p) as 'updateLeadStatus' | 'assignLead'}
+                          input={p.input ?? {}}
+                          onConfirm={() => void runWriteTool(getToolName(p) as string, p.toolCallId, p.input ?? {})}
+                          onCancel={() => void cancelWriteTool(getToolName(p) as string, p.toolCallId)}
+                        />
+                      ))}
+                    </div>
+                  )
                 })}
                 {busy && <div className="assistant-thinking">L’assistant réfléchit…</div>}
               </div>
