@@ -826,7 +826,7 @@ function OverviewCommercialIndividual() {
           <MagicKpi size="sm" accent="info" icon="calendar" label="RDV honorés" value={fmtCompact(kpis.honored)} sub={`${fmtCompact(kpis.planifie)} planifiés`} />
         </section>
 
-        <section className="overview-air-grid overview-commercial-grid">
+        <section className="overview-air-grid overview-commercial-grid overview-commercial-solo-grid">
           <CommercialDebriefsToFill debriefs={debriefs} />
 
           <div className="overview-air-card overview-role-wide">

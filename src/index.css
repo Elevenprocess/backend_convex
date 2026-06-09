@@ -677,6 +677,19 @@ body {
 .overview-commercial-grid .overview-role-wide { min-height: 218px; }
 .overview-commercial-grid .overview-role-side { min-height: 218px; }
 
+/* Vue commercial individuelle : peu de blocs → on remplit toute la largeur.
+   Débriefs (7) + « RDV à venir » (5) sur une seule ligne pleine largeur (au lieu
+   de 7 + 8 qui débordait et laissait des colonnes vides), actions en barre.
+   Cartes plus hautes pour occuper l'espace vertical de cette page épurée. */
+.overview-commercial-solo-grid .overview-commercial-qualified-list { grid-column: span 7; }
+.overview-commercial-solo-grid .overview-role-wide { grid-column: span 5; }
+.overview-commercial-solo-grid .overview-commercial-qualified-list,
+.overview-commercial-solo-grid .overview-role-wide { min-height: 380px; }
+.overview-commercial-solo-grid .overview-commercial-actions {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+
 /* KPI strip — sous-grid auto-fit : aucune card orpheline, ratio stable
    peu importe la largeur. Carde min 170px, étend pour occuper le reste. */
 .overview-commercial-kpis {
@@ -1619,6 +1632,10 @@ body {
   .overview-profile-panel, .overview-air-kpi, .overview-air-chart, .overview-air-pie, .overview-air-pipeline, .overview-air-funnel, .overview-role-wide, .overview-role-side, .overview-commercial-qualified-list, .overview-commercial-debrief-grid { grid-column: span 12; }
   .overview-commercial-debrief-grid { grid-template-columns: 1fr; }
   .overview-role-list-grid { grid-template-columns: 1fr; }
+  /* Vue individuelle : on empile en pleine largeur sous 980px (sinon les
+     spans 7/5 scopés resteraient côte à côte et trop serrés). */
+  .overview-commercial-solo-grid .overview-commercial-qualified-list,
+  .overview-commercial-solo-grid .overview-role-wide { grid-column: 1 / -1; min-height: 260px; }
 }
 @media (max-width: 680px) {
   .overview-commercial-hero { padding: 14px; border-radius: 24px; grid-template-columns: 1fr; }
