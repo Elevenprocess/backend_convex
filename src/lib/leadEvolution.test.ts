@@ -5,7 +5,7 @@ function day(date: string, classified: number, rdv: number, signed: number): Evo
   return { date, label: date.slice(8), calls: 0, rdv, signed, ca: 0, classified }
 }
 
-const HUGE_TOTALS = { leads: 999, rdv: 999, signed: 999 }
+const HUGE_TOTALS = { leads: 999, qualified: 999, signed: 999 }
 
 describe('buildLeadEvolutionPoints — données réelles par jour', () => {
   it('trace les vraies valeurs quotidiennes sans les forcer à égaler les totaux', () => {
@@ -17,7 +17,7 @@ describe('buildLeadEvolutionPoints — données réelles par jour', () => {
     const points = buildLeadEvolutionPoints(daily, [], { from: '2026-06-01', to: '2026-06-03', days: 3 }, 'day', HUGE_TOTALS)
 
     expect(points.map((p) => p.leads)).toEqual([3, 0, 5])
-    expect(points.map((p) => p.rdv)).toEqual([1, 0, 2])
+    expect(points.map((p) => p.qualified)).toEqual([1, 0, 2])
     expect(points.map((p) => p.signed)).toEqual([0, 0, 1])
   })
 
@@ -29,7 +29,7 @@ describe('buildLeadEvolutionPoints — données réelles par jour', () => {
       day('2026-06-04', 0, 0, 0),
       day('2026-06-05', 0, 0, 0),
     ]
-    const points = buildLeadEvolutionPoints(daily, [], { from: '2026-06-01', to: '2026-06-05', days: 5 }, 'day', { leads: 100, rdv: 0, signed: 0 })
+    const points = buildLeadEvolutionPoints(daily, [], { from: '2026-06-01', to: '2026-06-05', days: 5 }, 'day', { leads: 100, qualified: 0, signed: 0 })
 
     expect(points.map((p) => p.leads)).toEqual([0, 0, 0, 0, 0])
   })
