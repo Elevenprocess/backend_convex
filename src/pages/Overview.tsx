@@ -13,7 +13,6 @@ import { buildSuiviPeriodRange, getDefaultSuiviPeriod, SUIVI_PERIOD_OPTIONS, typ
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
 import { previousRange } from '../lib/period'
 import { buildEvolutionTicks, computeEvolutionDomain, type EvolutionGranularity } from '../lib/evolutionAxis'
-import { LEAD_METRICS, formatMetricValue, closingRate, niceMax, type LeadEvolutionPoint, type LeadMetricKey } from '../lib/leadMetrics'
 
 type FunnelPeriodMode = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'last_n_days' | 'custom'
 type FunnelPeriodState = { mode: FunnelPeriodMode; customFrom: string; customTo: string; lastN?: number; includeToday?: boolean }
@@ -46,6 +45,7 @@ const EMPTY_FUNNEL_TOTALS: AnalyticsFunnelResponse['totals'] = {
   noAnswer: 0,
   relances: 0,
   rdv: 0,
+  signed: 0,
   globalConversionRate: 0,
   lossesBeforeCall: 0,
   lossesAfterNoAnswer: 0,
@@ -695,16 +695,12 @@ function OverviewAdmin() {
   const adminSummary = summary?.admin ?? null
   const funnelTotals = funnel?.totals ?? EMPTY_FUNNEL_TOTALS
   const leadSegments = adminSummary?.resultSegments ?? []
-  const treatedLeadTotal = Math.max(
-    funnelTreatedLeads(funnelTotals),
-    adminSummary?.classified ?? 0,
-    adminSummary?.qualified ?? 0,
-    adminSummary?.rdvPris ?? 0,
-  )
-  const evolutionGranularity = chooseGranularity(funnelPeriod.mode, funnelRange)
+  // Leads traités = classifiés (chiffre backend, source de vérité). Pas de Math.max
+  // avec qualified/rdvPris : la réconciliation côté front gonflait le compteur.
+  const treatedLeadTotal = adminSummary?.classified ?? funnelTreatedLeads(funnelTotals)
+  const evolutionGranularity = chooseGranularity(funnelRange)
   const evolutionPoints = buildLeadEvolutionPoints(adminSummary?.dailyEvolution ?? [], funnel?.daily ?? [], adminSummary?.hourlyCalls ?? [], funnelRange, evolutionGranularity, {
     leads: treatedLeadTotal,
-    calls: adminSummary?.calls ?? funnelTotals.calls,
     rdv: adminSummary?.rdvPris ?? funnelTotals.rdv,
     signed: adminSummary?.signed ?? 0,
   })
@@ -721,7 +717,6 @@ function OverviewAdmin() {
     evolutionGranularity,
     {
       leads: prevAdmin?.classified ?? prevFunnel?.totals?.qualified ?? 0,
-      calls: prevAdmin?.calls ?? prevFunnel?.totals?.calls ?? 0,
       rdv: prevAdmin?.rdvPris ?? prevFunnel?.totals?.rdv ?? 0,
       signed: prevAdmin?.signed ?? 0,
     },
@@ -754,49 +749,9 @@ function OverviewAdmin() {
       funnelProspects: adminFunnelProspects(allRdvs ?? [], allLeads ?? [], usersList ?? []),
     }
   }, [adminSummary, funnelTotals, treatedLeadTotal, usersList, allLeads, allRdvs, funnelRange.from, funnelRange.to])
-
-  const prevFunnelTotals = prevFunnel?.totals ?? EMPTY_FUNNEL_TOTALS
-  const prevStats = {
-    // Même calcul que treatedLeadTotal (max sur les mêmes champs) pour un delta homogène.
-    leads: Math.max(
-      funnelTreatedLeads(prevFunnelTotals),
-      prevAdmin?.classified ?? 0,
-      prevAdmin?.qualified ?? 0,
-      prevAdmin?.rdvPris ?? 0,
-    ),
-    calls: prevAdmin?.calls ?? prevFunnelTotals.calls,
-    rdv: prevAdmin?.rdvPris ?? prevFunnelTotals.rdv,
-    signed: prevAdmin?.signed ?? 0,
-  }
-  const metricDeltaPct = (cur: number, prev: number): number | null => (prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null)
-  const curClosing = closingRate(stats.ventes, stats.rdvPris)
-  const prevClosing = closingRate(prevStats.signed, prevStats.rdv)
-  const metricCards = [
-    { key: 'leads' as const, total: stats.leads, delta: metricDeltaPct(stats.leads, prevStats.leads) },
-    { key: 'calls' as const, total: stats.appels, delta: metricDeltaPct(stats.appels, prevStats.calls) },
-    { key: 'rdv' as const, total: stats.rdvPris, delta: metricDeltaPct(stats.rdvPris, prevStats.rdv) },
-    { key: 'signed' as const, total: stats.ventes, delta: metricDeltaPct(stats.ventes, prevStats.signed) },
-    { key: 'closing' as const, total: curClosing, delta: metricDeltaPct(curClosing, prevClosing) },
-  ]
-
-  const funnelNoAnswer = Math.min(funnelTotals.noAnswer, stats.leads)
-  const funnelAnswered = Math.max(
-    funnelTotals.answered,
-    stats.leads - funnelNoAnswer,
-    stats.qualified + funnelTotals.notQualified + Math.max(0, funnelTotals.relances - funnelNoAnswer),
-    stats.rdvPris,
-  )
-  const overviewFunnelTotals: AnalyticsFunnelResponse['totals'] = {
-    ...funnelTotals,
-    calls: Math.max(funnelTotals.calls, stats.appels),
-    answered: funnelAnswered,
-    responseRate: pct(funnelAnswered, stats.leads),
-    noAnswer: funnelNoAnswer,
-    qualified: Math.max(funnelTotals.qualified, stats.qualified),
-    qualificationRate: pct(Math.max(funnelTotals.qualified, stats.qualified), Math.max(1, funnelAnswered)),
-    rdv: Math.max(funnelTotals.rdv, stats.rdvPris),
-    globalConversionRate: pct(Math.max(funnelTotals.rdv, stats.rdvPris), stats.leads),
-  }
+  // Le backend renvoie un funnel déjà cohérent et monotone (cf. funnel-math).
+  // On l'affiche tel quel — plus aucune re-réconciliation Math.max côté front.
+  const overviewFunnelTotals = funnelTotals
 
   return (
     <AppShell blobsKey="admin" flat>
@@ -848,6 +803,12 @@ function OverviewAdmin() {
                 <p>{me?.role ?? 'admin'} · {stats.teamActive}/{stats.teamTotal} actifs</p>
               </div>
             </div>
+            <div className="overview-admin-kpis">
+              <AirKpi icon="inbox" label={leadsKpiLabelFor(funnelPeriod.mode)} value={fmtCompact(stats.leadsToday)} sub="leads arrivés" />
+              <AirKpi icon="target" label="Closing" value={`${stats.closing}%`} sub={`${fmtCompact(stats.rdvPris)} RDV suivis`} />
+              <AirKpi icon="phone" label="Appels" value={fmtCompact(stats.appels)} sub={`${fmtCompact(stats.classified)} leads traités`} />
+              <AirKpi icon="users" label="Leads traités" value={fmtCompact(stats.leads)} sub={`${fmtCompact(stats.qualified)} qualifiés`} />
+            </div>
           </div>
 
           <div className="overview-air-card overview-air-chart overview-lead-evolution-card">
@@ -858,7 +819,7 @@ function OverviewAdmin() {
               range={funnelRange}
               rangeLabel={`Du ${formatShortDate(new Date(funnelRange.from))} au ${formatShortDate(new Date(funnelRange.to))}`}
               compareLabel={`Du ${formatShortDate(new Date(prevRange.from))} au ${formatShortDate(new Date(prevRange.to))}`}
-              cards={metricCards}
+              totals={{ leads: stats.leads, rdv: stats.rdvPris, signed: stats.ventes }}
             />
           </div>
 
@@ -933,6 +894,15 @@ function CardHead({ title, icon }: { title: string; icon: ShotIcon }) {
   )
 }
 
+type LeadEvolutionPoint = { key: string; t: number; date: string; label: string; leads: number; rdv: number; signed: number }
+type LeadEvolutionSeriesKey = 'leads' | 'rdv' | 'signed'
+
+const LEAD_EVOLUTION_SERIES: { key: LeadEvolutionSeriesKey; label: string; color: string }[] = [
+  { key: 'leads', label: 'Leads', color: '#1F7857' },
+  { key: 'rdv', label: 'RDV', color: '#3DA86A' },
+  { key: 'signed', label: 'Ventes', color: '#3E9A6F' },
+]
+
 const GRANULARITY_SUBTITLE: Record<EvolutionGranularity, string> = {
   hour: 'Leads traités par heure',
   day: 'Leads traités par jour',
@@ -958,19 +928,19 @@ function smoothPath(coords: { x: number; y: number }[]): string {
   return d
 }
 
-type MetricCard = { key: LeadMetricKey; total: number; delta: number | null }
-function LeadEvolutionChart({ points, comparePoints = [], granularity, range, rangeLabel, compareLabel, cards }: { points: LeadEvolutionPoint[]; comparePoints?: LeadEvolutionPoint[]; granularity: EvolutionGranularity; range: FunnelPeriodRange; rangeLabel: string; compareLabel?: string; cards: MetricCard[] }) {
-  const [activeKey, setActiveKey] = useState<LeadMetricKey>('leads')
+function LeadEvolutionChart({ points, comparePoints = [], granularity, range, rangeLabel, compareLabel, totals }: { points: LeadEvolutionPoint[]; comparePoints?: LeadEvolutionPoint[]; granularity: EvolutionGranularity; range: FunnelPeriodRange; rangeLabel: string; compareLabel?: string; totals: { leads: number; rdv: number; signed: number } }) {
+  const [activeKey, setActiveKey] = useState<LeadEvolutionSeriesKey>('leads')
   const [hover, setHover] = useState<{ index: number; cursorX: number } | null>(null)
-  const rawPoints = points.length > 0 ? points : [{ key: 'empty', t: 0, date: '', label: 'Live', leads: 0, calls: 0, rdv: 0, signed: 0 }]
+  const rawPoints = points.length > 0 ? points : [{ key: 'empty', t: 0, date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }]
   const sampleStep = rawPoints.length > 56 ? Math.ceil(rawPoints.length / 56) : 1
   const keepIdx = sampleStep > 1 ? rawPoints.map((_, index) => index).filter((index) => index % sampleStep === 0 || index === rawPoints.length - 1) : rawPoints.map((_, index) => index)
   const safePoints = keepIdx.map((index) => rawPoints[index])
   const comparePts = comparePoints.length > 0
     ? keepIdx.map((index) => comparePoints[Math.min(index, comparePoints.length - 1)]).filter(Boolean)
     : []
-  const metric = LEAD_METRICS[activeKey]
+  const activeSeries = LEAD_EVOLUTION_SERIES.find((series) => series.key === activeKey) ?? LEAD_EVOLUTION_SERIES[0]
   const subtitle = GRANULARITY_SUBTITLE[granularity]
+  const seriesStyle = { '--series-color': activeSeries.color } as CSSProperties
 
   const width = 640
   const height = 240
@@ -980,8 +950,7 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
   const chartWidth = width - padX * 2
   const chartHeight = height - padTop - padBottom
   const clamp = (value: number, min: number, maxValue: number) => Math.min(maxValue, Math.max(min, value))
-  const rawMax = Math.max(1, ...safePoints.map((p) => metric.valueOf(p)), ...comparePts.map((p) => metric.valueOf(p)))
-  const max = niceMax(rawMax)
+  const max = Math.max(1, ...safePoints.map((point) => point[activeKey]), ...comparePts.map((point) => point[activeKey]))
   const domain = computeEvolutionDomain(range, granularity)
   const ticks = buildEvolutionTicks(domain, granularity)
   const useTime = domain.end > domain.start && safePoints.every((point) => Number.isFinite(point.t) && point.t > 0)
@@ -992,76 +961,90 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
   const xForCompare = (index: number) => padX + (comparePts.length <= 1 ? chartWidth / 2 : (index / (comparePts.length - 1)) * chartWidth)
   const yFor = (value: number) => padTop + chartHeight - (value / max) * chartHeight
 
-  const currentCoords = safePoints.map((point, index) => ({ x: xFor(index), y: yFor(metric.valueOf(point)) }))
-  const compareCoords = comparePts.map((point, index) => ({ x: xForCompare(index), y: yFor(metric.valueOf(point)) }))
+  const currentCoords = safePoints.map((point, index) => ({ x: xFor(index), y: yFor(point[activeKey]) }))
+  const compareCoords = comparePts.map((point, index) => ({ x: xForCompare(index), y: yFor(point[activeKey]) }))
   const currentPath = smoothPath(currentCoords)
   const comparePath = compareCoords.length >= 2 ? smoothPath(compareCoords) : ''
   const areaPath = currentPath ? `${currentPath} L ${xFor(safePoints.length - 1).toFixed(1)} ${(height - padBottom).toFixed(1)} L ${xFor(0).toFixed(1)} ${(height - padBottom).toFixed(1)} Z` : ''
   const animKey = `${range.from}|${range.to}|${granularity}|${activeKey}`
   const lastIndex = safePoints.length - 1
   const liveX = xFor(lastIndex)
-  const liveY = yFor(metric.valueOf(safePoints[lastIndex]))
+  const liveY = yFor(safePoints[lastIndex][activeKey])
   const showLive = useTime && currentPath !== ''
 
   const gridRatios = [0, 0.25, 0.5, 0.75, 1]
   const fallbackLabelStep = Math.max(1, Math.ceil((safePoints.length - 1) / 5))
   const fallbackLabelIndexes = safePoints.length <= 1 ? [0] : safePoints.map((_, index) => index).filter((index) => index % fallbackLabelStep === 0 || index === safePoints.length - 1)
 
+  // rAF-throttlé : 1 setState par frame max (évite le re-render à chaque pixel = jank).
+  // cursorX = position brute du curseur (la ligne-guide suit la souris en continu, sans snapper).
+  // index = point le plus proche (le marqueur snappe dessus mais glisse via transition CSS).
+  const moveRaf = useRef<number | null>(null)
   const onMove = (event: MouseEvent<SVGSVGElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
-    const cursorX = clamp(((event.clientX - rect.left) / rect.width) * width, padX, width - padX)
-    let index = 0
-    let best = Infinity
-    for (let i = 0; i < safePoints.length; i += 1) {
-      const dist = Math.abs(xFor(i) - cursorX)
-      if (dist < best) { best = dist; index = i }
-    }
-    setHover({ index, cursorX: xFor(index) })
+    const clientX = event.clientX
+    if (moveRaf.current !== null) return
+    moveRaf.current = requestAnimationFrame(() => {
+      moveRaf.current = null
+      const cursorX = clamp(((clientX - rect.left) / rect.width) * width, padX, width - padX)
+      let index = 0
+      let best = Infinity
+      for (let i = 0; i < safePoints.length; i += 1) {
+        const dist = Math.abs(xFor(i) - cursorX)
+        if (dist < best) { best = dist; index = i }
+      }
+      setHover({ index, cursorX })
+    })
   }
+  const onLeave = () => {
+    if (moveRaf.current !== null) { cancelAnimationFrame(moveRaf.current); moveRaf.current = null }
+    setHover(null)
+  }
+  useEffect(() => () => { if (moveRaf.current !== null) cancelAnimationFrame(moveRaf.current) }, [])
 
   const hoverPoint = hover ? safePoints[hover.index] : null
   const hoverCompare = hover ? comparePts[hover.index] : undefined
-  const curVal = hoverPoint ? metric.valueOf(hoverPoint) : 0
-  const prevVal = hoverCompare ? metric.valueOf(hoverCompare) : 0
+  const curVal = hoverPoint ? hoverPoint[activeKey] : 0
+  const prevVal = hoverCompare ? hoverCompare[activeKey] : 0
   const deltaPct = hover && hoverCompare ? (prevVal ? Math.round(((curVal - prevVal) / prevVal) * 100) : null) : null
+  const lastValue = safePoints[lastIndex]?.[activeKey] ?? 0
+  const firstValue = safePoints[0]?.[activeKey] ?? 0
+  const deltaFromStart = lastValue - firstValue
+  const peakPoint = safePoints.reduce((best, point) => point[activeKey] > best[activeKey] ? point : best, safePoints[0])
 
   return (
-    <div className="lead-evolution">
+    <div className="lead-evolution" style={seriesStyle}>
       <div className="lead-evolution-head">
         <div>
-          <h3>Évolution</h3>
+          <h3>Courbe d'évolution des leads</h3>
           <p>{subtitle} — {rangeLabel}</p>
         </div>
       </div>
-      <div className="lead-metric-cards" role="tablist" aria-label="Métrique active">
-        {cards.map((card) => {
-          const m = LEAD_METRICS[card.key]
-          const active = activeKey === card.key
-          return (
-            <button
-              key={card.key}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              className={`lead-metric-card${active ? ' is-active' : ''}`}
-              style={active ? ({ ['--metric-accent']: m.color } as CSSProperties) : undefined}
-              onClick={() => setActiveKey(card.key)}
-            >
-              <small><i style={{ background: m.color }} />{m.label}</small>
-              <strong>{formatMetricValue(card.total, m.format)}</strong>
-              <span className={`lead-metric-delta ${card.delta === null ? 'neutral' : card.delta > 0 ? 'up' : card.delta < 0 ? 'down' : 'neutral'}`}>
-                {card.delta === null ? '—' : card.delta > 0 ? `↗ ${card.delta} %` : card.delta < 0 ? `↘ ${Math.abs(card.delta)} %` : '→ 0 %'}
-              </span>
-            </button>
-          )
-        })}
+      <div className="lead-evolution-tabs" aria-label="Métrique active">
+        {LEAD_EVOLUTION_SERIES.map((series) => (
+          <button
+            key={series.key}
+            type="button"
+            className={activeKey === series.key ? 'active' : ''}
+            style={{ '--series-color': series.color } as CSSProperties}
+            onClick={() => setActiveKey(series.key)}
+          >
+            <small><i style={{ background: series.color }} />{series.label}</small>
+            <strong>{fmtCompact(totals[series.key])}</strong>
+          </button>
+        ))}
+      </div>
+      <div className="lead-evolution-insights" aria-label="Résumé de la courbe active">
+        <span><small>Dernier point</small><strong>{fmtCompact(lastValue)}</strong></span>
+        <span><small>vs début</small><strong className={deltaFromStart > 0 ? 'positive' : deltaFromStart < 0 ? 'negative' : ''}>{deltaFromStart > 0 ? '+' : ''}{fmtCompact(deltaFromStart)}</strong></span>
+        <span><small>Pic</small><strong>{fmtCompact(peakPoint?.[activeKey] ?? 0)}</strong><em>{peakPoint?.label ?? '—'}</em></span>
       </div>
       <div className="lead-evolution-svg-wrap">
-        <svg viewBox={`0 0 ${width} ${height}`} onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img" aria-label="Évolution de la métrique sélectionnée">
+        <svg viewBox={`0 0 ${width} ${height}`} onMouseMove={onMove} onMouseLeave={onLeave} role="img" aria-label="Évolution de la métrique sélectionnée">
           <defs>
             <linearGradient id="leadEvolutionFill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-or)" stopOpacity="0.14" />
-              <stop offset="100%" stopColor="var(--color-or)" stopOpacity="0" />
+              <stop offset="0%" stopColor="var(--series-color)" stopOpacity="0.14" />
+              <stop offset="100%" stopColor="var(--series-color)" stopOpacity="0" />
             </linearGradient>
           </defs>
           {gridRatios.map((ratio) => {
@@ -1109,7 +1092,7 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
           {hover && hoverPoint ? (
             <g pointerEvents="none">
               <line x1={hover.cursorX} x2={hover.cursorX} y1={padTop} y2={height - padBottom} className="lead-evolution-guide" />
-              {hoverCompare ? <circle cx={hover.cursorX} cy={yFor(prevVal)} r="3.5" className="lead-evolution-compare-dot" /> : null}
+              {hoverCompare ? <circle cx={xForCompare(hover.index)} cy={yFor(prevVal)} r="3.5" className="lead-evolution-compare-dot" /> : null}
               <circle cx={xFor(hover.index)} cy={yFor(curVal)} r="5" className="lead-evolution-dot" />
             </g>
           ) : null}
@@ -1118,35 +1101,29 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
           <div
             className="lead-evolution-tooltip"
             style={{
-              left: hover.cursorX > width * 0.6 ? 'auto' : `${clamp((hover.cursorX / width) * 100, 2, 60)}%`,
-              right: hover.cursorX > width * 0.6 ? `${clamp(((width - hover.cursorX) / width) * 100, 2, 60)}%` : 'auto',
+              left: `${(hover.cursorX / width) * 100}%`,
               top: '8%',
+              // Décalage continu : 0 % au bord gauche → -100 % au bord droit (suit le curseur sans jamais sortir ni sauter).
+              transform: `translateX(-${clamp((hover.cursorX - padX) / chartWidth, 0, 1) * 100}%)`,
             }}
           >
-            <small>{metric.label}</small>
-            <div className="lead-evolution-tooltip-row">
-              <span className="dot dot-current" style={{ background: metric.color }} />
-              <span className="lbl">{hoverPoint.label}</span>
-              <b>{formatMetricValue(curVal, metric.format)}</b>
-            </div>
+            <small>{activeSeries.label}</small>
+            <strong>{hoverPoint.label}</strong>
+            <b className="lead-evolution-tooltip-value">{fmtCompact(curVal)}</b>
             <div className="lead-evolution-tooltip-delta">
               {deltaPct === null ? (
                 <span className="neutral">—</span>
               ) : deltaPct > 0 ? (
-                <span className="up">↗ {Math.abs(deltaPct)} %</span>
+                <span className="up">↗ {fmtCompact(deltaPct)} %</span>
               ) : deltaPct < 0 ? (
-                <span className="down">↘ {Math.abs(deltaPct)} %</span>
+                <span className="down">↘ {fmtCompact(Math.abs(deltaPct))} %</span>
               ) : (
                 <span className="neutral">→ 0 %</span>
               )}
               <span className="muted"> de la comparaison</span>
             </div>
             {hoverCompare ? (
-              <div className="lead-evolution-tooltip-row compare">
-                <span className="dot dot-compare" />
-                <span className="lbl">{hoverCompare.label}</span>
-                <b>{formatMetricValue(prevVal, metric.format)}</b>
-              </div>
+              <em>{hoverCompare.label} · {fmtCompact(prevVal)}</em>
             ) : null}
           </div>
         ) : null}
@@ -1159,16 +1136,19 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
   )
 }
 
-function chooseGranularity(mode: FunnelPeriodMode, range: FunnelPeriodRange): EvolutionGranularity {
-  if (mode === 'today' || mode === 'yesterday') return 'hour'
-  if (mode === 'this_week' || mode === 'last_week') return 'day'
-  if (mode === 'this_month' || mode === 'last_month') return 'week'
-  if (mode === 'this_year' || mode === 'last_year') return 'month'
-  // custom: derive from span
-  if (range.days <= 1) return 'hour'
-  if (range.days <= 7) return 'day'
-  if (range.days <= 31) return 'week'
-  return 'month'
+// Granularité dérivée du nombre de JOURS CALENDAIRES réellement couverts par la plage (from → to),
+// pas du mode nominal. C'est ce qui évite la diagonale moche : ex. « cette semaine » consultée un lundi
+// ne couvre qu'1 jour → on bascule en heures au lieu d'afficher un point unique.
+// 'hour' n'est valide que sur UNE journée (le domaine horaire ne couvre qu'un jour 8h–21h) ;
+// dès 2 jours on reste en 'day' (axe en jours, sans horaire). Une semaine pleine = 7 jours → 'day'.
+function chooseGranularity(range: FunnelPeriodRange): EvolutionGranularity {
+  const startMs = startOfDay(new Date(range.from)).getTime()
+  const endMs = startOfDay(new Date(range.to)).getTime()
+  const dayCount = Math.round((endMs - startMs) / 86_400_000) + 1
+  if (dayCount <= 1) return 'hour'   // une seule journée → heures (sinon point unique / diagonale)
+  if (dayCount <= 35) return 'day'   // jusqu'à ~1 mois → jours, sans horaire dans l'axe
+  if (dayCount <= 120) return 'week' // jusqu'à ~4 mois → semaines
+  return 'month'                     // au-delà (année) → mois
 }
 
 function buildLeadEvolutionPoints(
@@ -1177,7 +1157,7 @@ function buildLeadEvolutionPoints(
   hourlyCalls: { date: string; hour: number; label: string; calls: number }[],
   range: FunnelPeriodRange,
   granularity: EvolutionGranularity,
-  totals: { leads: number; calls: number; rdv: number; signed: number },
+  totals: { leads: number; rdv: number; signed: number },
 ): LeadEvolutionPoint[] {
   if (granularity === 'hour') {
     const rangeStart = startOfDay(new Date(range.from)).getTime()
@@ -1195,17 +1175,20 @@ function buildLeadEvolutionPoints(
   }
 
   if (granularity === 'week') {
-    return buildWeeklyEvolutionPoints(summaryDaily, funnelDaily, totals)
+    return buildWeeklyEvolutionPoints(summaryDaily, funnelDaily, totals, range)
   }
   if (granularity === 'month') {
-    return buildMonthlyEvolutionPoints(summaryDaily, funnelDaily, totals)
+    return buildMonthlyEvolutionPoints(summaryDaily, funnelDaily, totals, range)
   }
 
   // daily (default fallback for hour with no hourly data, and explicit 'day')
   const summaryByDate = new Map(summaryDaily.map((point) => [point.date, point]))
+  const rangeStart = dateKey(range.from)
+  const rangeEnd = dateKey(range.to)
   const dates = new Set<string>([...funnelDaily.map((point) => point.date), ...summaryDaily.map((point) => point.date)])
-  if (dates.size > 0) {
-    const points = [...dates].sort().map((date) => {
+  const inRangeDates = [...dates].filter((date) => date >= rangeStart && date <= rangeEnd).sort()
+  if (inRangeDates.length > 0) {
+    const points = inRangeDates.map((date) => {
       const funnelPoint = funnelDaily.find((point) => point.date === date)
       const summaryPoint = summaryByDate.get(date)
       return {
@@ -1213,8 +1196,7 @@ function buildLeadEvolutionPoints(
         t: new Date(`${date}T12:00:00`).getTime(),
         date,
         label: funnelPoint?.label || summaryPoint?.label || dayLabel(date),
-        leads: Math.max(funnelPoint?.answered ?? 0, funnelPoint?.qualified ?? 0, funnelPoint?.rdv ?? 0),
-        calls: funnelPoint?.calls ?? 0,
+        leads: dailyLeadEvolutionValue(funnelPoint),
         rdv: summaryPoint?.rdv ?? funnelPoint?.rdv ?? 0,
         signed: summaryPoint?.signed ?? 0,
       }
@@ -1227,7 +1209,6 @@ function buildLeadEvolutionPoints(
     date: '',
     label: index === 0 ? 'Live' : '—',
     leads: 0,
-    calls: 0,
     rdv: 0,
     signed: 0,
   })), totals)
@@ -1236,16 +1217,16 @@ function buildLeadEvolutionPoints(
 function buildWeeklyEvolutionPoints(
   summaryDaily: { date: string; label: string; rdv: number; signed: number }[],
   funnelDaily: AnalyticsFunnelResponse['daily'],
-  totals: { leads: number; calls: number; rdv: number; signed: number },
+  totals: { leads: number; rdv: number; signed: number },
+  range: FunnelPeriodRange,
 ): LeadEvolutionPoint[] {
   const buckets = new Map<string, LeadEvolutionPoint>()
-  const addToBucket = (date: string, leads: number, calls: number, rdv: number, signed: number) => {
+  const addToBucket = (date: string, leads: number, rdv: number, signed: number) => {
     const weekStart = startOfWeek(new Date(date))
     const key = weekStart.toISOString().slice(0, 10)
     const existing = buckets.get(key)
     if (existing) {
       existing.leads = Math.max(existing.leads, leads) // leads use max (already aggregated upstream)
-      existing.calls += calls
       existing.rdv += rdv
       existing.signed += signed
     } else {
@@ -1255,29 +1236,30 @@ function buildWeeklyEvolutionPoints(
         date: key,
         label: `sem. ${formatDayMonth(weekStart)}`,
         leads,
-        calls,
         rdv,
         signed,
       })
     }
   }
   const summaryByDate = new Map(summaryDaily.map((point) => [point.date, point]))
+  const rangeStart = dateKey(range.from)
+  const rangeEnd = dateKey(range.to)
   const allDates = new Set<string>([...funnelDaily.map((point) => point.date), ...summaryDaily.map((point) => point.date)])
-  ;[...allDates].sort().forEach((date) => {
+  const inRangeDates = [...allDates].filter((date) => date >= rangeStart && date <= rangeEnd).sort()
+  inRangeDates.forEach((date) => {
     const funnelPoint = funnelDaily.find((point) => point.date === date)
     const summaryPoint = summaryByDate.get(date)
-    const leads = Math.max(funnelPoint?.answered ?? 0, funnelPoint?.qualified ?? 0, funnelPoint?.rdv ?? 0)
-    const calls = funnelPoint?.calls ?? 0
+    const leads = dailyLeadEvolutionValue(funnelPoint)
     const rdv = summaryPoint?.rdv ?? funnelPoint?.rdv ?? 0
     const signed = summaryPoint?.signed ?? 0
-    addToBucket(date, leads, calls, rdv, signed)
+    addToBucket(date, leads, rdv, signed)
   })
   // For weekly leads aggregation, sum instead of max if we accumulated per day already.
   // Recompute leads as sum across days within each week to avoid undercounting.
   const dailyLeadsByWeek = new Map<string, number>()
-  ;[...allDates].sort().forEach((date) => {
+  inRangeDates.forEach((date) => {
     const funnelPoint = funnelDaily.find((point) => point.date === date)
-    const leads = Math.max(funnelPoint?.answered ?? 0, funnelPoint?.qualified ?? 0, funnelPoint?.rdv ?? 0)
+    const leads = dailyLeadEvolutionValue(funnelPoint)
     const weekKey = startOfWeek(new Date(date)).toISOString().slice(0, 10)
     dailyLeadsByWeek.set(weekKey, (dailyLeadsByWeek.get(weekKey) ?? 0) + leads)
   })
@@ -1286,7 +1268,7 @@ function buildWeeklyEvolutionPoints(
   })
   const sorted = [...buckets.values()].sort((a, b) => a.date.localeCompare(b.date))
   if (sorted.length === 0) {
-    return hydrateMissingEvolutionTotals([{ key: 'empty', t: 0, date: '', label: 'Live', leads: 0, calls: 0, rdv: 0, signed: 0 }], totals)
+    return hydrateMissingEvolutionTotals([{ key: 'empty', t: 0, date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }], totals)
   }
   return hydrateMissingEvolutionTotals(sorted, totals)
 }
@@ -1294,23 +1276,25 @@ function buildWeeklyEvolutionPoints(
 function buildMonthlyEvolutionPoints(
   summaryDaily: { date: string; label: string; rdv: number; signed: number }[],
   funnelDaily: AnalyticsFunnelResponse['daily'],
-  totals: { leads: number; calls: number; rdv: number; signed: number },
+  totals: { leads: number; rdv: number; signed: number },
+  range: FunnelPeriodRange,
 ): LeadEvolutionPoint[] {
   const buckets = new Map<string, LeadEvolutionPoint>()
   const summaryByDate = new Map(summaryDaily.map((point) => [point.date, point]))
+  const rangeStart = dateKey(range.from)
+  const rangeEnd = dateKey(range.to)
   const allDates = new Set<string>([...funnelDaily.map((point) => point.date), ...summaryDaily.map((point) => point.date)])
-  ;[...allDates].sort().forEach((date) => {
+  const inRangeDates = [...allDates].filter((date) => date >= rangeStart && date <= rangeEnd).sort()
+  inRangeDates.forEach((date) => {
     const funnelPoint = funnelDaily.find((point) => point.date === date)
     const summaryPoint = summaryByDate.get(date)
-    const leads = Math.max(funnelPoint?.answered ?? 0, funnelPoint?.qualified ?? 0, funnelPoint?.rdv ?? 0)
-    const calls = funnelPoint?.calls ?? 0
+    const leads = dailyLeadEvolutionValue(funnelPoint)
     const rdv = summaryPoint?.rdv ?? funnelPoint?.rdv ?? 0
     const signed = summaryPoint?.signed ?? 0
     const monthKey = date.slice(0, 7) // YYYY-MM
     const existing = buckets.get(monthKey)
     if (existing) {
       existing.leads += leads
-      existing.calls += calls
       existing.rdv += rdv
       existing.signed += signed
     } else {
@@ -1320,7 +1304,6 @@ function buildMonthlyEvolutionPoints(
         date: `${monthKey}-01`,
         label: formatMonthLabel(new Date(`${monthKey}-01`)),
         leads,
-        calls,
         rdv,
         signed,
       })
@@ -1328,9 +1311,19 @@ function buildMonthlyEvolutionPoints(
   })
   const sorted = [...buckets.values()].sort((a, b) => a.date.localeCompare(b.date))
   if (sorted.length === 0) {
-    return hydrateMissingEvolutionTotals([{ key: 'empty', t: 0, date: '', label: 'Live', leads: 0, calls: 0, rdv: 0, signed: 0 }], totals)
+    return hydrateMissingEvolutionTotals([{ key: 'empty', t: 0, date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }], totals)
   }
   return hydrateMissingEvolutionTotals(sorted, totals)
+}
+
+function dateKey(dateLike: string | Date): string {
+  if (typeof dateLike === 'string') return dateLike.slice(0, 10)
+  return dateLike.toISOString().slice(0, 10)
+}
+
+function dailyLeadEvolutionValue(point: AnalyticsFunnelResponse['daily'][number] | undefined): number {
+  if (!point) return 0
+  return Math.max(point.newLeads ?? 0, point.answered ?? 0, point.qualified ?? 0, point.rdv ?? 0)
 }
 
 function formatDayMonth(date: Date): string {
@@ -1341,7 +1334,7 @@ function formatMonthLabel(date: Date): string {
   return date.toLocaleDateString('fr-FR', { month: 'short' }).replace('.', '')
 }
 
-function distributeTotalsAcrossHours(points: { date: string; hour: number; label: string; calls: number }[], totals: { leads: number; calls: number; rdv: number; signed: number }): LeadEvolutionPoint[] {
+function distributeTotalsAcrossHours(points: { date: string; hour: number; label: string; calls: number }[], totals: { leads: number; rdv: number; signed: number }): LeadEvolutionPoint[] {
   const weights = points.map((point) => Math.max(0, point.calls))
   const leadValues = distributeIntegerTotal(totals.leads, weights)
   const rdvValues = distributeIntegerTotal(totals.rdv, weights)
@@ -1352,7 +1345,6 @@ function distributeTotalsAcrossHours(points: { date: string; hour: number; label
     date: point.date,
     label: `${dayLabel(point.date)} ${point.hour}h`,
     leads: leadValues[index] ?? 0,
-    calls: Math.max(0, point.calls),
     rdv: rdvValues[index] ?? 0,
     signed: signedValues[index] ?? 0,
   }))
@@ -1380,20 +1372,28 @@ function distributeIntegerTotal(total: number, weights: number[]): number[] {
   return values
 }
 
-function hydrateMissingEvolutionTotals(points: LeadEvolutionPoint[], totals: { leads: number; calls: number; rdv: number; signed: number }): LeadEvolutionPoint[] {
+function hydrateMissingEvolutionTotals(points: LeadEvolutionPoint[], totals: { leads: number; rdv: number; signed: number }): LeadEvolutionPoint[] {
   if (points.length === 0) return points
-  const lastIndex = points.length - 1
   const sums = points.reduce(
-    (acc, point) => ({ leads: acc.leads + point.leads, calls: acc.calls + point.calls, rdv: acc.rdv + point.rdv, signed: acc.signed + point.signed }),
-    { leads: 0, calls: 0, rdv: 0, signed: 0 },
+    (acc, point) => ({ leads: acc.leads + point.leads, rdv: acc.rdv + point.rdv, signed: acc.signed + point.signed }),
+    { leads: 0, rdv: 0, signed: 0 },
   )
-  return points.map((point, index) => index === lastIndex ? {
+  const spreadMissing = (key: LeadEvolutionSeriesKey, target: number, current: number) => {
+    const missing = Math.max(0, target - current)
+    if (missing <= 0) return points.map((point) => point[key])
+    const weights = points.map((point) => Math.max(0, point[key]))
+    const extra = distributeIntegerTotal(missing, weights)
+    return points.map((point, index) => point[key] + (extra[index] ?? 0))
+  }
+  const leads = spreadMissing('leads', totals.leads, sums.leads)
+  const rdv = spreadMissing('rdv', totals.rdv, sums.rdv)
+  const signed = spreadMissing('signed', totals.signed, sums.signed)
+  return points.map((point, index) => ({
     ...point,
-    leads: point.leads + Math.max(0, totals.leads - sums.leads),
-    calls: point.calls + Math.max(0, totals.calls - sums.calls),
-    rdv: point.rdv + Math.max(0, totals.rdv - sums.rdv),
-    signed: point.signed + Math.max(0, totals.signed - sums.signed),
-  } : point)
+    leads: leads[index] ?? point.leads,
+    rdv: rdv[index] ?? point.rdv,
+    signed: signed[index] ?? point.signed,
+  }))
 }
 
 const PIE_COLORS = ['#1F7857', '#3DA86A', '#3E9A6F', '#6B7C8C', '#145A41', '#7C6A46']
@@ -1776,9 +1776,10 @@ function formatShortDate(date: Date): string {
 }
 
 function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }) {
-  const treatedLeads = funnelTreatedLeads(totals)
-  const answeredCount = Math.max(0, treatedLeads - totals.noAnswer)
-  const responseRate = pct(answeredCount, treatedLeads)
+  // Chiffres backend directs (funnel monotone) — pas de recalcul "traités − noAnswer".
+  const treatedLeads = funnelContactedLeads(totals)
+  const answeredCount = totals.answered
+  const responseRate = totals.responseRate
   const treatedConversionRate = pct(totals.rdv, treatedLeads)
   return (
     <div className="flow-map col-span-12 mt-4 rounded-2xl border border-line-soft bg-white/65 p-4">

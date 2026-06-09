@@ -22,8 +22,30 @@ function formatMonthLabel(date: Date): string {
   return date.toLocaleDateString('fr-FR', { month: 'short' }).replace('.', '')
 }
 
-/** Bornes temporelles (ms) de l'axe X, selon la granularité et la plage. */
+// Empan minimal de l'axe quand la période vient juste de commencer (évite un graphe dégénéré tôt le matin / début de semaine).
+const MIN_LIVE_SPAN: Record<EvolutionGranularity, number> = {
+  hour: 60 * 60 * 1000, // 1 h
+  day: 24 * 60 * 60 * 1000, // 1 j
+  week: 7 * 24 * 60 * 60 * 1000, // 1 sem
+  month: 28 * 24 * 60 * 60 * 1000, // ~1 mois
+}
+
+/** Bornes temporelles (ms) de l'axe X, selon la granularité et la plage.
+ *  Mode live : si l'instant présent tombe dans la période, l'axe s'arrête à « maintenant »
+ *  (le point live est collé au bord droit, pas d'espace vide pour les heures à venir). */
 export function computeEvolutionDomain(range: { from: string; to: string }, granularity: EvolutionGranularity): EvolutionDomain {
+  const natural = naturalEvolutionDomain(range, granularity)
+  if (!(natural.end > natural.start)) return natural
+  const now = new Date().getTime()
+  if (now > natural.start && now < natural.end) {
+    const end = Math.min(natural.end, Math.max(natural.start + MIN_LIVE_SPAN[granularity], now))
+    return { start: natural.start, end }
+  }
+  return natural
+}
+
+/** Domaine « plein » de la période, sans troncature live (utilisé en interne + par les ticks). */
+function naturalEvolutionDomain(range: { from: string; to: string }, granularity: EvolutionGranularity): EvolutionDomain {
   if (granularity === 'hour') {
     const start = startOfDay(new Date(range.from))
     start.setHours(HOUR_WINDOW_START, 0, 0, 0)
@@ -59,11 +81,17 @@ export function buildEvolutionTicks(domain: EvolutionDomain, granularity: Evolut
   if (!(end > start)) return [{ t: start, label: '' }]
 
   if (granularity === 'hour') {
-    return HOUR_TICKS.map((hour) => {
+    const ticks = HOUR_TICKS.map((hour) => {
       const d = new Date(start)
       d.setHours(hour, 0, 0, 0)
       return { t: d.getTime(), label: `${hour}h` }
-    })
+    }).filter((tick) => tick.t >= start && tick.t <= end)
+    // Étiquette du bord droit (= « maintenant » en mode live) si l'axe est tronqué loin de la dernière graduation fixe.
+    const last = ticks[ticks.length - 1]
+    if (!last || end - last.t > 45 * 60 * 1000) {
+      ticks.push({ t: end, label: `${new Date(end).getHours()}h` })
+    }
+    return ticks
   }
 
   if (granularity === 'week') {

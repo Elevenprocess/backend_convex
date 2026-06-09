@@ -1,0 +1,175 @@
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport, type UIMessage } from 'ai'
+import { buildApiUrl } from '../../lib/api'
+import { getAssistantConversation, useChatWidget } from '../../lib/chatWidget'
+import { useAuth } from '../../lib/auth'
+
+function messageText(message: UIMessage): string {
+  return (message.parts ?? [])
+    .map((part: any) => {
+      if (part?.type === 'text') return part.text
+      if (part?.type?.startsWith('tool-')) return part.state === 'output-available' ? '✓ Données consultées' : 'Recherche en cours…'
+      return ''
+    })
+    .filter(Boolean)
+    .join('\n')
+}
+
+export function ChatPanel() {
+  const status = useAuth((s) => s.status)
+  const user = useAuth((s) => s.user)
+  const open = useChatWidget((s) => s.open)
+  const setOpen = useChatWidget((s) => s.setOpen)
+  const conversationId = useChatWidget((s) => s.conversationId)
+  const setConversationId = useChatWidget((s) => s.setConversationId)
+  const conversations = useChatWidget((s) => s.conversations)
+  const loadConversations = useChatWidget((s) => s.loadConversations)
+  const createConversation = useChatWidget((s) => s.createConversation)
+  const deleteConversation = useChatWidget((s) => s.deleteConversation)
+  const [input, setInput] = useState('')
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const listRef = useRef<HTMLDivElement>(null)
+
+  const transport = useMemo(() => new DefaultChatTransport<UIMessage>({
+    api: buildApiUrl('/assistant/chat'),
+    credentials: 'include',
+    fetch: async (input, init) => {
+      const res = await fetch(input, init)
+      const id = res.headers.get('X-Assistant-Conversation-Id')
+      if (id) setConversationId(id)
+      return res
+    },
+    prepareSendMessagesRequest: ({ messages }) => ({
+      body: { messages, conversationId: useChatWidget.getState().conversationId ?? undefined },
+    }),
+  }), [setConversationId])
+
+  const { messages, setMessages, sendMessage, status: chatStatus, error, stop } = useChat({ transport })
+  const busy = chatStatus === 'submitted' || chatStatus === 'streaming'
+
+  useEffect(() => {
+    if (status === 'authed') void loadConversations().catch(() => undefined)
+  }, [status, loadConversations])
+
+  useEffect(() => {
+    if (!conversationId) {
+      setMessages([])
+      return
+    }
+    setHistoryLoading(true)
+    getAssistantConversation(conversationId)
+      .then((detail) => {
+        setMessages(detail.messages.map((m) => ({ id: m.id, role: m.role as any, parts: m.parts as any })))
+      })
+      .catch(() => setMessages([]))
+      .finally(() => setHistoryLoading(false))
+  }, [conversationId, setMessages])
+
+  useEffect(() => {
+    if (!open) return
+    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
+  }, [messages, open, busy])
+
+  if (status !== 'authed' || !user) return null
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    const text = input.trim()
+    if (!text || busy) return
+    setInput('')
+    await sendMessage({ text })
+    void loadConversations().catch(() => undefined)
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        className="assistant-launcher"
+        onClick={() => setOpen(!open)}
+        aria-label={open ? 'Fermer assistant IA' : 'Ouvrir assistant IA'}
+      >
+        <span className="assistant-launcher-glow" />
+        <span className="assistant-launcher-icon">✦</span>
+        <span className="assistant-launcher-label">IA</span>
+      </button>
+
+      {open && (
+        <section className="assistant-panel" aria-label="Assistant IA ECOI">
+          <header className="assistant-header">
+            <div>
+              <p className="assistant-eyebrow">Assistant ECOI</p>
+              <h2>Copilote IA</h2>
+              <span>Connecté à tes leads, RDV, clients et stats.</span>
+            </div>
+            <button type="button" onClick={() => setOpen(false)} aria-label="Fermer">×</button>
+          </header>
+
+          <div className="assistant-body">
+            <aside className="assistant-history">
+              <button type="button" className="assistant-new" onClick={() => { setConversationId(null); setMessages([]); void createConversation() }}>
+                + Nouveau
+              </button>
+              <div className="assistant-history-list">
+                {conversations.map((conversation) => (
+                  <button
+                    key={conversation.id}
+                    type="button"
+                    className={conversation.id === conversationId ? 'active' : ''}
+                    onClick={() => setConversationId(conversation.id)}
+                    title={conversation.title}
+                  >
+                    <span>{conversation.title}</span>
+                    <small>{new Date(conversation.updatedAt).toLocaleDateString('fr-FR')}</small>
+                  </button>
+                ))}
+                {conversations.length === 0 && <p>Aucune conversation.</p>}
+              </div>
+              {conversationId && (
+                <button type="button" className="assistant-delete" onClick={() => void deleteConversation(conversationId)}>
+                  Supprimer
+                </button>
+              )}
+            </aside>
+
+            <main className="assistant-chat">
+              <div className="assistant-messages" ref={listRef}>
+                {historyLoading && <div className="assistant-empty">Chargement…</div>}
+                {!historyLoading && messages.length === 0 && (
+                  <div className="assistant-empty">
+                    <strong>Demande-moi un résumé, une recherche ou un point de suivi.</strong>
+                    <span>Ex: “Montre mes RDV de demain” ou “Quels leads chauds relancer ?”</span>
+                  </div>
+                )}
+                {messages.map((message) => {
+                  const text = messageText(message)
+                  if (!text) return null
+                  const isUser = message.role === 'user'
+                  return <div key={message.id} className={`assistant-message ${isUser ? 'user' : 'assistant'}`}>{text}</div>
+                })}
+                {busy && <div className="assistant-thinking">L’assistant réfléchit…</div>}
+              </div>
+
+              {error && <div className="assistant-error">{error.message}</div>}
+              <form className="assistant-input" onSubmit={submit}>
+                <textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) submit(e)
+                  }}
+                  placeholder="Écris ta demande…"
+                  rows={2}
+                />
+                <button type={busy ? 'button' : 'submit'} onClick={busy ? () => void stop() : undefined}>
+                  {busy ? 'Stop' : 'Envoyer'}
+                </button>
+              </form>
+            </main>
+          </div>
+        </section>
+      )}
+    </>
+  )
+}

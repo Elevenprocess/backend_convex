@@ -8,7 +8,21 @@ import { useTheme } from '../../lib/theme'
 import { leadListPath } from '../../lib/leadPaths'
 
 type Item = { to: string; icon: IconName; label: string; roles?: Role[] }
-type Section = { id: string; label: string; items: Item[] }
+type Section = { id: string; label: string; items: Item[]; collapsible?: boolean }
+
+const ACQUISITION_ROLES: Role[] = ['admin', 'setter', 'setter_lead', 'commercial', 'commercial_lead']
+const DELIVERY_ROLES: Role[] = ['admin', 'delivrabilite', 'responsable_technique', 'back_office']
+const OPS_ROLES: Role[] = ['delivrabilite', 'responsable_technique', 'back_office']
+const CALENDAR_ROLES: Role[] = [
+  'admin',
+  'setter',
+  'setter_lead',
+  'commercial',
+  'commercial_lead',
+  'delivrabilite',
+  'responsable_technique',
+  'back_office',
+]
 
 const SECTIONS: Section[] = [
   {
@@ -16,37 +30,56 @@ const SECTIONS: Section[] = [
     label: 'Espace',
     items: [
       { to: '/overview', icon: 'home', label: 'Overview' },
-      { to: '/leads', icon: 'users', label: 'Leads' },
-      { to: '/client', icon: 'inbox', label: 'Clients', roles: ['admin'] },
-      { to: '/rdv', icon: 'calendar', label: 'RDV' },
+      { to: '/notifications', icon: 'bell', label: 'Rappels' },
     ],
   },
   {
-    id: 'activite',
-    label: 'Activité',
+    id: 'analytics',
+    label: 'Analytics',
     items: [
-      { to: '/notifications', icon: 'bell', label: 'Rappels' },
       { to: '/analytics', icon: 'chart', label: 'Analytics' },
-      { to: '/suivi', icon: 'grid', label: 'Suivi', roles: ['admin', 'delivrabilite', 'responsable_technique', 'back_office'] },
-      { to: '/mes-interventions', icon: 'target', label: 'Mes interventions', roles: ['technicien'] },
+    ],
+  },
+  {
+    id: 'acquisition',
+    label: 'Acquisition',
+    collapsible: true,
+    items: [
+      { to: '/leads', icon: 'users', label: 'Leads', roles: ['admin', 'setter', 'setter_lead'] },
+      { to: '/client', icon: 'inbox', label: 'Client', roles: ACQUISITION_ROLES },
+    ],
+  },
+  {
+    id: 'delivrabilite',
+    label: 'Délivrabilité',
+    collapsible: true,
+    items: [
+      { to: '/suivi', icon: 'grid', label: 'Delivery', roles: DELIVERY_ROLES },
+      { to: '/client', icon: 'inbox', label: 'Client', roles: OPS_ROLES },
+    ],
+  },
+  {
+    id: 'calendriers',
+    label: 'Calendriers',
+    collapsible: true,
+    items: [
+      { to: '/rdv', icon: 'calendar', label: 'Calendrier RDV', roles: CALENDAR_ROLES },
+      { to: '/planning', icon: 'clock', label: 'Planning', roles: DELIVERY_ROLES },
     ],
   },
   {
     id: 'admin',
     label: 'Administration',
+    collapsible: true,
     items: [
       { to: '/settings', icon: 'users', label: 'Équipe', roles: ['commercial'] },
-      { to: '/settings', icon: 'shield', label: 'Paramètres', roles: ['admin', 'commercial_lead'] },
+      { to: '/settings', icon: 'settings', label: 'Paramètres', roles: ['admin', 'commercial_lead'] },
     ],
   },
 ]
 
 const SIDEBAR_STORAGE_KEY = 'ecoi.sidebar.expanded'
-
-// Le technicien n'a accès qu'à un sous-ensemble de pages : Overview, le
-// calendrier (RDV), les rappels (notifications) et ses interventions. On masque
-// tout le reste de son menu (Leads, Analytics…).
-const TECHNICIEN_PATHS = new Set(['/overview', '/rdv', '/notifications', '/mes-interventions'])
+const SIDEBAR_SECTIONS_STORAGE_KEY = 'ecoi.sidebar.collapsedSections'
 
 const ROLE_TAG: Record<Role, string> = {
   admin: 'Administration',
@@ -89,12 +122,27 @@ export function Sidebar() {
     const stored = window.localStorage.getItem(SIDEBAR_STORAGE_KEY)
     return stored === null ? true : stored === 'true'
   })
+  const [collapsedSections, setCollapsedSections] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return []
+    const stored = window.localStorage.getItem(SIDEBAR_SECTIONS_STORAGE_KEY)
+    if (!stored) return []
+    try {
+      const parsed = JSON.parse(stored)
+      return Array.isArray(parsed) ? parsed.filter((id) => typeof id === 'string') : []
+    } catch {
+      return []
+    }
+  })
   const [userMenu, setUserMenu] = useState(false)
   const userRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(expanded))
   }, [expanded])
+
+  useEffect(() => {
+    window.localStorage.setItem(SIDEBAR_SECTIONS_STORAGE_KEY, JSON.stringify(collapsedSections))
+  }, [collapsedSections])
 
   useEffect(() => {
     if (!userMenu) return
@@ -113,47 +161,36 @@ export function Sidebar() {
   }, [userMenu])
 
   const sections = useMemo(() => {
-    const isOps =
-      role === 'delivrabilite' ||
-      role === 'responsable_technique' ||
-      role === 'back_office'
+    if (role === 'technicien') {
+      return [
+        {
+          id: 'technicien',
+          label: 'Espace',
+          items: [
+            { to: '/planning', icon: 'calendar' as const, label: 'Planning' },
+            { to: '/mes-dossiers', icon: 'inbox' as const, label: 'Mes dossiers' },
+          ],
+        },
+      ]
+    }
     const built = SECTIONS.map((s) => ({
       ...s,
-      items: s.items
-        .filter((it) => !it.roles || it.roles.includes(role))
-        // Technicien : on restreint à sa liste blanche de pages.
-        .filter((it) => role !== 'technicien' || TECHNICIEN_PATHS.has(it.to))
-        .map((it) => {
-          // Technicien : la page RDV est présentée comme « Calendrier ».
-          if (role === 'technicien' && it.to === '/rdv') return { ...it, label: 'Calendrier' }
-          if (it.to !== '/leads') return it
-          // Commerciaux : « Clients ». Délivrabilité & ops : « Dossier client ».
-          if (role === 'commercial' || role === 'commercial_lead')
-            return { ...it, to: '/client', label: 'Clients' }
-          if (isOps)
-            return { ...it, to: '/client', icon: 'inbox' as const, label: 'Dossier client' }
-          return it
-        }),
+      items: s.items.filter((it) => !it.roles || it.roles.includes(role)),
     }))
-    // Délivrabilité : remonter « Suivi » juste au-dessus de « Dossier client ».
-    if (isOps) {
-      let suivi: Item | undefined
-      for (const s of built) {
-        const idx = s.items.findIndex((it) => it.to === '/suivi')
-        if (idx !== -1) {
-          suivi = s.items[idx]
-          s.items.splice(idx, 1)
-          break
-        }
-      }
-      if (suivi) {
-        const espace = built.find((s) => s.id === 'espace')
-        const clientIdx = espace?.items.findIndex((it) => it.to === '/client') ?? -1
-        if (espace) espace.items.splice(clientIdx === -1 ? espace.items.length : clientIdx, 0, suivi)
-      }
-    }
     return built.filter((s) => s.items.length > 0)
   }, [role])
+
+  useEffect(() => {
+    const activeSection = sections.find((section) => section.items.some((item) => item.to === location.pathname))
+    if (!activeSection?.collapsible || !collapsedSections.includes(activeSection.id)) return
+    setCollapsedSections((current) => current.filter((id) => id !== activeSection.id))
+  }, [collapsedSections, location.pathname, sections])
+
+  const toggleSection = (sectionId: string) => {
+    setCollapsedSections((current) =>
+      current.includes(sectionId) ? current.filter((id) => id !== sectionId) : [...current, sectionId],
+    )
+  }
 
   const handleSignOut = async () => {
     setUserMenu(false)
@@ -200,25 +237,48 @@ export function Sidebar() {
       </button>
 
       <div className="sb-scroll">
-        {sections.map((section) => (
-          <nav key={section.id} className="sb-section" aria-label={section.label}>
-            <div className="sb-section-label">{section.label}</div>
-            {section.items.map((item) => (
-              <NavLink
-                key={section.id + item.to + item.label}
-                to={item.to}
-                className={({ isActive }) => `sb-item ${isActive ? 'is-active' : ''}`}
-                data-tip={item.label}
-                title={item.label}
-              >
-                <span className="sb-item-icon">
-                  <Icon name={item.icon} size={16} strokeWidth={1.75} />
-                </span>
-                <span className="sb-item-label">{item.label}</span>
-              </NavLink>
-            ))}
-          </nav>
-        ))}
+        {sections.map((section) => {
+          const isSectionCollapsed = expanded && section.collapsible && collapsedSections.includes(section.id)
+          const bodyId = `sidebar-section-${section.id}`
+          return (
+            <nav
+              key={section.id}
+              className={`sb-section ${section.collapsible ? 'sb-section-collapsible' : ''} ${isSectionCollapsed ? 'is-collapsed' : ''}`}
+              aria-label={section.label}
+            >
+              {section.collapsible && expanded ? (
+                <button
+                  type="button"
+                  className="sb-section-header"
+                  onClick={() => toggleSection(section.id)}
+                  aria-expanded={!isSectionCollapsed}
+                  aria-controls={bodyId}
+                >
+                  <span className="sb-section-label">{section.label}</span>
+                  <Icon name="chevron-down" size={12} className="sb-section-chevron" />
+                </button>
+              ) : (
+                <div className="sb-section-label">{section.label}</div>
+              )}
+              <div className="sb-section-body" id={bodyId} hidden={isSectionCollapsed}>
+                {section.items.map((item) => (
+                  <NavLink
+                    key={section.id + item.to + item.label}
+                    to={item.to}
+                    className={({ isActive }) => `sb-item ${isActive ? 'is-active' : ''}`}
+                    data-tip={item.label}
+                    title={item.label}
+                  >
+                    <span className="sb-item-icon">
+                      <Icon name={item.icon} size={16} strokeWidth={1.75} />
+                    </span>
+                    <span className="sb-item-label">{item.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            </nav>
+          )
+        })}
       </div>
 
       <div className="sb-user" ref={userRef}>

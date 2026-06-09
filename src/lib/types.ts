@@ -114,6 +114,7 @@ export type LeadResponse = {
   callCount: number
   callsToday: number
   nextCallbackAt: string | null
+  callbackSetAt: string | null
   firstCallUnderFiveMin: boolean | null
   // Phase 1-6 — pont GHL
   monetaryValue: string | null // numeric Postgres → string en JSON
@@ -322,6 +323,7 @@ export type AnalyticsFunnelResponse = {
     noAnswer: number
     relances: number
     rdv: number
+    signed: number
     globalConversionRate: number
     lossesBeforeCall: number
     lossesAfterNoAnswer: number
@@ -870,6 +872,7 @@ export type NotificationResponse = {
 }
 
 export type VtCalendarEntry = {
+  kind: 'vt' | 'installation'
   clientId: string
   leadId: string
   leadName: string

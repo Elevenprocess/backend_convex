@@ -12,10 +12,13 @@ import { DossierSidebar } from '../components/suivi/DossierSidebar'
 import { TechnicienVtPicker } from '../components/suivi/TechnicienVtPicker'
 import { WorkflowBoard } from '../components/suivi/WorkflowBoard'
 import { DocumentsHub } from '../components/suivi/DocumentsHub'
-import type { UpdateSubstepPatch } from '../lib/types'
+import type { UpdateSubstepPatch, WorkflowPhase } from '../lib/types'
 
 export function SuiviDetail() {
   const role = useAuth((s) => s.user?.role)
+  const FIELD_PHASES: WorkflowPhase[] = ['vt', 'installation']
+  const canEditPhase = (phase: WorkflowPhase) =>
+    role === 'technicien' ? FIELD_PHASES.includes(phase) : true
   const { id } = useParams<{ id: string }>()
   const { data: leads, loading: leadsLoading, refetch: refetchLeads } = useLeads({ limit: 500 })
   const { data: rdvs, loading: rdvLoading } = useRdvList({ limit: 200 })
@@ -81,7 +84,7 @@ export function SuiviDetail() {
     && role !== 'back_office'
     && role !== 'technicien'
   ) return <Navigate to="/overview" replace />
-  if (!id) return <Navigate to="/suivi" replace />
+  if (!id) return <Navigate to={role === 'technicien' ? '/mes-dossiers' : '/suivi'} replace />
 
   const isLoading = leadsLoading || rdvLoading
 
@@ -90,7 +93,7 @@ export function SuiviDetail() {
       <Topbar eyebrow="SUIVI INSTALLATION" title="Détail dossier" />
       <main className="suivi-page flex-grow overflow-y-auto px-4 sm:px-8 pt-4 pb-8">
         <nav className="suivi-breadcrumb">
-          <Link to="/suivi">← Tous les dossiers</Link>
+          <Link to={role === 'technicien' ? '/mes-dossiers' : '/suivi'}>← {role === 'technicien' ? 'Mes dossiers' : 'Tous les dossiers'}</Link>
         </nav>
 
         {isLoading ? (
@@ -135,7 +138,7 @@ export function SuiviDetail() {
               ) : view === 'documents' ? (
                 <DocumentsHub substeps={substeps ?? []} today={today} onDocsChanged={refetch} />
               ) : (
-                <WorkflowBoard substeps={substeps ?? []} onMutate={onMutate} today={today} savingId={savingId} onDocsChanged={refetch} onGoToDocs={() => setView('documents')} />
+                <WorkflowBoard substeps={substeps ?? []} onMutate={onMutate} today={today} savingId={savingId} onDocsChanged={refetch} onGoToDocs={() => setView('documents')} canEditPhase={canEditPhase} />
               )}
               </section>
             </div>

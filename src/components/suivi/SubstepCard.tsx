@@ -10,9 +10,10 @@ type Props = {
   saving?: boolean
   onDocsChanged?: () => void
   onGoToDocs?: () => void
+  readOnly?: boolean
 }
 
-export function SubstepCard({ substep, onMutate, today, saving, onGoToDocs }: Props) {
+export function SubstepCard({ substep, onMutate, today, saving, onGoToDocs, readOnly }: Props) {
   const [date, setDate] = useState(substep.dateRealisee ?? '')
   const [notes, setNotes] = useState(substep.notes ?? '')
   const debounceRef = useRef<number | null>(null)
@@ -57,6 +58,12 @@ export function SubstepCard({ substep, onMutate, today, saving, onGoToDocs }: Pr
 
         {locked ? (
           <p className="wf-locked-note"><Icon name="shield" size={13} /> En attente d'une étape précédente</p>
+        ) : readOnly ? (
+          <div className="wf-substep-fields wf-readonly">
+            {substep.dateRealisee && <p className="wf-field-ro"><span>Date</span> {substep.dateRealisee}</p>}
+            {substep.notes && <p className="wf-field-ro"><span>Notes</span> {substep.notes}</p>}
+            <p className="wf-field-ro wf-field-ro-status"><span>Statut</span> {substep.status}</p>
+          </div>
         ) : (
           <div className="wf-substep-fields">
             <label className="wf-field">
@@ -87,12 +94,14 @@ export function SubstepCard({ substep, onMutate, today, saving, onGoToDocs }: Pr
           )
         })()}
 
-        <footer className="wf-substep-foot">
-          <button type="button" className="wf-cta" disabled={locked || saving} onClick={onAction}>
-            {done ? 'Rouvrir' : substep.actionLabel}
-          </button>
-          {saving && <span className="wf-saving">…</span>}
-        </footer>
+        {!readOnly && (
+          <footer className="wf-substep-foot">
+            <button type="button" className="wf-cta" disabled={locked || saving} onClick={onAction}>
+              {done ? 'Rouvrir' : substep.actionLabel}
+            </button>
+            {saving && <span className="wf-saving">…</span>}
+          </footer>
+        )}
       </div>
     </article>
   )

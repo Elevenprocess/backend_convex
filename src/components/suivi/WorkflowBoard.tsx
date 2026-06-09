@@ -3,7 +3,7 @@ import { SubstepCard } from './SubstepCard'
 import { groupSubsteps, SUIVI_SECTIONS } from '../../lib/suivi-board'
 import { useCollapsibleState } from '../../lib/useCollapsibleState'
 import { Icon } from '../Icon'
-import type { SubstepResponse, UpdateSubstepPatch } from '../../lib/types'
+import type { SubstepResponse, UpdateSubstepPatch, WorkflowPhase } from '../../lib/types'
 
 type Props = {
   substeps: SubstepResponse[]
@@ -12,6 +12,7 @@ type Props = {
   savingId?: string | null
   onDocsChanged?: () => void
   onGoToDocs?: () => void
+  canEditPhase?: (phase: WorkflowPhase) => boolean
 }
 
 function countDone(list: SubstepResponse[]) {
@@ -58,7 +59,7 @@ function CollapsibleWfSection({
   )
 }
 
-export function WorkflowBoard({ substeps, onMutate, today, savingId, onDocsChanged, onGoToDocs }: Props) {
+export function WorkflowBoard({ substeps, onMutate, today, savingId, onDocsChanged, onGoToDocs, canEditPhase }: Props) {
   const grouped = groupSubsteps(substeps)
   const overallDone = countDone(substeps)
   const overallTotal = substeps.length
@@ -67,7 +68,7 @@ export function WorkflowBoard({ substeps, onMutate, today, savingId, onDocsChang
   const renderList = (list: SubstepResponse[]) => (
     <div className="wf-list">
       {list.map((s) => (
-        <SubstepCard key={s.id} substep={s} onMutate={onMutate} today={today} saving={savingId === s.id} onDocsChanged={onDocsChanged} onGoToDocs={onGoToDocs} />
+        <SubstepCard key={s.id} substep={s} onMutate={onMutate} today={today} saving={savingId === s.id} onDocsChanged={onDocsChanged} onGoToDocs={onGoToDocs} readOnly={canEditPhase ? !canEditPhase(s.phase) : false} />
       ))}
     </div>
   )
