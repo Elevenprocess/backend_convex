@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Icon, type IconName } from '../components/Icon'
 import { LoadingBlock, Spinner } from '../components/Spinner'
-import { useLeads, useRdvList } from '../lib/hooks'
+import { useLeads, useNotifications, useRdvList } from '../lib/hooks'
+import { markNotificationRead } from '../lib/api'
+import { notifyRealtimeRefresh } from '../lib/realtime'
 import { useAuth } from '../lib/auth'
-import { fullName, type LeadResponse, type LeadStatus, type RdvResponse } from '../lib/types'
+import { fullName, type LeadResponse, type LeadStatus, type NotificationResponse, type RdvResponse } from '../lib/types'
 import { leadListPath, leadSearchPath } from '../lib/leadPaths'
 
 type Notif = {
@@ -26,6 +28,10 @@ type Notif = {
   // true => le système a détecté que le rappel a déjà été traité (lead rappelé, même en avance).
   // La carte s'affiche barrée automatiquement, sans clic sur "Barrer comme appelé".
   resolved?: boolean
+  /** For backend-persisted notifications: null = unread, string = already read */
+  readAt?: string | null
+  /** Callback to mark a persisted notification as read */
+  onMarkRead?: () => void
 }
 
 export function Notifications() {
@@ -35,13 +41,26 @@ export function Notifications() {
   const rdvFilters = isCommercial && user?.id ? { commercialId: user.id, limit: 200 } : { limit: 200 }
   const { data: leadsData, loading: leadsLoading } = useLeads(leadFilters)
   const { data: rdvsData, loading: rdvLoading } = useRdvList(rdvFilters)
+  const { data: persistedData, loading: persistedLoading, refetch: refreshPersisted } = useNotifications({ limit: 50 })
   const leads = leadsData ?? []
   const rdvs = rdvsData ?? []
+  const persisted = persistedData ?? []
   const minuteTick = useMinuteTicker()
-  const notifs = useMemo(() => (
-    isCommercial ? buildCommercialNotifications(leads, rdvs) : buildNotifications(leads, rdvs)
-  ), [isCommercial, leads, rdvs, minuteTick])
-  const loading = leadsLoading || rdvLoading
+
+  const handleMarkRead = useCallback((id: string) => {
+    markNotificationRead(id).then(() => {
+      notifyRealtimeRefresh({ event: 'notification:read', paths: ['/notifications'] })
+      refreshPersisted()
+    }).catch(() => { /* silently ignore — user can retry */ })
+  }, [refreshPersisted])
+
+  const notifs = useMemo(() => {
+    const derived = isCommercial ? buildCommercialNotifications(leads, rdvs) : buildNotifications(leads, rdvs)
+    const persistedNotifs = buildPersistedNotifications(persisted, handleMarkRead)
+    return dedupeNotifications([...derived, ...persistedNotifs]).sort(notificationFeedRank)
+  }, [isCommercial, leads, rdvs, persisted, handleMarkRead, minuteTick])
+
+  const loading = leadsLoading || rdvLoading || persistedLoading
   const [permission, setPermission] = useState(notificationPermission())
 
   useBrowserNotifications(notifs)
@@ -88,6 +107,7 @@ function NotificationCard({ notif }: { notif: Notif }) {
   const autoResolved = notif.resolved === true
   const manualCalled = notif.reminderKey ? calledReminders.has(notif.reminderKey) : false
   const isCalled = autoResolved || manualCalled
+  const isRead = notif.readAt != null
   const toggleCalled = () => {
     if (!notif.reminderKey) return
     const next = new Set(calledReminders)
@@ -98,16 +118,16 @@ function NotificationCard({ notif }: { notif: Notif }) {
   }
 
   return (
-    <div className={`glass-card p-4 flex items-start gap-4 ${notif.borderColor ? `border-l-4 ${notif.borderColor}` : ''} ${isCalled ? 'opacity-60' : ''}`}>
+    <div className={`glass-card p-4 flex items-start gap-4 ${notif.borderColor ? `border-l-4 ${notif.borderColor}` : ''} ${isCalled || isRead ? 'opacity-60' : ''}`}>
       <div className={`w-10 h-10 rounded-full ${notif.iconBg} flex items-center justify-center shrink-0`}>
         <Icon name={notif.icon} size={18} className={notif.iconColor} />
       </div>
       <div className="flex-grow min-w-0">
         <div className="flex justify-between items-start gap-2">
-          <span className={`font-semibold text-sm ${isCalled ? 'line-through text-muted' : ''}`}>{notif.title}</span>
+          <span className={`font-semibold text-sm ${isCalled || isRead ? 'line-through text-muted' : ''}`}>{notif.title}</span>
           <span className="text-xs text-faint shrink-0">{notif.time}</span>
         </div>
-        <p className={`text-sm text-muted mt-1 ${isCalled ? 'line-through' : ''}`}>{notif.body}</p>
+        <p className={`text-sm text-muted mt-1 ${isCalled || isRead ? 'line-through' : ''}`}>{notif.body}</p>
         <div className="mt-3 flex items-center gap-2">
           {notif.to && <Link to={notif.to} className="text-xs font-semibold text-or-dark hover:underline">Ouvrir</Link>}
           {autoResolved ? (
@@ -121,6 +141,15 @@ function NotificationCard({ notif }: { notif: Notif }) {
               className={`text-xs font-semibold rounded-full border px-3 py-1 transition ${isCalled ? 'border-success/40 bg-success-tint text-success' : 'border-line bg-white/70 text-muted hover:border-or hover:text-text'}`}
             >
               {isCalled ? 'Rappel barré' : 'Barrer comme appelé'}
+            </button>
+          )}
+          {notif.onMarkRead && !isRead && (
+            <button
+              type="button"
+              onClick={notif.onMarkRead}
+              className="text-xs font-semibold rounded-full border px-3 py-1 transition border-line bg-white/70 text-muted hover:border-or hover:text-text"
+            >
+              Marquer lu
             </button>
           )}
         </div>
@@ -320,6 +349,58 @@ export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvRes
   }
 
   return dedupeNotifications(notifications).sort(notificationFeedRank)
+}
+
+// ─── Notifs backend persistées (VT, webhooks, etc.) ──────────────────────────
+
+type PersistedPayload = { clientId?: string; [key: string]: unknown }
+
+function buildPersistedNotifications(
+  items: NotificationResponse[],
+  onMarkRead: (id: string) => void,
+): Notif[] {
+  return items.map((item) => {
+    const payload = (item.payload ?? {}) as PersistedPayload
+    const clientLink = payload.clientId ? `/clients/${payload.clientId}` : undefined
+    const { iconBg, iconColor, borderColor } = persistedNotifColors(item.type)
+    return {
+      id: `persisted-${item.id}`,
+      group: persistedNotifGroup(item.type),
+      icon: persistedNotifIcon(item.type),
+      iconBg,
+      iconColor,
+      borderColor,
+      title: item.title,
+      body: item.body ?? '',
+      time: relativeTime(item.createdAt),
+      sortAt: new Date(item.createdAt).getTime(),
+      urgency: 'info' as const,
+      to: clientLink,
+      readAt: item.readAt,
+      onMarkRead: item.readAt == null ? () => onMarkRead(item.id) : undefined,
+    }
+  })
+}
+
+function persistedNotifGroup(type: string): string {
+  if (type.startsWith('vt')) return 'VISITES TECHNIQUES'
+  if (type.startsWith('rdv')) return 'RDV'
+  if (type.startsWith('lead')) return 'LEADS'
+  return 'NOTIFICATIONS'
+}
+
+function persistedNotifIcon(type: string): IconName {
+  if (type.startsWith('vt')) return 'calendar'
+  if (type.startsWith('rdv')) return 'calendar'
+  if (type.startsWith('lead')) return 'users'
+  return 'bell'
+}
+
+function persistedNotifColors(type: string): { iconBg: string; iconColor: string; borderColor: string } {
+  if (type.startsWith('vt')) return NOTIF_COLOR.rdvUpcoming
+  if (type.startsWith('rdv')) return NOTIF_COLOR.rdvNew
+  if (type.startsWith('lead')) return NOTIF_COLOR.newLead
+  return NOTIF_COLOR.planned
 }
 
 function commercialRdvDetails(rdv: RdvResponse, lead?: LeadResponse): React.ReactNode {
