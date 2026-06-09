@@ -67,3 +67,17 @@ describe('RdvCalendar — gating des feeds par rôle', () => {
     expect(vtCalls.every((f) => f === null)).toBe(true)
   })
 })
+
+describe('RdvCalendar — filtre Commercial par rôle', () => {
+  it('commercial : le filtre « Commercial » est masqué', () => {
+    currentRole = 'commercial'
+    render(<MemoryRouter><RdvCalendar /></MemoryRouter>)
+    expect(screen.queryByText('Commercial :')).toBeNull()
+  })
+
+  it('commercial_lead : le filtre « Commercial » est visible', () => {
+    currentRole = 'commercial_lead'
+    render(<MemoryRouter><RdvCalendar /></MemoryRouter>)
+    expect(screen.getByText('Commercial :')).toBeInTheDocument()
+  })
+})

@@ -371,6 +371,8 @@ export function RdvCalendar() {
           )
         })}
 
+        {role !== 'commercial' && (
+          <>
         <span className="uppercase tracking-wider text-faint ml-1 sm:ml-2">Commercial :</span>
         <div className="relative">
           <button
@@ -417,6 +419,8 @@ export function RdvCalendar() {
             </>
           )}
         </div>
+          </>
+        )}
 
         {hasActiveFilter && (
           <button
