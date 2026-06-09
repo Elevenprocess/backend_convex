@@ -745,35 +745,57 @@ function OverviewCommercialIndividual() {
   const me = useAuth((s) => s.user)
   const display = useDisplayUser()
   const [tab, setTab] = useState('overview')
-  // Un commercial_lead voit l'ensemble de l'équipe closing, pas seulement ses
-  // propres RDV — pas de filtre commercialId, pas de scope `me.id` dans les
-  // helpers de prospects/débriefs.
-  const isManager = me?.role === 'commercial_lead'
-  const scopeCommercialId = isManager ? undefined : me?.id
+  const [period, setPeriod] = useState<FunnelPeriodState>({ ...DEFAULT_FUNNEL_PERIOD, mode: 'this_month' })
+  const range = buildFunnelPeriodRange(period)
+  const scopeCommercialId = me?.id
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), [])
-  // Vue commercial volontairement minimale : on ne charge que les RDV (sans
-  // borne de période, pour ne pas masquer un débrief en retard) et les leads
-  // pour afficher le nom des prospects.
+
+  // Liste RDV non bornée par la période : on ne masque jamais un débrief en
+  // retard ni un RDV à venir. Les KPIs filtrent la période en mémoire.
   const { data: rdvs = [] } = useRdvList({ commercialId: scopeCommercialId, limit: 200 })
   const { data: allLeads = [] } = useLeads({ limit: 500 })
 
-  const { debriefs, upcoming } = useMemo(() => {
+  const { kpis, upcoming, debriefs } = useMemo(() => {
     const list = rdvs ?? []
-    const leadById = new Map((allLeads ?? []).map((lead) => [lead.id, lead]))
-    const debriefs = list
-      .filter(needsDebrief)
-      .sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt))
-      .map((rdv) => ({ rdv, lead: leadById.get(rdv.leadId) }))
+    const leadById = new Map((allLeads ?? []).map((l) => [l.id, l]))
+
+    // KPIs : sous-ensemble dans la période (range.from/to et scheduledAt sont des ISO → compare lexicographique).
+    const inPeriod = list.filter((r) => r.scheduledAt >= range.from && r.scheduledAt <= range.to)
+    const honored = inPeriod.filter((r) => r.status === 'honore').length
+    const planifie = inPeriod.filter((r) => r.status === 'planifie').length
+    const signed = inPeriod.filter((r) => r.result === 'signe')
+    const lost = inPeriod.filter((r) => r.result === 'perdu').length
+    const reflexion = inPeriod.filter((r) => r.result === 'reflexion').length
+    const ca = signed.reduce((sum, r) => sum + (parseFloat(r.montantTotal ?? '0') || 0), 0)
+    const signedCount = signed.length
+    const closingBase = Math.max(honored, signedCount + lost + reflexion)
+    const kpis = {
+      ca,
+      signedCount,
+      closing: closingBase ? Math.round((signedCount / closingBase) * 100) : 0,
+      panier: signedCount ? ca / signedCount : 0,
+      honored,
+      planifie,
+      lost,
+    }
+
+    // RDV à venir et débriefs : sur la liste COMPLÈTE (hors période).
     const upcoming = list
       .filter((r) => r.status === 'planifie' && r.scheduledAt >= todayIso)
       .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))
-    return { debriefs, upcoming }
-  }, [rdvs, allLeads, todayIso])
+      .map((r) => ({ rdv: r, lead: leadById.get(r.leadId) }))
+    const debriefs = list
+      .filter(needsDebrief)
+      .sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt))
+      .map((r) => ({ rdv: r, lead: leadById.get(r.leadId) }))
+
+    return { kpis, upcoming, debriefs }
+  }, [rdvs, allLeads, todayIso, range.from, range.to])
 
   return (
     <AppShell blobsKey="commercial" flat>
       <Topbar
-        eyebrow={isManager ? 'RESPONSABLE COMMERCIAL' : 'COMMERCIAL'}
+        eyebrow="COMMERCIAL"
         title={`Bonjour, ${display.firstName}`}
         tabs={[
           { id: 'overview', label: 'Overview' },
@@ -790,9 +812,19 @@ function OverviewCommercialIndividual() {
           <div>
             <span className="shot-eyebrow">ECOI SaaS · commercial</span>
             <h1>Mon espace</h1>
-            <p className="text-sm text-muted mt-2">L'essentiel : vos débriefs à remplir et vos prochains rendez-vous.</p>
+            <p className="text-sm text-muted mt-2">Vos chiffres, vos prochains rendez-vous et vos débriefs à remplir.</p>
+          </div>
+          <div className="overview-commercial-toolbar">
+            <DateRangePicker value={period} onChange={setPeriod} align="right" />
           </div>
         </div>
+
+        <section className="overview-commercial-hero-stats">
+          <MagicKpi size="sm" accent="gold" icon="trophy" label="CA signé" value={fmtKEur(kpis.ca)} sub={`${fmtCompact(kpis.signedCount)} ventes`} />
+          <MagicKpi size="sm" accent="success" icon="target" label="Closing" value={`${kpis.closing}%`} sub={`${fmtCompact(kpis.lost)} perdus`} progress={kpis.closing} />
+          <MagicKpi size="sm" accent="green" icon="tag" label="Panier moyen" value={fmtKEur(kpis.panier)} sub="sur ventes signées" />
+          <MagicKpi size="sm" accent="info" icon="calendar" label="RDV honorés" value={fmtCompact(kpis.honored)} sub={`${fmtCompact(kpis.planifie)} planifiés`} />
+        </section>
 
         <section className="overview-air-grid overview-commercial-grid">
           <CommercialDebriefsToFill debriefs={debriefs} />
@@ -802,13 +834,8 @@ function OverviewCommercialIndividual() {
             <div className="overview-role-list overview-role-list-grid">
               {upcoming.length === 0 ? (
                 <div className="text-xs text-faint">Aucun RDV à venir.</div>
-              ) : upcoming.slice(0, 6).map((r, i) => (
-                <RdvRow
-                  key={r.id}
-                  color={['#1F7857', '#3E9A6F', '#145A41', '#3DA86A'][i % 4]}
-                  time={`${shortDateTime(r.scheduledAt)}`}
-                  sub={r.locationType === 'visio' ? 'Visio' : r.locationType === 'agence' ? 'Agence' : 'Domicile'}
-                />
+              ) : upcoming.slice(0, 6).map(({ rdv, lead }) => (
+                <CommercialUpcomingRdvRow key={rdv.id} rdv={rdv} lead={lead} />
               ))}
             </div>
           </div>
@@ -819,6 +846,32 @@ function OverviewCommercialIndividual() {
         </section>
       </main>
     </AppShell>
+  )
+}
+
+// Ligne RDV à venir enrichie (nom prospect + ville · tél + lieu + date), cliquable vers le détail.
+// Calquée sur le markup de CommercialDebriefsToFill pour rester cohérent visuellement.
+function CommercialUpcomingRdvRow({ rdv, lead }: { rdv: RdvResponse; lead?: LeadResponse }) {
+  const navigate = useNavigate()
+  const name = lead ? fullName(lead) : 'Prospect'
+  const place = rdv.locationType === 'visio' ? 'Visio' : rdv.locationType === 'agence' ? 'Agence' : 'Domicile'
+  return (
+    <button
+      type="button"
+      className="commercial-qualified-row"
+      style={{ background: 'none', border: 'none', font: 'inherit', textAlign: 'left', width: '100%', cursor: 'pointer' }}
+      onClick={() => navigate(`/rdv/${rdv.id}`)}
+    >
+      <div className="overview-role-avatar">{userInitials(name)}</div>
+      <div>
+        <strong>{name}</strong>
+        <small>{lead?.city ?? 'Ville non renseignée'} · {lead?.phone ?? 'sans téléphone'}</small>
+      </div>
+      <div className="commercial-qualified-meta">
+        <span>{place}</span>
+        <small>{shortDateTime(rdv.scheduledAt)}</small>
+      </div>
+    </button>
   )
 }
 
