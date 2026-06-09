@@ -45,6 +45,7 @@ const EMPTY_FUNNEL_TOTALS: AnalyticsFunnelResponse['totals'] = {
   noAnswer: 0,
   relances: 0,
   rdv: 0,
+  signed: 0,
   globalConversionRate: 0,
   lossesBeforeCall: 0,
   lossesAfterNoAnswer: 0,
@@ -694,12 +695,9 @@ function OverviewAdmin() {
   const adminSummary = summary?.admin ?? null
   const funnelTotals = funnel?.totals ?? EMPTY_FUNNEL_TOTALS
   const leadSegments = adminSummary?.resultSegments ?? []
-  const treatedLeadTotal = Math.max(
-    funnelTreatedLeads(funnelTotals),
-    adminSummary?.classified ?? 0,
-    adminSummary?.qualified ?? 0,
-    adminSummary?.rdvPris ?? 0,
-  )
+  // Leads traités = classifiés (chiffre backend, source de vérité). Pas de Math.max
+  // avec qualified/rdvPris : la réconciliation côté front gonflait le compteur.
+  const treatedLeadTotal = adminSummary?.classified ?? funnelTreatedLeads(funnelTotals)
   const evolutionGranularity = chooseGranularity(funnelRange)
   const evolutionPoints = buildLeadEvolutionPoints(adminSummary?.dailyEvolution ?? [], funnel?.daily ?? [], adminSummary?.hourlyCalls ?? [], funnelRange, evolutionGranularity, {
     leads: treatedLeadTotal,
@@ -751,24 +749,9 @@ function OverviewAdmin() {
       funnelProspects: adminFunnelProspects(allRdvs ?? [], allLeads ?? [], usersList ?? []),
     }
   }, [adminSummary, funnelTotals, treatedLeadTotal, usersList, allLeads, allRdvs, funnelRange.from, funnelRange.to])
-  const funnelNoAnswer = Math.min(funnelTotals.noAnswer, stats.leads)
-  const funnelAnswered = Math.max(
-    funnelTotals.answered,
-    stats.leads - funnelNoAnswer,
-    stats.qualified + funnelTotals.notQualified + Math.max(0, funnelTotals.relances - funnelNoAnswer),
-    stats.rdvPris,
-  )
-  const overviewFunnelTotals: AnalyticsFunnelResponse['totals'] = {
-    ...funnelTotals,
-    calls: Math.max(funnelTotals.calls, stats.appels),
-    answered: funnelAnswered,
-    responseRate: pct(funnelAnswered, stats.leads),
-    noAnswer: funnelNoAnswer,
-    qualified: Math.max(funnelTotals.qualified, stats.qualified),
-    qualificationRate: pct(Math.max(funnelTotals.qualified, stats.qualified), Math.max(1, funnelAnswered)),
-    rdv: Math.max(funnelTotals.rdv, stats.rdvPris),
-    globalConversionRate: pct(Math.max(funnelTotals.rdv, stats.rdvPris), stats.leads),
-  }
+  // Le backend renvoie un funnel déjà cohérent et monotone (cf. funnel-math).
+  // On l'affiche tel quel — plus aucune re-réconciliation Math.max côté front.
+  const overviewFunnelTotals = funnelTotals
 
   return (
     <AppShell blobsKey="admin" flat>
@@ -1793,9 +1776,10 @@ function formatShortDate(date: Date): string {
 }
 
 function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }) {
-  const treatedLeads = funnelTreatedLeads(totals)
-  const answeredCount = Math.max(0, treatedLeads - totals.noAnswer)
-  const responseRate = pct(answeredCount, treatedLeads)
+  // Chiffres backend directs (funnel monotone) — pas de recalcul "traités − noAnswer".
+  const treatedLeads = funnelContactedLeads(totals)
+  const answeredCount = totals.answered
+  const responseRate = totals.responseRate
   const treatedConversionRate = pct(totals.rdv, treatedLeads)
   return (
     <div className="flow-map col-span-12 mt-4 rounded-2xl border border-line-soft bg-white/65 p-4">

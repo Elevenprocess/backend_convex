@@ -323,6 +323,7 @@ export type AnalyticsFunnelResponse = {
     noAnswer: number
     relances: number
     rdv: number
+    signed: number
     globalConversionRate: number
     lossesBeforeCall: number
     lossesAfterNoAnswer: number

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { CallBubble } from './components/call/CallBubble'
+import { ChatPanel } from './components/assistant/ChatPanel'
 import { PersistentCallSidebar } from './components/call/PersistentCallSidebar'
 import { SidebarRevealPill } from './components/call/SidebarRevealPill'
 import { PersistentLeadSidebar } from './components/leads/PersistentLeadSidebar'
@@ -32,6 +33,7 @@ export function RootLayout() {
       <PersistentCallSidebar />
       <SidebarRevealPill />
       <CallBubble />
+      <ChatPanel />
       <SetterCallbackToastStack />
       <ClipboardToast />
     </>
