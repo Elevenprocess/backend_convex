@@ -431,6 +431,10 @@ function LeadsAdmin() {
     if (setterFilter !== 'all') list = list.filter((l) => l.setterId === setterFilter)
     if (commercialFilter !== 'all') list = list.filter((l) => l.assignedToId === commercialFilter)
     list = applyLeadFilters(list, leadFilters)
+    // Vue "À rappeler" : tri par date de prochain rappel (futurs proches en haut, en retard en bas).
+    if (leadFilters.status === 'a_rappeler' || leadFilters.status === 'relance') {
+      list = sortCallbackLeadsByNextCallback(list)
+    }
     return list
   }, [leads, setterFilter, commercialFilter, leadFilters])
 
