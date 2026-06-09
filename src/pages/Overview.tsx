@@ -81,8 +81,12 @@ function OverviewSuivi() {
   const range = useMemo(() => buildSuiviPeriodRange(period), [period])
   const now = useMemo(() => new Date(), [])
 
-  const { data: clients = [] } = useClients()
-  const { data: rdvs = [] } = useRdvList({ limit: 500 })
+  // data est typé `T | null` (cf. Async<>), donc le défaut de déstructuration ne suffit pas :
+  // on garde le fallback `?? []` pour fournir un tableau non-null aux fonctions pures.
+  const { data: clientsData } = useClients()
+  const { data: rdvsData } = useRdvList({ limit: 500 })
+  const clients = clientsData ?? []
+  const rdvs = rdvsData ?? []
 
   const pipeline = useMemo(() => buildDeliveryPipeline(clients, range, now), [clients, range, now])
   const priorities = useMemo(() => selectDeliveryPriorities(clients, now).slice(0, 6), [clients, now])
