@@ -998,15 +998,6 @@ function OverviewAdmin() {
           </div>
           <div className="flex flex-col items-end gap-3">
             <DateRangePicker value={funnelPeriod} onChange={setFunnelPeriod} align="right" />
-            <div className="overview-profile-chip">
-              <div className="overview-profile-photo">
-                {me?.image ? <img src={me.image} alt={me.name} /> : <span>{userInitials(me?.name)}</span>}
-              </div>
-              <div>
-                <strong>{me?.name}</strong>
-                <small>{me?.email}</small>
-              </div>
-            </div>
           </div>
         </section>
 
