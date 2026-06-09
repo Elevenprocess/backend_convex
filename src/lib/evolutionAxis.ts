@@ -33,10 +33,9 @@ const MIN_LIVE_SPAN: Record<EvolutionGranularity, number> = {
 /** Bornes temporelles (ms) de l'axe X, selon la granularité et la plage.
  *  Mode live : si l'instant présent tombe dans la période, l'axe s'arrête à « maintenant »
  *  (le point live est collé au bord droit, pas d'espace vide pour les heures à venir). */
-export function computeEvolutionDomain(range: { from: string; to: string }, granularity: EvolutionGranularity): EvolutionDomain {
+export function computeEvolutionDomain(range: { from: string; to: string }, granularity: EvolutionGranularity, now: number = Date.now()): EvolutionDomain {
   const natural = naturalEvolutionDomain(range, granularity)
   if (!(natural.end > natural.start)) return natural
-  const now = new Date().getTime()
   if (now > natural.start && now < natural.end) {
     const end = Math.min(natural.end, Math.max(natural.start + MIN_LIVE_SPAN[granularity], now))
     return { start: natural.start, end }
@@ -86,19 +85,28 @@ export function buildEvolutionTicks(domain: EvolutionDomain, granularity: Evolut
       d.setHours(hour, 0, 0, 0)
       return { t: d.getTime(), label: `${hour}h` }
     }).filter((tick) => tick.t >= start && tick.t <= end)
-    // Étiquette du bord droit (= « maintenant » en mode live) si l'axe est tronqué loin de la dernière graduation fixe.
+    // Étiquette du bord droit (= « maintenant ») UNIQUEMENT en mode live (axe tronqué avant 21h).
+    // Hors live, l'axe va jusqu'à 21h et 20h est déjà le dernier label voulu : pas de tick superflu.
+    const naturalEnd = new Date(start)
+    naturalEnd.setHours(HOUR_WINDOW_END, 0, 0, 0)
+    const isLive = end < naturalEnd.getTime()
     const last = ticks[ticks.length - 1]
-    if (!last || end - last.t > 45 * 60 * 1000) {
+    if (isLive && (!last || end - last.t > 45 * 60 * 1000)) {
       ticks.push({ t: end, label: `${new Date(end).getHours()}h` })
     }
     return ticks
   }
 
+  // Position centrale de la graduation bornée au domaine : en mode live, la fin est tronquée à
+  // « maintenant », donc le centre d'une période en cours (mercredi, 15 du mois, midi) peut tomber
+  // au-delà du bord droit. On le clampe pour qu'aucune graduation ne dépasse l'axe.
+  const within = (t: number) => Math.min(t, end)
+
   if (granularity === 'week') {
     const weeks: EvolutionTick[] = []
     let cursor = startOfWeek(new Date(start))
     while (cursor.getTime() <= end) {
-      weeks.push({ t: addDays(cursor, 3).getTime(), label: `sem. ${formatDayMonth(cursor)}` })
+      weeks.push({ t: within(addDays(cursor, 3).getTime()), label: `sem. ${formatDayMonth(cursor)}` })
       cursor = addDays(cursor, 7)
     }
     return sampleTicks(weeks)
@@ -110,7 +118,7 @@ export function buildEvolutionTicks(domain: EvolutionDomain, granularity: Evolut
     let year = startDate.getFullYear()
     let month = startDate.getMonth()
     while (new Date(year, month, 1).getTime() <= end) {
-      months.push({ t: new Date(year, month, 15).getTime(), label: formatMonthLabel(new Date(year, month, 1)) })
+      months.push({ t: within(new Date(year, month, 15).getTime()), label: formatMonthLabel(new Date(year, month, 1)) })
       month += 1
       if (month > 11) { month = 0; year += 1 }
     }
@@ -124,7 +132,7 @@ export function buildEvolutionTicks(domain: EvolutionDomain, granularity: Evolut
   while (cursor.getTime() <= endDay.getTime()) {
     const mid = new Date(cursor)
     mid.setHours(12, 0, 0, 0)
-    days.push({ t: mid.getTime(), label: dayLabel(cursor) })
+    days.push({ t: within(mid.getTime()), label: dayLabel(cursor) })
     cursor = addDays(cursor, 1)
   }
   return sampleTicks(days)
