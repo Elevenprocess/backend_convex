@@ -178,6 +178,7 @@ export type AnalyticsDailyPoint = {
   label: string
   calls: number
   rdv: number
+  qualified: number
   signed: number
   ca: number
   classified: number

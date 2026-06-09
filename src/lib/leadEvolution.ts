@@ -1,9 +1,9 @@
 import { addDays, endOfDay, startOfDay, startOfWeek } from './period'
 import type { EvolutionGranularity } from './evolutionAxis'
 
-export type LeadEvolutionSeriesKey = 'leads' | 'rdv' | 'signed'
-export type LeadEvolutionPoint = { key: string; t: number; date: string; label: string; leads: number; rdv: number; signed: number }
-export type EvolutionDailyInput = { date: string; label: string; calls: number; rdv: number; signed: number; ca: number; classified: number }
+export type LeadEvolutionSeriesKey = 'leads' | 'qualified' | 'signed'
+export type LeadEvolutionPoint = { key: string; t: number; date: string; label: string; leads: number; qualified: number; signed: number }
+export type EvolutionDailyInput = { date: string; label: string; calls: number; rdv: number; signed: number; ca: number; classified: number; qualified?: number }
 export type EvolutionHourlyInput = { date: string; hour: number; label: string; calls: number }
 export type EvolutionRange = { from: string; to: string; days: number }
 
@@ -34,7 +34,7 @@ export function buildLeadEvolutionPoints(
   hourlyCalls: EvolutionHourlyInput[],
   range: EvolutionRange,
   granularity: EvolutionGranularity,
-  totals: { leads: number; rdv: number; signed: number },
+  totals: { leads: number; qualified: number; signed: number },
 ): LeadEvolutionPoint[] {
   if (granularity === 'hour') {
     const rangeStart = startOfDay(new Date(range.from)).getTime()
@@ -68,7 +68,7 @@ export function buildLeadEvolutionPoints(
     date: point.date,
     label: point.label || dayLabel(point.date),
     leads: point.classified,
-    rdv: point.rdv,
+    qualified: point.qualified ?? point.rdv,
     signed: point.signed,
   }))
 }
@@ -98,13 +98,14 @@ function bucketEvolution(inRange: EvolutionDailyInput[], bucketFor: (date: strin
   const buckets = new Map<string, LeadEvolutionPoint>()
   for (const point of inRange) {
     const bucket = bucketFor(point.date)
+    const qualified = point.qualified ?? point.rdv
     const existing = buckets.get(bucket.key)
     if (existing) {
       existing.leads += point.classified
-      existing.rdv += point.rdv
+      existing.qualified += qualified
       existing.signed += point.signed
     } else {
-      buckets.set(bucket.key, { ...bucket, leads: point.classified, rdv: point.rdv, signed: point.signed })
+      buckets.set(bucket.key, { ...bucket, leads: point.classified, qualified, signed: point.signed })
     }
   }
   return [...buckets.values()].sort((a, b) => a.date.localeCompare(b.date))
@@ -115,10 +116,10 @@ function hourKey(point: EvolutionHourlyInput): string {
 }
 
 /** Mode horaire : on répartit le total de la journée au prorata des appels par heure (seule donnée intra-jour). */
-function distributeTotalsAcrossHours(points: EvolutionHourlyInput[], totals: { leads: number; rdv: number; signed: number }): LeadEvolutionPoint[] {
+function distributeTotalsAcrossHours(points: EvolutionHourlyInput[], totals: { leads: number; qualified: number; signed: number }): LeadEvolutionPoint[] {
   const weights = points.map((point) => Math.max(0, point.calls))
   const leadValues = distributeIntegerTotal(totals.leads, weights)
-  const rdvValues = distributeIntegerTotal(totals.rdv, weights)
+  const qualifiedValues = distributeIntegerTotal(totals.qualified, weights)
   const signedValues = distributeIntegerTotal(totals.signed, weights)
   return points.map((point, index) => ({
     key: hourKey(point),
@@ -126,7 +127,7 @@ function distributeTotalsAcrossHours(points: EvolutionHourlyInput[], totals: { l
     date: point.date,
     label: `${dayLabel(point.date)} ${point.hour}h`,
     leads: leadValues[index] ?? 0,
-    rdv: rdvValues[index] ?? 0,
+    qualified: qualifiedValues[index] ?? 0,
     signed: signedValues[index] ?? 0,
   }))
 }

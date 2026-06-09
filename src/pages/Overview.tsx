@@ -7,7 +7,7 @@ import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
 import { useDisplayUser } from '../lib/role'
 import { useCallLogs, useClients, useLeads, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary, useDebriefAnalytics, prefetchAnalyticsFunnel, prefetchAnalyticsSummary, type DebriefAnalyticsResponse } from '../lib/hooks'
-import { STATUS_LABEL, DEBRIEF_ACCEPTANCE_FACTOR_LABEL, DEBRIEF_NON_SALE_REASON_LABEL, fullName, initials, type AnalyticsFunnelResponse, type CallLogResponse, type DebriefAcceptanceFactor, type DebriefNonSaleReason, type LeadResponse, type LeadStatus, type RdvResponse, type UserResponse } from '../lib/types'
+import { STATUS_LABEL, DEBRIEF_ACCEPTANCE_FACTOR_LABEL, DEBRIEF_NON_SALE_REASON_LABEL, fullName, initials, type AnalyticsAdminSummary, type AnalyticsFunnelResponse, type CallLogResponse, type DebriefAcceptanceFactor, type DebriefNonSaleReason, type LeadResponse, type LeadStatus, type RdvResponse, type UserResponse } from '../lib/types'
 import { computeTechnicienStats, computeTerrainPipeline, selectUnassignedVt, type TechnicienStat } from '../lib/technicienStats'
 import { buildSuiviPeriodRange, getDefaultSuiviPeriod, SUIVI_PERIOD_OPTIONS, type SuiviPeriodState } from '../lib/suivi'
 import { PHASE_LABEL, PHASE_ICON } from '../lib/suivi-board'
@@ -922,7 +922,7 @@ function OverviewAdmin() {
   const evolutionGranularity = chooseGranularity(funnelRange)
   const evolutionPoints = buildLeadEvolutionPoints(adminSummary?.dailyEvolution ?? [], adminSummary?.hourlyCalls ?? [], funnelRange, evolutionGranularity, {
     leads: treatedLeadTotal,
-    rdv: adminSummary?.rdvPris ?? funnelTotals.rdv,
+    qualified: adminSummary?.qualified ?? funnelTotals.qualified,
     signed: adminSummary?.signed ?? 0,
   })
 
@@ -937,7 +937,7 @@ function OverviewAdmin() {
     evolutionGranularity,
     {
       leads: prevAdmin?.classified ?? prevFunnel?.totals?.qualified ?? 0,
-      rdv: prevAdmin?.rdvPris ?? prevFunnel?.totals?.rdv ?? 0,
+      qualified: prevAdmin?.qualified ?? prevFunnel?.totals?.qualified ?? 0,
       signed: prevAdmin?.signed ?? 0,
     },
   )
@@ -969,9 +969,13 @@ function OverviewAdmin() {
       funnelProspects: adminFunnelProspects(allRdvs ?? [], allLeads ?? [], usersList ?? []),
     }
   }, [adminSummary, funnelTotals, treatedLeadTotal, usersList, allLeads, allRdvs, funnelRange.from, funnelRange.to])
-  // Le backend renvoie un funnel déjà cohérent et monotone (cf. funnel-math).
-  // On l'affiche tel quel — plus aucune re-réconciliation Math.max côté front.
-  const overviewFunnelTotals = funnelTotals
+  // Le funnel backend ne scope que les leads CRÉÉS dans la période, alors que les KPI
+  // (summary) comptent les leads ACTIFS/traités → écart 11 vs 104/92. On réaligne le
+  // bloc Funnel sur les vrais chiffres du summary (Appels, Traités, RDV), en conservant
+  // la proportion « A répondu » du funnel mise à l'échelle des leads traités.
+  const overviewFunnelTotals: AnalyticsFunnelResponse['totals'] = adminSummary
+    ? reconcileFunnelWithSummary(funnelTotals, adminSummary, treatedLeadTotal)
+    : funnelTotals
 
   return (
     <AppShell blobsKey="admin" flat>
@@ -1005,9 +1009,6 @@ function OverviewAdmin() {
           <section className="overview-air-grid overview-admin-main-grid">
           <div className="overview-admin-summary">
             <div className="overview-profile-panel">
-              <div className="overview-profile-large">
-                {me?.image ? <img src={me.image} alt={me.name} /> : <span>{userInitials(me?.name)}</span>}
-              </div>
               <div>
                 <span className="shot-eyebrow">Profil connecté</span>
                 <h2>{me?.name}</h2>
@@ -1030,7 +1031,7 @@ function OverviewAdmin() {
               range={funnelRange}
               rangeLabel={`Du ${formatShortDate(new Date(funnelRange.from))} au ${formatShortDate(new Date(funnelRange.to))}`}
               compareLabel={`Du ${formatShortDate(new Date(prevRange.from))} au ${formatShortDate(new Date(prevRange.to))}`}
-              totals={{ leads: stats.leads, rdv: stats.rdvPris, signed: stats.ventes }}
+              totals={{ leads: stats.leads, qualified: stats.qualified, signed: stats.ventes }}
             />
           </div>
 
@@ -1108,7 +1109,7 @@ function CardHead({ title, icon }: { title: string; icon: ShotIcon }) {
 
 const LEAD_EVOLUTION_SERIES: { key: LeadEvolutionSeriesKey; label: string; color: string }[] = [
   { key: 'leads', label: 'Leads', color: '#1F7857' },
-  { key: 'rdv', label: 'RDV', color: '#3DA86A' },
+  { key: 'qualified', label: 'Qualifiés', color: '#3DA86A' },
   { key: 'signed', label: 'Ventes', color: '#3E9A6F' },
 ]
 
@@ -1137,10 +1138,10 @@ function smoothPath(coords: { x: number; y: number }[]): string {
   return d
 }
 
-function LeadEvolutionChart({ points, comparePoints = [], granularity, range, rangeLabel, compareLabel, totals }: { points: LeadEvolutionPoint[]; comparePoints?: LeadEvolutionPoint[]; granularity: EvolutionGranularity; range: FunnelPeriodRange; rangeLabel: string; compareLabel?: string; totals: { leads: number; rdv: number; signed: number } }) {
+function LeadEvolutionChart({ points, comparePoints = [], granularity, range, rangeLabel, compareLabel, totals }: { points: LeadEvolutionPoint[]; comparePoints?: LeadEvolutionPoint[]; granularity: EvolutionGranularity; range: FunnelPeriodRange; rangeLabel: string; compareLabel?: string; totals: { leads: number; qualified: number; signed: number } }) {
   const [activeKey, setActiveKey] = useState<LeadEvolutionSeriesKey>('leads')
   const [hover, setHover] = useState<{ index: number; cursorX: number } | null>(null)
-  const rawPoints = points.length > 0 ? points : [{ key: 'empty', t: 0, date: '', label: 'Live', leads: 0, rdv: 0, signed: 0 }]
+  const rawPoints = points.length > 0 ? points : [{ key: 'empty', t: 0, date: '', label: 'Live', leads: 0, qualified: 0, signed: 0 }]
   const sampleStep = rawPoints.length > 56 ? Math.ceil(rawPoints.length / 56) : 1
   const keepIdx = sampleStep > 1 ? rawPoints.map((_, index) => index).filter((index) => index % sampleStep === 0 || index === rawPoints.length - 1) : rawPoints.map((_, index) => index)
   const safePoints = keepIdx.map((index) => rawPoints[index])
@@ -1797,6 +1798,36 @@ function ratePct(denom: number, num: number): number {
 function pct(num: number, denom: number): number {
   if (denom === 0) return 0
   return Math.min(100, Math.round((num / denom) * 100))
+}
+
+// Réaligne le funnel sur les chiffres du summary (source de vérité des KPI) : Appels et
+// leads traités viennent du summary (leads actifs sur la période), pas du funnel backend
+// (leads créés seulement). La répartition Oui/Non du funnel est conservée en proportion
+// puis remise à l'échelle des leads traités réels pour rester cohérente (Oui + Non = traités).
+function reconcileFunnelWithSummary(
+  funnel: AnalyticsFunnelResponse['totals'],
+  summary: AnalyticsAdminSummary,
+  treatedLeads: number,
+): AnalyticsFunnelResponse['totals'] {
+  const treated = Math.max(0, treatedLeads)
+  const answered = Math.min(treated, Math.max(0, Math.round((treated * funnel.responseRate) / 100)))
+  const noAnswer = Math.max(0, treated - answered)
+  const calls = Math.max(summary.calls, treated)
+  const rdv = Math.min(treated, summary.rdvPris)
+  const qualified = Math.min(treated, summary.qualified)
+  return {
+    ...funnel,
+    newLeads: Math.max(funnel.newLeads, calls, treated),
+    calls,
+    answered,
+    responseRate: treated > 0 ? Math.min(100, Math.round((answered / treated) * 100)) : 0,
+    qualified,
+    qualificationRate: summary.qualificationRate,
+    noAnswer,
+    rdv,
+    signed: Math.min(rdv, summary.signed),
+    globalConversionRate: treated > 0 ? Math.min(100, Math.round((rdv / treated) * 100)) : funnel.globalConversionRate,
+  }
 }
 
 function funnelContactedLeads(totals: AnalyticsFunnelResponse['totals']): number {
