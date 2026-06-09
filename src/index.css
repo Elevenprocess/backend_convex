@@ -4997,3 +4997,16 @@ button.suivi-side-cta { font-family: inherit; cursor: pointer; width: 100%; }
 .dark .assistant-header, .dark .assistant-history, .dark .assistant-input { background: rgba(20,25,23,.72); border-color: rgba(255,255,255,.08); }
 .dark .assistant-message.assistant, .dark .assistant-history-list > button.active, .dark .assistant-history-list > button:hover, .dark .assistant-new, .dark .assistant-delete, .dark .assistant-input textarea { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.10); }
 @media (max-width: 760px) { .assistant-panel { right: 12px; bottom: 86px; height: calc(100vh - 110px); } .assistant-body { grid-template-columns: 1fr; } .assistant-history { display: none; } .assistant-launcher { right: 16px; bottom: 82px; } }
+
+/* --- Overview Délivrabilité — Pipeline livraison (Task 5) --- */
+.overview-delivery-funnel { display: flex; align-items: stretch; gap: 6px; margin: 18px 0; flex-wrap: wrap; }
+.overview-delivery-funnel-step { display: flex; align-items: center; flex: 1; min-width: 120px; }
+.overview-delivery-phase { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 6px; border: 1px solid var(--color-line-soft); border-radius: 16px; background: rgba(255,255,255,.7); cursor: pointer; transition: border-color .15s; text-align: center; }
+.overview-delivery-phase:hover { border-color: rgba(31,120,87,.5); }
+.overview-delivery-phase strong { font-size: 22px; line-height: 1.1; }
+.overview-delivery-phase small { font-size: 10px; color: var(--color-muted); }
+.overview-delivery-phase-mini { display: flex; gap: 6px; font-size: 9px; min-height: 12px; }
+.overview-delivery-phase-mini em { font-weight: 800; font-style: normal; }
+.overview-delivery-arrow { color: var(--color-line-soft); font-weight: 900; padding: 0 2px; }
+.overview-delivery-lists { display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; margin-top: 14px; }
+@media (max-width: 860px) { .overview-delivery-lists { grid-template-columns: 1fr; } }

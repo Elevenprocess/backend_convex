@@ -10,6 +10,8 @@ import { useCallLogs, useClients, useLeads, useRdvList, useUsers, useStartCall, 
 import { STATUS_LABEL, DEBRIEF_ACCEPTANCE_FACTOR_LABEL, DEBRIEF_NON_SALE_REASON_LABEL, fullName, initials, type AnalyticsFunnelResponse, type CallLogResponse, type DebriefAcceptanceFactor, type DebriefNonSaleReason, type LeadResponse, type LeadStatus, type RdvResponse, type UserResponse } from '../lib/types'
 import { computeTechnicienStats, computeTerrainPipeline, selectUnassignedVt, type TechnicienStat } from '../lib/technicienStats'
 import { buildSuiviPeriodRange, getDefaultSuiviPeriod, SUIVI_PERIOD_OPTIONS, type SuiviPeriodState } from '../lib/suivi'
+import { PHASE_LABEL, PHASE_ICON } from '../lib/suivi-board'
+import { buildDeliveryPipeline, selectDeliveryPriorities, selectRecentDeliveries, DELIVERY_PHASES } from '../lib/deliveryOverview'
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
 import { previousRange } from '../lib/period'
 import { buildEvolutionTicks, computeEvolutionDomain, type EvolutionGranularity } from '../lib/evolutionAxis'
@@ -71,59 +73,140 @@ export function Overview() {
 
 function OverviewSuivi() {
   const navigate = useNavigate()
-  const { data: leadsData } = useLeads({ limit: 500 })
-  const { data: rdvsData } = useRdvList({ limit: 200 })
-  const leads = leadsData ?? []
+  const [period, setPeriod] = useState<SuiviPeriodState>({
+    mode: 'this_year',
+    customFrom: '',
+    customTo: '',
+  })
+  const range = useMemo(() => buildSuiviPeriodRange(period), [period])
+  const now = useMemo(() => new Date(), [])
+
+  const { data: clientsData } = useClients()
+  const { data: rdvsData } = useRdvList({ limit: 500 })
+  const clients = clientsData ?? []
   const rdvs = rdvsData ?? []
-  const signedRdvs = rdvs.filter((r) => r.result === 'signe' || Boolean(r.signatureAt))
-  const signedLeadIds = new Set(signedRdvs.map((r) => r.leadId))
-  const signedLeads = leads.filter((l) => l.status === 'signe' || signedLeadIds.has(l.id))
-  const inTech = signedLeads.filter((l) => l.latestRdvStatus === 'honore' || l.status === 'signe').length
-  const blocked = signedLeads.filter((l) => l.lostReason || l.ghlStageName?.toLowerCase().includes('perdu')).length
-  const ca = signedRdvs.reduce((sum, r) => sum + (Number(r.montantTotal ?? 0) || 0), 0)
+
+  const pipeline = useMemo(() => buildDeliveryPipeline(clients, range, now), [clients, range, now])
+  const priorities = useMemo(() => selectDeliveryPriorities(clients, now).slice(0, 6), [clients, now])
+  const recent = useMemo(() => selectRecentDeliveries(clients, range).slice(0, 5), [clients, range])
+
+  // CA en livraison : somme des montants RDV des dossiers de la cohorte (jointure par leadId).
+  const cohortLeadIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const c of clients) {
+      const d = c.signedAt ? new Date(c.signedAt) : null
+      if (d && d.getTime() >= range.from.getTime() && d.getTime() <= range.to.getTime()) ids.add(c.leadId)
+    }
+    return ids
+  }, [clients, range])
+  const caEnLivraison = useMemo(
+    () => rdvs.filter((r) => cohortLeadIds.has(r.leadId)).reduce((sum, r) => sum + (Number(r.montantTotal ?? 0) || 0), 0),
+    [rdvs, cohortLeadIds],
+  )
+
+  const badgeFor = (row: (typeof priorities)[number]): { text: string; cls: string } => {
+    if (row.reason === 'blocked') return { text: 'Bloqué', cls: 'bg-danger/10 text-danger' }
+    if (row.reason === 'late') {
+      const days = row.lateSince != null ? Math.max(0, Math.round((now.getTime() - row.lateSince) / 86_400_000)) : 0
+      return { text: `Retard J+${days}`, cls: 'bg-danger/10 text-danger' }
+    }
+    return { text: 'Doc manquant', cls: 'bg-warning/10 text-warning' }
+  }
 
   return (
     <AppShell flat>
-      <Topbar eyebrow="DÉLIVRABILITÉ" title="Overview suivi dossiers" />
+      <Topbar eyebrow="DÉLIVRABILITÉ" title="Pipeline livraison" />
       <main className="overview-shot-page flex-grow overflow-auto">
         <div className="overview-air-header">
           <div>
-            <span className="shot-eyebrow">Post-signature · AD</span>
-            <h1>Suivi complet des prospects signés</h1>
+            <span className="shot-eyebrow">Post-signature · pilotage</span>
+            <h1>Pipeline de livraison des dossiers</h1>
           </div>
-          <button type="button" className="rounded-full bg-success text-white px-4 py-2 text-xs font-black" onClick={() => navigate('/suivi')}>Ouvrir le workflow</button>
+          <div className="flex gap-2 flex-wrap">
+            {SUIVI_PERIOD_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setPeriod((p) => ({ ...p, mode: opt.id }))}
+                className={`rounded-full px-3 py-1.5 text-xs font-black border transition ${period.mode === opt.id ? 'bg-text text-white border-text' : 'border-line-soft text-muted'}`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
-        <section className="overview-air-grid">
-          <AirKpi icon="trophy" label="Dossiers signés" value={fmtCompact(signedLeads.length)} sub="devis à livrer" />
-          <AirKpi icon="settings" label="Technique / pose" value={fmtCompact(inTech)} sub="VT, CNO ou installation" />
-          <AirKpi icon="shield" label="Blocages" value={fmtCompact(blocked)} sub="à débloquer rapidement" />
-          <AirKpi icon="tag" label="CA signé" value={fmtKEur(ca)} sub="base RDV signés" />
-          <div className="overview-air-card overview-role-wide">
-            <CardHead title="Workflow livraison" icon="grid" />
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-              {['Devis signé', 'VT sous 72h', 'DP / CNO', 'Installation'].map((label, i) => (
-                <button key={label} type="button" onClick={() => navigate('/suivi')} className="rounded-[18px] border border-line-soft bg-white/70 px-4 py-5 text-left hover:border-success/50 transition">
-                  <span className="text-[10px] font-black text-faint">0{i + 1}</span>
-                  <strong className="block mt-2 text-sm">{label}</strong>
-                  <small className="text-muted">cliquer pour piloter</small>
+
+        {/* Zone 1 — Tunnel des 6 phases (cliquable) */}
+        <section className="overview-delivery-funnel">
+          {DELIVERY_PHASES.map((phase, i) => {
+            const c = pipeline.phases[phase]
+            return (
+              <div key={phase} className="overview-delivery-funnel-step">
+                <button type="button" onClick={() => navigate(`/suivi?phase=${phase}`)} className="overview-delivery-phase">
+                  <Icon name={PHASE_ICON[phase]} size={16} />
+                  <strong>{fmtCompact(c.count)}</strong>
+                  <small>{PHASE_LABEL[phase]}</small>
+                  <span className="overview-delivery-phase-mini">
+                    {c.late > 0 && <em className="text-danger">{c.late} ret.</em>}
+                    {c.missingDocs > 0 && <em className="text-warning">{c.missingDocs} doc</em>}
+                  </span>
                 </button>
-              ))}
+                {i < DELIVERY_PHASES.length - 1 && <span className="overview-delivery-arrow" aria-hidden>›</span>}
+              </div>
+            )
+          })}
+        </section>
+
+        {/* Zone 2 — KPIs de santé */}
+        <section className="overview-air-grid">
+          <AirKpi icon="grid" label="Dossiers actifs" value={fmtCompact(pipeline.activeCount)} sub="en livraison" />
+          <AirKpi icon="shield" label="Retards SLA" value={fmtCompact(pipeline.lateCount)} sub="à débloquer" />
+          <AirKpi icon="inbox" label="Docs manquants" value={fmtCompact(pipeline.missingDocsCount)} sub="à compléter" />
+          <AirKpi icon="check" label="À livrer (phase finale)" value={fmtCompact(pipeline.toDeliverCount)} sub="installation / MES" />
+          <AirKpi icon="tag" label="CA en livraison" value={fmtKEur(caEnLivraison)} sub="base RDV signés" />
+        </section>
+
+        <div className="overview-delivery-lists">
+          {/* Zone 3 — File de priorités */}
+          <div className="overview-air-card">
+            <CardHead title="À traiter en priorité" icon="bell" />
+            <div className="overview-role-list">
+              {priorities.map((row) => {
+                const badge = badgeFor(row)
+                return (
+                  <div key={row.client.id} className="overview-role-row">
+                    <div className="overview-role-avatar">{userInitials(row.client.lead.fullName)}</div>
+                    <div>
+                      <strong>{row.client.lead.fullName || row.client.lead.phone || '—'}</strong>
+                      <small>{row.client.lead.city ?? '—'} · {PHASE_LABEL[row.client.currentPhase]}</small>
+                    </div>
+                    <span className={`text-[10px] font-black px-2 py-1 rounded-full ${badge.cls}`}>{badge.text}</span>
+                    <button onClick={() => navigate(`/suivi?lead=${row.client.leadId}`)}>Suivi</button>
+                  </div>
+                )
+              })}
+              {priorities.length === 0 && <div className="text-xs text-faint">Aucun dossier à traiter.</div>}
             </div>
           </div>
-          <div className="overview-air-card overview-role-side">
-            <CardHead title="À suivre maintenant" icon="bell" />
+
+          {/* Zone 4 — Dernières livraisons */}
+          <div className="overview-air-card">
+            <CardHead title="Dernières livraisons" icon="trophy" />
             <div className="overview-role-list">
-              {signedLeads.slice(0, 5).map((lead) => (
-                <div key={lead.id} className="overview-role-row">
-                  <div className="overview-role-avatar">{initials(lead)}</div>
-                  <div><strong>{fullName(lead) || lead.phone}</strong><small>{lead.city ?? '—'} · {STATUS_LABEL[lead.status]}</small></div>
-                  <button onClick={() => navigate(`/suivi?lead=${lead.id}`)}>Suivi</button>
+              {recent.map((c) => (
+                <div key={c.id} className="overview-role-row">
+                  <div className="overview-role-avatar">{userInitials(c.lead.fullName)}</div>
+                  <div>
+                    <strong>{c.lead.fullName || c.lead.phone || '—'}</strong>
+                    <small>Mise en service · {c.steps.mes?.dateRealisee ?? '—'}</small>
+                  </div>
+                  <span className="text-[10px] font-black px-2 py-1 rounded-full bg-success/10 text-success">livré ✓</span>
                 </div>
               ))}
-              {signedLeads.length === 0 && <div className="text-xs text-faint">Aucun dossier signé chargé.</div>}
+              {recent.length === 0 && <div className="text-xs text-faint">Aucune livraison récente.</div>}
             </div>
           </div>
-        </section>
+        </div>
       </main>
     </AppShell>
   )
