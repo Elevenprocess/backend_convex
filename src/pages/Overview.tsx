@@ -81,10 +81,8 @@ function OverviewSuivi() {
   const range = useMemo(() => buildSuiviPeriodRange(period), [period])
   const now = useMemo(() => new Date(), [])
 
-  const { data: clientsData } = useClients()
-  const { data: rdvsData } = useRdvList({ limit: 500 })
-  const clients = clientsData ?? []
-  const rdvs = rdvsData ?? []
+  const { data: clients = [] } = useClients()
+  const { data: rdvs = [] } = useRdvList({ limit: 500 })
 
   const pipeline = useMemo(() => buildDeliveryPipeline(clients, range, now), [clients, range, now])
   const priorities = useMemo(() => selectDeliveryPriorities(clients, now).slice(0, 6), [clients, now])
@@ -180,8 +178,10 @@ function OverviewSuivi() {
                       <strong>{row.client.lead.fullName || row.client.lead.phone || '—'}</strong>
                       <small>{row.client.lead.city ?? '—'} · {PHASE_LABEL[row.client.currentPhase]}</small>
                     </div>
-                    <span className={`text-[10px] font-black px-2 py-1 rounded-full ${badge.cls}`}>{badge.text}</span>
-                    <button onClick={() => navigate(`/suivi?lead=${row.client.leadId}`)}>Suivi</button>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[10px] font-black px-2 py-1 rounded-full ${badge.cls}`}>{badge.text}</span>
+                      <button onClick={() => navigate(`/suivi?lead=${row.client.leadId}`)}>Suivi</button>
+                    </div>
                   </div>
                 )
               })}
@@ -573,14 +573,11 @@ function OverviewCommercial() {
         tabs={[
           { id: 'overview', label: 'Overview' },
           { id: 'rdv', label: 'RDV' },
-          { id: 'pipeline', label: 'Pipeline' },
-          { id: 'ventes', label: 'Ventes' },
         ]}
         activeTab={tab}
         onTabChange={(id) => {
           setTab(id)
           if (id === 'rdv') navigate('/rdv')
-          if (id === 'pipeline' || id === 'ventes') navigate('/analytics')
         }}
       />
       <main className="overview-shot-page overview-commercial-page flex-grow overflow-auto">
@@ -657,12 +654,10 @@ function OverviewCommercial() {
               <p>{fmtCompact(stats.totalRdv)} RDV suivis · {fmtCompact(stats.totalHonored)} honorés · {fmtCompact(stats.signed)} ventes signées</p>
               <div className="overview-commercial-actions">
                 <button type="button" onClick={() => navigate('/rdv')}>Voir mes RDV</button>
-                <button type="button" onClick={() => navigate('/analytics')}>Suivre mes ventes</button>
               </div>
             </div>
           </div>
           <div className="overview-commercial-hero-stats">
-            <MagicKpi size="sm" accent="info" icon="inbox" label={leadsKpiLabelFor(commercialPeriod.mode)} value={fmtCompact(stats.leadsToday)} sub="leads arrivés" />
             <MagicKpi size="sm" accent="gold" icon="trophy" label="CA signé" value={fmtKEur(stats.ca)} sub={`${fmtCompact(stats.signed)} ventes`} />
             <MagicKpi size="sm" accent="success" icon="target" label="Closing" value={`${stats.closing}%`} sub={`${fmtCompact(stats.lost)} perdus`} progress={stats.closing} />
             <MagicKpi size="sm" accent="green" icon="tag" label="Panier moyen" value={fmtKEur(stats.panier)} sub="sur ventes signées" />
