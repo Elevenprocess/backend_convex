@@ -330,15 +330,14 @@ function AnalyticsAdmin() {
                   <Th>CLASSIFIÉS</Th>
                   <Th>JOINTS</Th>
                   <Th>QUALIFIÉS</Th>
-                  <Th>RDV PRIS</Th>
                   <Th className="text-right">EFFICACITÉ</Th>
                 </tr>
               </thead>
               <tbody>
                 {stats.setters.length === 0 ? (
-                  <tr><td className="px-3 py-5 text-faint" colSpan={7}>Aucun setter trouvé.</td></tr>
+                  <tr><td className="px-3 py-5 text-faint" colSpan={6}>Aucun setter trouvé.</td></tr>
                 ) : stats.setters.map((s, i) => (
-                  <SetterRow key={s.id} initials={s.initials} name={s.name} appels={s.calls} cnx={s.connected} qual={s.qualified} rdv={s.rdvPris} classified={s.classified} eff={`${s.efficiency}%`} effClass={s.efficiency >= 70 ? 'text-success' : s.efficiency >= 45 ? 'text-cuivre' : 'text-rouille'} star={i === 0} />
+                  <SetterRow key={s.id} initials={s.initials} name={s.name} appels={s.calls} cnx={s.connected} qual={s.qualified} classified={s.classified} eff={`${s.efficiency}%`} effClass={s.efficiency >= 70 ? 'text-success' : s.efficiency >= 45 ? 'text-cuivre' : 'text-rouille'} star={i === 0} />
                 ))}
               </tbody>
             </table>
@@ -575,7 +574,6 @@ function adminTableRows(stats: AnalyticsAdminSummary) {
     ['Appels réels enregistrés', fmtInt(stats.loggedCalls), 'Appels réellement créés dans les logs sur la période'],
     ['Leads traités', fmtInt(stats.classified), 'Leads qui ont eu un vrai statut : qualifié, relance, refus ou RDV'],
     ['Leads qualifiés', fmtInt(stats.qualified), `${qualifOnTreated}% des leads traités deviennent qualifiés`],
-    ['RDV calendrier', fmtInt(stats.scheduledRdv), 'RDV réellement présents dans le calendrier/CRM sur la période'],
     ['Ventes signées', fmtInt(stats.signed), 'Nombre de dossiers signés après RDV honoré'],
     ['Chiffre d’affaires signé', fmtKEur(stats.ca), stats.signed > 0 ? `Panier moyen estimé : ${fmtKEur(stats.ca / stats.signed)}` : 'Aucune vente signée sur cette période'],
   ]
@@ -747,8 +745,8 @@ function Th({ children, className = '' }: { children: ReactNode; className?: str
   return <th className={`px-3 py-2.5 ${className}`}>{children}</th>
 }
 
-function SetterRow({ initials, name, appels, cnx, qual, rdv, classified, eff, effClass = '', star = false }: {
-  initials: string; name: string; appels: number; cnx: number; qual: number; rdv: number; classified: number; eff: string; effClass?: string; star?: boolean
+function SetterRow({ initials, name, appels, cnx, qual, classified, eff, effClass = '', star = false }: {
+  initials: string; name: string; appels: number; cnx: number; qual: number; classified: number; eff: string; effClass?: string; star?: boolean
 }) {
   return (
     <tr className="border-b border-line-soft last:border-0">
@@ -762,7 +760,6 @@ function SetterRow({ initials, name, appels, cnx, qual, rdv, classified, eff, ef
       <td className="px-3 py-2.5">{classified}</td>
       <td className="px-3 py-2.5">{cnx}</td>
       <td className="px-3 py-2.5">{qual}</td>
-      <td className="px-3 py-2.5">{rdv}</td>
       <td className={`px-3 py-2.5 text-right font-bold ${effClass}`}>{star ? '★ ' : ''}{eff}</td>
     </tr>
   )
