@@ -143,6 +143,30 @@ export function applyLeadFilters<
   })
 }
 
+// Tri de la liste "À rappeler" :
+//   1. les rappels futurs en premier, du plus proche au plus loin
+//   2. puis les rappels en retard (date déjà passée), du plus récemment dépassé au plus ancien
+//   3. enfin ceux sans date de rappel programmée (conserve l'ordre d'origine — tri stable)
+export function sortCallbackLeadsByNextCallback<T extends Pick<LeadResponse, 'nextCallbackAt'>>(
+  leads: T[],
+  now: number = Date.now(),
+): T[] {
+  const rank = (lead: T): number => {
+    if (!lead.nextCallbackAt) return 2
+    return new Date(lead.nextCallbackAt).getTime() >= now ? 0 : 1
+  }
+  return [...leads].sort((a, b) => {
+    const rankA = rank(a)
+    const rankB = rank(b)
+    if (rankA !== rankB) return rankA - rankB
+    if (rankA === 2) return 0 // pas de date : on garde l'ordre d'origine
+    const tA = new Date(a.nextCallbackAt as string).getTime()
+    const tB = new Date(b.nextCallbackAt as string).getTime()
+    // futurs : ascendant (plus proche d'abord) ; en retard : descendant (plus récent d'abord)
+    return rankA === 0 ? tA - tB : tB - tA
+  })
+}
+
 export function leadFiltersActive(filters: LeadListFilters): boolean {
   return (
     filters.onlyNew ||

@@ -5,7 +5,7 @@ import { SplitPanel } from '../../components/SplitPanel'
 import { LeadFiltersBar } from '../../components/LeadFiltersBar'
 import { LoadingBlock } from '../../components/Spinner'
 import { useLeads, useUsers } from '../../lib/hooks'
-import { DEFAULT_LEAD_FILTERS, applyLeadFilters, type LeadListFilters } from '../../lib/leadFilters'
+import { DEFAULT_LEAD_FILTERS, applyLeadFilters, sortCallbackLeadsByNextCallback, type LeadListFilters } from '../../lib/leadFilters'
 import {
   STATUS_BADGE,
   STATUS_LABEL,
@@ -32,9 +32,15 @@ export function LeadsSplit() {
 
   const filtered = useMemo(() => {
     let list = applyLeadFilters(leads ?? [], leadFilters)
-    if (!query) return list
-    const q = query.toLowerCase()
-    return list.filter((l) => fullName(l).toLowerCase().includes(q) || (l.city ?? '').toLowerCase().includes(q))
+    if (query) {
+      const q = query.toLowerCase()
+      list = list.filter((l) => fullName(l).toLowerCase().includes(q) || (l.city ?? '').toLowerCase().includes(q))
+    }
+    // Vue "À rappeler" : on trie par date de prochain rappel (futurs proches en haut, en retard en bas).
+    if (leadFilters.status === 'a_rappeler' || leadFilters.status === 'relance') {
+      list = sortCallbackLeadsByNextCallback(list)
+    }
+    return list
   }, [leads, leadFilters, query])
 
   const selected = useMemo(() => {

@@ -11,7 +11,7 @@ import { useLeadSidebar } from '../../lib/leadSidebar'
 import { emitLeadDeselect, emitLeadSelect, useLeadLocks, type LeadLockInfo } from '../../lib/realtime'
 import { DossierCard } from '../../components/suivi/DossierCard'
 import { buildDossiers, readWorkflowState } from '../../lib/suivi'
-import { DEFAULT_LEAD_FILTERS, applyLeadFilters, leadFiltersActive, matchesLeadDateRange, type LeadArrivedAtFilter, type LeadDateField, type LeadHasFilter, type LeadLastCallFilter, type LeadListFilters } from '../../lib/leadFilters'
+import { DEFAULT_LEAD_FILTERS, applyLeadFilters, leadFiltersActive, matchesLeadDateRange, sortCallbackLeadsByNextCallback, type LeadArrivedAtFilter, type LeadDateField, type LeadHasFilter, type LeadLastCallFilter, type LeadListFilters } from '../../lib/leadFilters'
 import {
   STATUS_BADGE,
   STATUS_LABEL,
@@ -277,6 +277,9 @@ function LeadsSetter() {
         return textMatch || phoneMatch
       })
     }
+    // Onglet "À rappeler" : on trie par date de prochain rappel (futurs proches en haut,
+    // en retard regroupés en bas). On ne le fait pas en recherche globale (liste multi-catégories).
+    if (!q && filter === 'rappel') list = sortCallbackLeadsByNextCallback(list)
     return list
   }, [categoryLeads, filter, missingFilter, query])
 
