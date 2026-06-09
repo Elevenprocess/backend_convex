@@ -22,6 +22,7 @@ vi.mock('../../lib/hooks', () => ({
   useRdvList: () => ({ data: [], loading: false, error: null }),
   useGhlCalendarEvents: () => ({ data: { events: [] }, loading: false, error: null }),
   useLeads: () => ({ data: [], loading: false, error: null }),
+  useUsers: () => ({ data: [], loading: false, error: null }),
   useVtCalendar: () => ({ data: vtData, loading: false, error: null }),
 }))
 vi.mock('../../lib/auth', () => ({ useAuth: (sel: (s: { user?: { role: string } }) => unknown) => sel({ user: { role: 'technicien' } }) }))

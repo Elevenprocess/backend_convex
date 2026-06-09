@@ -24,6 +24,7 @@ vi.mock('../../lib/hooks', () => ({
     return { data: undefined, loading: false, error: 'Forbidden' }
   },
   useLeads: () => ({ data: [], loading: false, error: null }),
+  useUsers: () => ({ data: [], loading: false, error: null }),
   useVtCalendar: (filters?: unknown) => {
     vtCalls.push(filters)
     return { data: filters === null ? [] : [vt], loading: false, error: null }

@@ -4,10 +4,11 @@ import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
 import { LoadingBlock, Spinner } from '../../components/Spinner'
-import { useGhlCalendarEvents, useRdvList, useLeads, useVtCalendar, type GhlCalendarEvent } from '../../lib/hooks'
+import { useGhlCalendarEvents, useRdvList, useLeads, useUsers, useVtCalendar, type GhlCalendarEvent } from '../../lib/hooks'
 import { fullName, type LeadResponse, type RdvResponse, type RdvStatus, type VtCalendarEntry } from '../../lib/types'
 import { useAuth } from '../../lib/auth'
 import { leadSearchPath } from '../../lib/leadPaths'
+import { matchesCalendarFilters, type CalendarFilterState } from '../../lib/calendarFilters'
 
 const DEFAULT_HOURS = Array.from({ length: 12 }, (_, i) => 8 + i)
 const DAY_LABELS = ['LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM', 'DIM']
@@ -125,6 +126,10 @@ export function RdvCalendar() {
     return HOUR_HEIGHT_LEVELS.includes(raw as typeof HOUR_HEIGHT_LEVELS[number]) ? raw : HOUR_HEIGHT_DEFAULT
   })
   const [vtPopup, setVtPopup] = useState<VtCalendarEntry | null>(null)
+  // Filtres (vide = pas de filtre sur cette dimension). Non persistés.
+  const [selectedSectors, setSelectedSectors] = useState<Set<string>>(new Set())
+  const [selectedCommercials, setSelectedCommercials] = useState<Set<string>>(new Set())
+  const [commercialMenuOpen, setCommercialMenuOpen] = useState(false)
   const navigate = useNavigate()
 
   function changeHourHeight(direction: -1 | 1) {
@@ -156,6 +161,14 @@ export function RdvCalendar() {
   const { data: leads } = useLeads({ limit: 500 })
   const { data: vtEntries } = useVtCalendar(
     canSeeVt ? { from: period.from.toISOString(), to: period.to.toISOString() } : null,
+  )
+  const { data: users } = useUsers()
+
+  const commercials = useMemo(
+    () => (users ?? [])
+      .filter((u) => u.role === 'commercial' || u.role === 'commercial_lead')
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    [users],
   )
 
   const leadMap = useMemo(() => {
@@ -217,15 +230,35 @@ export function RdvCalendar() {
     return [...localItems, ...ghlItems, ...vtItems].sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
   }, [ghlEventsData?.events, rdvs, vtEntries])
 
+  // Commercial associé à un item : RDV local → commercialId, GHL → assignedToId, VT → aucun.
+  const commercialOf = (item: CalendarItem): string | null =>
+    item.source === 'local' ? item.rdv.commercialId : item.source === 'ghl' ? (item.event.commercialId ?? null) : null
+
+  const leadForItem = (item: CalendarItem): LeadResponse | undefined =>
+    item.source === 'ghl'
+      ? (item.event.contactId ? leadByExternalId.get(item.event.contactId) : undefined)
+      : item.source === 'vt' ? undefined : leadMap.get(item.rdv.leadId)
+
+  const filterState = useMemo<CalendarFilterState>(
+    () => ({ sectors: selectedSectors, commercials: selectedCommercials }),
+    [selectedSectors, selectedCommercials],
+  )
+  const hasActiveFilter = selectedSectors.size > 0 || selectedCommercials.size > 0
+  const visibleItems = useMemo(
+    () => calendarItems.filter((item) => matchesCalendarFilters(sectorForItem(item, leadForItem(item)), commercialOf(item), filterState)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [calendarItems, filterState, leadMap, leadByExternalId],
+  )
+
   const visibleHours = useMemo(() => {
     const hours = new Set(DEFAULT_HOURS)
-    for (const item of calendarItems) hours.add(reunionHour(item.scheduledAt))
+    for (const item of visibleItems) hours.add(reunionHour(item.scheduledAt))
     return [...hours].sort((a, b) => a - b)
-  }, [calendarItems])
+  }, [visibleItems])
 
   const rdvByHourCell = useMemo(() => {
     const m = new Map<string, CalendarItem[]>()
-    for (const item of calendarItems) {
+    for (const item of visibleItems) {
       const key = `${reunionDayKey(item.scheduledAt)}:${reunionHour(item.scheduledAt)}`
       const list = m.get(key) ?? []
       list.push(item)
@@ -233,7 +266,7 @@ export function RdvCalendar() {
       m.set(key, list)
     }
     return m
-  }, [calendarItems])
+  }, [visibleItems])
 
   const handleHorizontalCalendarScroll = (event: WheelEvent<HTMLDivElement>) => {
     const target = event.target instanceof HTMLElement ? event.target : null
@@ -249,7 +282,7 @@ export function RdvCalendar() {
 
   const rdvByDay = useMemo(() => {
     const m = new Map<string, CalendarItem[]>()
-    for (const item of calendarItems) {
+    for (const item of visibleItems) {
       const key = reunionDayKey(item.scheduledAt)
       const list = m.get(key) ?? []
       list.push(item)
@@ -257,7 +290,7 @@ export function RdvCalendar() {
       m.set(key, list)
     }
     return m
-  }, [calendarItems])
+  }, [visibleItems])
 
   return (
     <AppShell>
@@ -315,15 +348,85 @@ export function RdvCalendar() {
         </button>
       </div>
 
-      {/* Légende secteur */}
+      {/* Filtres : secteur (puces cliquables) + commercial (popover multi-sélection) */}
       <div className="px-4 sm:px-6 md:px-8 pt-2 flex items-center gap-2 sm:gap-3 flex-wrap text-[10px] sm:text-[11px] font-bold text-muted">
         <span className="uppercase tracking-wider text-faint">Secteurs :</span>
-        {SECTORS.map((s) => (
-          <span key={s} className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border ${"bg-white border border-line text-text"}`}>
-            <span className={`w-2 h-2 rounded-full ${SECTOR_DOT[s]}`} />
-            <span>{s}</span>
-          </span>
-        ))}
+        {SECTORS.map((s) => {
+          const active = selectedSectors.size === 0 || selectedSectors.has(s)
+          return (
+            <button
+              key={s}
+              type="button"
+              aria-pressed={selectedSectors.has(s)}
+              onClick={() => setSelectedSectors((prev) => {
+                const next = new Set(prev)
+                if (next.has(s)) next.delete(s); else next.add(s)
+                return next
+              })}
+              className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border transition-opacity ${active ? 'bg-white border-line text-text' : 'bg-transparent border-line text-faint opacity-40'}`}
+            >
+              <span className={`w-2 h-2 rounded-full ${SECTOR_DOT[s]}`} />
+              <span>{s}</span>
+            </button>
+          )
+        })}
+
+        <span className="uppercase tracking-wider text-faint ml-1 sm:ml-2">Commercial :</span>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setCommercialMenuOpen((o) => !o)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-line bg-white text-text"
+          >
+            <Icon name="users" size={12} />
+            <span>Commerciaux{selectedCommercials.size > 0 ? ` · ${selectedCommercials.size}` : ''}</span>
+            <Icon name="chevron-down" size={12} className={commercialMenuOpen ? 'rotate-180' : ''} />
+          </button>
+          {commercialMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-20" onClick={() => setCommercialMenuOpen(false)} />
+              <div className="absolute left-0 z-30 mt-1 min-w-[210px] max-h-64 overflow-auto bg-white border border-line rounded-xl shadow-lg p-1.5">
+                {commercials.length === 0 ? (
+                  <p className="px-2 py-1.5 text-faint font-medium">Aucun commercial</p>
+                ) : (
+                  commercials.map((c) => (
+                    <label key={c.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-cream cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedCommercials.has(c.id)}
+                        onChange={() => setSelectedCommercials((prev) => {
+                          const next = new Set(prev)
+                          if (next.has(c.id)) next.delete(c.id); else next.add(c.id)
+                          return next
+                        })}
+                      />
+                      <span className="text-text font-semibold">{c.name}</span>
+                    </label>
+                  ))
+                )}
+                {selectedCommercials.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCommercials(new Set())}
+                    className="w-full text-left px-2 py-1.5 mt-1 border-t border-line text-rouille hover:bg-cream rounded-b-lg"
+                  >
+                    Tout effacer
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        {hasActiveFilter && (
+          <button
+            type="button"
+            onClick={() => { setSelectedSectors(new Set()); setSelectedCommercials(new Set()) }}
+            className="text-or-dark underline underline-offset-2 hover:text-or"
+          >
+            Réinitialiser
+          </button>
+        )}
       </div>
 
       <main className="p-3 sm:p-6 md:p-8 pt-3 overflow-hidden flex-grow">
