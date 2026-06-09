@@ -460,6 +460,27 @@ body {
 @media (max-width: 1080px) {
   .overview-admin-summary { grid-template-columns: 1fr; }
 }
+/* 4 KPIs admin en rangée compacte (sans cette grille ils s'empilent en pleine largeur). */
+.overview-admin-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+.overview-admin-kpis > .overview-air-kpi {
+  grid-column: auto;
+  min-height: 96px;
+  padding: 13px 14px;
+  gap: 7px;
+}
+.overview-admin-kpis > .overview-air-kpi > span { width: 26px; height: 26px; border-radius: 6px; }
+.overview-admin-kpis > .overview-air-kpi > span svg { width: 15px; height: 15px; }
+.overview-admin-kpis > .overview-air-kpi small { font-size: 9px; letter-spacing: 0.12em; }
+.overview-admin-kpis > .overview-air-kpi strong { margin-top: 4px; font-size: clamp(20px, 1.9vw, 25px); line-height: 1; letter-spacing: -0.024em; }
+.overview-admin-kpis > .overview-air-kpi p { margin-top: 4px; font-size: 11px; }
+@media (max-width: 540px) {
+  .overview-admin-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .overview-admin-side-rail {
   position: sticky;
   top: 18px;
