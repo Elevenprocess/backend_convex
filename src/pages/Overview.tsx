@@ -1730,16 +1730,16 @@ function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }
   const treatedLeads = funnelContactedLeads(totals)
   const answeredCount = totals.answered
   const responseRate = totals.responseRate
-  const treatedConversionRate = pct(totals.rdv, treatedLeads)
+  const qualifiedConversionRate = pct(totals.qualified, treatedLeads)
   return (
     <div className="flow-map col-span-12 mt-4 rounded-2xl border border-line-soft bg-white/65 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div>
           <div className="eyebrow">Flux leads CRM</div>
-          <div className="text-sm font-extrabold">Lecture minimaliste des appels jusqu’au RDV</div>
+          <div className="text-sm font-extrabold">Lecture minimaliste des appels jusqu’aux qualifiés</div>
         </div>
         <div className="flow-pill flow-pill-success rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-extrabold text-emerald-700">
-          {totals.rdv} RDV · {treatedConversionRate}% conv.
+          {totals.qualified} Qualifiés · {qualifiedConversionRate}% conv.
         </div>
       </div>
 
@@ -1764,11 +1764,11 @@ function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }
           </div>
         </div>
         <MiniArrow />
-        <MiniFlowStep title="RDV" value={totals.rdv} sub={`${treatedConversionRate}% leads traités`} color="#3DA86A" />
+        <MiniFlowStep title="Qualifiés" value={totals.qualified} sub={`${qualifiedConversionRate}% leads traités`} color="#3DA86A" />
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted">
-        <span className="flow-pill rounded-full bg-white/70 px-2 py-1 border border-line-soft">Formule : RDV / leads traités</span>
+        <span className="flow-pill rounded-full bg-white/70 px-2 py-1 border border-line-soft">Formule : Qualifiés / leads traités</span>
       </div>
     </div>
   )
