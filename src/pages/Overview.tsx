@@ -503,8 +503,63 @@ function OverviewSetter() {
   )
 }
 
-// ----- F3 Commercial -----
+// Un RDV « à débriefer » : honoré (ou avec un résultat) mais sans débrief
+// rempli ni note. Même définition que la pipeline admin (AdminPipeline.tsx).
+function needsDebrief(rdv: RdvResponse): boolean {
+  return (rdv.status === 'honore' || rdv.result != null) && !rdv.debriefFilledAt && !rdv.notes?.trim()
+}
+
+function CommercialDebriefsToFill({ debriefs, limit = 8 }: { debriefs: { rdv: RdvResponse; lead?: LeadResponse }[]; limit?: number }) {
+  const navigate = useNavigate()
+  return (
+    <div className="overview-air-card overview-commercial-qualified-list">
+      <div className="shot-card-head">
+        <div>
+          <h3>Débriefs à remplir</h3>
+          <p>RDV honorés en attente de votre débrief · cliquez pour le remplir</p>
+        </div>
+        <span><Icon name="check" size={16} /></span>
+      </div>
+      <div className="commercial-qualified-list-body">
+        {debriefs.length === 0 ? (
+          <div className="text-xs text-faint">Aucun débrief à remplir.</div>
+        ) : debriefs.slice(0, limit).map(({ rdv, lead }) => {
+          const name = lead ? fullName(lead) : 'Prospect'
+          return (
+            <button
+              type="button"
+              key={rdv.id}
+              className="commercial-qualified-row"
+              style={{ background: 'none', border: 'none', font: 'inherit', textAlign: 'left', width: '100%', cursor: 'pointer' }}
+              onClick={() => navigate(`/rdv/${rdv.id}`)}
+            >
+              <div className="overview-role-avatar">{userInitials(name)}</div>
+              <div>
+                <strong>{name}</strong>
+                <small>{lead?.city ?? 'Ville non renseignée'} · {lead?.phone ?? 'sans téléphone'}</small>
+              </div>
+              <div className="commercial-qualified-meta">
+                <span>À débriefer</span>
+                <small>{shortDateTime(rdv.scheduledAt)}</small>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ----- F3 Commercial : aiguillage selon le rôle -----
+// Le commercial (vendeur individuel) a une vue minimale centrée sur ses
+// débriefs à remplir. Le commercial_lead (responsable) garde la vue complète.
 function OverviewCommercial() {
+  const role = useAuth((s) => s.user?.role)
+  return role === 'commercial_lead' ? <OverviewCommercialManager /> : <OverviewCommercialIndividual />
+}
+
+// ----- F3 bis : responsable commercial (commercial_lead) — vue complète -----
+function OverviewCommercialManager() {
   const navigate = useNavigate()
   const me = useAuth((s) => s.user)
   const display = useDisplayUser()
@@ -718,6 +773,89 @@ function OverviewCommercial() {
               <TaskLine icon="trophy" title="Signatures" sub={`${fmtCompact(stats.signed)} ventes signées`} done={stats.signed > 0} />
               <button onClick={() => navigate('/rdv')} className="overview-role-action">Voir mes RDV</button>
             </div>
+          </div>
+        </section>
+      </main>
+    </AppShell>
+  )
+}
+
+// ----- F3 ter : commercial individuel — vue minimale (débriefs à remplir) -----
+function OverviewCommercialIndividual() {
+  const navigate = useNavigate()
+  const me = useAuth((s) => s.user)
+  const display = useDisplayUser()
+  const [tab, setTab] = useState('overview')
+  // Un commercial_lead voit l'ensemble de l'équipe closing, pas seulement ses
+  // propres RDV — pas de filtre commercialId, pas de scope `me.id` dans les
+  // helpers de prospects/débriefs.
+  const isManager = me?.role === 'commercial_lead'
+  const scopeCommercialId = isManager ? undefined : me?.id
+  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  // Vue commercial volontairement minimale : on ne charge que les RDV (sans
+  // borne de période, pour ne pas masquer un débrief en retard) et les leads
+  // pour afficher le nom des prospects.
+  const { data: rdvs = [] } = useRdvList({ commercialId: scopeCommercialId, limit: 200 })
+  const { data: allLeads = [] } = useLeads({ limit: 500 })
+
+  const { debriefs, upcoming } = useMemo(() => {
+    const list = rdvs ?? []
+    const leadById = new Map((allLeads ?? []).map((lead) => [lead.id, lead]))
+    const debriefs = list
+      .filter(needsDebrief)
+      .sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt))
+      .map((rdv) => ({ rdv, lead: leadById.get(rdv.leadId) }))
+    const upcoming = list
+      .filter((r) => r.status === 'planifie' && r.scheduledAt >= todayIso)
+      .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))
+    return { debriefs, upcoming }
+  }, [rdvs, allLeads, todayIso])
+
+  return (
+    <AppShell blobsKey="commercial" flat>
+      <Topbar
+        eyebrow={isManager ? 'RESPONSABLE COMMERCIAL' : 'COMMERCIAL'}
+        title={`Bonjour, ${display.firstName}`}
+        tabs={[
+          { id: 'overview', label: 'Overview' },
+          { id: 'rdv', label: 'RDV' },
+        ]}
+        activeTab={tab}
+        onTabChange={(id) => {
+          setTab(id)
+          if (id === 'rdv') navigate('/rdv')
+        }}
+      />
+      <main className="overview-shot-page overview-commercial-page flex-grow overflow-auto">
+        <div className="overview-air-header">
+          <div>
+            <span className="shot-eyebrow">ECOI SaaS · commercial</span>
+            <h1>Mon espace</h1>
+            <p className="text-sm text-muted mt-2">L'essentiel : vos débriefs à remplir et vos prochains rendez-vous.</p>
+          </div>
+        </div>
+
+        <section className="overview-air-grid overview-commercial-grid">
+          <CommercialDebriefsToFill debriefs={debriefs} />
+
+          <div className="overview-air-card overview-role-wide">
+            <CardHead title="Mes RDV à venir" icon="phone" />
+            <div className="overview-role-list overview-role-list-grid">
+              {upcoming.length === 0 ? (
+                <div className="text-xs text-faint">Aucun RDV à venir.</div>
+              ) : upcoming.slice(0, 6).map((r, i) => (
+                <RdvRow
+                  key={r.id}
+                  color={['#1F7857', '#3E9A6F', '#145A41', '#3DA86A'][i % 4]}
+                  time={`${shortDateTime(r.scheduledAt)}`}
+                  sub={r.locationType === 'visio' ? 'Visio' : r.locationType === 'agence' ? 'Agence' : 'Domicile'}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="overview-commercial-actions">
+            <button type="button" onClick={() => navigate('/rdv')}>Voir mes RDV</button>
           </div>
         </section>
       </main>

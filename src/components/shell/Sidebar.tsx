@@ -23,6 +23,20 @@ const CALENDAR_ROLES: Role[] = [
   'responsable_technique',
   'back_office',
 ]
+// Le commercial (vendeur individuel) n'a pas besoin d'Analytics ni de Rappels :
+// sa vue est minimale (débrief + suivi de son client). Le commercial_lead
+// (responsable) garde, lui, l'accès complet.
+const NON_SALES_REP_ROLES: Role[] = [
+  'admin',
+  'setter',
+  'setter_lead',
+  'commercial_lead',
+  'delivrabilite',
+  'responsable_technique',
+  'back_office',
+  'technicien',
+  'finances',
+]
 
 const SECTIONS: Section[] = [
   {
@@ -30,14 +44,14 @@ const SECTIONS: Section[] = [
     label: 'Espace',
     items: [
       { to: '/overview', icon: 'home', label: 'Overview' },
-      { to: '/notifications', icon: 'bell', label: 'Rappels' },
+      { to: '/notifications', icon: 'bell', label: 'Rappels', roles: NON_SALES_REP_ROLES },
     ],
   },
   {
     id: 'analytics',
     label: 'Analytics',
     items: [
-      { to: '/analytics', icon: 'chart', label: 'Analytics' },
+      { to: '/analytics', icon: 'chart', label: 'Analytics', roles: NON_SALES_REP_ROLES },
     ],
   },
   {
@@ -72,7 +86,6 @@ const SECTIONS: Section[] = [
     label: 'Administration',
     collapsible: true,
     items: [
-      { to: '/settings', icon: 'users', label: 'Équipe', roles: ['commercial'] },
       { to: '/settings', icon: 'settings', label: 'Paramètres', roles: ['admin', 'commercial_lead'] },
     ],
   },
