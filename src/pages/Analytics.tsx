@@ -307,15 +307,6 @@ function AnalyticsAdmin() {
               </div>
               <PieChart segments={stats.resultSegments} center={`${stats.loggedCalls}\nappels réels`} />
             </div>
-            <div className="glass-card p-6">
-              <h3 className="font-bold mb-4">ETL qualité data</h3>
-              <div className="space-y-4">
-                <Goal label="Couverture traitement" value={`${stats.classified} traités / ${stats.loggedCalls} appels réels`} pct={pct(stats.classified, stats.loggedCalls)} color="#1F7857" />
-                <Goal label="Qualification" value={`${stats.qualified} qualifiés`} pct={stats.qualificationRate} color="#3DA86A" />
-                <Goal label="RDV / qualifiés" value={`${stats.rdvPris} opérationnels · ${stats.scheduledRdv} calendrier`} pct={stats.rdvRate} color="#3E9A6F" />
-                <Row label="Leads non traités" value={String(stats.unclassified)} />
-              </div>
-            </div>
           </div>
         </div>
 
