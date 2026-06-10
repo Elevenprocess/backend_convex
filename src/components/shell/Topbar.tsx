@@ -37,14 +37,15 @@ export function Topbar({ eyebrow, title }: TopbarProps) {
   const [openMenu, setOpenMenu] = useState<'search' | 'settings' | 'profile' | null>(null)
   const [search, setSearch] = useState('')
   const isCommercial = authUser?.role === 'commercial'
+  const isCommercialTeam = isCommercial || authUser?.role === 'commercial_lead'
   const leadNotificationFilters = isCommercial && authUser?.id ? { assignedToId: authUser.id, limit: 250 } : { limit: 250 }
   const rdvNotificationFilters = isCommercial && authUser?.id ? { commercialId: authUser.id, limit: 200 } : { limit: 200 }
   const { data: leadsData } = useLeads(leadNotificationFilters)
   const { data: rdvsData } = useRdvList(rdvNotificationFilters)
   const [seenNotificationVersion, setSeenNotificationVersion] = useState(0)
   const notificationCount = useMemo(
-    () => isNotificationsPage ? 0 : countUnreadNotifications(leadsData ?? [], rdvsData ?? [], isCommercial),
-    [isNotificationsPage, isCommercial, leadsData, rdvsData, seenNotificationVersion],
+    () => isNotificationsPage ? 0 : countUnreadNotifications(leadsData ?? [], rdvsData ?? [], isCommercialTeam),
+    [isNotificationsPage, isCommercialTeam, leadsData, rdvsData, seenNotificationVersion],
   )
 
   useEffect(() => {
@@ -217,12 +218,14 @@ export function Topbar({ eyebrow, title }: TopbarProps) {
 }
 
 function countUnreadNotifications(
-  leads: { id: string; status: string; createdAt: string; updatedAt?: string; nextCallbackAt: string | null }[],
-  rdvs: { id: string; status: string; result?: string | null; scheduledAt: string; createdAt?: string; updatedAt?: string }[],
+  leads: { id: string; status: string; createdAt: string; updatedAt?: string; lastStageChangeAt?: string | null; nextCallbackAt: string | null }[],
+  rdvs: { id: string; status: string; result?: string | null; scheduledAt: string; createdAt?: string; updatedAt?: string; debriefFilledAt?: string | null }[],
   commercial = false,
 ): number {
   const seen = readSeenNotificationIds()
-  const ids = commercial ? activeCommercialNotificationIds(rdvs) : activeNotificationIds(leads, rdvs)
+  // Côté commercial (commercial + commercial_lead) : uniquement les 3 notifs
+  // commerciales (nouveau qualifié, RDV reporté, débrief à faire).
+  const ids = commercial ? activeCommercialNotificationIds(leads, rdvs) : activeNotificationIds(leads, rdvs)
   return ids.filter((id) => !seen.has(id)).length
 }
 
@@ -260,29 +263,31 @@ function activeNotificationIds(
   return ids
 }
 
+// IDs des 3 notifications commerciales (commercial + commercial_lead). Doit
+// rester aligné avec buildCommercialNotifications dans pages/Notifications.tsx.
 function activeCommercialNotificationIds(
-  rdvs: { id: string; status: string; result?: string | null; scheduledAt: string; createdAt?: string; updatedAt?: string }[],
+  leads: { id: string; status: string; lastStageChangeAt?: string | null; updatedAt?: string }[],
+  rdvs: { id: string; status: string; scheduledAt: string; debriefFilledAt?: string | null }[],
 ): string[] {
   const now = Date.now()
-  const in10Min = now + 10 * 60 * 1000
   const in24h = now + 24 * 60 * 60 * 1000
-  const since24h = now - 24 * 60 * 60 * 1000
+  const since48h = now - 48 * 60 * 60 * 1000
   const ids: string[] = []
+
+  for (const lead of leads) {
+    if (lead.status !== 'qualifie') continue
+    const ref = lead.lastStageChangeAt ?? lead.updatedAt
+    const changedAt = ref ? new Date(ref).getTime() : 0
+    if (changedAt >= since48h) ids.push(`commercial-lead-qualified-${lead.id}`)
+  }
 
   for (const rdv of rdvs) {
     const scheduled = new Date(rdv.scheduledAt).getTime()
-    const created = rdv.createdAt ? new Date(rdv.createdAt).getTime() : 0
-    const updated = rdv.updatedAt ? new Date(rdv.updatedAt).getTime() : 0
-    if (rdv.status === 'planifie' && scheduled > now && scheduled <= in10Min) {
-      ids.push(`commercial-rdv-soon-${rdv.id}`)
-    } else if (rdv.status === 'planifie' && scheduled > now && scheduled <= in24h) {
-      ids.push(`commercial-rdv-upcoming-${rdv.id}`)
+    if (rdv.status === 'reporte' && scheduled > now && scheduled <= in24h) {
+      ids.push(`commercial-rdv-reporte-${rdv.id}`)
     }
-
-    if (created >= since24h) {
-      ids.push(`commercial-rdv-new-${rdv.id}`)
-    } else if (updated >= since24h && !(rdv.status === 'planifie' && !rdv.result)) {
-      ids.push(`commercial-pipeline-${rdv.id}`)
+    if (rdv.status === 'honore' && !rdv.debriefFilledAt) {
+      ids.push(`commercial-debrief-${rdv.id}`)
     }
   }
 

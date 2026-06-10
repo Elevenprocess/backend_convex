@@ -136,6 +136,7 @@ function useGlobalBrowserNotifications() {
   const user = useAuth((s) => s.user)
   const status = useAuth((s) => s.status)
   const isCommercial = user?.role === 'commercial'
+  const isCommercialTeam = isCommercial || user?.role === 'commercial_lead'
   const leadFilters = status === 'authed'
     ? (isCommercial && user?.id ? { assignedToId: user.id, limit: 250 } : { limit: 250 })
     : null
@@ -147,8 +148,8 @@ function useGlobalBrowserNotifications() {
   const minuteTick = useMinuteTick()
   const notifications = useMemo(() => {
     if (status !== 'authed') return []
-    return isCommercial ? buildCommercialNotifications(leadsData ?? [], rdvsData ?? []) : buildNotifications(leadsData ?? [], rdvsData ?? [])
-  }, [isCommercial, leadsData, rdvsData, status, minuteTick])
+    return isCommercialTeam ? buildCommercialNotifications(leadsData ?? [], rdvsData ?? []) : buildNotifications(leadsData ?? [], rdvsData ?? [])
+  }, [isCommercialTeam, leadsData, rdvsData, status, minuteTick])
 
   useBrowserNotifications(notifications)
 }

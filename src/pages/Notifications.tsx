@@ -9,7 +9,7 @@ import { markNotificationRead } from '../lib/api'
 import { notifyRealtimeRefresh } from '../lib/realtime'
 import { useAuth } from '../lib/auth'
 import { fullName, type LeadResponse, type LeadStatus, type NotificationResponse, type RdvResponse } from '../lib/types'
-import { leadListPath, leadSearchPath } from '../lib/leadPaths'
+import { leadSearchPath } from '../lib/leadPaths'
 
 type Notif = {
   id: string
@@ -36,7 +36,11 @@ type Notif = {
 
 export function Notifications() {
   const user = useAuth((s) => s.user)
+  // isCommercial = vendeur individuel → scope = ses leads/RDV attribués.
+  // isCommercialTeam = équipe closing (commercial + commercial_lead) → mêmes 3
+  // notifs ; le lead n'a pas de filtre de scope donc reçoit toute l'équipe.
   const isCommercial = user?.role === 'commercial'
+  const isCommercialTeam = isCommercial || user?.role === 'commercial_lead'
   const leadFilters = isCommercial && user?.id ? { assignedToId: user.id, limit: 250 } : { limit: 250 }
   const rdvFilters = isCommercial && user?.id ? { commercialId: user.id, limit: 200 } : { limit: 200 }
   const { data: leadsData, loading: leadsLoading } = useLeads(leadFilters)
@@ -55,10 +59,11 @@ export function Notifications() {
   }, [refreshPersisted])
 
   const notifs = useMemo(() => {
-    const derived = isCommercial ? buildCommercialNotifications(leads, rdvs) : buildNotifications(leads, rdvs)
-    const persistedNotifs = buildPersistedNotifications(persisted, handleMarkRead)
+    const derived = isCommercialTeam ? buildCommercialNotifications(leads, rdvs) : buildNotifications(leads, rdvs)
+    // Côté commercial, aucune notification persistée (VT, webhooks…) n'est affichée.
+    const persistedNotifs = isCommercialTeam ? [] : buildPersistedNotifications(persisted, handleMarkRead)
     return dedupeNotifications([...derived, ...persistedNotifs]).sort(notificationFeedRank)
-  }, [isCommercial, leads, rdvs, persisted, handleMarkRead, minuteTick])
+  }, [isCommercialTeam, leads, rdvs, persisted, handleMarkRead, minuteTick])
 
   const loading = leadsLoading || rdvLoading || persistedLoading
   const [permission, setPermission] = useState(notificationPermission())
@@ -68,7 +73,7 @@ export function Notifications() {
 
   return (
     <AppShell>
-      <Topbar eyebrow="NOTIFICATIONS" title={isCommercial ? 'Notifications commerciales' : 'Notifications et rappels'} />
+      <Topbar eyebrow="NOTIFICATIONS" title={isCommercialTeam ? 'Notifications commerciales' : 'Notifications et rappels'} />
       <div className="px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 flex items-center justify-between flex-shrink-0 gap-2 sm:gap-4 flex-wrap">
         <div className="text-sm text-muted">
           {loading && notifs.length === 0 ? <Spinner size={16} stroke={3} label="Chargement des notifications…" /> : `${notifs.length} notification${notifs.length > 1 ? 's' : ''} active${notifs.length > 1 ? 's' : ''}`}
@@ -87,8 +92,8 @@ export function Notifications() {
           <LoadingBlock label="Chargement des notifications…" />
         ) : notifs.length === 0 ? (
           <div className="glass-card p-6 text-sm text-muted">
-            {isCommercial
-              ? 'Aucune notification commerciale : pas de nouveau RDV, pas de RDV imminent et pas de mouvement pipeline récent.'
+            {isCommercialTeam
+              ? 'Aucune notification commerciale : pas de nouveau lead qualifié, pas de RDV reporté à venir et pas de débrief à faire.'
               : 'Aucune notification urgente : pas de nouveau lead récent, pas de rappel à traiter, pas de RDV imminent.'}
           </div>
         ) : (
@@ -274,81 +279,88 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
   return notifications.sort(notificationFeedRank)
 }
 
+// Notifications de l'équipe closing (commercial + commercial_lead).
+// Trois types seulement. Le périmètre est porté par les filtres de requête en
+// amont : le commercial_lead reçoit toute l'équipe (leads/RDV non filtrés), le
+// commercial individuel ne voit que ses leads/RDV attribués.
+//   1. Nouveau lead qualifié
+//   2. Rappel de RDV reporté (à l'approche de la nouvelle date)
+//   3. Débrief à faire (RDV honoré sans débrief rempli)
 export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): Notif[] {
   const now = Date.now()
-  const in10Min = now + 10 * 60 * 1000
   const in24h = now + 24 * 60 * 60 * 1000
-  const since24h = now - 24 * 60 * 60 * 1000
+  const since48h = now - 48 * 60 * 60 * 1000
   const leadMap = new Map(leads.map((lead) => [lead.id, lead]))
   const notifications: Notif[] = []
 
-  for (const rdv of rdvs) {
-    const lead = leadMap.get(rdv.leadId)
-    const name = lead ? fullName(lead) : 'Prospect'
-    const scheduled = new Date(rdv.scheduledAt).getTime()
-    const created = new Date(rdv.createdAt).getTime()
-    const updated = new Date(rdv.updatedAt).getTime()
-    const stage = commercialStageLabel(rdv, lead)
-    const details = commercialRdvDetails(rdv, lead)
+  // 1) Nouveaux leads qualifiés (status 'qualifie', changement de stage récent).
+  for (const lead of leads) {
+    if (lead.status !== 'qualifie') continue
+    const changedAt = lead.lastStageChangeAt ? new Date(lead.lastStageChangeAt).getTime() : new Date(lead.updatedAt).getTime()
+    if (changedAt < since48h) continue
+    const name = fullName(lead)
+    notifications.push({
+      id: `commercial-lead-qualified-${lead.id}`,
+      group: 'NOUVEAUX LEADS QUALIFIÉS',
+      icon: 'users',
+      ...NOTIF_COLOR.newLead,
+      title: 'Nouveau lead qualifié',
+      body: <><strong>{name}</strong>{commercialLeadDetails(lead)}</>,
+      time: relativeTime(lead.lastStageChangeAt ?? lead.updatedAt),
+      sortAt: changedAt,
+      urgency: 'info',
+      to: leadSearchPath(null, name),
+    })
+  }
 
-    if (rdv.status === 'planifie' && scheduled > now && scheduled <= in10Min) {
+  for (const rdv of rdvs) {
+    const summary = rdv.lead ?? leadMap.get(rdv.leadId) ?? null
+    const name = summary ? fullName(summary) : 'Prospect'
+    const scheduled = new Date(rdv.scheduledAt).getTime()
+
+    // 2) Rappel de RDV reporté — à l'approche de la nouvelle date (<24h).
+    if (rdv.status === 'reporte' && scheduled > now && scheduled <= in24h) {
       notifications.push({
-        id: `commercial-rdv-soon-${rdv.id}`,
-        group: 'DANS 10 MIN',
-        icon: 'calendar',
-        ...NOTIF_COLOR.rdvImminent,
-        title: 'RDV Planifié imminent',
-        body: <><strong>{name}</strong>{details}</>,
-        time: formatDateTime(rdv.scheduledAt),
-        sortAt: updated,
-        urgency: 'soon',
-        to: leadListPath('commercial'),
-      })
-    } else if (rdv.status === 'planifie' && scheduled > now && scheduled <= in24h) {
-      notifications.push({
-        id: `commercial-rdv-upcoming-${rdv.id}`,
-        group: 'RDV À VENIR',
+        id: `commercial-rdv-reporte-${rdv.id}`,
+        group: 'RDV REPORTÉS',
         icon: 'calendar',
         ...NOTIF_COLOR.rdvUpcoming,
-        title: 'RDV Planifié',
-        body: <><strong>{name}</strong>{details}</>,
+        title: 'Rappel : RDV reporté',
+        body: <><strong>{name}</strong> · {formatDateTime(rdv.scheduledAt)}</>,
         time: formatDateTime(rdv.scheduledAt),
-        sortAt: created,
-        urgency: 'info',
-        to: leadListPath('commercial'),
+        sortAt: scheduled,
+        urgency: 'soon',
+        to: `/rdv/${rdv.id}`,
       })
     }
 
-    if (created >= since24h) {
+    // 3) Débrief à faire — RDV honoré dont le débrief n'est pas rempli.
+    if (rdv.status === 'honore' && !rdv.debriefFilledAt) {
       notifications.push({
-        id: `commercial-rdv-new-${rdv.id}`,
-        group: 'NOUVEAUX RDV COMMERCIAL',
-        icon: 'calendar',
+        id: `commercial-debrief-${rdv.id}`,
+        group: 'DÉBRIEFS À FAIRE',
+        icon: 'check',
         ...NOTIF_COLOR.rdvNew,
-        title: 'Nouveau RDV attribué',
-        body: <><strong>{name}</strong>{details}</>,
-        time: relativeTime(rdv.createdAt),
-        sortAt: created,
+        title: 'Débrief à faire',
+        body: <><strong>{name}</strong> · RDV honoré le {formatDateTime(rdv.scheduledAt)}</>,
+        time: relativeTime(rdv.scheduledAt),
+        sortAt: scheduled,
         urgency: 'info',
-        to: leadListPath('commercial'),
-      })
-    } else if (updated >= since24h && stage !== 'RDV Planifié') {
-      notifications.push({
-        id: `commercial-pipeline-${rdv.id}`,
-        group: 'PIPELINE COMMERCIAL',
-        icon: 'chart',
-        ...pipelineColors(stage),
-        title: stage,
-        body: <><strong>{name}</strong>{details}</>,
-        time: relativeTime(rdv.updatedAt),
-        sortAt: updated,
-        urgency: 'info',
-        to: leadListPath('commercial'),
+        to: `/rdv/${rdv.id}`,
       })
     }
   }
 
   return dedupeNotifications(notifications).sort(notificationFeedRank)
+}
+
+// Détails secondaires (ville · téléphone) d'un lead qualifié.
+function commercialLeadDetails(lead: LeadResponse): React.ReactNode {
+  const parts: string[] = []
+  if (lead.city) parts.push(lead.city)
+  if (lead.phone) parts.push(lead.phone)
+  if (parts.length === 0) return null
+  return <> · {parts.join(' · ')}</>
 }
 
 // ─── Notifs backend persistées (VT, webhooks, etc.) ──────────────────────────
@@ -401,27 +413,6 @@ function persistedNotifColors(type: string): { iconBg: string; iconColor: string
   if (type.startsWith('rdv')) return NOTIF_COLOR.rdvNew
   if (type.startsWith('lead')) return NOTIF_COLOR.newLead
   return NOTIF_COLOR.planned
-}
-
-function commercialRdvDetails(rdv: RdvResponse, lead?: LeadResponse): React.ReactNode {
-  const parts = [formatDateTime(rdv.scheduledAt)]
-  if (lead?.phone) parts.push(lead.phone)
-  if (lead?.city) parts.push(lead.city)
-  if (rdv.montantTotal) parts.push(formatMoney(rdv.montantTotal))
-  if (rdv.externalId) parts.push('GHL')
-  return <> · {parts.join(' · ')}</>
-}
-
-function commercialStageLabel(rdv: RdvResponse, lead?: LeadResponse): string {
-  if (rdv.result === 'signe' || lead?.status === 'signe') return '11. Devis Signé'
-  if (rdv.result === 'perdu' || lead?.status === 'perdu') return '12. Devis Perdu'
-  if (lead?.status === 'pas_qualifie') return '7. RDV Pas Qualifié'
-  if (rdv.status === 'annule') return '6. RDV Annulé'
-  if (rdv.status === 'no_show' || rdv.result === 'no_show') return '(BIS) No-Show'
-  if (rdv.status === 'reporte' || rdv.result === 'reporte') return '8. RDV Reprogrammé'
-  if (lead?.status === 'relance') return '9. Relance Long Terme'
-  if (rdv.status === 'honore' || rdv.result === 'reflexion' || lead?.status === 'rdv_honore') return '10. Devis En Attente'
-  return 'RDV Planifié'
 }
 
 // Palette de couleurs par type de notification — toutes différentes pour scan visuel rapide.
@@ -505,14 +496,6 @@ const NOTIF_COLOR = {
     borderColor: 'border-l-[#E11D48]',
   },
 } as const
-
-function pipelineColors(stage: string): { iconBg: string; iconColor: string; borderColor: string } {
-  if (stage.includes('Signé')) return NOTIF_COLOR.pipelineWin
-  if (stage.includes('Perdu') || stage.includes('Annulé') || stage.includes('No-Show')) return NOTIF_COLOR.pipelineLoss
-  if (stage.includes('Reprogrammé')) return NOTIF_COLOR.pipelineReschedule
-  if (stage.includes('Pas Qualifié')) return NOTIF_COLOR.pipelineUnqualified
-  return NOTIF_COLOR.pipelineNeutral
-}
 
 function dedupeNotifications(notifs: Notif[]): Notif[] {
   const seen = new Set<string>()
@@ -684,12 +667,6 @@ function formatDateTime(iso: string): string {
   const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
   if (sameDay) return `aujourd'hui ${time}`
   return `${d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })} ${time}`
-}
-
-function formatMoney(value: string | number): string {
-  const amount = Number(value)
-  if (!Number.isFinite(amount)) return String(value)
-  return amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })
 }
 
 function relativeTime(iso: string): string {
