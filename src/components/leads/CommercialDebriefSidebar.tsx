@@ -4,6 +4,8 @@ import { useIsReadOnlyImpersonation } from '../../lib/auth'
 import {
   fullName,
   type FinancingType,
+  type FinancingOrg,
+  type PaymentSubMethod,
   type LeadResponse,
   type ProjectResponse,
   type RdvResponse,
@@ -11,6 +13,16 @@ import {
 } from '../../lib/types'
 import { useRdvList, updateRdv } from '../../lib/hooks'
 import { createLeadDebrief } from '../../lib/api'
+import {
+  PAYMENT_METHOD_CONFIG,
+  PAYMENT_METHOD_ORDER,
+  SUB_METHODS,
+  FINANCING_ORGS,
+  computeAcompteAmount,
+  formatEuro,
+  joinKits,
+  splitKits,
+} from '../../lib/debriefFinancing'
 
 type Props = {
   lead: LeadResponse
@@ -64,8 +76,12 @@ type FormState = {
   notes: string
   quoteAmount: string
   signedAt: string
-  kits: string
+  kits: string[]
   paymentMethod: FinancingType | ''
+  paymentSubMethod: PaymentSubMethod | ''
+  financingOrg: FinancingOrg | ''
+  acomptePercent: number | null
+  acompteAmountInput: string
 }
 
 const RESCHEDULE_REASONS = new Set<NonSaleReason>([
@@ -101,16 +117,32 @@ function getStepSequence(form: FormState): WizardStepId[] {
   return ['result', 'reason_nv', 'notes']
 }
 
+function isFinancingComplete(form: FormState): boolean {
+  if (!form.paymentMethod) return false
+  const cfg = PAYMENT_METHOD_CONFIG[form.paymentMethod as keyof typeof PAYMENT_METHOD_CONFIG]
+  if (!cfg) return false
+  const subOk = cfg.subChoice === 'method' ? form.paymentSubMethod !== '' : form.financingOrg !== ''
+  const acompteOk =
+    form.acomptePercent != null ||
+    (form.acompteAmountInput.trim() !== '' && Number(form.acompteAmountInput.replace(',', '.')) > 0)
+  return subOk && acompteOk
+}
+
+function isVenteDetailsComplete(form: FormState): boolean {
+  return (
+    form.quoteAmount.trim() !== '' &&
+    form.kits.length > 0 &&
+    isFinancingComplete(form)
+  )
+}
+
 function canAdvanceStep(stepId: WizardStepId, form: FormState): boolean {
   switch (stepId) {
     case 'result': return form.outcome !== ''
     case 'objection_v': return form.objection !== ''
     case 'acceptance_v': return form.acceptanceFactors.length > 0
     case 'details_v':
-      return form.quoteAmount.trim() !== ''
-        && form.signedAt !== ''
-        && form.kits.trim() !== ''
-        && form.paymentMethod !== ''
+      return isVenteDetailsComplete(form)
     case 'reason_nv': return form.nonSaleReason !== ''
     case 'objection_nv': return form.objection !== ''
     case 'notes': return true // step final, le bouton submit fait sa propre validation
@@ -162,11 +194,9 @@ const ACCEPTANCE_FACTORS: { value: AcceptanceFactor; label: string }[] = [
   { value: 'autre', label: 'Autre' },
 ]
 
-const PAYMENT_METHODS: { value: FinancingType; label: string; icon: IconName }[] = [
-  { value: 'comptant', label: 'Comptant', icon: 'check' },
-  { value: 'financement', label: 'Financement', icon: 'chart' },
-  { value: 'paiement_10x', label: 'Paiement 10x', icon: 'calendar' },
-]
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10) // YYYY-MM-DD (date du débrief)
+}
 
 const EMPTY_FORM: FormState = {
   outcome: '',
@@ -175,9 +205,13 @@ const EMPTY_FORM: FormState = {
   acceptanceFactors: [],
   notes: '',
   quoteAmount: '',
-  signedAt: '',
-  kits: '',
+  signedAt: todayIso(),
+  kits: [],
   paymentMethod: '',
+  paymentSubMethod: '',
+  financingOrg: '',
+  acomptePercent: null,
+  acompteAmountInput: '',
 }
 
 const NON_SALE_REASON_SEPARATOR = ' — '
@@ -243,9 +277,13 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, onValidated, 
         next.objection = ''
         next.acceptanceFactors = []
         next.quoteAmount = ''
-        next.signedAt = ''
-        next.kits = ''
+        next.signedAt = todayIso()
+        next.kits = []
         next.paymentMethod = ''
+        next.paymentSubMethod = ''
+        next.financingOrg = ''
+        next.acomptePercent = null
+        next.acompteAmountInput = ''
         // notes préservées (saisie commune)
       }
 
@@ -288,7 +326,7 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, onValidated, 
   const canSubmit =
     form.outcome !== '' &&
     (form.outcome === 'vente'
-      ? form.quoteAmount.trim() !== '' && form.signedAt !== '' && form.kits.trim() !== '' && form.paymentMethod !== ''
+      ? isVenteDetailsComplete(form)
       : form.nonSaleReason !== '')
 
   const canReschedule = Boolean(selectedRdv && rescheduleDate && rescheduleTime && !rescheduling && !readOnly)
@@ -346,7 +384,7 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, onValidated, 
           notes: composedNotes,
           montantTotal: form.outcome === 'vente' ? amount : null,
           signatureAt: form.outcome === 'vente' && form.signedAt ? form.signedAt : null,
-          kits: form.outcome === 'vente' ? form.kits.trim() || null : null,
+          kits: form.outcome === 'vente' && form.kits.length > 0 ? joinKits(form.kits) : null,
           financingType: form.outcome === 'vente' && form.paymentMethod ? form.paymentMethod : null,
           debriefFilledAt: new Date().toISOString(),
         })
@@ -598,10 +636,33 @@ function Step3VAcceptance({ form, update, toggleAcceptance }: Step3VProps) {
   )
 }
 
+type PaymentMethodConfigValue = (typeof PAYMENT_METHOD_ORDER)[number]
+
 function Step4VDetails({ form, update }: StepProps) {
+  const [kitInput, setKitInput] = useState('')
+
+  const addKit = () => {
+    const v = kitInput.trim()
+    if (!v) return
+    update({ kits: [...form.kits, v] })
+    setKitInput('')
+  }
+  const removeKit = (idx: number) =>
+    update({ kits: form.kits.filter((_, i) => i !== idx) })
+
+  const methodCfg = form.paymentMethod
+    ? PAYMENT_METHOD_CONFIG[form.paymentMethod as keyof typeof PAYMENT_METHOD_CONFIG]
+    : null
+  const computed =
+    form.acomptePercent != null
+      ? computeAcompteAmount(form.quoteAmount, form.acomptePercent)
+      : null
+
+  const pickMethod = (value: PaymentMethodConfigValue) =>
+    update({ paymentMethod: value, paymentSubMethod: '', financingOrg: '', acomptePercent: null, acompteAmountInput: '' })
+
   return (
     <div className="space-y-4">
-      {/* Bandeau : on cadre l'étape comme le moment de la vente gagnée */}
       <div className="flex items-center gap-3 rounded-2xl border border-success/30 bg-success-tint px-4 py-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-success text-white shadow-sm">
           <Icon name="trophy" size={18} />
@@ -612,10 +673,9 @@ function Step4VDetails({ form, update }: StepProps) {
         </div>
       </div>
 
-      {/* Champ hero : la valeur du devis, c'est le chiffre qui compte */}
       <div className="rounded-2xl border border-success/40 bg-white p-4 shadow-sm">
         <label className="flex items-center justify-between text-[11px] font-black uppercase tracking-[0.14em] text-muted">
-          <span>Valeur du devis signé <span className="text-rouille">*</span></span>
+          <span>Valeur du devis signé (TTC) <span className="text-rouille">*</span></span>
           <Icon name="sparkles" size={14} className="text-success" />
         </label>
         <div className="mt-2 flex items-baseline gap-2 border-b-2 border-success/20 pb-1 focus-within:border-success">
@@ -633,44 +693,113 @@ function Step4VDetails({ form, update }: StepProps) {
         </div>
       </div>
 
-      <FieldGroup label="Date de signature" required>
-        <div className="relative">
-          <Icon name="calendar" size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-or-dark" />
-          <input
-            type="date"
-            value={form.signedAt}
-            onChange={(e) => update({ signedAt: e.target.value })}
-            className="w-full rounded-xl border border-line bg-cream py-2 pl-9 pr-3 text-sm font-bold text-text outline-none focus:border-or"
-          />
-        </div>
-      </FieldGroup>
-
       <FieldGroup label="Kits vendus" required>
-        <div className="relative">
-          <Icon name="tag" size={15} className="pointer-events-none absolute left-3 top-3 text-or-dark" />
+        <div className="flex gap-2">
           <input
             type="text"
-            value={form.kits}
-            onChange={(e) => update({ kits: e.target.value })}
-            placeholder="Ex. : 8 PV + 1 onduleur + 1 batterie 5 kWh"
-            className="w-full rounded-xl border border-line bg-cream py-2 pl-9 pr-3 text-sm text-text outline-none focus:border-or"
+            value={kitInput}
+            onChange={(e) => setKitInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addKit() } }}
+            placeholder="Ex. : 8 PV, batterie 5 kWh…"
+            className="w-full rounded-xl border border-line bg-cream py-2 px-3 text-sm text-text outline-none focus:border-or"
           />
+          <button
+            type="button"
+            onClick={addKit}
+            disabled={!kitInput.trim()}
+            className="shrink-0 rounded-xl border border-or bg-or px-3 py-2 text-sm font-black text-white disabled:opacity-40"
+          >
+            Ajouter
+          </button>
         </div>
+        {form.kits.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {form.kits.map((kit, idx) => (
+              <span key={`${kit}-${idx}`} className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success-tint px-2.5 py-1 text-[12px] font-bold text-success">
+                {kit}
+                <button type="button" onClick={() => removeKit(idx)} className="text-success/60 hover:text-success" aria-label={`Retirer ${kit}`}>
+                  <Icon name="x" size={12} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
       </FieldGroup>
 
-      <FieldGroup label="Type de paiement" required>
-        <div className="grid grid-cols-3 gap-1.5">
-          {PAYMENT_METHODS.map((p) => (
+      <FieldGroup label="Financement" required>
+        <div className="grid grid-cols-2 gap-1.5">
+          {PAYMENT_METHOD_ORDER.map((value) => (
             <PaymentPill
-              key={p.value}
-              active={form.paymentMethod === p.value}
-              icon={p.icon}
-              label={p.label}
-              onClick={() => update({ paymentMethod: p.value })}
+              key={value}
+              active={form.paymentMethod === value}
+              icon={value === 'comptant' ? 'check' : value === 'financement' ? 'chart' : 'calendar'}
+              label={PAYMENT_METHOD_CONFIG[value].label}
+              onClick={() => pickMethod(value)}
             />
           ))}
         </div>
       </FieldGroup>
+
+      {methodCfg && (
+        <div className="space-y-4 rounded-2xl border border-line bg-cream/60 p-3">
+          {methodCfg.subChoice === 'method' ? (
+            <FieldGroup label="Moyen de paiement" required>
+              <div className="grid grid-cols-3 gap-1.5">
+                {SUB_METHODS.map((m) => (
+                  <ChoiceChip key={m.value} active={form.paymentSubMethod === m.value} label={m.label} onClick={() => update({ paymentSubMethod: m.value })} />
+                ))}
+              </div>
+            </FieldGroup>
+          ) : (
+            <FieldGroup label="Organisme de financement" required>
+              <div className="grid grid-cols-2 gap-1.5">
+                {FINANCING_ORGS.map((o) => (
+                  <ChoiceChip key={o.value} active={form.financingOrg === o.value} label={o.label} onClick={() => update({ financingOrg: o.value })} />
+                ))}
+              </div>
+            </FieldGroup>
+          )}
+
+          <FieldGroup label="Acompte" required>
+            <div className="flex flex-wrap gap-1.5">
+              {methodCfg.acomptePercents.map((pct) => (
+                <ChoiceChip
+                  key={pct}
+                  active={form.acomptePercent === pct}
+                  label={`${pct} %`}
+                  onClick={() => update({ acomptePercent: pct, acompteAmountInput: '' })}
+                />
+              ))}
+              <ChoiceChip
+                active={form.acomptePercent == null && form.acompteAmountInput !== ''}
+                label="Montant direct"
+                onClick={() => update({ acomptePercent: null })}
+              />
+            </div>
+
+            {form.acomptePercent != null && computed != null && (
+              <p className="mt-2 text-sm font-black text-success">
+                Acompte : {formatEuro(computed)} € TTC
+              </p>
+            )}
+            {form.acomptePercent == null && (
+              <div className="mt-2 flex items-baseline gap-2 border-b-2 border-success/20 pb-1 focus-within:border-success">
+                <span className="text-lg font-black text-success">€</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step="0.01"
+                  value={form.acompteAmountInput}
+                  onChange={(e) => update({ acompteAmountInput: e.target.value })}
+                  placeholder="Montant de l'acompte"
+                  className="w-full bg-transparent text-xl font-black text-text outline-none placeholder:text-faint/40"
+                />
+              </div>
+            )}
+          </FieldGroup>
+        </div>
+      )}
     </div>
   )
 }
@@ -1066,8 +1195,12 @@ function rdvToForm(rdv: RdvResponse): FormState {
     notes: freeText,
     quoteAmount: rdv.montantTotal ?? '',
     signedAt: rdv.signatureAt ?? '',
-    kits: rdv.kits ?? '',
+    kits: splitKits(rdv.kits),
     paymentMethod: (rdv.financingType ?? '') as FormState['paymentMethod'],
+    paymentSubMethod: '',
+    financingOrg: '',
+    acomptePercent: null,
+    acompteAmountInput: '',
   }
 }
 
@@ -1089,20 +1222,33 @@ function formToDebriefPayload(form: FormState, rdvId: string | null) {
     isVente && form.quoteAmount.trim() !== ''
       ? form.quoteAmount.trim().replace(',', '.')
       : null
+
+  let acompteAmount: string | null = null
+  if (isVente) {
+    if (form.acomptePercent != null) {
+      const computed = computeAcompteAmount(form.quoteAmount, form.acomptePercent)
+      acompteAmount = computed != null ? computed.toFixed(2) : null
+    } else if (form.acompteAmountInput.trim() !== '') {
+      acompteAmount = Number(form.acompteAmountInput.replace(',', '.')).toFixed(2)
+    }
+  }
+
   return {
     projectId: null as string | null,
     rdvId,
     outcome: (isVente ? 'vente' : 'non_vente') as 'vente' | 'non_vente',
-    // nonSaleReason est conservé pour TOUS les motifs non-vente (y compris
-    // suivi_prevu) : c'est ce que lit la carte « Raisons non-vente ».
     nonSaleReason: !isVente && form.nonSaleReason ? form.nonSaleReason : null,
     objection: form.objection ? labelFromObjection(form.objection) : null,
     acceptanceFactors: isVente ? form.acceptanceFactors : [],
     notes: form.notes.trim() || null,
     montantTotal: amount,
     financingType: isVente && form.paymentMethod ? form.paymentMethod : null,
-    kits: isVente ? form.kits.trim() || null : null,
+    kits: isVente && form.kits.length > 0 ? joinKits(form.kits) : null,
     signedAt: isVente && form.signedAt ? form.signedAt : null,
+    paymentSubMethod: isVente && form.paymentSubMethod ? form.paymentSubMethod : null,
+    financingOrg: isVente && form.financingOrg ? form.financingOrg : null,
+    acomptePercent: isVente ? form.acomptePercent : null,
+    acompteAmount,
   }
 }
 
@@ -1125,9 +1271,23 @@ function selectedDebriefCards(form: FormState): SummaryCard[] {
     if (form.objection) cards.push({ label: labelFromObjection(form.objection), sublabel: 'Objection surmontée', tone: 'or' })
     form.acceptanceFactors.forEach((factor) => cards.push({ label: labelFromAcceptance(factor), sublabel: 'Facteur d’acceptation', tone: 'success' }))
     if (form.quoteAmount.trim()) cards.push({ label: `${form.quoteAmount.trim()} €`, sublabel: 'Valeur du devis signé', tone: 'success' })
-    if (form.signedAt) cards.push({ label: form.signedAt, sublabel: 'Date de signature', tone: 'success' })
-    if (form.kits.trim()) cards.push({ label: form.kits.trim(), sublabel: 'Kits vendus', tone: 'success' })
-    if (form.paymentMethod) cards.push({ label: PAYMENT_METHODS.find((p) => p.value === form.paymentMethod)?.label ?? form.paymentMethod, sublabel: 'Type de paiement', tone: 'success' })
+    if (form.kits.length > 0) cards.push({ label: joinKits(form.kits), sublabel: 'Kits vendus', tone: 'success' })
+    if (form.paymentMethod) {
+      const cfg = PAYMENT_METHOD_CONFIG[form.paymentMethod as keyof typeof PAYMENT_METHOD_CONFIG]
+      const sub = form.paymentSubMethod
+        ? SUB_METHODS.find((m) => m.value === form.paymentSubMethod)?.label
+        : form.financingOrg
+          ? FINANCING_ORGS.find((o) => o.value === form.financingOrg)?.label
+          : ''
+      const label = [cfg?.label, sub].filter(Boolean).join(' · ')
+      cards.push({ label: label || (cfg?.label ?? form.paymentMethod), sublabel: 'Financement', tone: 'success' })
+    }
+    if (form.acomptePercent != null) {
+      const computed = computeAcompteAmount(form.quoteAmount, form.acomptePercent)
+      if (computed != null) cards.push({ label: `${formatEuro(computed)} € (${form.acomptePercent} %)`, sublabel: 'Acompte', tone: 'success' })
+    } else if (form.acompteAmountInput.trim() !== '') {
+      cards.push({ label: `${form.acompteAmountInput.trim()} €`, sublabel: 'Acompte', tone: 'success' })
+    }
   }
   if (form.outcome === 'non_vente') {
     cards.push({ label: 'Vente non réalisée', sublabel: 'À classer en non-vente', tone: 'rouille' })
