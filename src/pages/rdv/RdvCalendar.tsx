@@ -9,6 +9,7 @@ import { fullName, type LeadResponse, type RdvResponse, type RdvStatus, type VtC
 import { useAuth } from '../../lib/auth'
 import { leadSearchPath } from '../../lib/leadPaths'
 import { matchesCalendarFilters, type CalendarFilterState } from '../../lib/calendarFilters'
+import { rdvCardCategory, type RdvCardCategory } from './rdvCardCategory'
 
 const DEFAULT_HOURS = Array.from({ length: 12 }, (_, i) => 8 + i)
 const DAY_LABELS = ['LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM', 'DIM']
@@ -50,6 +51,27 @@ const VT_FEED_ROLES = ['admin', 'delivrabilite', 'responsable_technique', 'back_
 // Le secteur est uniquement signifié par la couleur du point ● à l'intérieur —
 // les badges restent eux aussi neutres pour ne pas réintroduire la couleur du secteur.
 const CARD_TONE = 'bg-cream-darker text-text border-line'
+
+// Teintes légères des cartes RDV par catégorie (admin / commercial_lead).
+// Réutilise les tokens de teinte du design system (cf. CARD_TONE / vtKindTone).
+const CATEGORY_TONE: Record<RdvCardCategory, string> = {
+  devis: 'bg-cuivre-tint text-text border-line',
+  debrief: 'bg-success-tint text-text border-line',
+  avenir: 'bg-white text-text border-line',
+  absent: 'bg-rouille-tint text-text border-line',
+  autre: 'bg-info-tint text-text border-line',
+}
+
+// Teinte d'une carte RDV : VT → tone VT ; RDV local coloré (rôles autorisés) →
+// teinte par catégorie ; sinon fond neutre actuel.
+function rdvCardTone(item: CalendarItem, colorize: boolean): string {
+  if (item.source === 'vt') return vtKindTone(item.vt)
+  if (item.source === 'local' && colorize) {
+    return CATEGORY_TONE[rdvCardCategory(item.rdv, new Date().toISOString())]
+  }
+  return CARD_TONE
+}
+
 const NEUTRAL_BADGE_TONE = 'bg-white text-muted border border-line'
 const SECTOR_DOT: Record<Sector, string> = {
   Nord: 'bg-sky-500',
@@ -113,6 +135,7 @@ function sectorForItem(item: CalendarItem, lead?: LeadResponse): Sector {
 
 export function RdvCalendar() {
   const role = useAuth((s) => s.user?.role)
+  const colorize = role === 'admin' || role === 'commercial_lead'
   // Sur mobile, la vue semaine (7 colonnes) impose un scroll horizontal :
   // on démarre donc en vue "jour", plus lisible au doigt. Desktop reste en semaine.
   const [view, setView] = useState<CalendarView>(
@@ -432,6 +455,8 @@ export function RdvCalendar() {
           </button>
         )}
       </div>
+
+      {colorize && <CalendarColorLegend />}
 
       <main className="p-3 sm:p-6 md:p-8 pt-3 overflow-hidden flex-grow">
         <div
@@ -757,6 +782,26 @@ type PositionedEntry =
   | { kind: 'rdv'; item: CalendarItem; top: number; height: number; stackIndex: number; stackTotal: number }
   | { kind: 'more'; items: CalendarItem[]; top: number; height: number; stackIndex: number; hiddenCount: number }
 
+function CalendarColorLegend() {
+  const items: Array<{ tone: string; label: string }> = [
+    { tone: 'bg-success-tint', label: 'Débrief fait' },
+    { tone: 'bg-white border border-line', label: 'À venir' },
+    { tone: 'bg-cuivre-tint', label: 'Devis en attente' },
+    { tone: 'bg-rouille-tint', label: 'Pas de débrief' },
+  ]
+  return (
+    <div className="px-4 sm:px-6 md:px-8 pt-2 flex items-center gap-3 flex-wrap text-[10px] sm:text-[11px] font-bold text-muted">
+      <span className="uppercase tracking-wider text-faint">Légende :</span>
+      {items.map((it) => (
+        <span key={it.label} className="inline-flex items-center gap-1.5">
+          <span className={`w-3 h-3 rounded ${it.tone}`} />
+          {it.label}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 function RdvBlock({ item, lead, hourHeight, stackIndex, stackTotal, onClick, style }: { item: CalendarItem; lead?: LeadResponse; hourHeight: number; stackIndex: number; stackTotal: number; onClick: () => void; style?: CSSProperties }) {
   const isVt = item.source === 'vt'
   const isGhl = item.source === 'ghl'
@@ -769,7 +814,9 @@ function RdvBlock({ item, lead, hourHeight, stackIndex, stackTotal, onClick, sty
     ? [item.vt.city, item.vt.phone].filter(Boolean).join(' · ')
     : isGhl ? ghlEventDetail(item.event) : localRdvFallbackDetail(item.rdv)
   const sector = sectorForItem(item, lead)
-  const tone = isVt ? vtKindTone(item.vt) : CARD_TONE
+  const role = useAuth((s) => s.user?.role)
+  const colorize = role === 'admin' || role === 'commercial_lead'
+  const tone = rdvCardTone(item, colorize)
   const startTime = formatTime(item.scheduledAt)
   const endTime = formatTime(new Date(new Date(item.scheduledAt).getTime() + RDV_DURATION_MIN * 60_000).toISOString())
   const title = `${startTime}–${endTime} — ${sector} — ${label}${detail ? ` — ${detail}` : ''}${isGhl ? ' — GHL temps réel' : ''}${isVt ? ` — ${vtKindLabel(item.vt)}` : ''}`
@@ -983,7 +1030,9 @@ function RdvButton({ item, lead, compact = false, onClick }: { item: CalendarIte
     ? [item.vt.city, item.vt.phone].filter(Boolean).join(' · ')
     : isGhl ? ghlEventDetail(item.event) : localRdvFallbackDetail(item.rdv)
   const sector = sectorForItem(item, lead)
-  const tone = isVt ? vtKindTone(item.vt) : CARD_TONE
+  const role = useAuth((s) => s.user?.role)
+  const colorize = role === 'admin' || role === 'commercial_lead'
+  const tone = rdvCardTone(item, colorize)
   const title = `${formatTime(item.scheduledAt)} — ${sector} — ${label}${detail ? ` — ${detail}` : ''}${isGhl ? ' — GHL temps réel' : ''}${isVt ? ` — ${vtKindLabel(item.vt)}` : ''}`
   return (
     <button
