@@ -4,10 +4,21 @@ import { formatDate } from '../../lib/suivi'
 import { attachmentRawUrl, downloadDevisPdf } from '../../lib/api'
 import {
   DEBRIEF_OUTCOME_LABEL,
+  PAYMENT_SUB_METHOD_LABEL,
+  FINANCING_ORG_LABEL,
   type Devis,
   type ProjectAttachmentResponse,
   type DebriefResponse,
 } from '../../lib/types'
+
+const FINANCING_TYPE_SHORT: Record<string, string> = {
+  comptant: 'Comptant',
+  financement: 'Financement',
+  financement_sans_apport: 'Financement sans apport',
+  apport_financement: 'Apport + financement',
+  paiement_10x: 'Paiement 10x',
+  paiement_12x: 'Paiement 12x',
+}
 
 export function Section({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
   return (
@@ -85,6 +96,16 @@ export function AttachmentRow({ attachment }: { attachment: ProjectAttachmentRes
 }
 
 export function DebriefCard({ debrief }: { debrief: DebriefResponse }) {
+  const financingBits = [
+    debrief.financingType ? FINANCING_TYPE_SHORT[debrief.financingType] ?? debrief.financingType : null,
+    debrief.paymentSubMethod ? PAYMENT_SUB_METHOD_LABEL[debrief.paymentSubMethod] : null,
+    debrief.financingOrg ? FINANCING_ORG_LABEL[debrief.financingOrg] : null,
+  ].filter(Boolean)
+  const acompte =
+    debrief.acompteAmount != null
+      ? `acompte ${debrief.acompteAmount} €${debrief.acomptePercent != null ? ` (${debrief.acomptePercent} %)` : ''}`
+      : null
+
   return (
     <article className="rounded-xl border border-line bg-white p-3.5">
       <div className="mb-1 flex items-baseline justify-between gap-2">
@@ -95,6 +116,11 @@ export function DebriefCard({ debrief }: { debrief: DebriefResponse }) {
       </div>
       {debrief.notes && <p className="whitespace-pre-wrap text-xs leading-relaxed text-muted">{debrief.notes}</p>}
       {debrief.objection && <p className="mt-1 text-[11px] font-semibold text-faint">Objection : {debrief.objection}</p>}
+      {(financingBits.length > 0 || acompte) && (
+        <p className="mt-1 text-[11px] font-semibold text-faint">
+          {[financingBits.join(' · '), acompte].filter(Boolean).join(' · ')}
+        </p>
+      )}
     </article>
   )
 }
