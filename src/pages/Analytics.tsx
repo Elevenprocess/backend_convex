@@ -280,6 +280,11 @@ function AnalyticsAdmin() {
   const stats = data?.admin ?? EMPTY_ADMIN_STATS
   const commercialStats = stats
   const qualifRate = stats.classified > 0 ? Math.round((stats.qualified / stats.classified) * 100) : 0
+  // Le commercial_lead partage la vue AnalyticsAdmin mais ne voit pas les
+  // métriques setter / call-center (leads traités, qualifiés, CA global, tableau
+  // global, camembert OLAP, performance par setter) : seuls le suivi par
+  // commercial et l'analyse des débriefs lui sont utiles.
+  const isCommercialLead = useAuth((s) => s.user?.role) === 'commercial_lead'
 
   return (
     <AppShell blobsKey="admin" flat>
@@ -289,6 +294,8 @@ function AnalyticsAdmin() {
         <DateRangePicker value={period} onChange={setPeriod} align="right" />
       </div>
       <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 overflow-y-auto space-y-4 sm:space-y-6 flex-grow">
+        {!isCommercialLead && (
+        <>
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
           <BigStatCard label="LEADS TRAITÉS" value={fmtInt(stats.classified)} delta={`${stats.loggedCalls} appels`} deltaTone="info" sub={`Leads avec un vrai statut sur ${stats.loggedCalls} appels réels`} accent="info" icon="users" />
           <BigStatCard label="QUALIFIÉS" value={fmtInt(stats.qualified)} delta={`${qualifRate}%`} deltaTone="info" sub={`${qualifRate}% des leads traités deviennent qualifiés`} accent="success" icon="target" progress={qualifRate} trend={stats.dailyEvolution.map((d) => d.rdv)} />
@@ -307,6 +314,7 @@ function AnalyticsAdmin() {
               </div>
               <PieChart segments={stats.resultSegments} center={`${stats.loggedCalls}\nappels réels`} />
             </div>
+
           </div>
         </div>
 
@@ -334,6 +342,8 @@ function AnalyticsAdmin() {
             </table>
           </div>
         </div>
+        </>
+        )}
 
         <CommercialTrackingDashboard commercials={commercialStats.commercials} totalCa={commercialStats.ca} totalSigned={commercialStats.signed} totalHonored={commercialStats.commercials.reduce((sum, c) => sum + c.honored, 0)} loading={loading} />
 
