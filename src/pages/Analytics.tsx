@@ -325,7 +325,7 @@ function AnalyticsAdmin() {
           <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
             <div>
               <span className="eyebrow">MOYENNES SETTER</span>
-              <h3 className="text-xl font-extrabold mt-1">Moyenne d’appels &amp; de RDV par setter</h3>
+              <h3 className="text-xl font-extrabold mt-1">Moyenne d’appels &amp; de qualifiés par setter</h3>
               <p className="text-sm text-muted mt-1">
                 Calculé sur les {setterAverages.activeSetters} setter{setterAverages.activeSetters > 1 ? 's' : ''} actif{setterAverages.activeSetters > 1 ? 's' : ''}
                 {setterAverages.totalSetters > setterAverages.activeSetters ? ` (sur ${setterAverages.totalSetters})` : ''} · période {range.label} · {periodDays} jour{periodDays > 1 ? 's' : ''}.
@@ -346,21 +346,21 @@ function AnalyticsAdmin() {
                 icon="phone"
               />
               <BigStatCard
-                label="MOY. RDV / SETTER"
-                value={fmtAvg(setterAverages.avgRdvPerSetter)}
-                delta={`~${fmtAvg(setterAverages.avgRdvPerSetterPerDay)}/j`}
+                label="MOY. QUALIFIÉS / SETTER"
+                value={fmtAvg(setterAverages.avgQualifiedPerSetter)}
+                delta={`~${fmtAvg(setterAverages.avgQualifiedPerSetterPerDay)}/j`}
                 deltaTone="info"
-                sub={`${fmtInt(setterAverages.totalRdv)} RDV ÷ ${setterAverages.activeSetters} setter${setterAverages.activeSetters > 1 ? 's' : ''} actif${setterAverages.activeSetters > 1 ? 's' : ''}`}
+                sub={`${fmtInt(setterAverages.totalQualified)} qualifiés ÷ ${setterAverages.activeSetters} setter${setterAverages.activeSetters > 1 ? 's' : ''} actif${setterAverages.activeSetters > 1 ? 's' : ''}`}
                 accent="gold"
-                icon="calendar"
+                icon="target"
               />
               <BigStatCard
-                label="TRANSFO APPEL → RDV"
-                value={`${fmtAvg(setterAverages.rdvPerCallRate)}%`}
-                sub={`${fmtInt(setterAverages.totalRdv)} RDV pour ${fmtInt(setterAverages.totalCalls)} appels`}
+                label="TRANSFO APPEL → QUALIF"
+                value={`${fmtAvg(setterAverages.qualifiedPerCallRate)}%`}
+                sub={`${fmtInt(setterAverages.totalQualified)} qualifiés pour ${fmtInt(setterAverages.totalCalls)} appels`}
                 accent="success"
-                icon="target"
-                progress={setterAverages.rdvPerCallRate}
+                icon="check"
+                progress={setterAverages.qualifiedPerCallRate}
               />
             </div>
           )}

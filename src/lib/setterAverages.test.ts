@@ -17,48 +17,48 @@ function setter(p: Partial<AnalyticsSetterPerf> & { id: string }): AnalyticsSett
 }
 
 describe('computeSetterAverages', () => {
-  it('moyenne = somme réelle ÷ nombre de setters actifs', () => {
+  it('moyenne = somme réelle ÷ nombre de setters actifs (qualifiés, pas RDV)', () => {
     const setters = [
-      setter({ id: 'a', calls: 100, classified: 20, rdvPris: 10 }),
-      setter({ id: 'b', calls: 50, classified: 10, rdvPris: 4 }),
+      setter({ id: 'a', calls: 100, classified: 20, qualified: 12 }),
+      setter({ id: 'b', calls: 50, classified: 10, qualified: 6 }),
     ]
     const r = computeSetterAverages(setters, 5)
     expect(r.activeSetters).toBe(2)
     expect(r.totalCalls).toBe(150)
-    expect(r.totalRdv).toBe(14)
+    expect(r.totalQualified).toBe(18)
     expect(r.avgCallsPerSetter).toBe(75)
-    expect(r.avgRdvPerSetter).toBe(7)
+    expect(r.avgQualifiedPerSetter).toBe(9)
   })
 
-  it('exclut les setters inactifs (0 appel / 0 lead / 0 RDV) du diviseur', () => {
+  it('exclut les setters inactifs (0 appel / 0 lead traité) du diviseur', () => {
     const setters = [
-      setter({ id: 'a', calls: 80, classified: 12, rdvPris: 8 }),
+      setter({ id: 'a', calls: 80, classified: 12, qualified: 8 }),
       setter({ id: 'idle' }), // ne doit pas diluer la moyenne
     ]
     const r = computeSetterAverages(setters, 4)
     expect(r.totalSetters).toBe(2)
     expect(r.activeSetters).toBe(1)
     expect(r.avgCallsPerSetter).toBe(80)
-    expect(r.avgRdvPerSetter).toBe(8)
+    expect(r.avgQualifiedPerSetter).toBe(8)
   })
 
   it('divise par les jours réels de la période pour la moyenne journalière', () => {
-    const r = computeSetterAverages([setter({ id: 'a', calls: 100, rdvPris: 20, classified: 5 })], 10)
+    const r = computeSetterAverages([setter({ id: 'a', calls: 100, qualified: 20, classified: 25 })], 10)
     expect(r.avgCallsPerSetterPerDay).toBe(10)
-    expect(r.avgRdvPerSetterPerDay).toBe(2)
+    expect(r.avgQualifiedPerSetterPerDay).toBe(2)
   })
 
-  it('taux appel→RDV = total RDV ÷ total appels', () => {
-    const r = computeSetterAverages([setter({ id: 'a', calls: 200, rdvPris: 20, classified: 5 })], 1)
-    expect(r.rdvPerCallRate).toBe(10)
+  it('taux appel→qualifié = total qualifiés ÷ total appels', () => {
+    const r = computeSetterAverages([setter({ id: 'a', calls: 200, qualified: 20, classified: 25 })], 1)
+    expect(r.qualifiedPerCallRate).toBe(10)
   })
 
   it('aucune division par zéro quand il n’y a aucun setter actif', () => {
     const r = computeSetterAverages([setter({ id: 'idle' })], 0)
     expect(r.activeSetters).toBe(0)
     expect(r.avgCallsPerSetter).toBe(0)
-    expect(r.avgRdvPerSetter).toBe(0)
-    expect(r.avgCallsPerSetterPerDay).toBe(0)
-    expect(r.rdvPerCallRate).toBe(0)
+    expect(r.avgQualifiedPerSetter).toBe(0)
+    expect(r.avgQualifiedPerSetterPerDay).toBe(0)
+    expect(r.qualifiedPerCallRate).toBe(0)
   })
 })
