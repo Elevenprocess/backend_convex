@@ -550,12 +550,82 @@ function CommercialDebriefsToFill({ debriefs, limit = 8 }: { debriefs: { rdv: Rd
   )
 }
 
-// ----- F3 Commercial : vue unique pour commercial et commercial_lead -----
-// Les deux rôles partagent désormais la même vue (OverviewCommercialIndividual).
-// Seul le périmètre de données diffère : le commercial_lead voit toute l'équipe
-// closing (scope non borné), le commercial ne voit que ses propres données.
+// ----- F3 Commercial : routage par rôle -----
+// Le commercial_lead supervise toute l'équipe closing → vue complète
+// (OverviewCommercialIndividual, scope non borné). Le commercial individuel a une
+// vue épurée (OverviewCommercialSolo) : un seul KPI « RDV honorés » + ses débriefs.
 function OverviewCommercial() {
-  return <OverviewCommercialIndividual />
+  const role = useAuth((s) => s.user?.role)
+  if (role === 'commercial_lead') return <OverviewCommercialIndividual />
+  return <OverviewCommercialSolo />
+}
+
+// ----- F3 solo : commercial individuel — vue épurée -----
+// Volontairement minimale : le commercial n'a besoin que de son nombre de RDV
+// honorés sur la période et de la liste de ses débriefs en attente. On ne charge
+// donc ni CA/closing/panier ni les RDV à venir (cf. OverviewCommercialIndividual
+// pour la vue complète conservée au commercial_lead).
+function OverviewCommercialSolo() {
+  const me = useAuth((s) => s.user)
+  const display = useDisplayUser()
+  const [period, setPeriod] = useState<FunnelPeriodState>({ ...DEFAULT_FUNNEL_PERIOD, mode: 'this_month' })
+  const range = buildFunnelPeriodRange(period)
+
+  // Liste RDV non bornée par la période : on ne masque jamais un débrief en retard.
+  // Le KPI « RDV honorés » filtre la période en mémoire.
+  const { data: rdvs = [] } = useRdvList({ commercialId: me?.id, limit: 200 })
+  const { data: allLeads = [] } = useLeads({ limit: 500 })
+
+  const { honored, planifie, debriefs } = useMemo(() => {
+    const list = rdvs ?? []
+    const leadById = new Map((allLeads ?? []).map((l) => [l.id, l]))
+
+    // KPI « RDV honorés » : sous-ensemble dans la période (ISO → compare lexicographique).
+    const inPeriod = list.filter((r) => r.scheduledAt >= range.from && r.scheduledAt <= range.to)
+    const honored = inPeriod.filter((r) => r.status === 'honore').length
+    const planifie = inPeriod.filter((r) => r.status === 'planifie').length
+
+    // Débriefs à remplir triés par client récent (date d'arrivée du lead, repli RDV).
+    const leadArrival = (r: RdvResponse): string => {
+      const full = leadById.get(r.leadId)
+      return full?.arrivalAt ?? full?.createdAt ?? r.createdAt
+    }
+    const debriefs = list
+      .filter(needsDebrief)
+      .sort((a, b) => leadArrival(b).localeCompare(leadArrival(a)))
+      .map((r) => ({ rdv: r, lead: r.lead ?? leadById.get(r.leadId) }))
+
+    return { honored, planifie, debriefs }
+  }, [rdvs, allLeads, range.from, range.to])
+
+  return (
+    <AppShell blobsKey="commercial" flat>
+      <Topbar
+        eyebrow="COMMERCIAL"
+        title={`Bonjour, ${display.firstName}`}
+      />
+      <main className="overview-shot-page overview-commercial-page flex-grow overflow-auto">
+        <div className="overview-air-header">
+          <div>
+            <span className="shot-eyebrow">ECOI SaaS · commercial</span>
+            <h1>Mon espace</h1>
+            <p className="text-sm text-muted mt-2">Vos RDV honorés et vos débriefs à remplir.</p>
+          </div>
+          <div className="overview-commercial-toolbar">
+            <DateRangePicker value={period} onChange={setPeriod} align="right" />
+          </div>
+        </div>
+
+        <section className="overview-commercial-hero-stats">
+          <MagicKpi size="sm" accent="info" icon="calendar" label="RDV honorés" value={fmtCompact(honored)} sub={`${fmtCompact(planifie)} planifiés`} />
+        </section>
+
+        <section className="overview-air-grid overview-commercial-grid overview-commercial-solo-grid">
+          <CommercialDebriefsToFill debriefs={debriefs} />
+        </section>
+      </main>
+    </AppShell>
+  )
 }
 
 // ----- F3 ter : commercial individuel — vue minimale (débriefs à remplir) -----

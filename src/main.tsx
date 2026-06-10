@@ -44,6 +44,16 @@ function NoTechnicien({ children }: { children: ReactElement }) {
   return children
 }
 
+// Agenda /rdv : interdit au technicien (→ planning) et au commercial individuel
+// (→ overview épuré, sans agenda). Le commercial_lead y a toujours accès. Ne
+// protège que la liste calendrier ; /rdv/:id (détail/débrief) reste accessible.
+function RdvCalendarGuard({ children }: { children: ReactElement }) {
+  const role = useAuth((s) => s.user?.role)
+  if (role === 'technicien') return <Navigate to="/planning" replace />
+  if (role === 'commercial') return <Navigate to="/overview" replace />
+  return children
+}
+
 const router = createHashRouter([
   {
     element: <RootLayout />,
@@ -63,7 +73,7 @@ const router = createHashRouter([
           { path: '/client', element: <NoTechnicien><ClientsList /></NoTechnicien> },
           { path: '/client/:id', element: <NoTechnicien><LeadDetail /></NoTechnicien> },
           { path: '/projects/:id', element: <ProjectDetail /> },
-          { path: '/rdv', element: <NoTechnicien><RdvCalendar /></NoTechnicien> },
+          { path: '/rdv', element: <RdvCalendarGuard><RdvCalendar /></RdvCalendarGuard> },
           { path: '/rdv/split', element: <RdvSplit /> },
           { path: '/rdv/:id', element: <RdvDetail /> },
           { path: '/analytics', element: <NoTechnicien><Analytics /></NoTechnicien> },

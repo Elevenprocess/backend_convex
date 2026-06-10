@@ -13,11 +13,12 @@ type Section = { id: string; label: string; items: Item[]; collapsible?: boolean
 const ACQUISITION_ROLES: Role[] = ['admin', 'setter', 'setter_lead', 'commercial', 'commercial_lead']
 const DELIVERY_ROLES: Role[] = ['admin', 'delivrabilite', 'responsable_technique', 'back_office']
 const OPS_ROLES: Role[] = ['delivrabilite', 'responsable_technique', 'back_office']
+// Le commercial (vendeur individuel) n'a pas accès à l'agenda /rdv : sa vue est
+// minimale (KPI honorés + débriefs). Le commercial_lead garde l'accès.
 const CALENDAR_ROLES: Role[] = [
   'admin',
   'setter',
   'setter_lead',
-  'commercial',
   'commercial_lead',
   'delivrabilite',
   'responsable_technique',

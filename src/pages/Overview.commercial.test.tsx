@@ -46,27 +46,27 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('Overview — Mon espace (commercial individuel)', () => {
+describe('Overview — Mon espace (commercial individuel, vue épurée)', () => {
   const renderPage = () => render(<MemoryRouter><Overview /></MemoryRouter>)
 
-  it('affiche les 4 KPIs perso', () => {
+  it('affiche le seul KPI « RDV honorés » et masque CA / closing / panier', () => {
     renderPage()
-    expect(screen.getByText('CA signé')).toBeInTheDocument()
-    expect(screen.getByText('Closing')).toBeInTheDocument()
-    expect(screen.getByText('Panier moyen')).toBeInTheDocument()
     expect(screen.getByText('RDV honorés')).toBeInTheDocument()
+    expect(screen.queryByText('CA signé')).not.toBeInTheDocument()
+    expect(screen.queryByText('Closing')).not.toBeInTheDocument()
+    expect(screen.queryByText('Panier moyen')).not.toBeInTheDocument()
   })
 
-  it('calcule les KPIs sur la période (CA, closing, panier dérivés des RDV)', () => {
+  it('compte les RDV honorés sur la période (4 honorés en juin)', () => {
     renderPage()
-    expect(screen.getByText('20k€')).toBeInTheDocument()
-    expect(screen.getByText('10k€')).toBeInTheDocument()
-    expect(screen.getByText('50%')).toBeInTheDocument()
+    // r1, r2, r5, r4 sont honorés en juin ; r3 est planifié.
+    expect(screen.getByText('4')).toBeInTheDocument()
   })
 
-  it('affiche le nom du prospect dans « Mes RDV à venir »', () => {
+  it('ne montre plus le bloc « Mes RDV à venir »', () => {
     renderPage()
-    expect(screen.getByText('Marie Curie')).toBeInTheDocument()
+    expect(screen.queryByText('Mes RDV à venir')).not.toBeInTheDocument()
+    expect(screen.queryByText('Marie Curie')).not.toBeInTheDocument()
   })
 
   it('liste les débriefs à remplir avec le nom du prospect', () => {

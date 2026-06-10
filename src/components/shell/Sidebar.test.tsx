@@ -36,6 +36,22 @@ describe('Sidebar — navigation par rôle', () => {
     expect(within(nav).queryByRole('link', { name: /Calendrier RDV/i })).not.toBeInTheDocument()
   })
 
+  it('masque le Calendrier RDV au commercial individuel (vue épurée)', () => {
+    setUser('commercial')
+    renderSidebar()
+    const nav = screen.getByRole('button', { name: /Rechercher/i }).parentElement!
+
+    expect(within(nav).getByRole('link', { name: /Overview/i })).toBeInTheDocument()
+    expect(within(nav).queryByRole('link', { name: /Calendrier RDV/i })).not.toBeInTheDocument()
+  })
+
+  it('garde le Calendrier RDV pour le commercial_lead', () => {
+    setUser('commercial_lead')
+    renderSidebar()
+
+    expect(screen.getByRole('link', { name: 'Calendrier RDV' })).toBeInTheDocument()
+  })
+
   it('groupe le setter par Acquisition et Calendriers', () => {
     setUser('setter')
     renderSidebar()
