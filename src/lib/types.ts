@@ -400,6 +400,7 @@ export type RdvResponse = {
   notes: string | null
   debriefFilledAt: string | null
   debriefDueAt: string | null
+  hasDevisEnAttente: boolean
   createdAt: string
   updatedAt: string
   lead: RdvLeadSummary | null
