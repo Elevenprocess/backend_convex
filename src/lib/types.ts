@@ -352,12 +352,25 @@ export type AnalyticsSummaryResponse = {
 export type RdvStatus = 'planifie' | 'honore' | 'no_show' | 'reporte' | 'annule'
 export type RdvResult = 'signe' | 'reflexion' | 'perdu' | 'no_show' | 'reporte'
 export type RdvLocation = 'domicile' | 'agence' | 'visio'
+export type PaymentSubMethod = 'cheque' | 'especes' | 'virement'
+export type FinancingOrg = 'cmoi' | 'sofider'
+
+export const PAYMENT_SUB_METHOD_LABEL: Record<PaymentSubMethod, string> = {
+  cheque: 'Chèque',
+  especes: 'Espèces',
+  virement: 'Virement',
+}
+export const FINANCING_ORG_LABEL: Record<FinancingOrg, string> = {
+  cmoi: 'CMOI',
+  sofider: 'Sofider',
+}
 export type FinancingType =
   | 'comptant'
   | 'financement'
   | 'financement_sans_apport'
   | 'apport_financement'
   | 'paiement_10x'
+  | 'paiement_12x'
 
 // Résumé du lead embarqué dans la réponse RDV (backend toRdvResponse) : permet
 // d'afficher nom / ville / téléphone du prospect sans jointure /leads cliente.
@@ -767,6 +780,10 @@ export interface DebriefResponse {
   montantTotal: string | null;
   financingType: FinancingType | null;
   kits: string | null;
+  paymentSubMethod: PaymentSubMethod | null;
+  financingOrg: FinancingOrg | null;
+  acomptePercent: number | null;
+  acompteAmount: string | null;
   signedAt: string | null;
   createdAt: string;
   updatedAt: string;
