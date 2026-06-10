@@ -89,10 +89,15 @@ function matchesFilter(role: Role, filter: TeamFilter): boolean {
   return FILTER_ROLES[filter].includes(role)
 }
 
+// Rôles acquisition (setting + closing) : seuls visibles pour un commercial_lead.
+const ACQUISITION_ROLES: Role[] = ['setter', 'setter_lead', 'commercial', 'commercial_lead']
+
 export function Settings() {
   const role = useAuth((s) => s.user?.role)
 
-  if (role === 'admin' || role === 'commercial_lead') return <SettingsAdmin />
+  if (role === 'admin') return <SettingsAdmin />
+  // commercial_lead = responsable d'équipe : ne gère que les setters et commerciaux.
+  if (role === 'commercial_lead') return <SettingsAdmin restricted />
   if (role === 'commercial') return <SettingsCommercial />
   return <Navigate to="/overview" replace />
 }
@@ -157,7 +162,7 @@ function SettingsCommercial() {
   )
 }
 
-function SettingsAdmin() {
+function SettingsAdmin({ restricted = false }: { restricted?: boolean }) {
   const { data: users, loading, error, refetch: refetchUsers } = useUsers()
   const [inviteOpen, setInviteOpen] = useState(false)
   const [filter, setFilter] = useState<TeamFilter>('all')
@@ -166,8 +171,14 @@ function SettingsAdmin() {
   const { data: ghlUsers, error: ghlUsersError } = useGhlUsers()
   const isDark = useTheme((s) => s.isDark)
   const toggleTheme = useTheme((s) => s.toggleTheme)
-  const team = useMemo(() => users ?? [], [users])
-  const pendingInvitations = (invitations ?? []).filter((i) => i.status === 'pending')
+  // commercial_lead : restreint la base aux setters et commerciaux uniquement.
+  const team = useMemo(
+    () => (users ?? []).filter((u) => !restricted || ACQUISITION_ROLES.includes(u.role)),
+    [users, restricted],
+  )
+  const pendingInvitations = (invitations ?? []).filter(
+    (i) => i.status === 'pending' && (!restricted || ACQUISITION_ROLES.includes(i.role)),
+  )
   const pendingInvitationByUserId = useMemo(() => {
     const map = new Map<string, InvitationResponse>()
     for (const invitation of invitations ?? []) {
@@ -215,8 +226,8 @@ function SettingsAdmin() {
           <StatCard icon="users" value={counts.total} label="Utilisateurs" primary active={filter === 'all'} onClick={() => selectFilter('all')} />
           <StatCard icon="phone" value={counts.setters} label="Setters" active={filter === 'setters'} onClick={() => selectFilter('setters')} />
           <StatCard icon="target" value={counts.commerciaux} label="Commerciaux" active={filter === 'commerciaux'} onClick={() => selectFilter('commerciaux')} />
-          <StatCard icon="grid" value={counts.ops} label="Ops / Déliv." active={filter === 'ops'} onClick={() => selectFilter('ops')} />
-          <StatCard icon="shield" value={counts.admins} label="Admin / Fin." active={filter === 'admins'} onClick={() => selectFilter('admins')} />
+          {!restricted && <StatCard icon="grid" value={counts.ops} label="Ops / Déliv." active={filter === 'ops'} onClick={() => selectFilter('ops')} />}
+          {!restricted && <StatCard icon="shield" value={counts.admins} label="Admin / Fin." active={filter === 'admins'} onClick={() => selectFilter('admins')} />}
         </section>
 
         <section className="overview-air-card settings-reveal" style={{ animationDelay: '120ms', padding: 18 }}>

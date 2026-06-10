@@ -10,6 +10,7 @@ import { MagicKpi, type KpiAccent, type DeltaTone } from '../components/kpi/Magi
 import type { IconName } from '../components/Icon'
 import { DEFAULT_PERIOD, buildPeriodRange, type PeriodState, type PeriodMode, type PeriodRange } from '../lib/period'
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
+import { computeSetterAverages } from '../lib/setterAverages'
 
 type Segment = AnalyticsSegment
 
@@ -279,6 +280,8 @@ function AnalyticsAdmin() {
   const { data, loading, error } = useAnalyticsSummary({ from: range.from, to: range.to })
   const stats = data?.admin ?? EMPTY_ADMIN_STATS
   const commercialStats = stats
+  const periodDays = data?.range?.days ?? Math.max(1, range.days)
+  const setterAverages = useMemo(() => computeSetterAverages(stats.setters, periodDays), [stats.setters, periodDays])
   const qualifRate = stats.classified > 0 ? Math.round((stats.qualified / stats.classified) * 100) : 0
   // Le commercial_lead partage la vue AnalyticsAdmin mais ne voit pas les
   // métriques setter / call-center (leads traités, qualifiés, CA global, tableau
@@ -316,6 +319,51 @@ function AnalyticsAdmin() {
             </div>
 
           </div>
+        </div>
+
+        <div className="glass-card p-6">
+          <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
+            <div>
+              <span className="eyebrow">MOYENNES SETTER</span>
+              <h3 className="text-xl font-extrabold mt-1">Moyenne d’appels &amp; de RDV par setter</h3>
+              <p className="text-sm text-muted mt-1">
+                Calculé sur les {setterAverages.activeSetters} setter{setterAverages.activeSetters > 1 ? 's' : ''} actif{setterAverages.activeSetters > 1 ? 's' : ''}
+                {setterAverages.totalSetters > setterAverages.activeSetters ? ` (sur ${setterAverages.totalSetters})` : ''} · période {range.label} · {periodDays} jour{periodDays > 1 ? 's' : ''}.
+              </p>
+            </div>
+          </div>
+          {setterAverages.activeSetters === 0 ? (
+            <div className="rounded-3xl border border-line-soft bg-white/60 p-8 text-center text-muted">Aucun setter actif sur cette période.</div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:gap-6">
+              <BigStatCard
+                label="MOY. APPELS / SETTER"
+                value={fmtAvg(setterAverages.avgCallsPerSetter)}
+                delta={`~${fmtAvg(setterAverages.avgCallsPerSetterPerDay)}/j`}
+                deltaTone="info"
+                sub={`${fmtInt(setterAverages.totalCalls)} appels ÷ ${setterAverages.activeSetters} setter${setterAverages.activeSetters > 1 ? 's' : ''} actif${setterAverages.activeSetters > 1 ? 's' : ''}`}
+                accent="green"
+                icon="phone"
+              />
+              <BigStatCard
+                label="MOY. RDV / SETTER"
+                value={fmtAvg(setterAverages.avgRdvPerSetter)}
+                delta={`~${fmtAvg(setterAverages.avgRdvPerSetterPerDay)}/j`}
+                deltaTone="info"
+                sub={`${fmtInt(setterAverages.totalRdv)} RDV ÷ ${setterAverages.activeSetters} setter${setterAverages.activeSetters > 1 ? 's' : ''} actif${setterAverages.activeSetters > 1 ? 's' : ''}`}
+                accent="gold"
+                icon="calendar"
+              />
+              <BigStatCard
+                label="TRANSFO APPEL → RDV"
+                value={`${fmtAvg(setterAverages.rdvPerCallRate)}%`}
+                sub={`${fmtInt(setterAverages.totalRdv)} RDV pour ${fmtInt(setterAverages.totalCalls)} appels`}
+                accent="success"
+                icon="target"
+                progress={setterAverages.rdvPerCallRate}
+              />
+            </div>
+          )}
         </div>
 
         <div className="glass-card p-6">
@@ -511,6 +559,10 @@ function pct(num: number, denom: number): number {
 
 function fmtInt(n: number | null | undefined): string {
   return Math.round(Number(n ?? 0)).toLocaleString('fr-FR')
+}
+
+function fmtAvg(n: number | null | undefined): string {
+  return Number(n ?? 0).toLocaleString('fr-FR', { maximumFractionDigits: 1 })
 }
 
 function percent(value: number, total: number): number {
