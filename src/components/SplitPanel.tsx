@@ -77,6 +77,14 @@ function notesTabStorageKey(leadId: string): string {
   return `ecoi.notes-tab.v1.${leadId}`
 }
 
+// Adresse complète sur 2 lignes max : ligne « rue », puis « code postal ville ».
+// Lue directement depuis `lead`, donc se met à jour dès que l'onglet Infos enregistre (refetch via onSaved).
+function fullAddressLines(lead: LeadResponse): string[] {
+  const street = cleanField(lead.addressLine)
+  const cityLine = [cleanField(lead.postalCode), cleanField(lead.city)].filter(Boolean).join(' ')
+  return [street, cityLine || null].filter((line): line is string => Boolean(line))
+}
+
 export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, children, onClose, onSaved, className }: SplitPanelProps) {
   const role = useAuth((s) => s.user?.role)
   const [active, setActive] = useState(defaultTab ?? tabs[0].id)
@@ -86,6 +94,7 @@ export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, chi
   const commercialName = lead.latestRdvCommercialId
     ? userMap?.get(lead.latestRdvCommercialId)?.name ?? null
     : null
+  const addressLines = fullAddressLines(lead)
 
   return (
     <aside className={`w-full md:w-[420px] max-w-full border-l border-line bg-white/65 backdrop-blur-md flex flex-col flex-shrink-0 overflow-hidden ${className ?? ''}`}>
@@ -111,6 +120,16 @@ export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, chi
             )}
           </div>
         </div>
+        {addressLines.length > 0 && (
+          <div className="flex min-w-0 max-w-[45%] items-start justify-end gap-1 text-right">
+            <Icon name="map-pin" size={12} className="mt-[2px] shrink-0 text-faint" />
+            <div className="min-w-0 text-xs text-faint leading-snug">
+              {addressLines.map((line, i) => (
+                <div key={i} className="break-words">{line}</div>
+              ))}
+            </div>
+          </div>
+        )}
         <Link to={leadDetailPath(role, lead.id)} className="text-xs font-semibold text-or hover:underline whitespace-nowrap">
           Fiche →
         </Link>
