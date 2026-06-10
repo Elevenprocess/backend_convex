@@ -610,9 +610,16 @@ function OverviewCommercialIndividual() {
       .filter((r) => r.status === 'planifie' && r.scheduledAt >= todayIso)
       .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))
       .map((r) => ({ rdv: r, lead: r.lead ?? leadById.get(r.leadId) }))
+    // « Débriefs à remplir » trié par client récent : on remonte ceux qui
+    // viennent d'arriver dans le CRM (date d'arrivée / création du lead), avec
+    // repli sur la date de création du RDV si le lead n'est pas chargé.
+    const leadArrival = (r: RdvResponse): string => {
+      const full = leadById.get(r.leadId)
+      return full?.arrivalAt ?? full?.createdAt ?? r.createdAt
+    }
     const debriefs = list
       .filter(needsDebrief)
-      .sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt))
+      .sort((a, b) => leadArrival(b).localeCompare(leadArrival(a)))
       .map((r) => ({ rdv: r, lead: r.lead ?? leadById.get(r.leadId) }))
 
     return { kpis, upcoming, debriefs }
