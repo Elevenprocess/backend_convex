@@ -550,193 +550,12 @@ function CommercialDebriefsToFill({ debriefs, limit = 8 }: { debriefs: { rdv: Rd
   )
 }
 
-// ----- F3 Commercial : aiguillage selon le rôle -----
-// Le commercial (vendeur individuel) a une vue minimale centrée sur ses
-// débriefs à remplir. Le commercial_lead (responsable) garde la vue complète.
+// ----- F3 Commercial : vue unique pour commercial et commercial_lead -----
+// Les deux rôles partagent désormais la même vue (OverviewCommercialIndividual).
+// Seul le périmètre de données diffère : le commercial_lead voit toute l'équipe
+// closing (scope non borné), le commercial ne voit que ses propres données.
 function OverviewCommercial() {
-  const role = useAuth((s) => s.user?.role)
-  return role === 'commercial_lead' ? <OverviewCommercialManager /> : <OverviewCommercialIndividual />
-}
-
-// ----- F3 bis : responsable commercial (commercial_lead) — vue complète -----
-function OverviewCommercialManager() {
-  const navigate = useNavigate()
-  const me = useAuth((s) => s.user)
-  const display = useDisplayUser()
-  const [tab, setTab] = useState('overview')
-  // Un commercial_lead voit l'ensemble de l'équipe closing, pas seulement ses
-  // propres RDV — pas de filtre commercialId, pas de scope `me.id` dans les
-  // helpers de prospects/débriefs.
-  const isManager = me?.role === 'commercial_lead'
-  const scopeCommercialId = isManager ? undefined : me?.id
-  const [commercialPeriod, setCommercialPeriod] = useState<FunnelPeriodState>({ ...DEFAULT_FUNNEL_PERIOD, mode: 'this_month' })
-  const commercialRange = buildFunnelPeriodRange(commercialPeriod)
-  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), [])
-  const { data: rdvs = [] } = useRdvList({ commercialId: scopeCommercialId, fromDate: commercialRange.from, toDate: commercialRange.to, limit: 200 })
-  const { data: commercialSummary } = useAnalyticsSummary({ from: commercialRange.from, to: commercialRange.to })
-  const { data: allLeads = [] } = useLeads({ limit: 500 })
-  const { data: debriefAnalytics } = useDebriefAnalytics({ from: commercialRange.from, to: commercialRange.to, commercialId: scopeCommercialId })
-  const qualifiedDebriefSegments = useMemo(() => acceptanceFactorSegments(debriefAnalytics), [debriefAnalytics])
-  const nonSaleDebriefSegments = useMemo(() => nonSaleReasonSegments(debriefAnalytics), [debriefAnalytics])
-
-  const stats = useMemo(() => {
-    const list = rdvs ?? []
-    const leadList = allLeads ?? []
-    const analytics = commercialSummary?.commercial
-    const leadsToday = leadList.filter((l) => isCreatedInRange(l.createdAt, commercialRange.from, commercialRange.to)).length
-    const honored = list.filter((r) => r.status === 'honore')
-    const signed = list.filter((r) => r.result === 'signe')
-    const lost = list.filter((r) => r.result === 'perdu')
-    const reflexion = list.filter((r) => r.result === 'reflexion')
-    const fallbackCa = signed.reduce((sum, r) => sum + (parseFloat(r.montantTotal ?? '0') || 0), 0)
-    const fallbackSigned = signed.length
-    const fallbackLost = lost.length
-    const fallbackReflexion = reflexion.length
-    const fallbackHonored = honored.length
-    const outcomeBase = Math.max(fallbackHonored, fallbackSigned + fallbackLost + fallbackReflexion)
-    const fallbackClosing = outcomeBase ? Math.round((fallbackSigned / outcomeBase) * 100) : 0
-    const upcoming = list
-      .filter((r) => r.status === 'planifie' && r.scheduledAt >= todayIso)
-      .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))
-    const totalPlanifie = list.filter((r) => r.status === 'planifie').length
-    const totalHonored = Math.max(analytics?.honored ?? 0, fallbackHonored)
-    const totalRdv = Math.max(analytics?.total ?? 0, list.length)
-    const totalSigned = Math.max(analytics?.signed ?? 0, fallbackSigned)
-    const totalCa = Math.max(analytics?.ca ?? 0, fallbackCa)
-    const totalLost = Math.max(analytics?.resultSegments.find((segment) => segment.label === 'Perdu')?.value ?? 0, fallbackLost)
-    const totalReflexion = Math.max(analytics?.resultSegments.find((segment) => segment.label === 'Réflexion')?.value ?? 0, fallbackReflexion)
-    const closingBase = Math.max(totalHonored, totalSigned + totalLost + totalReflexion)
-    return {
-      ca: totalCa,
-      closing: Math.max(analytics?.closing ?? 0, fallbackClosing, closingBase ? Math.round((totalSigned / closingBase) * 100) : 0),
-      panier: totalSigned ? totalCa / totalSigned : 0,
-      signed: totalSigned,
-      upcoming,
-      totalPlanifie,
-      totalHonored,
-      totalRdv,
-      lost: totalLost,
-      reflexion: totalReflexion,
-      leadsToday,
-      qualifiedProspects: commercialQualifiedProspects(list, leadList, scopeCommercialId),
-      qualifiedDebriefSegments: commercialQualifiedDebriefSegments(list, leadList, scopeCommercialId, commercialRange),
-      nonSaleDebriefSegments: commercialNonSaleDebriefSegments(list, leadList, scopeCommercialId, commercialRange),
-    }
-  }, [rdvs, todayIso, commercialSummary, allLeads, scopeCommercialId, commercialRange.from, commercialRange.to])
-
-  return (
-    <AppShell blobsKey="commercial" flat>
-      <Topbar
-        eyebrow={isManager ? 'RESPONSABLE COMMERCIAL' : 'COMMERCIAL'}
-        title={`Bonjour, ${display.firstName}`}
-        tabs={[
-          { id: 'overview', label: 'Overview' },
-          { id: 'rdv', label: 'RDV' },
-        ]}
-        activeTab={tab}
-        onTabChange={(id) => {
-          setTab(id)
-          if (id === 'rdv') navigate('/rdv')
-        }}
-      />
-      <main className="overview-shot-page overview-commercial-page flex-grow overflow-auto">
-        <div className="overview-air-header">
-          <div>
-            <span className="shot-eyebrow">ECOI SaaS · commercial</span>
-            <h1>Mon closing commercial</h1>
-            <p className="text-sm text-muted mt-2">{commercialRange.label}</p>
-          </div>
-          <div className="overview-commercial-toolbar">
-            <DateRangePicker value={commercialPeriod} onChange={setCommercialPeriod} align="right" />
-            <div className="overview-profile-chip">
-              <div className="overview-profile-photo">
-                {me?.image ? <img src={me.image} alt={me.name ?? 'Profil'} /> : <span>{userInitials(me?.name ?? display.firstName)}</span>}
-              </div>
-              <div>
-                <strong>{me?.name ?? display.firstName}</strong>
-                <small>{me?.email ?? 'Commercial ECOI'}</small>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <section className="overview-commercial-hero">
-          <div className="overview-commercial-hero-main">
-            <div className="overview-commercial-avatar">
-              {me?.image ? <img src={me.image} alt={me.name ?? 'Profil'} /> : <span>{userInitials(me?.name ?? display.firstName)}</span>}
-            </div>
-            <div className="overview-commercial-hero-content">
-              <h3>{me?.name ?? display.firstName}</h3>
-              <span className="shot-eyebrow">Performance commerciale</span>
-              <h2>{fmtKEur(stats.ca)}</h2>
-              <p>{fmtCompact(stats.totalRdv)} RDV suivis · {fmtCompact(stats.totalHonored)} honorés · {fmtCompact(stats.signed)} ventes signées</p>
-              <div className="overview-commercial-actions">
-                <button type="button" onClick={() => navigate('/rdv')}>Voir mes RDV</button>
-              </div>
-            </div>
-          </div>
-          <div className="overview-commercial-hero-stats">
-            <MagicKpi size="sm" accent="gold" icon="trophy" label="CA signé" value={fmtKEur(stats.ca)} sub={`${fmtCompact(stats.signed)} ventes`} />
-            <MagicKpi size="sm" accent="success" icon="target" label="Closing" value={`${stats.closing}%`} sub={`${fmtCompact(stats.lost)} perdus`} progress={stats.closing} />
-            <MagicKpi size="sm" accent="green" icon="tag" label="Panier moyen" value={fmtKEur(stats.panier)} sub="sur ventes signées" />
-            <MagicKpi size="sm" accent="info" icon="calendar" label="RDV suivis" value={fmtCompact(stats.totalRdv)} sub={`${fmtCompact(stats.totalHonored)} honorés`} />
-          </div>
-        </section>
-
-        <section className="overview-air-grid overview-commercial-grid">
-          <CommercialQualifiedProspects prospects={stats.qualifiedProspects} />
-
-          <div className="overview-commercial-debrief-grid">
-            <DebriefPieCard
-              title="Débrief qualifié"
-              subtitle="facteurs d'acceptation des ventes"
-              segments={qualifiedDebriefSegments}
-            />
-            <DebriefPieCard
-              title="Raisons non-vente"
-              subtitle="motifs des débriefs non-vente"
-              segments={nonSaleDebriefSegments}
-            />
-          </div>
-
-          <div className="overview-commercial-rdv-actions">
-            <div className="overview-air-card overview-role-side">
-              <CardHead title="Pipeline" icon="arrow-right" />
-              <div className="space-y-3">
-                <PipelineRow label="RDV planifiés" count={stats.totalPlanifie} pct={100} color="#1F7857" />
-                <PipelineRow label="Honorés" count={stats.totalHonored} pct={pct(stats.totalHonored, stats.totalPlanifie)} color="#3E9A6F" />
-                <PipelineRow label="Ventes" count={stats.signed} pct={pct(stats.signed, Math.max(stats.signed + stats.lost, stats.totalHonored))} color="#3DA86A" />
-              </div>
-            </div>
-
-            <div className="overview-air-card overview-role-wide">
-              <CardHead title="Mes RDV à venir" icon="phone" />
-              <div className="overview-role-list overview-role-list-grid">
-                {stats.upcoming.length === 0 ? (
-                  <div className="text-xs text-faint">Aucun RDV à venir.</div>
-                ) : stats.upcoming.slice(0, 6).map((r, i) => (
-                  <RdvRow
-                    key={r.id}
-                    color={['#1F7857', '#3E9A6F', '#145A41', '#3DA86A'][i % 4]}
-                    time={`${shortDateTime(r.scheduledAt)}`}
-                    sub={r.locationType === 'visio' ? 'Visio' : r.locationType === 'agence' ? 'Agence' : 'Domicile'}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="overview-air-card overview-role-side">
-              <CardHead title="Actions" icon="check" />
-              <TaskLine icon="phone" title="Préparer RDV" sub={`${fmtCompact(stats.upcoming.length)} rendez-vous à venir`} done={stats.upcoming.length > 0} />
-              <TaskLine icon="target" title="Honorés" sub={`${fmtCompact(stats.totalHonored)} RDV honorés`} done={stats.totalHonored > 0} />
-              <TaskLine icon="trophy" title="Signatures" sub={`${fmtCompact(stats.signed)} ventes signées`} done={stats.signed > 0} />
-              <button onClick={() => navigate('/rdv')} className="overview-role-action">Voir mes RDV</button>
-            </div>
-          </div>
-        </section>
-      </main>
-    </AppShell>
-  )
+  return <OverviewCommercialIndividual />
 }
 
 // ----- F3 ter : commercial individuel — vue minimale (débriefs à remplir) -----
@@ -747,7 +566,9 @@ function OverviewCommercialIndividual() {
   const [tab, setTab] = useState('overview')
   const [period, setPeriod] = useState<FunnelPeriodState>({ ...DEFAULT_FUNNEL_PERIOD, mode: 'this_month' })
   const range = buildFunnelPeriodRange(period)
-  const scopeCommercialId = me?.id
+  // Le commercial_lead supervise toute l'équipe closing : scope non borné
+  // (commercialId undefined). Le commercial individuel ne voit que ses données.
+  const scopeCommercialId = me?.role === 'commercial_lead' ? undefined : me?.id
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), [])
 
   // Liste RDV non bornée par la période : on ne masque jamais un débrief en
@@ -2026,40 +1847,6 @@ function adminFunnelProspects(rdvs: RdvResponse[], leads: LeadResponse[], users:
     })
 }
 
-function commercialQualifiedProspects(rdvs: RdvResponse[], leads: LeadResponse[], commercialId: string | undefined): QualifiedProspect[] {
-  const leadById = new Map(leads.map((lead) => [lead.id, lead]))
-  const prospects = new Map<string, QualifiedProspect>()
-
-  leads
-    .filter((lead) => !commercialId || lead.assignedToId === commercialId || lead.latestRdvCommercialId === commercialId)
-    .filter((lead) => ['qualifie', 'rdv_pris', 'rdv_honore', 'signe', 'perdu', 'pas_qualifie'].includes(lead.status))
-    .forEach((lead) => prospects.set(lead.id, {
-      id: lead.id,
-      name: fullName(lead) || lead.email || lead.phone || 'Prospect qualifié',
-      phone: lead.phone,
-      city: lead.city,
-      status: commercialProspectStatus({ lead }),
-      scheduledAt: lead.latestRdvAt,
-    }))
-
-  rdvs
-    .filter((rdv) => rdv.status === 'planifie' || rdv.status === 'honore' || rdv.status === 'annule' || rdv.status === 'no_show' || rdv.result === 'signe' || rdv.result === 'reflexion' || rdv.result === 'perdu' || rdv.result === 'no_show')
-    .forEach((rdv) => {
-      const lead = leadById.get(rdv.leadId)
-      const status = commercialProspectStatus({ rdv, lead })
-      prospects.set(rdv.leadId, {
-        id: rdv.leadId,
-        name: lead ? (fullName(lead) || lead.email || lead.phone || 'Prospect qualifié') : 'Prospect qualifié',
-        phone: lead?.phone ?? null,
-        city: lead?.city ?? null,
-        status,
-        scheduledAt: rdv.scheduledAt,
-      })
-    })
-
-  return Array.from(prospects.values()).sort((a, b) => (b.scheduledAt ?? '').localeCompare(a.scheduledAt ?? ''))
-}
-
 // Cartes Overview alimentées par les débriefs réels (table debriefs via
 // /analytics/debriefs). Les catégories sont exactement celles du formulaire de
 // débrief : facteurs d'acceptation (vente) + motifs de non-vente.
@@ -2270,27 +2057,6 @@ function PillTabs({ items, active, onChange }: { items: { id: string; label: str
       {items.map((it) => (
         <button key={it.id} className={`pill-tab ${active === it.id ? 'active' : ''}`} onClick={() => onChange(it.id)}>{it.label}</button>
       ))}
-    </div>
-  )
-}
-
-function PipelineRow({ label, count, pct, color }: { label: string; count: number; pct: number; color: string }) {
-  return (
-    <div className="flex items-center gap-3">
-      <div className="w-16 eyebrow text-[10px]">{label}</div>
-      <div className="h-7 rounded-md flex items-center px-3 text-white font-bold text-xs" style={{ width: `${Math.max(8, pct)}%`, background: color }}>{count}</div>
-    </div>
-  )
-}
-
-function RdvRow({ color, time, sub }: { color: string; time: string; sub: string }) {
-  return (
-    <div className="flex items-center gap-3 p-2 bg-white/40 rounded-lg border border-line-soft">
-      <div className="w-1 h-8 rounded-full" style={{ background: color }}></div>
-      <div className="flex-grow">
-        <div className="text-xs font-semibold">{time}</div>
-        <div className="text-[10px] text-faint">{sub}</div>
-      </div>
     </div>
   )
 }
