@@ -794,6 +794,7 @@ function OverviewAdmin() {
       closing: ratePct(rdvPris, signed),
       leads: treatedLeadTotal,
       appels: calls,
+      appelsReels: adminSummary?.loggedCalls ?? calls,
       classified: treatedLeadTotal,
       qualified,
       qualifRate: adminSummary?.qualificationRate ?? funnelTotals.qualificationRate,
@@ -856,7 +857,7 @@ function OverviewAdmin() {
             <div className="overview-admin-kpis">
               <AirKpi icon="inbox" label={leadsKpiLabelFor(funnelPeriod.mode)} value={fmtCompact(stats.leadsToday)} sub="leads arrivés" />
               <AirKpi icon="target" label="Closing" value={`${stats.closing}%`} sub={`${fmtCompact(stats.rdvPris)} RDV suivis`} />
-              <AirKpi icon="phone" label="Appels" value={fmtCompact(stats.appels)} sub={`${fmtCompact(stats.classified)} leads traités`} />
+              <AirKpi icon="phone" label="Appels" value={fmtCompact(stats.appelsReels)} sub={`${fmtCompact(stats.classified)} leads traités`} />
               <AirKpi icon="users" label="Leads traités" value={fmtCompact(stats.leads)} sub={`${fmtCompact(stats.qualified)} qualifiés`} />
             </div>
           </div>
