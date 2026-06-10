@@ -200,6 +200,7 @@ function LeadsSetter() {
   const me = useAuth((s) => s.user)
   const [filter, setFilter] = useState<SetterFilter>('nouveau')
   const [missingFilter, setMissingFilter] = useState<SetterMissingFilter>('all')
+  const [callbackSort, setCallbackSort] = useState<CallbackSort>(null)
   const [searchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('search') ?? '')
   const selectedId = useLeadSidebar((s) => s.selectedLeadId)
@@ -313,11 +314,16 @@ function LeadsSetter() {
         return textMatch || phoneMatch
       })
     }
-    // Onglet "À rappeler" : on trie par date de prochain rappel (futurs proches en haut,
-    // en retard regroupés en bas). On ne le fait pas en recherche globale (liste multi-catégories).
-    if (!q && filter === 'rappel') list = sortCallbackLeadsByNextCallback(list)
+    // Tri explicite par clic sur l'en-tête « prochain rappel » : prioritaire sur le tri par défaut.
+    if (callbackSort) {
+      list = sortLeadsByNextCallback(list, callbackSort)
+    } else if (!q && filter === 'rappel') {
+      // Onglet "À rappeler" : on trie par date de prochain rappel (futurs proches en haut,
+      // en retard regroupés en bas). On ne le fait pas en recherche globale (liste multi-catégories).
+      list = sortCallbackLeadsByNextCallback(list)
+    }
     return list
-  }, [categoryLeads, filter, missingFilter, query])
+  }, [categoryLeads, filter, missingFilter, query, callbackSort])
 
   const selected = useMemo(
     () => (selectedId ? mine.find((l) => l.id === selectedId) ?? null : null),
@@ -388,7 +394,7 @@ function LeadsSetter() {
                   </colgroup>
                   <thead className="text-left eyebrow sticky top-0 z-10 border-b border-white/60 bg-white/65 shadow-sm shadow-text/5 backdrop-blur-2xl">
                     <tr>
-                      {orderedColumns.map((column) => renderSetterHeader(column.key))}
+                      {orderedColumns.map((column) => renderSetterHeader(column.key, { callbackDir: callbackSort, onToggleCallback: () => setCallbackSort(nextCallbackSortDir) }))}
                     </tr>
                   </thead>
                   <tbody>
@@ -449,6 +455,7 @@ function LeadsAdmin() {
   const orderedColumns = useOrderedColumns(ADMIN_COLUMNS, visibleColumns)
   const [deletingLeadId, setDeletingLeadId] = useState<string | null>(null)
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([])
+  const [callbackSort, setCallbackSort] = useState<CallbackSort>(null)
 
   const { data: leadsData, loading, error, backgroundLoading, refetch } = useLeadsProgressive({ quickLimit: 100, fullLimit: 500 })
   const { data: leadStats } = useLeadStats()
@@ -468,12 +475,15 @@ function LeadsAdmin() {
     if (setterFilter !== 'all') list = list.filter((l) => l.setterId === setterFilter)
     if (commercialFilter !== 'all') list = list.filter((l) => l.assignedToId === commercialFilter)
     list = applyLeadFilters(list, leadFilters)
-    // Vue "À rappeler" : tri par date de prochain rappel (futurs proches en haut, en retard en bas).
-    if (leadFilters.status === 'a_rappeler' || leadFilters.status === 'relance') {
+    // Tri explicite par clic sur l'en-tête « prochain rappel » : prioritaire sur le tri par défaut.
+    if (callbackSort) {
+      list = sortLeadsByNextCallback(list, callbackSort)
+    } else if (leadFilters.status === 'a_rappeler' || leadFilters.status === 'relance') {
+      // Vue "À rappeler" : tri par date de prochain rappel (futurs proches en haut, en retard en bas).
       list = sortCallbackLeadsByNextCallback(list)
     }
     return list
-  }, [leads, setterFilter, commercialFilter, leadFilters])
+  }, [leads, setterFilter, commercialFilter, leadFilters, callbackSort])
 
   const stats = useMemo(() => {
     const byStatus = leadStats?.byStatus
@@ -647,7 +657,7 @@ function LeadsAdmin() {
                       aria-label="Sélectionner tous les leads visibles"
                     />
                   </Th>
-                  {orderedColumns.map((column) => renderAdminHeader(column.key))}
+                  {orderedColumns.map((column) => renderAdminHeader(column.key, { callbackDir: callbackSort, onToggleCallback: () => setCallbackSort(nextCallbackSortDir) }))}
                 </tr>
               </thead>
               <tbody>
@@ -924,11 +934,11 @@ function setterColumnWidth(key: ColumnKey): number {
   }
 }
 
-function renderSetterHeader(key: ColumnKey) {
+function renderSetterHeader(key: ColumnKey, sort?: { callbackDir: CallbackSort; onToggleCallback: () => void }) {
   switch (key) {
     case 'nom': return <Th key={key} className="w-[240px] lead-sticky-head">NOM</Th>
     case 'telephone': return <Th key={key} className="w-[200px]">TÉLÉPHONE DU PROSPECT</Th>
-    case 'prochainRappel': return <Th key={key} className="w-[200px]">DATE/HEURE PROCHAIN RAPPEL</Th>
+    case 'prochainRappel': return <SortableTh key={key} className="w-[200px]" dir={sort?.callbackDir ?? null} onToggle={sort?.onToggleCallback}>DATE/HEURE PROCHAIN RAPPEL</SortableTh>
     case 'dateArrivee': return <Th key={key} className="w-[180px]">DATE/HEURE D'ARRIVÉE</Th>
     case 'adresseComplete': return <Th key={key} className="w-[260px]">ADRESSE COMPLÈTE</Th>
     case 'setter': return <Th key={key} className="w-[210px]">SETTER ASSIGNÉ</Th>
@@ -991,7 +1001,7 @@ function renderSetterCell(
   }
 }
 
-function renderAdminHeader(key: ColumnKey) {
+function renderAdminHeader(key: ColumnKey, sort?: { callbackDir: CallbackSort; onToggleCallback: () => void }) {
   switch (key) {
     case 'nom': return <Th key={key} className="w-[190px] lead-sticky-head">NOM</Th>
     case 'statut': return <Th key={key} className="w-[160px]">STATUT OPPORTUNITÉ</Th>
@@ -1023,7 +1033,7 @@ function renderAdminHeader(key: ColumnKey) {
     case 'pctLeadAppele5min': return <Th key={key} className="w-[160px]">% LEAD APPELÉ &lt; 5MIN</Th>
     case 'campagnes': return <Th key={key} className="w-[240px]">CAMPAGNES</Th>
     case 'jaugeAppels': return <Th key={key} className="w-[160px]">JAUGE APPELS (4/JOUR)</Th>
-    case 'prochainRappel': return <Th key={key} className="w-[220px]">DATE/HEURE PROCHAIN RAPPEL</Th>
+    case 'prochainRappel': return <SortableTh key={key} className="w-[220px]" dir={sort?.callbackDir ?? null} onToggle={sort?.onToggleCallback}>DATE/HEURE PROCHAIN RAPPEL</SortableTh>
     case 'relanceMax': return <Th key={key} className="w-[160px]">JOUR RELANCE MAX</Th>
     case 'jauge': return <Th key={key} className="w-[170px]">JAUGE 11 JOURS</Th>
     case 'projets': return <Th key={key} className="w-[160px]">PROJETS</Th>
@@ -1841,6 +1851,60 @@ function ColumnVisibilityMenu({
 
 function Th({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return <th className={`px-4 py-3 whitespace-nowrap bg-white/25 backdrop-blur-xl ${className}`}>{children}</th>
+}
+
+// Tri par « prochain rappel » déclenché au clic sur l'en-tête de colonne.
+// Cycle : aucun → ascendant → descendant → aucun (retour au tri par défaut).
+type CallbackSort = 'asc' | 'desc' | null
+
+function nextCallbackSortDir(dir: CallbackSort): CallbackSort {
+  if (dir === null) return 'asc'
+  if (dir === 'asc') return 'desc'
+  return null
+}
+
+function sortLeadsByNextCallback(list: LeadResponse[], dir: 'asc' | 'desc'): LeadResponse[] {
+  const ts = (l: LeadResponse) => (l.nextCallbackAt ? new Date(l.nextCallbackAt).getTime() : null)
+  return [...list].sort((a, b) => {
+    const ta = ts(a)
+    const tb = ts(b)
+    if (ta === null && tb === null) return 0
+    if (ta === null) return 1 // leads sans rappel programmé : toujours en bas
+    if (tb === null) return -1
+    return dir === 'asc' ? ta - tb : tb - ta
+  })
+}
+
+function SortChevron({ dir }: { dir: CallbackSort }) {
+  return (
+    <svg
+      width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"
+      className={dir ? 'text-or' : 'text-faint opacity-50'} aria-hidden="true"
+    >
+      {dir === 'asc' ? <polyline points="6 15 12 9 18 15" />
+        : dir === 'desc' ? <polyline points="6 9 12 15 18 9" />
+        : <><polyline points="7 10 12 6 17 10" /><polyline points="7 14 12 18 17 14" /></>}
+    </svg>
+  )
+}
+
+function SortableTh({ children, className = '', dir, onToggle }: { children: React.ReactNode; className?: string; dir: CallbackSort; onToggle?: () => void }) {
+  const label = dir === 'asc' ? 'tri ascendant' : dir === 'desc' ? 'tri descendant' : 'non trié'
+  return (
+    <th className={`px-4 py-3 whitespace-nowrap bg-white/25 backdrop-blur-xl ${className}`}>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="inline-flex items-center gap-1.5 hover:text-text transition-colors"
+        title="Trier par date/heure de prochain rappel"
+        aria-label={`Trier par date/heure de prochain rappel (${label})`}
+      >
+        {children}
+        <SortChevron dir={dir} />
+      </button>
+    </th>
+  )
 }
 
 function Td({
