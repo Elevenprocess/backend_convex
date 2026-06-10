@@ -359,6 +359,16 @@ export type FinancingType =
   | 'apport_financement'
   | 'paiement_10x'
 
+// Résumé du lead embarqué dans la réponse RDV (backend toRdvResponse) : permet
+// d'afficher nom / ville / téléphone du prospect sans jointure /leads cliente.
+export type RdvLeadSummary = {
+  id: string
+  firstName: string | null
+  lastName: string | null
+  city: string | null
+  phone: string | null
+}
+
 export type RdvResponse = {
   id: string
   externalId: string | null
@@ -379,6 +389,7 @@ export type RdvResponse = {
   debriefDueAt: string | null
   createdAt: string
   updatedAt: string
+  lead: RdvLeadSummary | null
 }
 
 // Helpers d'affichage utilisés un peu partout dans l'UI.

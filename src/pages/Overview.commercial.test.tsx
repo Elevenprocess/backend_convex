@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import type { LeadResponse, RdvResponse } from '../lib/types'
+import type { RdvLeadSummary, RdvResponse } from '../lib/types'
 
 vi.mock('../components/shell/AppShell', () => ({ AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }))
 vi.mock('../components/shell/Topbar', () => ({ Topbar: () => null }))
@@ -11,32 +11,29 @@ vi.mock('../lib/auth', () => ({
 }))
 vi.mock('../lib/role', () => ({ useDisplayUser: () => ({ firstName: 'Alex' }) }))
 
+const lead = (id: string, firstName: string, lastName: string, city: string): RdvLeadSummary =>
+  ({ id, firstName, lastName, city, phone: '0692000000' })
+
 const rdv = (over: Partial<RdvResponse>): RdvResponse => ({
   id: 'r', leadId: 'lead-x', scheduledAt: '2026-06-05T10:00:00.000Z',
   status: 'honore', result: null, montantTotal: null, locationType: 'domicile',
-  debriefFilledAt: '2026-06-05T12:00:00.000Z', notes: null,
+  debriefFilledAt: '2026-06-05T12:00:00.000Z', notes: null, lead: null,
   ...over,
 } as RdvResponse)
 
+// Le lead est désormais embarqué dans le RDV (backend toRdvResponse), plus de
+// requête /leads séparée.
 const RDVS: RdvResponse[] = [
   rdv({ id: 'r1', leadId: 'lead-1', scheduledAt: '2026-06-05T10:00:00.000Z', status: 'honore', result: 'signe', montantTotal: '15000' }),
   rdv({ id: 'r2', leadId: 'lead-2', scheduledAt: '2026-06-06T10:00:00.000Z', status: 'honore', result: 'perdu' }),
   rdv({ id: 'r5', leadId: 'lead-5', scheduledAt: '2026-06-07T10:00:00.000Z', status: 'honore', result: 'signe', montantTotal: '5000' }),
-  rdv({ id: 'r4', leadId: 'lead-4', scheduledAt: '2026-06-04T09:00:00.000Z', status: 'honore', result: null, debriefFilledAt: null, notes: null }),
-  rdv({ id: 'r3', leadId: 'lead-3', scheduledAt: '2026-06-20T08:00:00.000Z', status: 'planifie', result: null, debriefFilledAt: null, notes: null }),
-]
-
-const lead = (id: string, firstName: string, lastName: string, city: string): LeadResponse =>
-  ({ id, firstName, lastName, city, phone: '0692000000' } as LeadResponse)
-
-const LEADS: LeadResponse[] = [
-  lead('lead-3', 'Marie', 'Curie', 'Saint-Pierre'),
-  lead('lead-4', 'Paul', 'Dirac', 'Saint-Denis'),
+  rdv({ id: 'r4', leadId: 'lead-4', scheduledAt: '2026-06-04T09:00:00.000Z', status: 'honore', result: null, debriefFilledAt: null, notes: null, lead: lead('lead-4', 'Paul', 'Dirac', 'Saint-Denis') }),
+  rdv({ id: 'r3', leadId: 'lead-3', scheduledAt: '2026-06-20T08:00:00.000Z', status: 'planifie', result: null, debriefFilledAt: null, notes: null, lead: lead('lead-3', 'Marie', 'Curie', 'Saint-Pierre') }),
 ]
 
 vi.mock('../lib/hooks', () => ({
   useRdvList: () => ({ data: RDVS, loading: false, error: null }),
-  useLeads: () => ({ data: LEADS, loading: false, error: null }),
+  useLeads: () => ({ data: [], loading: false, error: null }),
 }))
 
 import { Overview } from './Overview'

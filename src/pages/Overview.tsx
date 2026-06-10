@@ -7,7 +7,7 @@ import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
 import { useDisplayUser } from '../lib/role'
 import { useCallLogs, useClients, useLeads, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary, useDebriefAnalytics, prefetchAnalyticsFunnel, prefetchAnalyticsSummary, type DebriefAnalyticsResponse } from '../lib/hooks'
-import { STATUS_LABEL, DEBRIEF_ACCEPTANCE_FACTOR_LABEL, DEBRIEF_NON_SALE_REASON_LABEL, fullName, initials, type AnalyticsAdminSummary, type AnalyticsFunnelResponse, type CallLogResponse, type DebriefAcceptanceFactor, type DebriefNonSaleReason, type LeadResponse, type LeadStatus, type RdvResponse, type UserResponse } from '../lib/types'
+import { STATUS_LABEL, DEBRIEF_ACCEPTANCE_FACTOR_LABEL, DEBRIEF_NON_SALE_REASON_LABEL, fullName, initials, type AnalyticsAdminSummary, type AnalyticsFunnelResponse, type CallLogResponse, type DebriefAcceptanceFactor, type DebriefNonSaleReason, type LeadResponse, type LeadStatus, type RdvResponse, type RdvLeadSummary, type UserResponse } from '../lib/types'
 import { computeTechnicienStats, computeTerrainPipeline, selectUnassignedVt, type TechnicienStat } from '../lib/technicienStats'
 import { buildSuiviPeriodRange, getDefaultSuiviPeriod, SUIVI_PERIOD_OPTIONS, type SuiviPeriodState } from '../lib/suivi'
 import { PHASE_LABEL, PHASE_ICON } from '../lib/suivi-board'
@@ -509,7 +509,7 @@ function needsDebrief(rdv: RdvResponse): boolean {
   return (rdv.status === 'honore' || rdv.result != null) && !rdv.debriefFilledAt && !rdv.notes?.trim()
 }
 
-function CommercialDebriefsToFill({ debriefs, limit = 8 }: { debriefs: { rdv: RdvResponse; lead?: LeadResponse }[]; limit?: number }) {
+function CommercialDebriefsToFill({ debriefs, limit = 8 }: { debriefs: { rdv: RdvResponse; lead?: RdvLeadSummary | null }[]; limit?: number }) {
   const navigate = useNavigate()
   return (
     <div className="overview-air-card overview-commercial-qualified-list">
@@ -573,6 +573,11 @@ function OverviewCommercialIndividual() {
 
   // Liste RDV non bornée par la période : on ne masque jamais un débrief en
   // retard ni un RDV à venir. Les KPIs filtrent la période en mémoire.
+  // Le lead (nom/ville/téléphone) est embarqué dans chaque RDV par le backend
+  // (toRdvResponse) — c'est la source fiable, notamment pour le commercial_lead
+  // dont les RDV d'équipe référencent des leads hors du lot /leads chargé.
+  // La jointure /leads ci-dessous reste un fallback (commercial individuel, ou
+  // backend pas encore déployé) : bornée à ses propres leads, donc suffisante.
   const { data: rdvs = [] } = useRdvList({ commercialId: scopeCommercialId, limit: 200 })
   const { data: allLeads = [] } = useLeads({ limit: 500 })
 
@@ -604,11 +609,11 @@ function OverviewCommercialIndividual() {
     const upcoming = list
       .filter((r) => r.status === 'planifie' && r.scheduledAt >= todayIso)
       .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))
-      .map((r) => ({ rdv: r, lead: leadById.get(r.leadId) }))
+      .map((r) => ({ rdv: r, lead: r.lead ?? leadById.get(r.leadId) }))
     const debriefs = list
       .filter(needsDebrief)
       .sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt))
-      .map((r) => ({ rdv: r, lead: leadById.get(r.leadId) }))
+      .map((r) => ({ rdv: r, lead: r.lead ?? leadById.get(r.leadId) }))
 
     return { kpis, upcoming, debriefs }
   }, [rdvs, allLeads, todayIso, range.from, range.to])
@@ -672,7 +677,7 @@ function OverviewCommercialIndividual() {
 
 // Ligne RDV à venir enrichie (nom prospect + ville · tél + lieu + date), cliquable vers le détail.
 // Calquée sur le markup de CommercialDebriefsToFill pour rester cohérent visuellement.
-function CommercialUpcomingRdvRow({ rdv, lead }: { rdv: RdvResponse; lead?: LeadResponse }) {
+function CommercialUpcomingRdvRow({ rdv, lead }: { rdv: RdvResponse; lead?: RdvLeadSummary | null }) {
   const navigate = useNavigate()
   const name = lead ? fullName(lead) : 'Prospect'
   const place = rdv.locationType === 'visio' ? 'Visio' : rdv.locationType === 'agence' ? 'Agence' : 'Domicile'
