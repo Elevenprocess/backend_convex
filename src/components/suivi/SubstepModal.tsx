@@ -168,7 +168,7 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
                 {docStatus.present.map((d) => (
                   <li key={d.id} className="wf-modal-doc">
                     <span className={`dochub-thumb kind-${fileKind(d.mimeType)}`}>{KIND_LABEL[fileKind(d.mimeType)]}</span>
-                    <a className="wf-modal-doc-name" href={substepDocumentRawUrl(d.id)} target="_blank" rel="noreferrer" title={d.filename}>{d.filename}</a>
+                    <button type="button" className="wf-modal-doc-name" onClick={() => setPreview({ url: substepDocumentRawUrl(d.id), filename: d.filename, mimeType: d.mimeType })} title={d.filename}>{d.filename}</button>
                     <span className="wf-modal-doc-meta">{Math.max(1, Math.round(d.sizeBytes / 1024))} Ko</span>
                     {!readOnly && (
                       <button type="button" className="dochub-doc-del" aria-label="Supprimer" onClick={() => void onDeleteDoc(d.id)}>
@@ -211,6 +211,8 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
             </button>
           </footer>
         )}
+
+        {preview && <DocumentPreviewModal doc={preview} onClose={() => setPreview(null)} />}
       </div>
     </div>
   )

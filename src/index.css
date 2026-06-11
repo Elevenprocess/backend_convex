@@ -4909,8 +4909,8 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 .wf-modal-docs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .wf-modal-doc { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--color-line-soft); border-radius: 9px; background: #fff; }
 .wf-modal-doc.is-missing { border-style: dashed; background: var(--color-cream); }
-.wf-modal-doc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 600; color: var(--color-text); text-decoration: none; }
-a.wf-modal-doc-name:hover { color: var(--color-cuivre); }
+.wf-modal-doc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 600; color: var(--color-text); text-decoration: none; text-align: left; background: none; border: none; padding: 0; font-family: inherit; cursor: pointer; }
+.wf-modal-doc-name:hover { color: var(--color-cuivre); }
 .wf-modal-doc-meta { font-size: 10.5px; color: var(--color-faint); white-space: nowrap; }
 .wf-modal-missing-pill { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: var(--color-rouille-tint); color: var(--color-rouille); }
 .wf-modal-hint { margin: 0; font-size: 11.5px; color: var(--color-muted); }
@@ -5196,7 +5196,7 @@ a.wf-modal-doc-name:hover { color: var(--color-cuivre); }
 .dochub-thumb.kind-image { background: var(--color-or-tint); color: var(--color-or-dark); }
 .dochub-thumb.kind-doc { background: var(--color-info-tint); color: var(--color-info); }
 .dochub-thumb.kind-missing { background: var(--color-line-soft); color: var(--color-faint); }
-.dochub-doc-name { min-width: 0; color: var(--color-text); text-decoration: none; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dochub-doc-name { min-width: 0; color: var(--color-text); text-decoration: none; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; background: none; border: none; padding: 0; font-family: inherit; cursor: pointer; }
 .dochub-doc-name:hover { color: var(--color-cuivre); }
 .dochub-doc-meta { font-size: 11px; color: var(--color-faint); white-space: nowrap; }
 .dochub-missing-pill { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--color-rouille-tint); color: var(--color-rouille); }
