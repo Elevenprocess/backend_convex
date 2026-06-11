@@ -58,7 +58,7 @@ export function DossierCard({ dossier, client, onClick }: Props) {
         <span className="suivi-card-dot" style={{ background: statusColor }} aria-hidden />
         <span className="suivi-card-step">{stepLabel(dossier.activeStep)}</span>
         <span className="suivi-card-time">· {formatRelativeDate(dossier.signedAt)}</span>
-        <span className="suivi-card-action">Ouvrir fiche + workflow</span>
+        <span className="suivi-card-action">Ouvrir la fiche</span>
       </footer>
     </button>
   )

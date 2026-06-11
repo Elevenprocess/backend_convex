@@ -131,7 +131,7 @@ export function Suivi() {
         ) : (
           <section className="suivi-grid">
             {filtered.map((d) => (
-              <DossierCard key={d.id} dossier={d} client={clientByLead.get(d.id)} onClick={() => navigate(`/suivi/${d.id}`)} />
+              <DossierCard key={d.id} dossier={d} client={clientByLead.get(d.id)} onClick={() => navigate(`/suivi/${d.id}/fiche`)} />
             ))}
           </section>
         )}
