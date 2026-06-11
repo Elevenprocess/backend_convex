@@ -924,6 +924,31 @@ export async function createGhlAppointment(input: CreateGhlAppointmentInput): Pr
   })
 }
 
+export type UpdateGhlAppointmentInput = {
+  scheduledAt?: string
+  notes?: string | null
+  firstName?: string | null
+  lastName?: string | null
+  email?: string | null
+  phone?: string | null
+  addressLine?: string | null
+  city?: string | null
+  postalCode?: string | null
+  typeLogement?: string | null
+  revenuFiscal?: number | null
+}
+
+// Édite un RDV (rdvId local) déjà envoyé à GHL : replanification, note et infos
+// lead. Le backend pousse vers GHL puis met le local à jour.
+export async function updateGhlAppointment(rdvId: string, input: UpdateGhlAppointmentInput): Promise<{ rdv: RdvResponse; ghl: unknown }> {
+  const updated = await api<{ rdv: RdvResponse; ghl: unknown }>(`/ghl-calendar/appointments/${encodeURIComponent(rdvId)}`, {
+    method: 'PATCH',
+    body: input,
+  })
+  notifyRealtimeRefresh({ event: 'rdv:updated', paths: ['/rdv', '/leads', '/analytics/summary', '/analytics/funnel', '/ghl-calendar/events'] })
+  return updated
+}
+
 export async function createRdv(input: CreateRdvInput): Promise<RdvResponse> {
   return api<RdvResponse>('/rdv', { method: 'POST', body: input })
 }

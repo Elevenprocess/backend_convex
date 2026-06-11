@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon, type IconName } from './Icon'
 import { Spinner, LoadingBlock } from './Spinner'
@@ -16,7 +16,7 @@ import {
   type UserResponse,
 } from '../lib/types'
 import { useCall, type CallState } from '../lib/call'
-import { useCallLogs, useRdvList, createCallLog, createRdv, updateLead, useGhlCalendarConfig, useGhlFreeSlots, createGhlAppointment, syncLeadGhlCalendarEvents, type GhlCalendarEvent } from '../lib/hooks'
+import { useCallLogs, useRdvList, createCallLog, createRdv, updateLead, updateGhlAppointment, useGhlCalendarConfig, useGhlFreeSlots, createGhlAppointment, syncLeadGhlCalendarEvents, type GhlCalendarEvent } from '../lib/hooks'
 import { useAuth } from '../lib/auth'
 import { leadDetailPath } from '../lib/leadPaths'
 
@@ -208,7 +208,7 @@ function DefaultPanelContent({
   if (active === 'infos') return <InfosTab lead={lead} userMap={userMap} onSaved={onSaved} />
   if (active === 'activite') return <ActiviteTab leadId={lead.id} userMap={userMap} />
   if (active === 'appels') return <AppelsTab leadId={lead.id} userMap={userMap} />
-  if (active === 'rdv') return <RdvTab lead={lead} userMap={userMap} />
+  if (active === 'rdv') return <RdvTab lead={lead} userMap={userMap} onSaved={onSaved} />
   if (active === 'notes') {
     return (
       <NotesTab
@@ -251,6 +251,35 @@ function leadToInfosForm(lead: LeadResponse): InfosEditable {
     city: cleanField(lead.city) ?? '',
     postalCode: cleanField(lead.postalCode) ?? '',
     status: lead.status,
+    typeLogement: cleanField(lead.typeLogement) ?? '',
+    revenuFiscal: lead.revenuFiscal?.toString() ?? '',
+  }
+}
+
+// Champs lead éditables partagés entre l'onglet Notes (formulaire final avant envoi GHL)
+// et l'onglet Infos. On les centralise pour pouvoir resynchroniser le formulaire Notes
+// quand le lead est modifié ailleurs (ex : onglet Infos enregistre → refetch → prop lead change).
+type LeadNotesForm = {
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+  addressLine: string
+  city: string
+  postalCode: string
+  typeLogement: string
+  revenuFiscal: string
+}
+
+function leadToNotesForm(lead: LeadResponse): LeadNotesForm {
+  return {
+    firstName: cleanField(lead.firstName) ?? '',
+    lastName: cleanField(lead.lastName) ?? '',
+    email: cleanField(lead.email) ?? '',
+    phone: cleanField(lead.phone) ?? '',
+    addressLine: cleanField(lead.addressLine) ?? '',
+    city: cleanField(lead.city) ?? '',
+    postalCode: cleanField(lead.postalCode) ?? '',
     typeLogement: cleanField(lead.typeLogement) ?? '',
     revenuFiscal: lead.revenuFiscal?.toString() ?? '',
   }
@@ -468,7 +497,7 @@ function AppelsTab({ leadId, userMap }: { leadId: string; userMap?: Map<string, 
   )
 }
 
-function RdvTab({ lead, userMap }: { lead: LeadResponse; userMap?: Map<string, UserResponse> }) {
+function RdvTab({ lead, userMap, onSaved }: { lead: LeadResponse; userMap?: Map<string, UserResponse>; onSaved?: () => void }) {
   const { data, loading, refetch } = useRdvList({ leadId: lead.id, limit: 50 })
   const [syncingGhl, setSyncingGhl] = useState(false)
   const [syncTried, setSyncTried] = useState(false)
@@ -527,7 +556,16 @@ function RdvTab({ lead, userMap }: { lead: LeadResponse; userMap?: Map<string, U
       {rdvs.map((r) => {
         const ghlEvent = findMatchingGhlEvent(lead, r, matchedGhlEvents)
         const commercialName = rdvCommercialName(r, ghlEvent, userMap)
-        return <RdvInfoCard key={r.id} rdv={r} ghlEvent={ghlEvent} commercialName={commercialName} />
+        return (
+          <RdvInfoCard
+            key={r.id}
+            rdv={r}
+            lead={lead}
+            ghlEvent={ghlEvent}
+            commercialName={commercialName}
+            onUpdated={() => { refetch(); onSaved?.() }}
+          />
+        )
       })}
       {rdvs.length === 0 && matchedGhlEvents.map((event) => (
         <GhlRdvInfoCard key={event.id} event={event} userMap={userMap} />
@@ -536,7 +574,20 @@ function RdvTab({ lead, userMap }: { lead: LeadResponse; userMap?: Map<string, U
   )
 }
 
-function RdvInfoCard({ rdv, ghlEvent, commercialName }: { rdv: RdvResponse; ghlEvent?: GhlCalendarEvent; commercialName: string | null }) {
+function RdvInfoCard({ rdv, lead, ghlEvent, commercialName, onUpdated }: { rdv: RdvResponse; lead: LeadResponse; ghlEvent?: GhlCalendarEvent; commercialName: string | null; onUpdated?: () => void }) {
+  const [editing, setEditing] = useState(false)
+
+  if (editing) {
+    return (
+      <EditRdvForm
+        rdv={rdv}
+        lead={lead}
+        onCancel={() => setEditing(false)}
+        onSaved={() => { setEditing(false); onUpdated?.() }}
+      />
+    )
+  }
+
   return (
     <div className="bg-white/70 border border-line rounded-xl p-3 shadow-sm">
       <div className="flex items-start justify-between gap-3 mb-3">
@@ -544,7 +595,17 @@ function RdvInfoCard({ rdv, ghlEvent, commercialName }: { rdv: RdvResponse; ghlE
           <span className="text-[11px] font-bold uppercase tracking-widest text-or">RDV {rdv.status}</span>
           <div className="text-sm font-semibold text-text mt-1">{formatRdvDate(rdv.scheduledAt)}</div>
         </div>
-        {rdv.externalId && <span className="text-[10px] font-bold uppercase tracking-widest text-success bg-success-tint rounded-full px-2 py-1">GHL</span>}
+        <div className="flex items-center gap-2">
+          {rdv.externalId && <span className="text-[10px] font-bold uppercase tracking-widest text-success bg-success-tint rounded-full px-2 py-1">GHL</span>}
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="text-xs font-semibold text-or hover:underline inline-flex items-center gap-1"
+            title="Modifier le RDV et les infos envoyées à GHL"
+          >
+            <Icon name="edit" size={12} /> Modifier
+          </button>
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-2 text-xs">
         <MiniInfo label="Date" value={formatRdvDay(rdv.scheduledAt)} />
@@ -557,6 +618,109 @@ function RdvInfoCard({ rdv, ghlEvent, commercialName }: { rdv: RdvResponse; ghlE
       {rdv.notes && <p className="text-sm mt-3 text-text whitespace-pre-line">{rdv.notes}</p>}
     </div>
   )
+}
+
+// Formulaire d'édition d'un RDV déjà créé (et potentiellement déjà envoyé à GHL).
+// Replanification + note + infos lead. À l'enregistrement, le backend pousse vers
+// GHL (appointment + contact) puis met le local à jour.
+function EditRdvForm({ rdv, lead, onCancel, onSaved }: { rdv: RdvResponse; lead: LeadResponse; onCancel: () => void; onSaved: () => void }) {
+  const [date, setDate] = useState(() => isoToReunionDateInput(rdv.scheduledAt))
+  const [time, setTime] = useState(() => isoToReunionTimeInput(rdv.scheduledAt))
+  const [notes, setNotes] = useState(rdv.notes ?? '')
+  const [info, setInfo] = useState(() => leadToNotesForm(lead))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function save() {
+    setSaving(true)
+    setError(null)
+    try {
+      if (!date || !time) throw new Error('Renseigne la date et l’heure du RDV.')
+      const email = info.email.trim()
+      if (email && !isValidEmail(email)) throw new Error('Email invalide : corrige ou vide le champ email.')
+      const payload = {
+        scheduledAt: rdvAtToReunionIso(`${date}T${time}`),
+        notes: notes.trim() === '' ? null : notes.trim(),
+        firstName: info.firstName.trim() === '' ? null : info.firstName.trim(),
+        lastName: info.lastName.trim() === '' ? null : info.lastName.trim(),
+        email: email === '' ? null : email,
+        phone: info.phone.trim() === '' ? null : info.phone.trim(),
+        addressLine: info.addressLine.trim() === '' ? null : info.addressLine.trim(),
+        city: info.city.trim() === '' ? null : info.city.trim(),
+        postalCode: info.postalCode.trim() === '' ? null : info.postalCode.trim(),
+        typeLogement: info.typeLogement.trim() === '' ? null : info.typeLogement.trim(),
+        revenuFiscal: parseRevenuFiscal(info.revenuFiscal),
+      }
+      await updateGhlAppointment(rdv.id, payload)
+      onSaved()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Modification impossible')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const set = (key: keyof LeadNotesForm) => (v: string) => setInfo((f) => ({ ...f, [key]: v }))
+
+  return (
+    <div className="bg-white/80 border border-or/30 rounded-xl p-3 shadow-sm space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-widest text-or">Modifier le RDV</span>
+        <div className="flex items-center gap-2">
+          <button onClick={onCancel} disabled={saving} className="text-xs font-semibold text-faint hover:underline disabled:opacity-50">Annuler</button>
+          <button onClick={save} disabled={saving} className="text-xs font-semibold text-or hover:underline disabled:opacity-50 inline-flex items-center gap-1">
+            {saving ? <Spinner size={14} stroke={2} /> : null}Enregistrer
+          </button>
+        </div>
+      </div>
+      {error && <div className="text-xs text-rouille bg-rouille-tint/40 rounded p-2">{error}</div>}
+      {rdv.externalId && <p className="text-[11px] text-muted">Les changements sont aussi poussés vers GHL (RDV + contact).</p>}
+
+      <div className="grid grid-cols-2 gap-2">
+        <DateOnlyInput label="Date" value={date} onChange={setDate} />
+        <div>
+          <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-1">Heure</div>
+          <input type="time" step={60} value={time} onChange={(e) => setTime(e.target.value)} className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full" />
+        </div>
+      </div>
+      <div>
+        <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-1">Note transmise</div>
+        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full h-20 resize-none" placeholder="Note pour le commercial…" />
+      </div>
+
+      <div className="border-t border-line-soft pt-3 space-y-2">
+        <div className="text-[10px] font-bold tracking-widest uppercase text-faint">Infos lead (mises à jour dans GHL)</div>
+        <div className="grid grid-cols-2 gap-2">
+          <Input label="Prénom" value={info.firstName} onChange={set('firstName')} />
+          <Input label="Nom" value={info.lastName} onChange={set('lastName')} />
+        </div>
+        <Input label="Téléphone" value={info.phone} onChange={set('phone')} placeholder="+262 692 ..." />
+        <Input label="Email" value={info.email} onChange={set('email')} type="email" />
+        <Input label="Adresse" value={info.addressLine} onChange={set('addressLine')} />
+        <div className="grid grid-cols-2 gap-2">
+          <Input label="Ville" value={info.city} onChange={set('city')} />
+          <Input label="Code postal" value={info.postalCode} onChange={set('postalCode')} placeholder="97400" />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Input label="Type logement" value={info.typeLogement} onChange={set('typeLogement')} />
+          <Input label="Revenu fiscal" value={info.revenuFiscal} onChange={set('revenuFiscal')} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function isoToReunionDateInput(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  // en-CA → format YYYY-MM-DD, attendu par <input type="date">.
+  return d.toLocaleDateString('en-CA', { timeZone: 'Indian/Reunion' })
+}
+
+function isoToReunionTimeInput(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Indian/Reunion' })
 }
 
 function GhlRdvInfoCard({ event, userMap }: { event: GhlCalendarEvent; userMap?: Map<string, UserResponse> }) {
@@ -705,17 +869,11 @@ function NotesTab({
   const [sector, setSector] = useState<'Nord' | 'Sud' | 'Est' | 'Ouest' | ''>('')
   const [rdvDate, setRdvDate] = useState(todayInputValue())
   const [rdvAt, setRdvAt] = useState('')
-  const [form, setForm] = useState({
-    firstName: cleanField(lead.firstName) ?? '',
-    lastName: cleanField(lead.lastName) ?? '',
-    email: cleanField(lead.email) ?? '',
-    phone: cleanField(lead.phone) ?? '',
-    addressLine: cleanField(lead.addressLine) ?? '',
-    city: cleanField(lead.city) ?? '',
-    postalCode: cleanField(lead.postalCode) ?? '',
-    typeLogement: cleanField(lead.typeLogement) ?? '',
-    revenuFiscal: lead.revenuFiscal?.toString() ?? '',
-  })
+  const [form, setForm] = useState<LeadNotesForm>(() => leadToNotesForm(lead))
+  // Snapshot des champs lead sur lesquels le formulaire est aligné. Sert à fusionner
+  // les modifs venues d'ailleurs (onglet Infos) sans écraser ce que le setter a déjà
+  // saisi dans le formulaire final.
+  const leadSnapshotRef = useRef<LeadNotesForm>(leadToNotesForm(lead))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -746,17 +904,10 @@ function NotesTab({
   // remounts (PersistentLeadSidebar peut se démonter brièvement quand useLead
   // refetch, F5, déconnexion WS, etc.) sans faire perdre la saisie en cours.
   useEffect(() => {
-    const defaultForm = {
-      firstName: cleanField(lead.firstName) ?? '',
-      lastName: cleanField(lead.lastName) ?? '',
-      email: cleanField(lead.email) ?? '',
-      phone: cleanField(lead.phone) ?? '',
-      addressLine: cleanField(lead.addressLine) ?? '',
-      city: cleanField(lead.city) ?? '',
-      postalCode: cleanField(lead.postalCode) ?? '',
-      typeLogement: cleanField(lead.typeLogement) ?? '',
-      revenuFiscal: lead.revenuFiscal?.toString() ?? '',
-    }
+    const defaultForm = leadToNotesForm(lead)
+    // On (ré)aligne le snapshot sur le lead courant : tout ce qui arrive ensuite
+    // via la prop lead (modif onglet Infos) sera fusionné par l'effet de resync.
+    leadSnapshotRef.current = defaultForm
     try {
       const stored = localStorage.getItem(notesTabStorageKey(lead.id))
       if (stored) {
@@ -797,6 +948,31 @@ function NotesTab({
     setError(null)
     setSuccess(null)
   }, [lead.id])
+
+  // Resync : quand le lead est modifié ailleurs (onglet Infos enregistre → refetch →
+  // la prop lead change sans changer d'id), on reporte ces modifs dans le formulaire
+  // final. On ne touche qu'aux champs que le setter n'a pas lui-même modifiés ici
+  // (form[key] === snapshot[key]) pour ne pas écraser une saisie en cours.
+  useEffect(() => {
+    const next = leadToNotesForm(lead)
+    const prev = leadSnapshotRef.current
+    leadSnapshotRef.current = next
+    setForm((current) => {
+      let changed = false
+      const merged = { ...current }
+      for (const key of Object.keys(next) as (keyof LeadNotesForm)[]) {
+        if (next[key] !== prev[key] && current[key] === prev[key]) {
+          merged[key] = next[key]
+          changed = true
+        }
+      }
+      return changed ? merged : current
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    lead.firstName, lead.lastName, lead.email, lead.phone, lead.addressLine,
+    lead.city, lead.postalCode, lead.typeLogement, lead.revenuFiscal,
+  ])
 
   // Sauvegarde à chaque modification (debounced via React batching) — clé par lead.
   useEffect(() => {
