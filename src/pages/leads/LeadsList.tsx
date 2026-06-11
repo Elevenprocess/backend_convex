@@ -456,8 +456,20 @@ function LeadsAdmin() {
   const [deletingLeadId, setDeletingLeadId] = useState<string | null>(null)
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([])
   const [callbackSort, setCallbackSort] = useState<CallbackSort>(null)
+  const [searchParams] = useSearchParams()
+  const [query, setQuery] = useState(searchParams.get('search') ?? '')
 
-  const { data: leadsData, loading, error, backgroundLoading, refetch } = useLeadsProgressive({ quickLimit: 100, fullLimit: 500 })
+  // Recherche backend (même pattern que le setter) : quand un terme est saisi,
+  // on bascule sur une requête /leads?search=… au lieu du lot de base. Les
+  // filtres setter/commercial/statut s'appliquent ensuite en mémoire dessus.
+  const searchTerm = query.trim()
+  const baseLeadsState = useLeadsProgressive({ quickLimit: 100, fullLimit: 500 })
+  const searchLeadsState = useLeadsProgressive(searchTerm ? { quickLimit: 100, fullLimit: 500, search: searchTerm } : null)
+  const leadsData = searchTerm ? searchLeadsState.data : baseLeadsState.data
+  const loading = searchTerm ? searchLeadsState.loading : baseLeadsState.loading
+  const error = searchTerm ? searchLeadsState.error : baseLeadsState.error
+  const backgroundLoading = searchTerm ? searchLeadsState.backgroundLoading : baseLeadsState.backgroundLoading
+  const refetch = searchTerm ? searchLeadsState.refetch : baseLeadsState.refetch
   const { data: leadStats } = useLeadStats()
   const { data: users = [] } = useUsers()
   const leads = leadsData ?? []
@@ -597,6 +609,16 @@ function LeadsAdmin() {
 
         <div className="flex-grow flex flex-col min-w-0">
           <div className="px-4 sm:px-8 pt-4 flex items-center gap-3 flex-shrink-0 flex-wrap">
+            <div className="relative flex-grow max-w-sm min-w-[200px]">
+              <Icon name="search" size={16} className="absolute left-3 top-2.5 text-faint" />
+              <input
+                type="text"
+                placeholder="Rechercher un lead…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="w-full bg-white border border-line rounded-[14px] pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-or"
+              />
+            </div>
             <span className="text-xs text-faint font-semibold">{filtered.length}/{(leads ?? []).length}</span>
             {leadFiltersActive(leadFilters) || setterFilter !== 'all' || commercialFilter !== 'all' ? (
               <button
