@@ -1,5 +1,6 @@
-import type { ReactNode, KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Icon } from '../Icon'
+import { DocumentPreviewModal } from './DocumentPreviewModal'
 import { formatDate } from '../../lib/suivi'
 import { attachmentRawUrl, downloadDevisPdf } from '../../lib/api'
 import {
@@ -93,6 +94,7 @@ export function DevisRow({ devis }: { devis: Devis }) {
 }
 
 export function AttachmentRow({ attachment }: { attachment: ProjectAttachmentResponse }) {
+  const [open, setOpen] = useState(false)
   return (
     <li className="flex items-center gap-3 rounded-xl border border-line bg-white px-3 py-2.5">
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cream text-muted">
@@ -100,7 +102,7 @@ export function AttachmentRow({ attachment }: { attachment: ProjectAttachmentRes
       </span>
       <button
         type="button"
-        onClick={() => window.open(attachmentRawUrl(attachment.id), '_blank')}
+        onClick={() => setOpen(true)}
         className="min-w-0 flex-1 text-left"
         title={attachment.label || attachment.filename}
       >
@@ -109,6 +111,12 @@ export function AttachmentRow({ attachment }: { attachment: ProjectAttachmentRes
           {Math.max(1, Math.round(attachment.sizeBytes / 1024))} Ko · {formatDate(attachment.createdAt)}
         </div>
       </button>
+      {open && (
+        <DocumentPreviewModal
+          doc={{ url: attachmentRawUrl(attachment.id), filename: attachment.filename, mimeType: attachment.contentType, label: attachment.label }}
+          onClose={() => setOpen(false)}
+        />
+      )}
     </li>
   )
 }

@@ -3927,6 +3927,49 @@ button.suivi-side-cta { font-family: inherit; cursor: pointer; width: 100%; }
 @keyframes fiche-wf-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fiche-wf-slide { from { transform: translateX(40px); opacity: .4; } to { transform: translateX(0); opacity: 1; } }
 
+/* Module « Technicien VT » */
+.tech-picker-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tech-picker-head strong { display: inline-flex; align-items: center; gap: 7px; }
+.tech-picker-head strong svg { color: var(--color-or-dark); }
+.tech-picker-edit { border: none; background: transparent; color: var(--color-or-dark); font-family: inherit; font-size: 12px; font-weight: 800; cursor: pointer; padding: 2px 4px; border-radius: 6px; transition: background .15s ease; }
+.tech-picker-edit:hover { background: var(--color-or-tint); }
+.tech-picker-edit:disabled { opacity: .5; cursor: default; }
+.tech-picker-card { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--color-line); background: #fff; font-family: inherit; }
+button.tech-picker-card { cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+button.tech-picker-card:hover { border-color: var(--color-or-light); box-shadow: 0 8px 22px rgba(20, 35, 28, .08); transform: translateY(-1px); }
+button.tech-picker-card:disabled { opacity: .6; cursor: default; transform: none; box-shadow: none; }
+.tech-picker-card.is-assigned { border-color: var(--color-or-light); background: linear-gradient(180deg, var(--color-or-tint), #fff); }
+.tech-picker-card.is-empty { border-style: dashed; }
+.tech-picker-avatar { flex-shrink: 0; width: 42px; height: 42px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 900; background: var(--color-or); color: #fff; letter-spacing: .02em; }
+.tech-picker-avatar.is-empty { background: var(--color-cream); color: var(--color-faint); }
+.tech-picker-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tech-picker-name { font-size: 14px; font-weight: 900; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tech-picker-role { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: var(--color-or-dark); }
+.tech-picker-card.is-empty .tech-picker-role { color: var(--color-muted); }
+.tech-picker-editor { display: flex; flex-direction: column; gap: 8px; }
+.tech-picker-select { width: 100%; border-radius: 10px; border: 1px solid var(--color-line-soft); padding: 10px 12px; font-size: 13px; font-weight: 700; font-family: inherit; color: var(--color-text); background: #fff; }
+.tech-picker-select:focus { outline: none; border-color: var(--color-or); box-shadow: 0 0 0 3px var(--color-or-tint); }
+.tech-picker-cancel { align-self: flex-start; border: none; background: transparent; color: var(--color-muted); font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer; padding: 2px 4px; }
+.tech-picker-cancel:hover { color: var(--color-rouille); }
+.tech-picker-saving { font-size: 11px; font-weight: 700; color: var(--color-muted); }
+
+/* Aperçu document / mandat en pop-up */
+.doc-preview-backdrop { position: fixed; inset: 0; z-index: 210; display: flex; align-items: center; justify-content: center; padding: 28px; background: rgba(15, 30, 22, .58); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); animation: fiche-wf-fade .16s ease; }
+.doc-preview { width: min(1000px, 94vw); height: min(88vh, 900px); display: flex; flex-direction: column; background: var(--color-cream-darker); border: 1px solid var(--color-line); border-radius: 18px; box-shadow: 0 40px 90px rgba(20, 35, 28, .34); overflow: hidden; }
+.doc-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--color-line); background: #fff; }
+.doc-preview-title { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 14px; font-weight: 900; color: var(--color-text); }
+.doc-preview-icon { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 9px; background: var(--color-or-tint); color: var(--color-or-dark); }
+.doc-preview-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.doc-preview-open, .doc-preview-close { width: 34px; height: 34px; border-radius: 999px; border: 1px solid var(--color-line); background: #fff; color: var(--color-muted); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .15s ease, color .15s ease, border-color .15s ease; }
+.doc-preview-open:hover { background: var(--color-or-tint); color: var(--color-or-dark); border-color: var(--color-or-light); }
+.doc-preview-close:hover { background: var(--color-rouille-tint); color: var(--color-rouille); }
+.doc-preview-body { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; background: #1c2620; }
+.doc-preview-img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.doc-preview-frame { width: 100%; height: 100%; border: none; background: #fff; }
+.doc-preview-fallback { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 40px; text-align: center; color: #e7efe9; }
+.doc-preview-fallback-icon { display: flex; align-items: center; justify-content: center; width: 64px; height: 64px; border-radius: 16px; background: rgba(255, 255, 255, .08); color: rgba(255, 255, 255, .7); }
+.doc-preview-fallback p { font-size: 13px; font-weight: 700; color: rgba(255, 255, 255, .78); margin: 0; }
+
 /* Bouton « voir plus » des sections de la fiche */
 .fiche-show-more {
   margin-top: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px;

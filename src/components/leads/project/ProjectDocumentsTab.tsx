@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Icon } from '../../Icon'
 import { FileDropzone } from '../../FileDropzone'
+import { DocumentPreviewModal, type DocPreview } from '../../suivi/DocumentPreviewModal'
 import {
   ApiError,
+  attachmentRawUrl,
   deleteProjectAttachment,
-  getAttachmentSignedUrl,
   uploadProjectAttachment,
 } from '../../../lib/api'
 import type {
@@ -24,6 +25,7 @@ export function ProjectDocumentsTab({ project, attachments, onChanged }: Props) 
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [label, setLabel] = useState('')
+  const [preview, setPreview] = useState<DocPreview | null>(null)
 
   async function handleFile(file: File) {
     setError(null)
@@ -44,13 +46,8 @@ export function ProjectDocumentsTab({ project, attachments, onChanged }: Props) 
     }
   }
 
-  async function openDoc(id: string) {
-    try {
-      const { url } = await getAttachmentSignedUrl(id)
-      window.open(url, '_blank', 'noopener')
-    } catch {
-      /* ignore */
-    }
+  function openDoc(d: ProjectAttachmentResponse) {
+    setPreview({ url: attachmentRawUrl(d.id), filename: d.filename, mimeType: d.contentType, label: d.label })
   }
 
   async function handleDelete(id: string) {
@@ -99,7 +96,7 @@ export function ProjectDocumentsTab({ project, attachments, onChanged }: Props) 
             <li key={d.id} className="flex items-center gap-3 rounded-2xl border border-line bg-white/70 px-3 py-2.5">
               <button
                 type="button"
-                onClick={() => void openDoc(d.id)}
+                onClick={() => openDoc(d)}
                 className="w-9 h-9 rounded-lg bg-cream flex items-center justify-center shrink-0 hover:bg-cream-darker"
                 title="Ouvrir"
               >
@@ -107,7 +104,7 @@ export function ProjectDocumentsTab({ project, attachments, onChanged }: Props) 
               </button>
               <button
                 type="button"
-                onClick={() => void openDoc(d.id)}
+                onClick={() => openDoc(d)}
                 className="flex-1 min-w-0 text-left"
               >
                 <div className="font-bold text-sm truncate">{d.label || d.filename}</div>
@@ -127,6 +124,8 @@ export function ProjectDocumentsTab({ project, attachments, onChanged }: Props) 
           ))}
         </ul>
       )}
+
+      {preview && <DocumentPreviewModal doc={preview} onClose={() => setPreview(null)} />}
     </div>
   )
 }

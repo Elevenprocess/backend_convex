@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../Icon'
 import { FileDropzone } from '../FileDropzone'
+import { DocumentPreviewModal, type DocPreview } from './DocumentPreviewModal'
 import {
   PHASE_ICON,
   PHASE_LABEL,
@@ -36,6 +37,7 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
   const [responsable, setResponsable] = useState(substep.responsableId ?? '')
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [preview, setPreview] = useState<DocPreview | null>(null)
   const debounceRef = useRef<number | null>(null)
 
   useEffect(() => {
