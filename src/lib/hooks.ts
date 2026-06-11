@@ -864,6 +864,18 @@ export function useGhlUsers(): Async<GhlUser[]> {
   return useFetch<GhlUser[]>('/ghl-calendar/users')
 }
 
+export type GhlCommercialSyncReport = {
+  ghlUserCount: number
+  matched: { id: string; name: string; email: string | null; ghlUserId: string }[]
+  unmatched: { id: string; name: string; email: string | null }[]
+  alreadyMapped: { id: string; name: string; ghlUserId: string }[]
+}
+
+// Mappe (par email) les commerciaux du SaaS à leurs utilisateurs GHL côté backend.
+export function syncGhlCommercialUsers(): Promise<GhlCommercialSyncReport> {
+  return api<GhlCommercialSyncReport>('/ghl-calendar/sync-users', { method: 'POST' })
+}
+
 export function useGhlMySector(enabled = true): Async<GhlMySector> {
   return useFetch<GhlMySector>(enabled ? '/ghl-calendar/my-sector' : null)
 }

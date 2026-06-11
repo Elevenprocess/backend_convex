@@ -8,7 +8,7 @@ import type { IconName } from '../components/Icon'
 import { UserEditModal } from '../components/UserEditModal'
 import { LoadingBlock, Spinner } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
-import { copyText, inviteUser, regenerateInvitation, revokeInvitation, updateUser, useGhlUsers, useInvitations, useUsers } from '../lib/hooks'
+import { copyText, inviteUser, regenerateInvitation, revokeInvitation, syncGhlCommercialUsers, updateUser, useGhlUsers, useInvitations, useUsers } from '../lib/hooks'
 import { notifyClipboardCopied } from '../lib/clipboardToast'
 import { useTheme } from '../lib/theme'
 import type { InvitationResponse, Role, Team, UserResponse } from '../lib/types'
@@ -169,6 +169,25 @@ function SettingsAdmin({ restricted = false }: { restricted?: boolean }) {
   const [editingUser, setEditingUser] = useState<UserResponse | null>(null)
   const { data: invitations, refetch: refetchInvitations } = useInvitations()
   const { data: ghlUsers, error: ghlUsersError } = useGhlUsers()
+  const [ghlSyncing, setGhlSyncing] = useState(false)
+  const [ghlSyncMsg, setGhlSyncMsg] = useState<string | null>(null)
+
+  async function handleSyncGhl() {
+    setGhlSyncing(true)
+    setGhlSyncMsg(null)
+    try {
+      const r = await syncGhlCommercialUsers()
+      const parts = [`${r.matched.length} relié${r.matched.length > 1 ? 's' : ''}`]
+      if (r.unmatched.length) parts.push(`${r.unmatched.length} non résolu${r.unmatched.length > 1 ? 's' : ''}`)
+      if (r.alreadyMapped.length) parts.push(`${r.alreadyMapped.length} déjà lié${r.alreadyMapped.length > 1 ? 's' : ''}`)
+      setGhlSyncMsg(`${parts.join(' · ')} (${r.ghlUserCount} users GHL)`)
+      refetchUsers()
+    } catch (e) {
+      setGhlSyncMsg(e instanceof Error ? e.message : 'Synchronisation GHL impossible')
+    } finally {
+      setGhlSyncing(false)
+    }
+  }
   const isDark = useTheme((s) => s.isDark)
   const toggleTheme = useTheme((s) => s.toggleTheme)
   // commercial_lead : restreint la base aux setters et commerciaux uniquement.
@@ -215,12 +234,23 @@ function SettingsAdmin({ restricted = false }: { restricted?: boolean }) {
             <p>{counts.total} utilisateur{counts.total > 1 ? 's' : ''} · {counts.active} actif{counts.active > 1 ? 's' : ''}</p>
           </div>
           <div className="settings-header-actions">
+            {!restricted && (
+              <button onClick={handleSyncGhl} disabled={ghlSyncing} className="settings-invite" style={{ opacity: ghlSyncing ? 0.6 : 1 }} title="Relie automatiquement les commerciaux à leurs comptes GHL (par email)">
+                <Icon name="sparkles" size={15} />
+                {ghlSyncing ? 'Synchronisation…' : 'Synchroniser avec GHL'}
+              </button>
+            )}
             <button onClick={() => setInviteOpen(true)} className="settings-invite">
               <Icon name="plus" size={15} />
               Inviter un membre
             </button>
           </div>
         </header>
+        {ghlSyncMsg && (
+          <div className="settings-reveal" style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 700 }}>
+            <span className="status-badge bg-success-tint text-success">GHL : {ghlSyncMsg}</span>
+          </div>
+        )}
 
         <section className="settings-stats settings-reveal" style={{ animationDelay: '60ms' }} aria-label="Filtrer les membres par type">
           <StatCard icon="users" value={counts.total} label="Utilisateurs" primary active={filter === 'all'} onClick={() => selectFilter('all')} />
