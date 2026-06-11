@@ -28,6 +28,7 @@ export function SuiviDetail() {
     && role !== 'responsable_technique'
     && role !== 'back_office'
     && role !== 'technicien'
+    && role !== 'finances'
   ) return <Navigate to="/overview" replace />
   if (!id) return <Navigate to={role === 'technicien' ? '/mes-dossiers' : '/suivi'} replace />
 

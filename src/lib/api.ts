@@ -1,5 +1,8 @@
 import type {
+  AcompteResponse,
+  RecordAcomptePatch,
   ClientResponse,
+  CommercialObjectiveResponse,
   DebriefResponse,
   Devis,
   LeadResponse,
@@ -12,6 +15,7 @@ import type {
   SubstepResponse,
   SubstepDocument,
   UpdateSubstepPatch,
+  UpsertCommercialObjectivePayload,
 } from './types'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
@@ -229,6 +233,18 @@ export function resolveSubstepProblem(
   return api<SubstepResponse>(`/substeps/${substepId}/resolve-problem`, { method: 'POST', body: { status } })
 }
 
+// ─── Finances : acomptes ─────────────────────────────────────
+export function listAcomptes(): Promise<AcompteResponse[]> {
+  return api<AcompteResponse[]>('/payments/acomptes')
+}
+
+export function recordAcompte(
+  debriefId: string,
+  patch: RecordAcomptePatch,
+): Promise<AcompteResponse> {
+  return api<AcompteResponse>(`/payments/acomptes/${debriefId}`, { method: 'PATCH', body: patch })
+}
+
 export function getDevis(devisId: string): Promise<Devis> {
   return api<Devis>(`/devis/${devisId}`)
 }
@@ -400,6 +416,17 @@ export function getAttachmentSignedUrl(
  * fonctionne en dev (local-FS) comme en prod (R2), contrairement à
  * getAttachmentSignedUrl qui renvoie un file:// inexploitable en local.
  */
+// ─── Objectifs commerciaux (mensuels, par commercial) ─────
+export async function listCommercialObjectives(period: string): Promise<CommercialObjectiveResponse[]> {
+  return api('/commercial-objectives', { query: { period } })
+}
+
+export async function upsertCommercialObjective(
+  payload: UpsertCommercialObjectivePayload,
+): Promise<CommercialObjectiveResponse> {
+  return api('/commercial-objectives', { method: 'PUT', body: payload })
+}
+
 export function attachmentRawUrl(attachmentId: string): string {
   return buildApiUrl(`/attachments/${attachmentId}/raw`)
 }

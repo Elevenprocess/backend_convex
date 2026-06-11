@@ -22,7 +22,9 @@ export function DossierWorkflowPanel({ dossier }: Props) {
   const role = useAuth((s) => s.user?.role)
   const FIELD_PHASES: WorkflowPhase[] = ['vt', 'installation']
   const canEditPhase = (phase: WorkflowPhase) =>
-    role === 'technicien' ? FIELD_PHASES.includes(phase) : true
+    role === 'finances' ? false
+      : role === 'technicien' ? FIELD_PHASES.includes(phase)
+        : true
 
   const { data: clients, refetch: refetchClients } = useClients({ leadId: dossier.lead.id })
   const { data: users } = useUsers()

@@ -6,8 +6,10 @@ import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
 import { useDisplayUser } from '../lib/role'
-import { useCallLogs, useClients, useLeads, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary, useDebriefAnalytics, prefetchAnalyticsFunnel, prefetchAnalyticsSummary, type DebriefAnalyticsResponse } from '../lib/hooks'
-import { STATUS_LABEL, DEBRIEF_ACCEPTANCE_FACTOR_LABEL, DEBRIEF_NON_SALE_REASON_LABEL, fullName, initials, type AnalyticsAdminSummary, type AnalyticsFunnelResponse, type CallLogResponse, type DebriefAcceptanceFactor, type DebriefNonSaleReason, type LeadResponse, type LeadStatus, type RdvResponse, type RdvLeadSummary, type UserResponse } from '../lib/types'
+import { useCallLogs, useClients, useLeads, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary, useCommercialObjectives, useDebriefAnalytics, prefetchAnalyticsFunnel, prefetchAnalyticsSummary, type DebriefAnalyticsResponse } from '../lib/hooks'
+import { STATUS_LABEL, DEBRIEF_ACCEPTANCE_FACTOR_LABEL, DEBRIEF_NON_SALE_REASON_LABEL, fullName, initials, type AnalyticsAdminSummary, type AnalyticsFunnelResponse, type CallLogResponse, type CommercialObjectiveResponse, type DebriefAcceptanceFactor, type DebriefNonSaleReason, type LeadResponse, type LeadStatus, type RdvResponse, type RdvLeadSummary, type UserResponse } from '../lib/types'
+import { CommercialLeaderboard, type LeaderboardRow } from '../components/overview/CommercialLeaderboard'
+import { ObjectivesEditorModal } from '../components/overview/ObjectivesEditorModal'
 import { computeTechnicienStats, computeTerrainPipeline, selectUnassignedVt, type TechnicienStat } from '../lib/technicienStats'
 import { buildSuiviPeriodRange, getDefaultSuiviPeriod, SUIVI_PERIOD_OPTIONS, type SuiviPeriodState } from '../lib/suivi'
 import { PHASE_LABEL, PHASE_ICON } from '../lib/suivi-board'
@@ -556,7 +558,7 @@ function CommercialDebriefsToFill({ debriefs, limit = 8 }: { debriefs: { rdv: Rd
 // vue épurée (OverviewCommercialSolo) : un seul KPI « RDV honorés » + ses débriefs.
 function OverviewCommercial() {
   const role = useAuth((s) => s.user?.role)
-  if (role === 'commercial_lead') return <OverviewCommercialIndividual />
+  if (role === 'commercial_lead') return <OverviewCommercialLead />
   return <OverviewCommercialSolo />
 }
 
@@ -628,85 +630,102 @@ function OverviewCommercialSolo() {
   )
 }
 
-// ----- F3 ter : commercial individuel — vue minimale (débriefs à remplir) -----
-function OverviewCommercialIndividual() {
+// ----- F3 ter : responsable commercial (commercial_lead) — pilotage équipe -----
+// Vue manager : KPIs équipe avec atteinte d'objectif, classement des commerciaux,
+// édition des objectifs mensuels (persistés en base) et débriefs à remplir.
+function OverviewCommercialLead() {
   const navigate = useNavigate()
-  const me = useAuth((s) => s.user)
   const display = useDisplayUser()
   const [tab, setTab] = useState('overview')
   const [period, setPeriod] = useState<FunnelPeriodState>({ ...DEFAULT_FUNNEL_PERIOD, mode: 'this_month' })
   const range = buildFunnelPeriodRange(period)
-  // Le commercial_lead supervise toute l'équipe closing par défaut (scope non
-  // borné, commercialId undefined), mais peut basculer sur « Mes RDV » pour ne
-  // voir que les RDV qui lui sont personnellement attribués (commercialId = son
-  // id). Le commercial individuel ne voit toujours que ses données.
-  const isCommercialLead = me?.role === 'commercial_lead'
-  const [rdvScope, setRdvScope] = useState<'team' | 'mine'>('team')
-  const scopeCommercialId = isCommercialLead
-    ? rdvScope === 'mine'
-      ? me?.id
-      : undefined
-    : me?.id
-  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const [objOpen, setObjOpen] = useState(false)
 
-  // Liste RDV non bornée par la période : on ne masque jamais un débrief en
-  // retard ni un RDV à venir. Les KPIs filtrent la période en mémoire.
-  // Le lead (nom/ville/téléphone) est embarqué dans chaque RDV par le backend
-  // (toRdvResponse) — c'est la source fiable, notamment pour le commercial_lead
-  // dont les RDV d'équipe référencent des leads hors du lot /leads chargé.
-  // La jointure /leads ci-dessous reste un fallback (commercial individuel, ou
-  // backend pas encore déployé) : bornée à ses propres leads, donc suffisante.
-  const { data: rdvs = [] } = useRdvList({ commercialId: scopeCommercialId, limit: 200 })
+  // Les objectifs sont mensuels : on dérive le mois ('YYYY-MM') du début de la
+  // période sélectionnée. Pour « Ce mois-ci » (défaut), l'atteinte est exacte.
+  const monthKey = range.from.slice(0, 7)
+  const monthLabel = new Date(range.from).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
+
+  const { data: summary } = useAnalyticsSummary({ from: range.from, to: range.to })
+  const { data: objectives, refetch: refetchObjectives } = useCommercialObjectives(monthKey)
+  const { data: users } = useUsers()
+  const { data: rdvs = [] } = useRdvList({ limit: 200 })
   const { data: allLeads = [] } = useLeads({ limit: 500 })
 
-  const { kpis, upcoming, debriefs } = useMemo(() => {
+  const commercials = useMemo(() => summary?.admin?.commercials ?? [], [summary])
+
+  const objByCommercial = useMemo(() => {
+    const m = new Map<string, CommercialObjectiveResponse>()
+    for (const o of objectives ?? []) m.set(o.commercialId, o)
+    return m
+  }, [objectives])
+
+  // KPIs équipe : agrégés depuis le classement par commercial (cohérent avec le board).
+  const team = useMemo(() => {
+    const ca = commercials.reduce((s, c) => s + c.ca, 0)
+    const signed = commercials.reduce((s, c) => s + c.signed, 0)
+    const honored = commercials.reduce((s, c) => s + c.honored, 0)
+    const closing = commercials.length
+      ? Math.round(commercials.reduce((s, c) => s + c.closing, 0) / commercials.length)
+      : 0
+    return { ca, signed, honored, closing }
+  }, [commercials])
+
+  // Objectif équipe = somme des objectifs des commerciaux (closing = moyenne).
+  const targets = useMemo(() => {
+    let ca = 0, ventes = 0, rdv = 0, closingSum = 0, closingCount = 0
+    for (const o of objectives ?? []) {
+      ca += o.caTarget ?? 0
+      ventes += o.ventesTarget ?? 0
+      rdv += o.rdvTarget ?? 0
+      if (o.closingTarget != null) { closingSum += o.closingTarget; closingCount++ }
+    }
+    return { ca, ventes, rdv, closing: closingCount ? Math.round(closingSum / closingCount) : 0 }
+  }, [objectives])
+
+  const leaderboardRows: LeaderboardRow[] = commercials.map((perf) => ({
+    perf,
+    objective: objByCommercial.get(perf.id) ?? null,
+  }))
+
+  const { upcoming, debriefs } = useMemo(() => {
     const list = rdvs ?? []
     const leadById = new Map((allLeads ?? []).map((l) => [l.id, l]))
-
-    // KPIs : sous-ensemble dans la période (range.from/to et scheduledAt sont des ISO → compare lexicographique).
-    const inPeriod = list.filter((r) => r.scheduledAt >= range.from && r.scheduledAt <= range.to)
-    const honored = inPeriod.filter((r) => r.status === 'honore').length
-    const planifie = inPeriod.filter((r) => r.status === 'planifie').length
-    const signed = inPeriod.filter((r) => r.result === 'signe')
-    const lost = inPeriod.filter((r) => r.result === 'perdu').length
-    const reflexion = inPeriod.filter((r) => r.result === 'reflexion').length
-    const ca = signed.reduce((sum, r) => sum + (parseFloat(r.montantTotal ?? '0') || 0), 0)
-    const signedCount = signed.length
-    const closingBase = Math.max(honored, signedCount + lost + reflexion)
-    const kpis = {
-      ca,
-      signedCount,
-      closing: closingBase ? Math.round((signedCount / closingBase) * 100) : 0,
-      panier: signedCount ? ca / signedCount : 0,
-      honored,
-      planifie,
-      lost,
-    }
-
-    // RDV à venir et débriefs : sur la liste COMPLÈTE (hors période).
-    const upcoming = list
-      .filter((r) => r.status === 'planifie' && r.scheduledAt >= todayIso)
-      .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))
-      .map((r) => ({ rdv: r, lead: r.lead ?? leadById.get(r.leadId) }))
-    // « Débriefs à remplir » trié par client récent : on remonte ceux qui
-    // viennent d'arriver dans le CRM (date d'arrivée / création du lead), avec
-    // repli sur la date de création du RDV si le lead n'est pas chargé.
+    const todayIso = new Date().toISOString().slice(0, 10)
     const leadArrival = (r: RdvResponse): string => {
       const full = leadById.get(r.leadId)
       return full?.arrivalAt ?? full?.createdAt ?? r.createdAt
     }
+    const upcoming = list
+      .filter((r) => r.status === 'planifie' && r.scheduledAt >= todayIso)
+      .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))
+      .map((r) => ({ rdv: r, lead: r.lead ?? leadById.get(r.leadId) }))
     const debriefs = list
       .filter(needsDebrief)
       .sort((a, b) => leadArrival(b).localeCompare(leadArrival(a)))
       .map((r) => ({ rdv: r, lead: r.lead ?? leadById.get(r.leadId) }))
+    return { upcoming, debriefs }
+  }, [rdvs, allLeads])
 
-    return { kpis, upcoming, debriefs }
-  }, [rdvs, allLeads, todayIso, range.from, range.to])
+  const caPct = targets.ca > 0 ? Math.round((team.ca / targets.ca) * 100) : undefined
+  const ventesPct = targets.ventes > 0 ? Math.round((team.signed / targets.ventes) * 100) : undefined
+  const rdvPct = targets.rdv > 0 ? Math.round((team.honored / targets.rdv) * 100) : undefined
+
+  // Liste des commerciaux pour l'éditeur d'objectifs : tout l'annuaire closing
+  // (pour fixer un objectif même à un commercial sans activité ce mois), avec
+  // repli sur les commerciaux du classement si l'annuaire n'est pas chargé.
+  const commercialsForModal = useMemo(() => {
+    const roster = (users ?? [])
+      .filter((u) => u.role === 'commercial' || u.role === 'commercial_lead')
+      .map((u) => ({ id: u.id, name: u.name, initials: userInitials(u.name) }))
+    if (roster.length) return roster
+    return commercials.map((c) => ({ id: c.id, name: c.name, initials: c.initials }))
+  }, [commercials, users])
 
   return (
     <AppShell blobsKey="commercial" flat>
       <Topbar
-        eyebrow="COMMERCIAL"
+        eyebrow="RESPONSABLE COMMERCIAL"
         title={`Bonjour, ${display.firstName}`}
         tabs={[
           { id: 'overview', label: 'Overview' },
@@ -721,54 +740,65 @@ function OverviewCommercialIndividual() {
       <main className="overview-shot-page overview-commercial-page flex-grow overflow-auto">
         <div className="overview-air-header">
           <div>
-            <span className="shot-eyebrow">ECOI SaaS · commercial</span>
-            <h1>Mon espace</h1>
+            <span className="shot-eyebrow">ECOI SaaS · pilotage commercial</span>
+            <h1>Pilotage de l'équipe</h1>
             <p className="text-sm text-muted mt-2">
-              {isCommercialLead && rdvScope === 'mine'
-                ? 'Uniquement les RDV qui vous sont attribués · vos chiffres et débriefs.'
-                : isCommercialLead
-                  ? "Toute l'équipe closing · chiffres, prochains rendez-vous et débriefs."
-                  : 'Vos chiffres, vos prochains rendez-vous et vos débriefs à remplir.'}
+              Performance de l'équipe closing, classement et atteinte des objectifs du mois.
             </p>
           </div>
           <div className="overview-commercial-toolbar">
-            {isCommercialLead && (
-              <PillTabs
-                items={[{ id: 'team', label: "Toute l'équipe" }, { id: 'mine', label: 'Mes RDV' }]}
-                active={rdvScope}
-                onChange={(id) => setRdvScope(id as 'team' | 'mine')}
-              />
-            )}
+            <button type="button" className="lead-objbtn-top" onClick={() => setObjOpen(true)}>
+              Objectifs · {monthLabel}
+            </button>
             <DateRangePicker value={period} onChange={setPeriod} align="right" />
           </div>
         </div>
 
         <section className="overview-commercial-hero-stats">
-          <MagicKpi size="sm" accent="gold" icon="trophy" label="CA signé" value={fmtKEur(kpis.ca)} sub={`${fmtCompact(kpis.signedCount)} ventes`} />
-          <MagicKpi size="sm" accent="success" icon="target" label="Closing" value={`${kpis.closing}%`} sub={`${fmtCompact(kpis.lost)} perdus`} progress={kpis.closing} />
-          <MagicKpi size="sm" accent="green" icon="tag" label="Panier moyen" value={fmtKEur(kpis.panier)} sub="sur ventes signées" />
-          <MagicKpi size="sm" accent="info" icon="calendar" label="RDV honorés" value={fmtCompact(kpis.honored)} sub={`${fmtCompact(kpis.planifie)} planifiés`} />
+          <MagicKpi size="sm" accent="gold" icon="trophy" label="CA équipe" value={fmtKEur(team.ca)}
+            sub={caPct != null ? `${caPct}% · obj. ${fmtKEur(targets.ca)}` : `${fmtCompact(team.signed)} ventes`}
+            progress={caPct != null ? Math.min(100, caPct) : undefined} />
+          <MagicKpi size="sm" accent="success" icon="target" label="Closing moyen" value={`${team.closing}%`}
+            sub={targets.closing > 0 ? `objectif ${targets.closing}%` : 'moyenne équipe'} progress={team.closing} />
+          <MagicKpi size="sm" accent="green" icon="tag" label="Ventes" value={fmtCompact(team.signed)}
+            sub={ventesPct != null ? `${ventesPct}% · obj. ${fmtCompact(targets.ventes)}` : 'devis signés'} />
+          <MagicKpi size="sm" accent="info" icon="calendar" label="RDV honorés" value={fmtCompact(team.honored)}
+            sub={rdvPct != null ? `${rdvPct}% · obj. ${fmtCompact(targets.rdv)}` : 'sur la période'} />
         </section>
 
-        <section className="overview-air-grid overview-commercial-grid overview-commercial-solo-grid">
-          <CommercialDebriefsToFill debriefs={debriefs} />
+        <section className="overview-lead-grid">
+          <CommercialLeaderboard rows={leaderboardRows} onEditObjectives={() => setObjOpen(true)} />
 
-          <div className="overview-air-card overview-role-wide">
-            <CardHead title="Mes RDV à venir" icon="phone" />
-            <div className="overview-role-list overview-role-list-grid">
-              {upcoming.length === 0 ? (
-                <div className="text-xs text-faint">Aucun RDV à venir.</div>
-              ) : upcoming.slice(0, 6).map(({ rdv, lead }) => (
-                <CommercialUpcomingRdvRow key={rdv.id} rdv={rdv} lead={lead} />
-              ))}
+          <div className="overview-lead-side">
+            <div className="overview-air-card">
+              <CardHead title="Débriefs à remplir" icon="phone" />
+              <CommercialDebriefsToFill debriefs={debriefs} limit={6} />
             </div>
-          </div>
 
-          <div className="overview-commercial-actions">
-            <button type="button" onClick={() => navigate('/rdv')}>Voir mes RDV</button>
+            <div className="overview-air-card">
+              <CardHead title="Prochains RDV équipe" icon="phone" />
+              <div className="overview-role-list">
+                {upcoming.length === 0 ? (
+                  <div className="text-xs text-faint">Aucun RDV à venir.</div>
+                ) : upcoming.slice(0, 5).map(({ rdv, lead }) => (
+                  <CommercialUpcomingRdvRow key={rdv.id} rdv={rdv} lead={lead} />
+                ))}
+              </div>
+            </div>
           </div>
         </section>
       </main>
+
+      {objOpen && (
+        <ObjectivesEditorModal
+          commercials={commercialsForModal}
+          objectives={objByCommercial}
+          period={monthKey}
+          periodLabel={monthLabel}
+          onClose={() => setObjOpen(false)}
+          onSaved={refetchObjectives}
+        />
+      )}
     </AppShell>
   )
 }

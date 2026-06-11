@@ -257,6 +257,27 @@ export type AnalyticsCommercialPerf = {
   ca: number
 }
 
+// Objectifs mensuels par commercial (fixés par le responsable commercial).
+export type CommercialObjectiveResponse = {
+  id: string
+  commercialId: string
+  period: string // 'YYYY-MM'
+  caTarget: number | null
+  ventesTarget: number | null
+  rdvTarget: number | null
+  closingTarget: number | null
+  updatedAt: string
+}
+
+export type UpsertCommercialObjectivePayload = {
+  commercialId: string
+  period: string
+  caTarget?: number | null
+  ventesTarget?: number | null
+  rdvTarget?: number | null
+  closingTarget?: number | null
+}
+
 export type AnalyticsAdminSummary = {
   calls: number
   loggedCalls: number
@@ -891,6 +912,35 @@ export type UpdateSubstepPatch = Partial<{
   problemReason: string | null
   problemNotes: string | null
 }>
+
+// ─── Finances : encaissement des acomptes ───────────────────
+export type AcompteStatut = 'attendu' | 'encaisse' | 'en_retard' | 'annule'
+
+export type AcompteResponse = {
+  debriefId: string
+  leadId: string | null
+  clientName: string | null
+  commercialName: string | null
+  montantTotal: string | null
+  acompteAmount: string | null
+  acomptePercent: number | null
+  paymentSubMethod: string | null
+  financingType: string | null
+  signedAt: string | null
+  statut: AcompteStatut
+  montantReel: string | null
+  dateEncaissement: string | null
+  notes: string | null
+  recordedById: string | null
+  updatedAt: string | null
+}
+
+export type RecordAcomptePatch = {
+  statut: AcompteStatut
+  montantReel?: string | null
+  dateEncaissement?: string | null
+  notes?: string | null
+}
 
 export type NotificationResponse = {
   id: string

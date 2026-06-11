@@ -72,6 +72,7 @@ export function Suivi() {
     && role !== 'delivrabilite'
     && role !== 'responsable_technique'
     && role !== 'back_office'
+    && role !== 'finances'
   ) return <Navigate to="/overview" replace />
 
   const isLoading = leadsLoading || rdvLoading

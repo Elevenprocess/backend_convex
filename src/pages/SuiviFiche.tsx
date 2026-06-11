@@ -90,6 +90,7 @@ export function FicheCompletePage() {
     && role !== 'responsable_technique'
     && role !== 'back_office'
     && role !== 'technicien'
+    && role !== 'finances'
   ) return <Navigate to="/overview" replace />
   if (!id) return <Navigate to="/suivi" replace />
 

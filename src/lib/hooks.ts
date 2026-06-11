@@ -4,6 +4,7 @@ import { notifyClipboardCopied } from './clipboardToast'
 import { notifyRealtimeRefresh, REALTIME_REFRESH_EVENT, type RealtimeRefreshPayload } from './realtime'
 import { useNetworkActivity } from './networkActivity'
 import type {
+  AcompteResponse,
   CallLogResponse,
   ClientResponse,
   DebriefResponse,
@@ -18,6 +19,7 @@ import type {
   AnalyticsSummaryResponse,
   AnalyticsFunnelResponse,
   AnalyticsCommercialSummary,
+  CommercialObjectiveResponse,
   ProjectAttachmentResponse,
   ProjectDetailResponse,
   ProjectResponse,
@@ -403,6 +405,10 @@ export function useSubsteps(
   )
 }
 
+export function useAcomptes(enabled = true): Async<AcompteResponse[]> {
+  return useFetch<AcompteResponse[]>(enabled ? '/payments/acomptes' : null)
+}
+
 export function useInvitations(enabled = true): Async<InvitationResponse[]> {
   return useFetch<InvitationResponse[]>(enabled ? '/users/invitations' : null)
 }
@@ -497,6 +503,14 @@ export function prefetchAnalyticsSummary(filters?: {
   to?: string
 }, options?: { force?: boolean }): Promise<AnalyticsSummaryResponse | null> {
   return prefetchFetchCache<AnalyticsSummaryResponse>('/analytics/summary', filters, options)
+}
+
+export function useCommercialObjectives(period: string | null): Async<CommercialObjectiveResponse[]> {
+  return useFetch<CommercialObjectiveResponse[]>(
+    period ? '/commercial-objectives' : null,
+    period ? { period } : undefined,
+    { refreshCachedOnMount: true },
+  )
 }
 
 export function useAnalyticsFunnel(filters?: {

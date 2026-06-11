@@ -19,6 +19,7 @@ import { RdvDetail } from './pages/rdv/RdvDetail'
 import { RdvSplit } from './pages/rdv/RdvSplit'
 import { Analytics } from './pages/Analytics'
 import { Suivi } from './pages/Suivi'
+import { Finances } from './pages/Finances'
 import { SuiviDetail } from './pages/SuiviDetail'
 import { FicheCompletePage } from './pages/SuiviFiche'
 import { ProfilSetter } from './pages/profils/ProfilSetter'
@@ -80,6 +81,7 @@ const router = createHashRouter([
           { path: '/suivi', element: <NoTechnicien><Suivi /></NoTechnicien> },
           { path: '/suivi/:id', element: <SuiviDetail /> },
           { path: '/suivi/:id/fiche', element: <FicheCompletePage /> },
+          { path: '/finances', element: <NoTechnicien><Finances /></NoTechnicien> },
           { path: '/mes-interventions', element: <MesInterventions /> },
           { path: '/team/setters/:id', element: <ProfilSetter /> },
           { path: '/team/commerciaux/:id', element: <ProfilCommercial /> },

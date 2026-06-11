@@ -69,8 +69,16 @@ const SECTIONS: Section[] = [
     label: 'Délivrabilité',
     collapsible: true,
     items: [
-      { to: '/suivi', icon: 'grid', label: 'Delivery', roles: DELIVERY_ROLES },
+      { to: '/suivi', icon: 'grid', label: 'Delivery', roles: [...DELIVERY_ROLES, 'finances'] },
       { to: '/client', icon: 'inbox', label: 'Client', roles: OPS_ROLES },
+    ],
+  },
+  {
+    id: 'finances',
+    label: 'Finances',
+    collapsible: true,
+    items: [
+      { to: '/finances', icon: 'tag', label: 'Acomptes', roles: ['admin', 'finances'] },
     ],
   },
   {
