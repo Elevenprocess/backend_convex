@@ -1,4 +1,4 @@
-import { type CSSProperties, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, type MouseEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '../components/Icon'
 import { MagicKpi } from '../components/kpi/MagicKpi'
@@ -1105,9 +1105,32 @@ function smoothPath(coords: { x: number; y: number }[]): string {
   return d
 }
 
+// Y exact SUR la courbe pour une abscisse X donnée (le tracé est monotone en X,
+// gauche→droite). Recherche dichotomique sur la longueur du path → le marqueur
+// peut se poser n'importe où sous le curseur, pas seulement sur un point de data.
+function yOnPathAtX(path: SVGPathElement, x: number, fallbackY: number): number {
+  const total = path.getTotalLength()
+  if (!total) return fallbackY
+  let lo = 0
+  let hi = total
+  for (let i = 0; i < 20; i += 1) {
+    const mid = (lo + hi) / 2
+    if (path.getPointAtLength(mid).x < x) lo = mid
+    else hi = mid
+  }
+  return path.getPointAtLength((lo + hi) / 2).y
+}
+
 function LeadEvolutionChart({ points, comparePoints = [], granularity, range, rangeLabel, compareLabel, totals }: { points: LeadEvolutionPoint[]; comparePoints?: LeadEvolutionPoint[]; granularity: EvolutionGranularity; range: FunnelPeriodRange; rangeLabel: string; compareLabel?: string; totals: { leads: number; qualified: number; signed: number } }) {
   const [activeKey, setActiveKey] = useState<LeadEvolutionSeriesKey>('leads')
-  const [hover, setHover] = useState<{ index: number; cursorX: number } | null>(null)
+  // cursorX/dotY : position du marqueur SUR la courbe (coord. SVG, suit le curseur en continu).
+  // mx/my/mw/mh : position du curseur et taille du cadre en pixels (pour placer le tooltip).
+  const [hover, setHover] = useState<{ index: number; cursorX: number; dotY: number; mx: number; my: number; mw: number; mh: number } | null>(null)
+  const lineRef = useRef<SVGPathElement | null>(null)
+  const tooltipRef = useRef<HTMLDivElement | null>(null)
+  // Position finale de la carte en pixels, clampée dans le cadre (calculée après
+  // mesure réelle du tooltip → jamais coupée, glisse le long du bord au lieu de sauter).
+  const [tipPos, setTipPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 })
   const rawPoints = points.length > 0 ? points : [{ key: 'empty', t: 0, date: '', label: 'Live', leads: 0, qualified: 0, signed: 0 }]
   const sampleStep = rawPoints.length > 56 ? Math.ceil(rawPoints.length / 56) : 1
   const keepIdx = sampleStep > 1 ? rawPoints.map((_, index) => index).filter((index) => index % sampleStep === 0 || index === rawPoints.length - 1) : rawPoints.map((_, index) => index)
@@ -1134,14 +1157,10 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
   const xForTime = (t: number) => padX + ((clamp(t, domain.start, domain.end) - domain.start) / (domain.end - domain.start)) * chartWidth
   const xForIndex = (index: number) => padX + (safePoints.length === 1 ? chartWidth / 2 : (index / (safePoints.length - 1)) * chartWidth)
   const xFor = (index: number) => (useTime ? xForTime(safePoints[index].t) : xForIndex(index))
-  // comparePts.length === safePoints.length by construction (same keepIdx mapping)
-  const xForCompare = (index: number) => padX + (comparePts.length <= 1 ? chartWidth / 2 : (index / (comparePts.length - 1)) * chartWidth)
   const yFor = (value: number) => padTop + chartHeight - (value / max) * chartHeight
 
   const currentCoords = safePoints.map((point, index) => ({ x: xFor(index), y: yFor(point[activeKey]) }))
-  const compareCoords = comparePts.map((point, index) => ({ x: xForCompare(index), y: yFor(point[activeKey]) }))
   const currentPath = smoothPath(currentCoords)
-  const comparePath = compareCoords.length >= 2 ? smoothPath(compareCoords) : ''
   const areaPath = currentPath ? `${currentPath} L ${xFor(safePoints.length - 1).toFixed(1)} ${(height - padBottom).toFixed(1)} L ${xFor(0).toFixed(1)} ${(height - padBottom).toFixed(1)} Z` : ''
   const animKey = `${range.from}|${range.to}|${granularity}|${activeKey}`
   const lastIndex = safePoints.length - 1
@@ -1160,6 +1179,7 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
   const onMove = (event: MouseEvent<SVGSVGElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
     const clientX = event.clientX
+    const clientY = event.clientY
     if (moveRaf.current !== null) return
     moveRaf.current = requestAnimationFrame(() => {
       moveRaf.current = null
@@ -1170,16 +1190,60 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
         const dist = Math.abs(xFor(i) - cursorX)
         if (dist < best) { best = dist; index = i }
       }
-      setHover({ index, cursorX })
+      // Marqueur posé exactement sur la courbe à l'abscisse du curseur (suivi continu).
+      const fallbackY = yFor(safePoints[index][activeKey])
+      const dotY = lineRef.current ? yOnPathAtX(lineRef.current, cursorX, fallbackY) : fallbackY
+      setHover({
+        index,
+        cursorX,
+        dotY,
+        mx: clientX - rect.left,
+        my: clientY - rect.top,
+        mw: rect.width,
+        mh: rect.height,
+      })
     })
   }
   const onLeave = () => {
     if (moveRaf.current !== null) { cancelAnimationFrame(moveRaf.current); moveRaf.current = null }
     setHover(null)
   }
+  // Place la carte sur les 4 côtés du curseur (haut / bas / gauche / droite + coins)
+  // selon le bord du graph atteint. Mesure réelle du tooltip → jamais coupé.
+  // useLayoutEffect : recalcule avant peinture, donc aucun flash à la position précédente.
+  useLayoutEffect(() => {
+    const el = tooltipRef.current
+    if (!hover || !el) return
+    const gap = 14
+    const margin = 8
+    const tw = el.offsetWidth
+    const th = el.offsetHeight
+    const { mx, my, mw, mh } = hover
+    // Horizontal : à droite du curseur par défaut ; bascule à gauche si pas la place ;
+    // si aucun des deux côtés ne tient (carte large / cadre étroit) → centré sur le curseur.
+    let left: number
+    if (mx + gap + tw <= mw - margin) left = mx + gap
+    else if (mx - gap - tw >= margin) left = mx - gap - tw
+    else left = mx - tw / 2
+    left = clamp(left, margin, Math.max(margin, mw - tw - margin))
+    // Vertical : centré sur le curseur au milieu ; près du HAUT la carte passe EN DESSOUS,
+    // près du BAS elle passe AU-DESSUS (bascule décisive, pas un simple écrasement au bord).
+    let top = my - th / 2
+    if (top < margin) top = my + gap + th <= mh - margin ? my + gap : margin
+    else if (top + th > mh - margin) top = my - gap - th >= margin ? my - gap - th : mh - th - margin
+    top = clamp(top, margin, Math.max(margin, mh - th - margin))
+    setTipPos({ left, top })
+  }, [hover])
   useEffect(() => () => { if (moveRaf.current !== null) cancelAnimationFrame(moveRaf.current) }, [])
 
   const hoverPoint = hover ? safePoints[hover.index] : null
+  // Libellé honnête du point réel le plus proche : date complète en jour/sem./mois,
+  // libellé horaire tel quel en mode 'hour' (déjà précis : « lun 14h »).
+  const hoverDateLabel = hoverPoint
+    ? granularity === 'hour'
+      ? hoverPoint.label
+      : new Date(`${hoverPoint.date}T12:00:00`).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })
+    : ''
   const hoverCompare = hover ? comparePts[hover.index] : undefined
   const curVal = hoverPoint ? hoverPoint[activeKey] : 0
   const prevVal = hoverCompare ? hoverCompare[activeKey] : 0
@@ -1235,10 +1299,9 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
               </g>
             )
           })}
-          {comparePath ? <path d={comparePath} className="lead-evolution-compare" /> : null}
           <g key={animKey} className="lead-evolution-anim">
             {areaPath ? <path d={areaPath} fill="url(#leadEvolutionFill)" stroke="none" /> : null}
-            {currentPath ? <path d={currentPath} className="lead-evolution-line lead-evolution-line--draw" /> : null}
+            {currentPath ? <path ref={lineRef} d={currentPath} className="lead-evolution-line lead-evolution-line--draw" /> : null}
           </g>
           {showLive ? (
             <g key={`live-${animKey}`} className="lead-evolution-live" pointerEvents="none">
@@ -1269,23 +1332,21 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
           {hover && hoverPoint ? (
             <g pointerEvents="none">
               <line x1={hover.cursorX} x2={hover.cursorX} y1={padTop} y2={height - padBottom} className="lead-evolution-guide" />
-              {hoverCompare ? <circle cx={xForCompare(hover.index)} cy={yFor(prevVal)} r="3.5" className="lead-evolution-compare-dot" /> : null}
-              <circle cx={xFor(hover.index)} cy={yFor(curVal)} r="5" className="lead-evolution-dot" />
+              <circle cx={hover.cursorX} cy={hover.dotY} r="5" className="lead-evolution-dot" style={{ transition: 'none' }} />
             </g>
           ) : null}
         </svg>
         {hover && hoverPoint ? (
           <div
+            ref={tooltipRef}
             className="lead-evolution-tooltip"
             style={{
-              left: `${(hover.cursorX / width) * 100}%`,
-              top: '8%',
-              // Décalage continu : 0 % au bord gauche → -100 % au bord droit (suit le curseur sans jamais sortir ni sauter).
-              transform: `translateX(-${clamp((hover.cursorX - padX) / chartWidth, 0, 1) * 100}%)`,
+              left: tipPos.left,
+              top: tipPos.top,
             }}
           >
-            <small>{activeSeries.label}</small>
-            <strong>{hoverPoint.label}</strong>
+            <small>{activeSeries.label} · jour le plus proche</small>
+            <strong>{hoverDateLabel}</strong>
             <b className="lead-evolution-tooltip-value">{fmtCompact(curVal)}</b>
             <div className="lead-evolution-tooltip-delta">
               {deltaPct === null ? (
@@ -1307,7 +1368,7 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
       </div>
       <div className="lead-evolution-legend">
         <span><i className="swatch-solid" />{rangeLabel}</span>
-        {compareLabel ? <span><i className="swatch-dashed" />{compareLabel}</span> : null}
+        {compareLabel ? <span className="legend-compare">comparé à {compareLabel}</span> : null}
       </div>
     </div>
   )

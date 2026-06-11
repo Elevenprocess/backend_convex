@@ -5085,6 +5085,7 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 .lead-evolution-legend i { width: 18px; height: 0; flex-shrink: 0; }
 .lead-evolution-legend i.swatch-solid { height: 3px; border-radius: 2px; background: var(--series-color); }
 .lead-evolution-legend i.swatch-dashed { height: 0; border-top: 2px dashed var(--color-faint); }
+.lead-evolution-legend .legend-compare { color: var(--color-faint); font-weight: 600; }
 .lead-evolution-insights {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
