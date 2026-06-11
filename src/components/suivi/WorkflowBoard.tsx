@@ -1,14 +1,16 @@
-import { type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { SubstepCard } from './SubstepCard'
+import { SubstepModal } from './SubstepModal'
 import { groupSubsteps, SUIVI_SECTIONS } from '../../lib/suivi-board'
 import { useCollapsibleState } from '../../lib/useCollapsibleState'
 import { Icon } from '../Icon'
-import type { SubstepResponse, UpdateSubstepPatch, WorkflowPhase } from '../../lib/types'
+import type { SubstepResponse, UpdateSubstepPatch, UserResponse, WorkflowPhase } from '../../lib/types'
 
 type Props = {
   substeps: SubstepResponse[]
   onMutate: (id: string, patch: UpdateSubstepPatch) => void
   today: string
+  users?: UserResponse[]
   savingId?: string | null
   onDocsChanged?: () => void
   onGoToDocs?: () => void
@@ -59,16 +61,18 @@ function CollapsibleWfSection({
   )
 }
 
-export function WorkflowBoard({ substeps, onMutate, today, savingId, onDocsChanged, onGoToDocs, canEditPhase }: Props) {
+export function WorkflowBoard({ substeps, onMutate, today, users, savingId, onDocsChanged, canEditPhase }: Props) {
   const grouped = groupSubsteps(substeps)
   const overallDone = countDone(substeps)
   const overallTotal = substeps.length
   const overallPct = overallTotal ? Math.round((overallDone / overallTotal) * 100) : 0
+  const [openId, setOpenId] = useState<string | null>(null)
+  const openSubstep = openId ? substeps.find((s) => s.id === openId) ?? null : null
 
   const renderList = (list: SubstepResponse[]) => (
     <div className="wf-list">
       {list.map((s) => (
-        <SubstepCard key={s.id} substep={s} onMutate={onMutate} today={today} saving={savingId === s.id} onDocsChanged={onDocsChanged} onGoToDocs={onGoToDocs} readOnly={canEditPhase ? !canEditPhase(s.phase) : false} />
+        <SubstepCard key={s.id} substep={s} users={users} today={today} onOpen={() => setOpenId(s.id)} />
       ))}
     </div>
   )
@@ -117,6 +121,19 @@ export function WorkflowBoard({ substeps, onMutate, today, savingId, onDocsChang
           </CollapsibleWfSection>
         )
       })}
+
+      {openSubstep && (
+        <SubstepModal
+          substep={openSubstep}
+          users={users ?? []}
+          today={today}
+          saving={savingId === openSubstep.id}
+          readOnly={canEditPhase ? !canEditPhase(openSubstep.phase) : false}
+          onMutate={onMutate}
+          onDocsChanged={onDocsChanged}
+          onClose={() => setOpenId(null)}
+        />
+      )}
     </div>
   )
 }

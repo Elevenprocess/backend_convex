@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { fetchAttachmentObjectUrl } from '../../lib/api'
+import { useState } from 'react'
+import { attachmentRawUrl } from '../../lib/api'
 
 type Props = {
   attachmentId: string
@@ -8,36 +8,16 @@ type Props = {
 }
 
 /**
- * Affiche une pièce jointe image via un fetch authentifié (cookie) → object URL.
- * Le endpoint /attachments/:id/raw étant protégé, une <img src> directe casse ;
- * on récupère donc le blob comme pour le PDF des devis.
+ * Affiche une pièce jointe image via une <img src> directe vers
+ * /attachments/:id/raw. L'auth passe par le cookie de session, envoyé même en
+ * cross-origin car `crm.*` et `api.*` partagent le site electroconceptoi.com.
+ *
+ * On NE fait PAS de fetch+blob : en prod l'API est cross-origin et la réponse
+ * StreamableFile du endpoint raw ne porte pas les en-têtes CORS — un fetch().blob()
+ * échouait donc (image cassée), alors qu'une <img> n'a pas besoin de CORS.
  */
 export function AuthImage({ attachmentId, alt, className }: Props) {
-  const [url, setUrl] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-    let objectUrl: string | null = null
-    setUrl(null)
-    setFailed(false)
-    fetchAttachmentObjectUrl(attachmentId)
-      .then((u) => {
-        if (cancelled) {
-          URL.revokeObjectURL(u)
-          return
-        }
-        objectUrl = u
-        setUrl(u)
-      })
-      .catch(() => {
-        if (!cancelled) setFailed(true)
-      })
-    return () => {
-      cancelled = true
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
-    }
-  }, [attachmentId])
 
   if (failed) {
     return (
@@ -46,8 +26,14 @@ export function AuthImage({ attachmentId, alt, className }: Props) {
       </div>
     )
   }
-  if (!url) {
-    return <div className={`fiche-photo-skeleton ${className ?? ''}`} aria-hidden />
-  }
-  return <img src={url} alt={alt} className={className} loading="lazy" />
+
+  return (
+    <img
+      src={attachmentRawUrl(attachmentId)}
+      alt={alt}
+      className={className}
+      loading="lazy"
+      onError={() => setFailed(true)}
+    />
+  )
 }

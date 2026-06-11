@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useAuth } from '../../lib/auth'
-import { useClients, useSubsteps } from '../../lib/hooks'
+import { useClients, useSubsteps, useUsers } from '../../lib/hooks'
 import { bootstrapClient, updateSubstep } from '../../lib/api'
 import { todayIso } from '../../lib/suivi-board'
 import type { Dossier } from '../../lib/suivi'
@@ -25,6 +25,7 @@ export function DossierWorkflowPanel({ dossier }: Props) {
     role === 'technicien' ? FIELD_PHASES.includes(phase) : true
 
   const { data: clients, refetch: refetchClients } = useClients({ leadId: dossier.lead.id })
+  const { data: users } = useUsers()
   const client = clients?.[0] ?? null
   const { data: substeps, loading: substepsLoading, refetch } = useSubsteps(client ? { clientId: client.id } : null)
   const [savingId, setSavingId] = useState<string | null>(null)
@@ -103,7 +104,7 @@ export function DossierWorkflowPanel({ dossier }: Props) {
         ) : view === 'documents' ? (
           <DocumentsHub substeps={substeps ?? []} today={today} onDocsChanged={refetch} />
         ) : (
-          <WorkflowBoard substeps={substeps ?? []} onMutate={onMutate} today={today} savingId={savingId} onDocsChanged={refetch} onGoToDocs={() => setView('documents')} canEditPhase={canEditPhase} />
+          <WorkflowBoard substeps={substeps ?? []} onMutate={onMutate} today={today} users={users ?? []} savingId={savingId} onDocsChanged={refetch} onGoToDocs={() => setView('documents')} canEditPhase={canEditPhase} />
         )}
       </section>
     </div>

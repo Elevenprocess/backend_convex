@@ -4811,6 +4811,73 @@ button.suivi-side-cta { font-family: inherit; cursor: pointer; width: 100%; }
 .wf-substep.is-done .wf-cta:hover:not(:disabled) { background: var(--color-cream); opacity: 1; }
 .wf-saving { color: var(--color-muted); font-size: 12px; }
 
+/* === Nœud cliquable du workflow (façon N8N) ============================ */
+.wf-node-btn {
+  width: 100%; text-align: left; border: 1px solid var(--color-line); border-radius: 12px;
+  background: #fff; padding: 10px 12px; cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .04s ease;
+}
+.wf-node-btn:hover:not(:disabled) { border-color: var(--color-cuivre); box-shadow: 0 4px 14px rgba(20, 35, 28, .08); }
+.wf-node-btn:active:not(:disabled) { transform: translateY(1px); }
+.wf-node-btn:disabled { cursor: default; background: var(--color-cream); }
+.wf-substep-node.is-active .wf-node-btn { border-color: var(--color-cuivre); box-shadow: 0 0 0 3px var(--color-cuivre-tint); }
+.wf-substep-node.is-done .wf-node-btn { border-color: var(--color-line); background: var(--color-cream); }
+.wf-substep-node.is-blocked .wf-node-btn { border-color: var(--color-rouille); box-shadow: 0 0 0 3px var(--color-rouille-tint); }
+.wf-node-summary { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.wf-node-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .02em;
+  background: var(--color-cream-darker); color: var(--color-muted);
+}
+.wf-node-chip.is-missing { background: var(--color-rouille-tint); color: var(--color-rouille); }
+.wf-node-open { margin-left: auto; display: inline-flex; color: var(--color-faint); }
+.wf-node-btn:hover:not(:disabled) .wf-node-open { color: var(--color-cuivre); }
+
+/* === Pop-up d'un module du workflow ==================================== */
+.wf-modal { width: min(520px, 96vw); }
+.wf-modal-head-main { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
+.wf-modal-icon {
+  flex-shrink: 0; width: 38px; height: 38px; border-radius: 11px; display: inline-flex;
+  align-items: center; justify-content: center; background: var(--color-cuivre-tint); color: var(--color-cuivre);
+}
+.wf-modal-icon.is-done { background: var(--color-or-tint); color: var(--color-or-dark); }
+.wf-modal-icon.is-blocked { background: var(--color-rouille-tint); color: var(--color-rouille); }
+.wf-modal-icon.is-locked { background: var(--color-cream-darker); color: var(--color-faint); }
+.fiche-modal-head .fiche-modal-sub { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.wf-modal-status {
+  display: inline-flex; padding: 2px 9px; border-radius: 999px; font-size: 10px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .04em; background: var(--color-cuivre-tint); color: var(--color-cuivre);
+}
+.wf-modal-status.is-done { background: var(--color-or-tint); color: var(--color-or-dark); }
+.wf-modal-status.is-blocked { background: var(--color-rouille-tint); color: var(--color-rouille); }
+.wf-modal-status.is-locked { background: var(--color-cream-darker); color: var(--color-faint); }
+.wf-modal-section { display: flex; flex-direction: column; gap: 8px; }
+.wf-modal-section h3 {
+  display: inline-flex; align-items: center; gap: 6px; margin: 0;
+  font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; color: var(--color-cuivre);
+}
+.wf-modal-input {
+  width: 100%; border: 1px solid var(--color-line); border-radius: 10px; padding: 9px 12px;
+  font-size: 13.5px; color: var(--color-text); background: var(--color-cream);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.wf-modal-input:focus { outline: none; border-color: var(--color-cuivre); box-shadow: 0 0 0 3px var(--color-cuivre-tint); }
+textarea.wf-modal-input { resize: vertical; min-height: 64px; }
+.wf-modal-docs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.wf-modal-doc { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--color-line-soft); border-radius: 9px; background: #fff; }
+.wf-modal-doc.is-missing { border-style: dashed; background: var(--color-cream); }
+.wf-modal-doc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 600; color: var(--color-text); text-decoration: none; }
+a.wf-modal-doc-name:hover { color: var(--color-cuivre); }
+.wf-modal-doc-meta { font-size: 10.5px; color: var(--color-faint); white-space: nowrap; }
+.wf-modal-missing-pill { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: var(--color-rouille-tint); color: var(--color-rouille); }
+.wf-modal-hint { margin: 0; font-size: 11.5px; color: var(--color-muted); }
+.wf-modal-error { margin: 0; font-size: 11.5px; font-weight: 600; color: var(--color-rouille); }
+.wf-modal-ro { display: flex; flex-direction: column; gap: 10px; margin: 0; }
+.wf-modal-ro div { display: grid; grid-template-columns: 90px 1fr; gap: 10px; align-items: baseline; }
+.wf-modal-ro dt { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--color-faint); }
+.wf-modal-ro dd { margin: 0; font-size: 13px; color: var(--color-text); font-weight: 600; }
+.wf-modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--color-line); background: #fff; }
+
 /* Documents d'une sous-étape (pièces) */
 .wf-docs { display: flex; flex-direction: column; gap: 8px; }
 .wf-docs-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--color-faint); }

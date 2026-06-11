@@ -15,41 +15,38 @@ function sub(over: Partial<SubstepResponse>): SubstepResponse {
   } as SubstepResponse
 }
 
-describe('SubstepCard', () => {
-  it('affiche le actionLabel et déclenche onMutate(status:fait) au clic', () => {
-    const onMutate = vi.fn()
-    render(<SubstepCard substep={sub({})} onMutate={onMutate} today="2026-06-02" />)
-    fireEvent.click(screen.getByRole('button', { name: 'Marquer envoyée' }))
-    expect(onMutate).toHaveBeenCalledWith('sub-1', expect.objectContaining({ status: 'fait', dateRealisee: '2026-06-02' }))
-  })
-
-  it("affiche 'Rouvrir' quand fait", () => {
-    render(<SubstepCard substep={sub({ status: 'fait', dateRealisee: '2026-06-01' })} onMutate={vi.fn()} today="2026-06-02" />)
-    expect(screen.getByRole('button', { name: 'Rouvrir' })).toBeInTheDocument()
+describe('SubstepCard (nœud workflow)', () => {
+  it('ouvre le pop-up au clic sur le nœud', () => {
+    const onOpen = vi.fn()
+    render(<SubstepCard substep={sub({})} today="2026-06-02" onOpen={onOpen} />)
+    fireEvent.click(screen.getByRole('button', { name: /DP envoyée à la mairie/i }))
+    expect(onOpen).toHaveBeenCalled()
   })
 
   it('affiche le badge pièce manquante quand missingDocument', () => {
-    render(<SubstepCard substep={sub({ missingDocument: true })} onMutate={vi.fn()} today="2026-06-02" />)
+    render(<SubstepCard substep={sub({ missingDocument: true })} today="2026-06-02" onOpen={vi.fn()} />)
     expect(screen.getByText(/pièce manquante/i)).toBeInTheDocument()
   })
 
   it('affiche la jauge SLA J-x quand deadline', () => {
-    render(<SubstepCard substep={sub({ deadline: '2026-06-30' })} onMutate={vi.fn()} today="2026-06-02" />)
+    render(<SubstepCard substep={sub({ deadline: '2026-06-30' })} today="2026-06-02" onOpen={vi.fn()} />)
     expect(screen.getByText('J-28')).toBeInTheDocument()
   })
 
-  it('grise et désactive le bouton quand verrouillé', () => {
-    render(<SubstepCard substep={sub({ unlocked: false })} onMutate={vi.fn()} today="2026-06-02" />)
+  it('désactive le nœud et affiche « en attente » quand verrouillé', () => {
+    render(<SubstepCard substep={sub({ unlocked: false })} today="2026-06-02" onOpen={vi.fn()} />)
     expect(screen.getByText(/en attente/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Marquer envoyée' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /DP envoyée à la mairie/i })).toBeDisabled()
   })
 
-  it('affiche un résumé pièces et un lien vers le hub', () => {
-    const onGoToDocs = vi.fn()
-    const s = sub({ expectedDocs: ['consuel', 'autre'], documents: [{ id: 'd', type: 'consuel', filename: 'a.pdf', mimeType: 'application/pdf', sizeBytes: 1024, uploadedAt: '' }] })
-    render(<SubstepCard substep={s} onMutate={vi.fn()} today="2026-06-02" onGoToDocs={onGoToDocs} />)
+  it('affiche un résumé pièces et le technicien attribué', () => {
+    const s = sub({
+      responsableId: 'u1',
+      expectedDocs: ['consuel', 'autre'],
+      documents: [{ id: 'd', type: 'consuel', filename: 'a.pdf', mimeType: 'application/pdf', sizeBytes: 1024, uploadedAt: '' }],
+    })
+    render(<SubstepCard substep={s} users={[{ id: 'u1', name: 'Jean Tech', role: 'technicien' } as never]} today="2026-06-02" onOpen={vi.fn()} />)
     expect(screen.getByText(/1\/2 pièces/i)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /voir les pièces/i }))
-    expect(onGoToDocs).toHaveBeenCalled()
+    expect(screen.getByText('Jean Tech')).toBeInTheDocument()
   })
 })

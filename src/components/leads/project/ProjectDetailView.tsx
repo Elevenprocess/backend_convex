@@ -55,6 +55,13 @@ export function ProjectDetailView({ project, onChanged, onRdvDebrief }: Props) {
   const [loading, setLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
 
+  // Filet de sécurité : si le rôle se résout après le montage (ou bascule viewAs)
+  // et masque le devis alors que l'onglet actif était 'devis', on rebascule sur
+  // 'debriefs'. Évite qu'un commercial reste bloqué sur le dépôt de devis.
+  useEffect(() => {
+    if (hideDevis && tab === 'devis') setTab('debriefs')
+  }, [hideDevis, tab])
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -189,7 +196,7 @@ export function ProjectDetailView({ project, onChanged, onRdvDebrief }: Props) {
           </div>
         ) : (
           <div className="rounded-2xl border border-line bg-white p-5 sm:p-6">
-            {tab === 'devis' && (
+            {!hideDevis && tab === 'devis' && (
               <ProjectDevisTab project={project} devis={detail.devis} onChanged={refresh} />
             )}
             {tab === 'debriefs' && (
