@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties, type UIEvent, type WheelEvent } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type UIEvent, type WheelEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
@@ -262,6 +262,51 @@ export function RdvCalendar() {
       ? (item.event.contactId ? leadByExternalId.get(item.event.contactId) : undefined)
       : item.source === 'vt' ? undefined : leadMap.get(item.rdv.leadId)
 
+  // Pour chaque commercial, l'ensemble des secteurs où il a au moins un RDV.
+  // Sert à n'afficher dans le filtre commerciaux que ceux présents dans le(s)
+  // secteur(s) sélectionné(s).
+  const commercialSectors = useMemo(() => {
+    const m = new Map<string, Set<string>>()
+    for (const item of calendarItems) {
+      const cid = commercialOf(item)
+      if (!cid) continue
+      const sector = sectorForItem(item, leadForItem(item))
+      const set = m.get(cid) ?? new Set<string>()
+      set.add(sector)
+      m.set(cid, set)
+    }
+    return m
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendarItems, leadMap, leadByExternalId])
+
+  // Commerciaux proposés dans le filtre : si des secteurs sont sélectionnés, on
+  // ne garde que ceux ayant au moins un RDV dans un de ces secteurs.
+  const availableCommercials = useMemo(() => {
+    if (selectedSectors.size === 0) return commercials
+    return commercials.filter((c) => {
+      const sectors = commercialSectors.get(c.id)
+      if (!sectors) return false
+      for (const s of sectors) if (selectedSectors.has(s)) return true
+      return false
+    })
+  }, [commercials, commercialSectors, selectedSectors])
+
+  // Quand le secteur change, on retire de la sélection les commerciaux qui
+  // n'appartiennent plus au(x) secteur(s) affiché(s) (sinon filtre fantôme).
+  useEffect(() => {
+    setSelectedCommercials((prev) => {
+      if (prev.size === 0) return prev
+      const availableIds = new Set(availableCommercials.map((c) => c.id))
+      let changed = false
+      const next = new Set<string>()
+      for (const id of prev) {
+        if (availableIds.has(id)) next.add(id)
+        else changed = true
+      }
+      return changed ? next : prev
+    })
+  }, [availableCommercials])
+
   const filterState = useMemo<CalendarFilterState>(
     () => ({ sectors: selectedSectors, commercials: selectedCommercials }),
     [selectedSectors, selectedCommercials],
@@ -411,10 +456,12 @@ export function RdvCalendar() {
             <>
               <div className="fixed inset-0 z-20" onClick={() => setCommercialMenuOpen(false)} />
               <div className="absolute left-0 z-30 mt-1 min-w-[210px] max-h-64 overflow-auto bg-white border border-line rounded-xl shadow-lg p-1.5">
-                {commercials.length === 0 ? (
-                  <p className="px-2 py-1.5 text-faint font-medium">Aucun commercial</p>
+                {availableCommercials.length === 0 ? (
+                  <p className="px-2 py-1.5 text-faint font-medium">
+                    {selectedSectors.size > 0 ? 'Aucun commercial sur ce secteur' : 'Aucun commercial'}
+                  </p>
                 ) : (
-                  commercials.map((c) => (
+                  availableCommercials.map((c) => (
                     <label key={c.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-cream cursor-pointer">
                       <input
                         type="checkbox"
