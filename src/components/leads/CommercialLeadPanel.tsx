@@ -9,7 +9,6 @@ import {
   createProject,
   createLeadDebrief,
   listProjectsByLead,
-  uploadDevis,
 } from '../../lib/api'
 import {
   fullName,
@@ -316,7 +315,7 @@ function OverviewView(props: {
           <div className="py-4 text-center text-xs text-muted">Chargement…</div>
         ) : projects.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-line bg-white/40 px-4 py-4 text-xs text-muted">
-            Aucun projet pour ce prospect. Crée-en un, le devis n'est pas obligatoire pour démarrer.
+            Aucun projet pour ce prospect. Crée-en un pour démarrer.
           </div>
         ) : (
           <ul className="space-y-2">
@@ -381,7 +380,6 @@ function CreateProjectView(props: {
   const defaultAddress = [lead.addressLine, lead.postalCode, lead.city].filter(Boolean).join(', ')
   const [name, setName] = useState('')
   const [address, setAddress] = useState(defaultAddress)
-  const [file, setFile] = useState<File | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -389,7 +387,6 @@ function CreateProjectView(props: {
     setError(null)
     const projectName = name.trim()
     if (!projectName) return setError('Donne un nom au projet.')
-    if (file && file.type !== 'application/pdf') return setError('Seul un PDF est accepté pour le devis.')
     setSubmitting(true)
     try {
       const project = await createProject({
@@ -397,20 +394,6 @@ function CreateProjectView(props: {
         name: projectName,
         addressLine: address.trim() || null,
       })
-      // Devis optionnel : si l'user a déposé un PDF, on l'upload lié au projet.
-      if (file) {
-        try {
-          await uploadDevis(lead.id, undefined, file, {
-            projectName,
-            installationAddress: address.trim(),
-            projectId: project.id,
-          })
-        } catch (uploadErr) {
-          // On crée quand même le projet, mais on informe que le PDF a échoué.
-          const msg = uploadErr instanceof Error ? uploadErr.message : 'Devis non uploadé'
-          setError(`Projet créé, mais upload devis échoué : ${msg}`)
-        }
-      }
       onCreated(project)
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Échec de la création.'
@@ -422,10 +405,6 @@ function CreateProjectView(props: {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-info/20 bg-info-tint/40 px-4 py-3 text-[11px] text-info">
-        Le devis PDF est optionnel. Tu peux créer un projet en qualification et déposer le PDF plus tard.
-      </div>
-
       <div>
         <label className="block text-[11px] font-bold uppercase tracking-wider text-faint mb-1">Nom du projet</label>
         <input
@@ -447,35 +426,6 @@ function CreateProjectView(props: {
           placeholder="Adresse complète d'installation"
           className="w-full bg-white border border-line rounded-[14px] px-3 py-2 text-sm focus:outline-none focus:border-or"
         />
-      </div>
-
-      <div>
-        <label className="block text-[11px] font-bold uppercase tracking-wider text-faint mb-1">Devis Solteo (optionnel)</label>
-        <label
-          htmlFor="cp-pdf"
-          className={`block rounded-2xl border-2 border-dashed px-6 py-6 text-center cursor-pointer transition-colors ${
-            file ? 'border-or bg-or/10' : 'border-line bg-white/40 hover:bg-white/70'
-          }`}
-        >
-          <input
-            id="cp-pdf"
-            type="file"
-            accept="application/pdf"
-            className="hidden"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          />
-          {file ? (
-            <div>
-              <div className="font-bold text-sm">{file.name}</div>
-              <div className="text-xs text-muted mt-0.5">{(file.size / 1024).toFixed(0)} ko — cliquer pour remplacer</div>
-            </div>
-          ) : (
-            <div>
-              <div className="font-bold text-sm">Déposer le PDF du devis</div>
-              <div className="text-xs text-muted mt-0.5">Tu peux aussi le faire plus tard depuis l'onglet Devis.</div>
-            </div>
-          )}
-        </label>
       </div>
 
       {error && <div className="rounded-xl bg-rouille-tint px-3 py-2 text-sm text-rouille">{error}</div>}

@@ -13,6 +13,7 @@ import { ProjectDevisTab } from './ProjectDevisTab'
 import { ProjectDebriefsTab } from './ProjectDebriefsTab'
 import { ProjectPhotosTab } from './ProjectPhotosTab'
 import { ProjectDocumentsTab } from './ProjectDocumentsTab'
+import { useAuth } from '../../../lib/auth'
 
 type Tab = 'devis' | 'debriefs' | 'photos' | 'documents'
 
@@ -22,6 +23,11 @@ const TABS: { id: Tab; label: string; icon: 'edit' | 'phone' | 'eye' | 'grid' }[
   { id: 'photos', label: 'Photos', icon: 'eye' },
   { id: 'documents', label: 'Documents', icon: 'grid' },
 ]
+
+// Le dépôt/suivi de devis est réservé à l'admin et à la délivrabilité.
+// Côté commercial (commercial + commercial_lead), le dossier client se limite
+// aux débriefs, photos et documents.
+const DEVIS_HIDDEN_ROLES = ['commercial', 'commercial_lead']
 
 const STATUSES: ProjectStatus[] = [
   'qualification',
@@ -41,7 +47,10 @@ type Props = {
 }
 
 export function ProjectDetailView({ project, onChanged, onRdvDebrief }: Props) {
-  const [tab, setTab] = useState<Tab>('devis')
+  const role = useAuth((s) => s.user?.role)
+  const hideDevis = !!role && DEVIS_HIDDEN_ROLES.includes(role)
+  const visibleTabs = hideDevis ? TABS.filter((t) => t.id !== 'devis') : TABS
+  const [tab, setTab] = useState<Tab>(hideDevis ? 'debriefs' : 'devis')
   const [detail, setDetail] = useState<ProjectDetailResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -115,7 +124,7 @@ export function ProjectDetailView({ project, onChanged, onRdvDebrief }: Props) {
           <section className="rounded-2xl border border-line bg-white p-5">
             <div className="text-faint text-[10px] uppercase tracking-[0.14em] mb-3">Contenu du dossier</div>
             <div className="space-y-2">
-              <KpiRow icon="edit" label="Devis" value={detail.devis.length} />
+              {!hideDevis && <KpiRow icon="edit" label="Devis" value={detail.devis.length} />}
               <KpiRow icon="phone" label="Débriefs" value={detail.debriefs.length} />
               <KpiRow icon="grid" label="Fichiers" value={detail.attachments.length} />
             </div>
@@ -144,7 +153,7 @@ export function ProjectDetailView({ project, onChanged, onRdvDebrief }: Props) {
       {/* ─── Colonne droite : tabs + contenu ─── */}
       <section>
         <nav className="flex items-center gap-1 border-b border-line mb-5 overflow-x-auto -mx-1 px-1">
-          {TABS.map((t) => {
+          {visibleTabs.map((t) => {
             const active = tab === t.id
             const count = detail ? tabBadgeCount(t.id, detail) : 0
             return (
