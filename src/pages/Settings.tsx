@@ -171,16 +171,22 @@ function SettingsAdmin({ restricted = false }: { restricted?: boolean }) {
   const { data: ghlUsers, error: ghlUsersError } = useGhlUsers()
   const [ghlSyncing, setGhlSyncing] = useState(false)
   const [ghlSyncMsg, setGhlSyncMsg] = useState<string | null>(null)
+  // Commerciaux non reliés à un user GHL (email SaaS ≠ email GHL) : listés pour
+  // que l'admin corrige l'email du compte → tant qu'ils sont là, leurs RDV et
+  // leurs clients restent « sans commercial » dans le CRM.
+  const [ghlUnmatched, setGhlUnmatched] = useState<{ id: string; name: string; email: string | null }[]>([])
 
   async function handleSyncGhl() {
     setGhlSyncing(true)
     setGhlSyncMsg(null)
+    setGhlUnmatched([])
     try {
       const r = await syncGhlCommercialUsers()
       const parts = [`${r.matched.length} relié${r.matched.length > 1 ? 's' : ''}`]
       if (r.unmatched.length) parts.push(`${r.unmatched.length} non résolu${r.unmatched.length > 1 ? 's' : ''}`)
       if (r.alreadyMapped.length) parts.push(`${r.alreadyMapped.length} déjà lié${r.alreadyMapped.length > 1 ? 's' : ''}`)
       setGhlSyncMsg(`${parts.join(' · ')} (${r.ghlUserCount} users GHL)`)
+      setGhlUnmatched(r.unmatched)
       refetchUsers()
     } catch (e) {
       setGhlSyncMsg(e instanceof Error ? e.message : 'Synchronisation GHL impossible')
@@ -249,6 +255,20 @@ function SettingsAdmin({ restricted = false }: { restricted?: boolean }) {
         {ghlSyncMsg && (
           <div className="settings-reveal" style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 700 }}>
             <span className="status-badge bg-success-tint text-success">GHL : {ghlSyncMsg}</span>
+          </div>
+        )}
+        {ghlUnmatched.length > 0 && (
+          <div className="settings-reveal rounded-lg bg-rouille-tint px-3 py-2.5" style={{ margin: '0 0 8px' }}>
+            <p className="text-xs font-bold text-rouille mb-1.5">
+              {ghlUnmatched.length} commercial{ghlUnmatched.length > 1 ? 'aux' : ''} non relié{ghlUnmatched.length > 1 ? 's' : ''} à GHL — leurs RDV et clients resteront « sans commercial » tant que l'email du compte ne correspond pas à celui de GHL.
+            </p>
+            <ul className="space-y-0.5">
+              {ghlUnmatched.map((u) => (
+                <li key={u.id} className="text-[11px] font-semibold text-rouille/90">
+                  {u.name}{u.email ? ` · ${u.email}` : ' · (aucun email)'}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
