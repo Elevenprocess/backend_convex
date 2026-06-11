@@ -404,6 +404,24 @@ export function attachmentRawUrl(attachmentId: string): string {
   return buildApiUrl(`/attachments/${attachmentId}/raw`)
 }
 
+/**
+ * Récupère le binaire d'une pièce jointe (photo/document) via fetch authentifié
+ * (cookie de session) et renvoie un object URL. Indispensable pour afficher une
+ * image dans <img> : le endpoint /attachments/:id/raw est protégé, une URL brute
+ * en src échouerait (401/403). À révoquer (URL.revokeObjectURL) au démontage.
+ */
+export async function fetchAttachmentObjectUrl(attachmentId: string): Promise<string> {
+  const res = await fetch(buildApiUrl(`/attachments/${attachmentId}/raw`), {
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, text || `Chargement du fichier échoué : ${res.status}`)
+  }
+  const blob = await res.blob()
+  return URL.createObjectURL(blob)
+}
+
 export function deleteProjectAttachment(attachmentId: string): Promise<{ ok: true }> {
   return api<{ ok: true }>(`/attachments/${attachmentId}`, { method: 'DELETE' })
 }

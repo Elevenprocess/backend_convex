@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { ReactNode, KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Icon } from '../Icon'
 import { formatDate } from '../../lib/suivi'
 import { attachmentRawUrl, downloadDevisPdf } from '../../lib/api'
@@ -7,6 +7,7 @@ import {
   PAYMENT_SUB_METHOD_LABEL,
   FINANCING_ORG_LABEL,
   type Devis,
+  type DevisStatus,
   type ProjectAttachmentResponse,
   type DebriefResponse,
 } from '../../lib/types'
@@ -18,6 +19,14 @@ const FINANCING_TYPE_SHORT: Record<string, string> = {
   apport_financement: 'Apport + financement',
   paiement_10x: 'Paiement 10x',
   paiement_12x: 'Paiement 12x',
+}
+
+const DEVIS_STATUS_META: Record<DevisStatus, { label: string; tone: string }> = {
+  brouillon: { label: 'Brouillon', tone: 'is-neutral' },
+  en_attente: { label: 'En attente', tone: 'is-warn' },
+  signature_en_cours: { label: 'Signature en cours', tone: 'is-info' },
+  signe: { label: 'Signé', tone: 'is-ok' },
+  perdu: { label: 'Perdu', tone: 'is-lost' },
 }
 
 export function Section({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
@@ -51,25 +60,34 @@ export function Empty({ children }: { children: ReactNode }) {
 
 export function DevisRow({ devis }: { devis: Devis }) {
   const montant = devis.montantTtc ?? devis.montantNet ?? devis.montantHt
+  const status = DEVIS_STATUS_META[devis.status] ?? { label: devis.status, tone: 'is-neutral' }
+  const meta = [
+    devis.puissanceKwc ? `${devis.puissanceKwc} kWc` : null,
+    devis.nbPanneaux ? `${devis.nbPanneaux} panneaux` : null,
+    devis.devisDate ? formatDate(devis.devisDate) : null,
+  ].filter(Boolean)
   return (
-    <li className="flex items-center gap-3 rounded-xl border border-line bg-white px-3 py-2.5">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-or-tint text-or-dark">
-        <Icon name="tag" size={15} />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-[13px] font-bold text-text">{devis.devisNumber || devis.filename}</div>
-        <div className="text-[10px] text-muted">
-          {montant ? `${Number(montant).toLocaleString('fr-FR')} €` : '—'} · {devis.status}
-          {devis.devisDate ? ` · ${formatDate(devis.devisDate)}` : ''}
+    <li className="fiche-devis-card">
+      <div className="fiche-devis-main">
+        <span className="fiche-devis-icon"><Icon name="tag" size={16} /></span>
+        <div className="min-w-0 flex-1">
+          <div className="fiche-devis-top">
+            <span className="fiche-devis-num">{devis.devisNumber || devis.filename}</span>
+            <span className={`fiche-devis-status ${status.tone}`}>{status.label}</span>
+          </div>
+          {meta.length > 0 && <div className="fiche-devis-meta">{meta.join(' · ')}</div>}
         </div>
       </div>
-      <button
-        type="button"
-        onClick={() => void downloadDevisPdf(devis.id, devis.filename)}
-        className="rounded-lg border border-line px-2.5 py-1.5 text-[11px] font-bold text-muted transition-colors hover:bg-cream hover:text-text"
-      >
-        <Icon name="download" size={13} />
-      </button>
+      <div className="fiche-devis-foot">
+        <span className="fiche-devis-amount">{montant ? `${Number(montant).toLocaleString('fr-FR')} €` : '—'}</span>
+        <button
+          type="button"
+          onClick={() => void downloadDevisPdf(devis.id, devis.filename)}
+          className="fiche-devis-dl"
+        >
+          <Icon name="download" size={13} /> PDF
+        </button>
+      </div>
     </li>
   )
 }
@@ -95,7 +113,7 @@ export function AttachmentRow({ attachment }: { attachment: ProjectAttachmentRes
   )
 }
 
-export function DebriefCard({ debrief }: { debrief: DebriefResponse }) {
+export function DebriefCard({ debrief, onClick }: { debrief: DebriefResponse; onClick?: () => void }) {
   const financingBits = [
     debrief.financingType ? FINANCING_TYPE_SHORT[debrief.financingType] ?? debrief.financingType : null,
     debrief.paymentSubMethod ? PAYMENT_SUB_METHOD_LABEL[debrief.paymentSubMethod] : null,
@@ -107,20 +125,24 @@ export function DebriefCard({ debrief }: { debrief: DebriefResponse }) {
       : null
 
   return (
-    <article className="rounded-xl border border-line bg-white p-3.5">
+    <article
+      className={`fiche-debrief-card${onClick ? ' is-clickable' : ''}`}
+      {...(onClick ? { role: 'button', tabIndex: 0, onClick, onKeyDown: (e: ReactKeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } } } : {})}
+    >
       <div className="mb-1 flex items-baseline justify-between gap-2">
         <span className="text-[13px] font-black text-text">
           Débrief · {DEBRIEF_OUTCOME_LABEL[debrief.outcome] ?? debrief.outcome}
         </span>
         <span className="shrink-0 text-[10px] font-bold text-faint">{formatDate(debrief.createdAt)}</span>
       </div>
-      {debrief.notes && <p className="whitespace-pre-wrap text-xs leading-relaxed text-muted">{debrief.notes}</p>}
-      {debrief.objection && <p className="mt-1 text-[11px] font-semibold text-faint">Objection : {debrief.objection}</p>}
+      {debrief.notes && <p className="line-clamp-2 whitespace-pre-wrap text-xs leading-relaxed text-muted">{debrief.notes}</p>}
+      {debrief.objection && <p className="mt-1 line-clamp-1 text-[11px] font-semibold text-faint">Objection : {debrief.objection}</p>}
       {(financingBits.length > 0 || acompte) && (
-        <p className="mt-1 text-[11px] font-semibold text-faint">
+        <p className="mt-1 truncate text-[11px] font-semibold text-faint">
           {[financingBits.join(' · '), acompte].filter(Boolean).join(' · ')}
         </p>
       )}
+      {onClick && <span className="fiche-debrief-more">Voir le détail →</span>}
     </article>
   )
 }

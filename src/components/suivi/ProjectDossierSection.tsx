@@ -1,17 +1,33 @@
+import { useState } from 'react'
 import { formatDate } from '../../lib/suivi'
-import { attachmentRawUrl } from '../../lib/api'
-import { PROJECT_STATUS_LABEL, type ProjectDetailResponse } from '../../lib/types'
+import { PROJECT_STATUS_LABEL, type DebriefResponse, type ProjectDetailResponse } from '../../lib/types'
 import { Section, Empty, DevisRow, AttachmentRow, DebriefCard } from './fiche-parts'
+import { AuthImage } from './AuthImage'
+import { PhotoLightbox } from './PhotoLightbox'
+import { DebriefDetailModal } from './DebriefDetailModal'
 
 type Props = {
   project: ProjectDetailResponse
   commercialName?: string
 }
 
+const PREVIEW_LIMIT = 3
+
+/** Bouton « voir plus / voir moins » partagé par les sections de la fiche. */
+function ShowMore({ total, expanded, onToggle, noun }: { total: number; expanded: boolean; onToggle: () => void; noun: string }) {
+  if (total <= PREVIEW_LIMIT) return null
+  return (
+    <button type="button" className="fiche-show-more" onClick={onToggle}>
+      {expanded ? 'Voir moins' : `Voir ${total - PREVIEW_LIMIT} ${noun} de plus`}
+    </button>
+  )
+}
+
 /**
  * Un « dossier » de projet du client : en-tête (nom, statut, date, commercial)
  * puis les éléments créés par les commerciaux — devis, photos, documents,
- * débriefs — scopés à ce projet.
+ * débriefs — scopés à ce projet. Chaque liste n'affiche que 3 éléments puis
+ * propose « voir plus » ; photos en lightbox, débriefs en popup détaillée.
  */
 export function ProjectDossierSection({ project, commercialName }: Props) {
   const photos = project.attachments.filter((a) => a.kind === 'photo')
@@ -19,6 +35,18 @@ export function ProjectDossierSection({ project, commercialName }: Props) {
   const debriefs = [...project.debriefs].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   )
+
+  const [devisOpen, setDevisOpen] = useState(false)
+  const [photosOpen, setPhotosOpen] = useState(false)
+  const [docsOpen, setDocsOpen] = useState(false)
+  const [debriefsOpen, setDebriefsOpen] = useState(false)
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [selectedDebrief, setSelectedDebrief] = useState<DebriefResponse | null>(null)
+
+  const visibleDevis = devisOpen ? project.devis : project.devis.slice(0, PREVIEW_LIMIT)
+  const visiblePhotos = photosOpen ? photos : photos.slice(0, PREVIEW_LIMIT)
+  const visibleDocs = docsOpen ? documents : documents.slice(0, PREVIEW_LIMIT)
+  const visibleDebriefs = debriefsOpen ? debriefs : debriefs.slice(0, PREVIEW_LIMIT)
 
   return (
     <article className="space-y-6 rounded-2xl border border-line bg-cream p-5">
@@ -37,11 +65,14 @@ export function ProjectDossierSection({ project, commercialName }: Props) {
         {project.devis.length === 0 ? (
           <Empty>Aucun devis.</Empty>
         ) : (
-          <ul className="space-y-2">
-            {project.devis.map((d) => (
-              <DevisRow key={d.id} devis={d} />
-            ))}
-          </ul>
+          <>
+            <ul className="space-y-2">
+              {visibleDevis.map((d) => (
+                <DevisRow key={d.id} devis={d} />
+              ))}
+            </ul>
+            <ShowMore total={project.devis.length} expanded={devisOpen} onToggle={() => setDevisOpen((v) => !v)} noun="devis" />
+          </>
         )}
       </Section>
 
@@ -49,24 +80,22 @@ export function ProjectDossierSection({ project, commercialName }: Props) {
         {photos.length === 0 ? (
           <Empty>Aucune photo.</Empty>
         ) : (
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-            {photos.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => window.open(attachmentRawUrl(p.id), '_blank')}
-                className="aspect-square overflow-hidden rounded-xl border border-line bg-white"
-                title={p.label || p.filename}
-              >
-                <img
-                  src={attachmentRawUrl(p.id)}
-                  alt={p.label || p.filename}
-                  className="h-full w-full object-cover transition-transform hover:scale-105"
-                  loading="lazy"
-                />
-              </button>
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {visiblePhotos.map((p, i) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setLightboxIndex(i)}
+                  className="fiche-photo-tile"
+                  title={p.label || p.filename}
+                >
+                  <AuthImage attachmentId={p.id} alt={p.label || p.filename} className="fiche-photo-img" />
+                </button>
+              ))}
+            </div>
+            <ShowMore total={photos.length} expanded={photosOpen} onToggle={() => setPhotosOpen((v) => !v)} noun="photos" />
+          </>
         )}
       </Section>
 
@@ -74,11 +103,14 @@ export function ProjectDossierSection({ project, commercialName }: Props) {
         {documents.length === 0 ? (
           <Empty>Aucun document.</Empty>
         ) : (
-          <ul className="space-y-2">
-            {documents.map((doc) => (
-              <AttachmentRow key={doc.id} attachment={doc} />
-            ))}
-          </ul>
+          <>
+            <ul className="space-y-2">
+              {visibleDocs.map((doc) => (
+                <AttachmentRow key={doc.id} attachment={doc} />
+              ))}
+            </ul>
+            <ShowMore total={documents.length} expanded={docsOpen} onToggle={() => setDocsOpen((v) => !v)} noun="documents" />
+          </>
         )}
       </Section>
 
@@ -86,13 +118,33 @@ export function ProjectDossierSection({ project, commercialName }: Props) {
         {debriefs.length === 0 ? (
           <Empty>Aucun débrief.</Empty>
         ) : (
-          <div className="space-y-3">
-            {debriefs.map((d) => (
-              <DebriefCard key={d.id} debrief={d} />
-            ))}
-          </div>
+          <>
+            <div className="space-y-3">
+              {visibleDebriefs.map((d) => (
+                <DebriefCard key={d.id} debrief={d} onClick={() => setSelectedDebrief(d)} />
+              ))}
+            </div>
+            <ShowMore total={debriefs.length} expanded={debriefsOpen} onToggle={() => setDebriefsOpen((v) => !v)} noun="débriefs" />
+          </>
         )}
       </Section>
+
+      {lightboxIndex != null && photos[lightboxIndex] && (
+        <PhotoLightbox
+          photos={photos}
+          index={lightboxIndex}
+          onIndexChange={setLightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
+
+      {selectedDebrief && (
+        <DebriefDetailModal
+          debrief={selectedDebrief}
+          commercialName={commercialName}
+          onClose={() => setSelectedDebrief(null)}
+        />
+      )}
     </article>
   )
 }
