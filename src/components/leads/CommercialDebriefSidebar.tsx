@@ -724,6 +724,20 @@ function Step4VDetails({ form, update }: StepProps) {
       ? computeAcompteAmount(form.quoteAmount, form.acomptePercent)
       : null
 
+  // Montant de l'acompte effectif (pourcentage calculé OU saisie directe) et reste à
+  // payer = total TTC − acompte. Sert à afficher « à payer » et « reste à payer ».
+  const acompteValue =
+    form.acomptePercent != null
+      ? computed
+      : form.acompteAmountInput.trim() !== ''
+        ? Number(form.acompteAmountInput.replace(',', '.'))
+        : null
+  const quoteValue = form.quoteAmount.trim() !== '' ? Number(form.quoteAmount.replace(',', '.')) : null
+  const resteAPayer =
+    quoteValue != null && !Number.isNaN(quoteValue) && acompteValue != null && !Number.isNaN(acompteValue)
+      ? Math.max(0, quoteValue - acompteValue)
+      : null
+
   const pickMethod = (value: PaymentMethodConfigValue) =>
     update({ paymentMethod: value, paymentSubMethod: '', financingOrg: '', acomptePercent: null, acompteAmountInput: '' })
 
@@ -843,11 +857,6 @@ function Step4VDetails({ form, update }: StepProps) {
               />
             </div>
 
-            {form.acomptePercent != null && computed != null && (
-              <p className="mt-2 text-sm font-black text-success">
-                Acompte : {formatEuro(computed)} € TTC
-              </p>
-            )}
             {form.acomptePercent == null && (
               <div className="mt-2 flex items-baseline gap-2 border-b-2 border-success/20 pb-1 focus-within:border-success">
                 <span className="text-lg font-black text-success">€</span>
@@ -861,6 +870,15 @@ function Step4VDetails({ form, update }: StepProps) {
                   placeholder="Montant de l'acompte"
                   className="w-full bg-transparent text-xl font-black text-text outline-none placeholder:text-faint/40"
                 />
+              </div>
+            )}
+
+            {acompteValue != null && !Number.isNaN(acompteValue) && acompteValue > 0 && (
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-xl border border-success/30 bg-success-tint px-3 py-2 text-sm">
+                <span className="font-black text-success">À payer : {formatEuro(acompteValue)} € TTC</span>
+                {resteAPayer != null && (
+                  <span className="font-bold text-text/70">Reste à payer : {formatEuro(resteAPayer)} € TTC</span>
+                )}
               </div>
             )}
           </FieldGroup>
