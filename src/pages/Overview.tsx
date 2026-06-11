@@ -5,6 +5,7 @@ import { MagicKpi } from '../components/kpi/MagicKpi'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
+import { leadDetailPath } from '../lib/leadPaths'
 import { useDisplayUser } from '../lib/role'
 import { useCallLogs, useClients, useLeads, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary, useCommercialObjectives, useDebriefAnalytics, prefetchAnalyticsFunnel, prefetchAnalyticsSummary, type DebriefAnalyticsResponse } from '../lib/hooks'
 import { STATUS_LABEL, DEBRIEF_ACCEPTANCE_FACTOR_LABEL, DEBRIEF_NON_SALE_REASON_LABEL, fullName, initials, type AnalyticsAdminSummary, type AnalyticsFunnelResponse, type CallLogResponse, type CommercialObjectiveResponse, type DebriefAcceptanceFactor, type DebriefNonSaleReason, type LeadResponse, type LeadStatus, type RdvResponse, type RdvLeadSummary, type UserResponse } from '../lib/types'
@@ -513,6 +514,7 @@ function needsDebrief(rdv: RdvResponse): boolean {
 
 function CommercialDebriefsToFill({ debriefs, limit = 8 }: { debriefs: { rdv: RdvResponse; lead?: RdvLeadSummary | null }[]; limit?: number }) {
   const navigate = useNavigate()
+  const role = useAuth((s) => s.user?.role)
   return (
     <div className="overview-air-card overview-commercial-qualified-list">
       <div className="shot-card-head">
@@ -527,13 +529,17 @@ function CommercialDebriefsToFill({ debriefs, limit = 8 }: { debriefs: { rdv: Rd
           <div className="text-xs text-faint">Aucun débrief à remplir.</div>
         ) : debriefs.slice(0, limit).map(({ rdv, lead }) => {
           const name = lead ? fullName(lead) : 'Prospect'
+          // Le débrief se remplit sur la fiche client (CommercialDebriefSidebar),
+          // pas sur le détail RDV. On ouvre /client/:leadId avec ?debrief=<rdvId>
+          // pour que la fiche déplie directement le débrief du RDV concerné.
           return (
             <button
               type="button"
               key={rdv.id}
               className="commercial-qualified-row"
               style={{ background: 'none', border: 'none', font: 'inherit', textAlign: 'left', width: '100%', cursor: 'pointer' }}
-              onClick={() => navigate(`/rdv/${rdv.id}`)}
+              onClick={() => rdv.leadId && navigate(`${leadDetailPath(role, rdv.leadId)}?debrief=${rdv.id}`)}
+              disabled={!rdv.leadId}
             >
               <div className="overview-role-avatar">{userInitials(name)}</div>
               <div>

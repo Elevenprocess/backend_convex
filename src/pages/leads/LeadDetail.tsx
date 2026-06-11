@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react'
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon, type IconName } from '../../components/Icon'
@@ -45,6 +45,7 @@ type DebriefDraft = Parameters<typeof createLeadDebrief>[1]
 
 export function LeadDetail() {
   const { id } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const startCall = useStartCall()
   const role = useAuth((s) => s.user?.role)
@@ -79,6 +80,17 @@ export function LeadDetail() {
     if (!id) return
     void listDebriefsByLead(id).then(setDebriefs).catch(() => undefined)
   }, [id, debriefRefreshKey])
+
+  // Arrivée depuis « Débriefs à remplir » (Overview commercial) : ?debrief=<rdvId>
+  // → on ouvre directement le débrief, puis on nettoie l'URL pour que le bouton
+  // « Retour » / un refresh ne le ré-ouvre pas en boucle.
+  useEffect(() => {
+    if (!searchParams.get('debrief')) return
+    setDebriefOpen(true)
+    const next = new URLSearchParams(searchParams)
+    next.delete('debrief')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
 
   async function handleDeleteDebrief(debriefId: string) {
     if (!window.confirm('Supprimer ce débrief ?')) return
