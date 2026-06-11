@@ -4990,6 +4990,7 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 }
 .drp-include { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--color-text); }
 .drp-include input { accent-color: var(--color-or); }
+.drp-single { font-weight: 600; cursor: pointer; }
 .drp-cals { display: flex; gap: 22px; }
 .drp-cal { width: 250px; }
 .drp-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }

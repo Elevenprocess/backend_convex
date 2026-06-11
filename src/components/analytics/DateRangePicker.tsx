@@ -29,6 +29,9 @@ export function DateRangePicker({ value, onChange, align = 'left' }: Props) {
   // 'end' = on place le curseur vert (sortant). `hover` prévisualise la plage.
   const [picking, setPicking] = useState<'start' | 'end'>('start')
   const [hover, setHover] = useState<Date | null>(null)
+  // Mode « une seule journée » : un clic sélectionne le jour cliqué (début = fin),
+  // sans attendre de second clic pour la date de fin.
+  const [singleDay, setSingleDay] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   const wasOpen = useRef(false)
@@ -37,6 +40,8 @@ export function DateRangePicker({ value, onChange, align = 'left' }: Props) {
       setDraft(value)
       setPicking('start')
       setHover(null)
+      // Pré-active le mode jour unique si la valeur courante est déjà une seule journée.
+      setSingleDay(value.mode === 'custom' && !!value.customFrom && value.customFrom === value.customTo)
     }
     wasOpen.current = open
   }, [open, value])
@@ -69,9 +74,26 @@ export function DateRangePicker({ value, onChange, align = 'left' }: Props) {
   //    on passe en attente de la FIN.
   //  • 2e clic → pose la FIN (vert). Si on clique AVANT le début, on inverse
   //    intelligemment : le plus tôt devient le bleu, l'ancien début le vert.
+  function toggleSingleDay(on: boolean) {
+    setSingleDay(on)
+    setPicking('start')
+    setHover(null)
+    // En activant, on replie la plage courante sur sa date de début.
+    if (on && draft.mode === 'custom' && draft.customFrom) {
+      setDraft((d) => ({ ...d, customTo: d.customFrom }))
+    }
+  }
+
   function clickDay(day: Date) {
     if (day > today) return
     const iso = toDateInputValue(day)
+    // Mode jour unique : un seul clic fixe début ET fin sur le jour cliqué.
+    if (singleDay) {
+      setDraft((d) => ({ ...d, mode: 'custom', customFrom: iso, customTo: iso }))
+      setPicking('start')
+      setHover(null)
+      return
+    }
     const startFresh = picking === 'start' || draft.mode !== 'custom' || !draft.customFrom
     if (startFresh) {
       setDraft((d) => ({ ...d, mode: 'custom', customFrom: iso, customTo: iso }))
@@ -208,6 +230,11 @@ export function DateRangePicker({ value, onChange, align = 'left' }: Props) {
                 Inclure aujourd'hui
               </label>
             </div>
+            <label className="drp-include drp-single">
+              <input type="checkbox" checked={singleDay}
+                onChange={(e) => toggleSingleDay(e.target.checked)} />
+              Sélectionner une seule journée
+            </label>
             <div className="drp-cals">
               {renderCal(prevView, 'left')}
               {renderCal(view, 'right')}
