@@ -1128,9 +1128,22 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
   const [hover, setHover] = useState<{ index: number; cursorX: number; dotY: number; mx: number; my: number; mw: number; mh: number } | null>(null)
   const lineRef = useRef<SVGPathElement | null>(null)
   const tooltipRef = useRef<HTMLDivElement | null>(null)
+  const wrapRef = useRef<HTMLDivElement | null>(null)
   // Position finale de la carte en pixels, clampée dans le cadre (calculée après
   // mesure réelle du tooltip → jamais coupée, glisse le long du bord au lieu de sauter).
   const [tipPos, setTipPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 })
+  // Dimensions réelles du conteneur : viewBox calé dessus en 1:1 → le tracé remplit
+  // toute la largeur, aucun letterboxing (plus d'espace vide à gauche/droite).
+  const [dims, setDims] = useState<{ width: number; height: number }>({ width: 640, height: 274 })
+  useLayoutEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const measure = () => setDims({ width: el.clientWidth, height: el.clientHeight })
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
   const rawPoints = points.length > 0 ? points : [{ key: 'empty', t: 0, date: '', label: 'Live', leads: 0, qualified: 0, signed: 0 }]
   const sampleStep = rawPoints.length > 56 ? Math.ceil(rawPoints.length / 56) : 1
   const keepIdx = sampleStep > 1 ? rawPoints.map((_, index) => index).filter((index) => index % sampleStep === 0 || index === rawPoints.length - 1) : rawPoints.map((_, index) => index)
@@ -1142,20 +1155,23 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
   const subtitle = GRANULARITY_SUBTITLE[granularity]
   const seriesStyle = { '--series-color': activeSeries.color } as CSSProperties
 
-  const width = 640
-  const height = 240
-  const padX = 40
+  const width = dims.width
+  const height = dims.height
+  // padLeft : place pour l'axe Y (libellés). padRight réduit : pas d'axe à droite,
+  // on récupère l'espace pour que la courbe aille presque au bord.
+  const padLeft = 36
+  const padRight = 12
   const padTop = 18
   const padBottom = 34
-  const chartWidth = width - padX * 2
-  const chartHeight = height - padTop - padBottom
+  const chartWidth = Math.max(1, width - padLeft - padRight)
+  const chartHeight = Math.max(1, height - padTop - padBottom)
   const clamp = (value: number, min: number, maxValue: number) => Math.min(maxValue, Math.max(min, value))
   const max = Math.max(1, ...safePoints.map((point) => point[activeKey]), ...comparePts.map((point) => point[activeKey]))
   const domain = computeEvolutionDomain(range, granularity)
   const ticks = buildEvolutionTicks(domain, granularity)
   const useTime = domain.end > domain.start && safePoints.every((point) => Number.isFinite(point.t) && point.t > 0)
-  const xForTime = (t: number) => padX + ((clamp(t, domain.start, domain.end) - domain.start) / (domain.end - domain.start)) * chartWidth
-  const xForIndex = (index: number) => padX + (safePoints.length === 1 ? chartWidth / 2 : (index / (safePoints.length - 1)) * chartWidth)
+  const xForTime = (t: number) => padLeft + ((clamp(t, domain.start, domain.end) - domain.start) / (domain.end - domain.start)) * chartWidth
+  const xForIndex = (index: number) => padLeft + (safePoints.length === 1 ? chartWidth / 2 : (index / (safePoints.length - 1)) * chartWidth)
   const xFor = (index: number) => (useTime ? xForTime(safePoints[index].t) : xForIndex(index))
   const yFor = (value: number) => padTop + chartHeight - (value / max) * chartHeight
 
@@ -1183,7 +1199,7 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
     if (moveRaf.current !== null) return
     moveRaf.current = requestAnimationFrame(() => {
       moveRaf.current = null
-      const cursorX = clamp(((clientX - rect.left) / rect.width) * width, padX, width - padX)
+      const cursorX = clamp(((clientX - rect.left) / rect.width) * width, padLeft, width - padRight)
       let index = 0
       let best = Infinity
       for (let i = 0; i < safePoints.length; i += 1) {
@@ -1280,8 +1296,8 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
         <span><small>vs début</small><strong className={deltaFromStart > 0 ? 'positive' : deltaFromStart < 0 ? 'negative' : ''}>{deltaFromStart > 0 ? '+' : ''}{fmtCompact(deltaFromStart)}</strong></span>
         <span><small>Pic</small><strong>{fmtCompact(peakPoint?.[activeKey] ?? 0)}</strong><em>{peakPoint?.label ?? '—'}</em></span>
       </div>
-      <div className="lead-evolution-svg-wrap">
-        <svg viewBox={`0 0 ${width} ${height}`} onMouseMove={onMove} onMouseLeave={onLeave} role="img" aria-label="Évolution de la métrique sélectionnée">
+      <div className="lead-evolution-svg-wrap" ref={wrapRef}>
+        <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" onMouseMove={onMove} onMouseLeave={onLeave} role="img" aria-label="Évolution de la métrique sélectionnée">
           <defs>
             <linearGradient id="leadEvolutionFill" x1="0" x2="0" y1="0" y2="1">
               <stop offset="0%" stopColor="var(--series-color)" stopOpacity="0.14" />
@@ -1294,8 +1310,8 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
             const showLabel = ratio === 0 || ratio === 0.5 || ratio === 1
             return (
               <g key={ratio}>
-                <line x1={padX} x2={width - padX} y1={y} y2={y} className="lead-evolution-grid" />
-                {showLabel ? <text x={padX - 8} y={y + 3} className="lead-evolution-yaxis" textAnchor="end">{fmtCompact(label)}</text> : null}
+                <line x1={padLeft} x2={width - padRight} y1={y} y2={y} className="lead-evolution-grid" />
+                {showLabel ? <text x={padLeft - 8} y={y + 3} className="lead-evolution-yaxis" textAnchor="end">{fmtCompact(label)}</text> : null}
               </g>
             )
           })}
