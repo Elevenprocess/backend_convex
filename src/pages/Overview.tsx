@@ -636,9 +636,17 @@ function OverviewCommercialIndividual() {
   const [tab, setTab] = useState('overview')
   const [period, setPeriod] = useState<FunnelPeriodState>({ ...DEFAULT_FUNNEL_PERIOD, mode: 'this_month' })
   const range = buildFunnelPeriodRange(period)
-  // Le commercial_lead supervise toute l'équipe closing : scope non borné
-  // (commercialId undefined). Le commercial individuel ne voit que ses données.
-  const scopeCommercialId = me?.role === 'commercial_lead' ? undefined : me?.id
+  // Le commercial_lead supervise toute l'équipe closing par défaut (scope non
+  // borné, commercialId undefined), mais peut basculer sur « Mes RDV » pour ne
+  // voir que les RDV qui lui sont personnellement attribués (commercialId = son
+  // id). Le commercial individuel ne voit toujours que ses données.
+  const isCommercialLead = me?.role === 'commercial_lead'
+  const [rdvScope, setRdvScope] = useState<'team' | 'mine'>('team')
+  const scopeCommercialId = isCommercialLead
+    ? rdvScope === 'mine'
+      ? me?.id
+      : undefined
+    : me?.id
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), [])
 
   // Liste RDV non bornée par la période : on ne masque jamais un débrief en
@@ -715,9 +723,22 @@ function OverviewCommercialIndividual() {
           <div>
             <span className="shot-eyebrow">ECOI SaaS · commercial</span>
             <h1>Mon espace</h1>
-            <p className="text-sm text-muted mt-2">Vos chiffres, vos prochains rendez-vous et vos débriefs à remplir.</p>
+            <p className="text-sm text-muted mt-2">
+              {isCommercialLead && rdvScope === 'mine'
+                ? 'Uniquement les RDV qui vous sont attribués · vos chiffres et débriefs.'
+                : isCommercialLead
+                  ? "Toute l'équipe closing · chiffres, prochains rendez-vous et débriefs."
+                  : 'Vos chiffres, vos prochains rendez-vous et vos débriefs à remplir.'}
+            </p>
           </div>
           <div className="overview-commercial-toolbar">
+            {isCommercialLead && (
+              <PillTabs
+                items={[{ id: 'team', label: "Toute l'équipe" }, { id: 'mine', label: 'Mes RDV' }]}
+                active={rdvScope}
+                onChange={(id) => setRdvScope(id as 'team' | 'mine')}
+              />
+            )}
             <DateRangePicker value={period} onChange={setPeriod} align="right" />
           </div>
         </div>
