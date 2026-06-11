@@ -218,6 +218,49 @@ const NON_SALE_REASON_SEPARATOR = ' — '
 const ACCEPTANCE_PREFIX_RE = /^\[Acceptation:\s*([^\]]+)\]\s*\n?/
 const PRECISION_PREFIX_RE = /^\[Précision:\s*([\s\S]*?)\]\s*(?:\n|$)/
 
+// Persistance locale du débrief en cours : un brouillon par (lead, RDV) pour qu'un
+// rechargement de page ne fasse pas repartir le wizard de zéro.
+const DRAFT_STORAGE_PREFIX = 'ecoi:debrief-draft:'
+
+type DebriefDraft = { form: FormState; currentStep: number }
+
+function draftStorageKey(leadId: string, rdvId: string | null): string {
+  return `${DRAFT_STORAGE_PREFIX}${leadId}:${rdvId ?? 'no-rdv'}`
+}
+
+function loadDebriefDraft(leadId: string, rdvId: string | null): DebriefDraft | null {
+  try {
+    const raw = window.localStorage.getItem(draftStorageKey(leadId, rdvId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<DebriefDraft> | null
+    if (!parsed || typeof parsed !== 'object' || !parsed.form) return null
+    return {
+      // Fusion avec EMPTY_FORM : tolère un brouillon écrit par une version antérieure
+      // du formulaire (champs manquants → valeurs par défaut).
+      form: { ...EMPTY_FORM, ...parsed.form },
+      currentStep: typeof parsed.currentStep === 'number' ? parsed.currentStep : 0,
+    }
+  } catch {
+    return null
+  }
+}
+
+function saveDebriefDraft(leadId: string, rdvId: string | null, draft: DebriefDraft): void {
+  try {
+    window.localStorage.setItem(draftStorageKey(leadId, rdvId), JSON.stringify(draft))
+  } catch {
+    /* quota dépassé / navigation privée : on ignore silencieusement */
+  }
+}
+
+function clearDebriefDraft(leadId: string, rdvId: string | null): void {
+  try {
+    window.localStorage.removeItem(draftStorageKey(leadId, rdvId))
+  } catch {
+    /* noop */
+  }
+}
+
 export function CommercialDebriefSidebar({ lead, onClose, onSaved, onValidated, onResolveVenteProject, onSubmitFromFiche, onBack, className = '' }: Props) {
   const { data: rdvs, loading: rdvsLoading, refetch: refetchRdvs } = useRdvList({ leadId: lead.id })
   const sortedRdvs = useMemo(() => sortRdvsForDebrief(rdvs ?? []), [rdvs])
@@ -234,6 +277,9 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, onValidated, 
   const [rescheduleTime, setRescheduleTime] = useState('')
   const [rescheduling, setRescheduling] = useState(false)
   const [rescheduleSavedAt, setRescheduleSavedAt] = useState<string | null>(null)
+  // Clé du brouillon actuellement chargé : empêche la sauvegarde d'écrire l'ancien
+  // form sous la nouvelle clé au premier render suivant un changement de lead/RDV.
+  const draftLoadedKeyRef = useRef<string | null>(null)
   const readOnly = useIsReadOnlyImpersonation()
 
   // Auto-close 1.6s après une sauvegarde réussie pour libérer l'écran et signaler la fin.
@@ -259,13 +305,28 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, onValidated, 
   useEffect(() => {
     setError(null)
     setRescheduleSavedAt(null)
-    setForm(selectedRdv ? rdvToForm(selectedRdv) : EMPTY_FORM)
+    const rdvId = selectedRdv?.id ?? null
+    // Priorité au brouillon local en cours (débrief non soumis interrompu par un
+    // rechargement). Sinon : si le RDV a DÉJÀ un débrief enregistré (debriefFilledAt),
+    // on repart vierge pour un nouveau débrief ; on ne ré-affiche pas la saisie passée.
+    const draft = loadDebriefDraft(lead.id, rdvId)
+    const base = selectedRdv && !selectedRdv.debriefFilledAt ? rdvToForm(selectedRdv) : EMPTY_FORM
+    setForm(draft ? draft.form : base)
     const initialSlot = selectedRdv ? dateTimeInputsFromIso(selectedRdv.scheduledAt) : { date: '', time: '' }
     setRescheduleDate(initialSlot.date)
     setRescheduleTime(initialSlot.time)
-    setCurrentStep(0)
+    setCurrentStep(draft ? draft.currentStep : 0)
     setTransitionDirection('forward')
-  }, [selectedRdv?.id, selectedRdv?.scheduledAt])
+    draftLoadedKeyRef.current = draftStorageKey(lead.id, rdvId)
+  }, [lead.id, selectedRdv?.id, selectedRdv?.scheduledAt])
+
+  // Sauvegarde le brouillon à chaque évolution du formulaire ou de l'étape, mais
+  // seulement après que le draft de la clé courante a été chargé (cf. ref ci-dessus).
+  useEffect(() => {
+    const rdvId = selectedRdv?.id ?? null
+    if (draftLoadedKeyRef.current !== draftStorageKey(lead.id, rdvId)) return
+    saveDebriefDraft(lead.id, rdvId, { form, currentStep })
+  }, [form, currentStep, lead.id, selectedRdv?.id])
 
   const update = (patch: Partial<FormState>) => {
     setForm((current) => {
@@ -403,6 +464,7 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, onValidated, 
       } else if (onSubmitFromFiche) {
         // Pas de RDV, depuis la fiche : le parent gère l'attribution du projet
         // (auto / sélecteur / création) puis l'enregistrement + le feedback.
+        clearDebriefDraft(lead.id, selectedRdv?.id ?? null)
         onSubmitFromFiche(debriefPayload, form.outcome as 'vente' | 'non_vente')
         onClose()
         return
@@ -411,6 +473,9 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, onValidated, 
         await createLeadDebrief(lead.id, debriefPayload)
       }
 
+      // Débrief enregistré : on jette le brouillon local pour qu'un retour ne
+      // ressuscite pas un formulaire déjà soumis.
+      clearDebriefDraft(lead.id, selectedRdv?.id ?? null)
       onSaved?.()
       if (form.outcome === 'vente' || form.outcome === 'non_vente') {
         onValidated?.(form.outcome, venteProjectId)
