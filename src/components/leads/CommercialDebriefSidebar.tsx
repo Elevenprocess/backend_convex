@@ -464,7 +464,8 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, onValidated, 
       } else if (onSubmitFromFiche) {
         // Pas de RDV, depuis la fiche : le parent gère l'attribution du projet
         // (auto / sélecteur / création) puis l'enregistrement + le feedback.
-        clearDebriefDraft(lead.id, selectedRdv?.id ?? null)
+        // selectedRdv est forcément null dans cette branche → clé "no-rdv".
+        clearDebriefDraft(lead.id, null)
         onSubmitFromFiche(debriefPayload, form.outcome as 'vente' | 'non_vente')
         onClose()
         return
