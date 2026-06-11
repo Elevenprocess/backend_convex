@@ -5011,6 +5011,10 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 .drp-day.edge-start { background: #3B6FB0; color: #fff; font-weight: 700; border-radius: 8px 0 0 8px; box-shadow: 0 0 0 2px color-mix(in srgb, #3B6FB0 28%, transparent); }
 .drp-day.edge-end { background: var(--color-or); color: #fff; font-weight: 700; border-radius: 0 8px 8px 0; box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-or) 28%, transparent); }
 .drp-day.edge-start.edge-end { border-radius: 8px; }
+/* Curseurs déplaçables : poignée « saisissable », « en cours de saisie » pendant le glissé. */
+.drp-day.edge-start, .drp-day.edge-end { cursor: grab; }
+.drp-panel.is-dragging { user-select: none; }
+.drp-panel.is-dragging .drp-day { cursor: grabbing; }
 .drp-foot {
   display: flex; align-items: center; justify-content: space-between;
   border-top: 1px solid var(--color-line-soft); padding-top: 12px;

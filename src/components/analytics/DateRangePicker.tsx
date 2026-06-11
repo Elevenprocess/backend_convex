@@ -32,6 +32,13 @@ export function DateRangePicker({ value, onChange, align = 'left' }: Props) {
   // Mode « une seule journée » : un clic sélectionne le jour cliqué (début = fin),
   // sans attendre de second clic pour la date de fin.
   const [singleDay, setSingleDay] = useState(false)
+  // Glisser-déposer d'un curseur : 'start'/'end' = le curseur qu'on déplace,
+  // null = pas de drag en cours. dragAnchor garde le curseur opposé (fixe) pendant
+  // le glissé. didDrag distingue un vrai déplacement d'un simple clic (pour ne pas
+  // re-déclencher la logique de clic au relâchement).
+  const [dragging, setDragging] = useState<'start' | 'end' | null>(null)
+  const dragAnchor = useRef<string | undefined>(undefined)
+  const didDrag = useRef(false)
   const ref = useRef<HTMLDivElement>(null)
 
   const wasOpen = useRef(false)
@@ -40,6 +47,8 @@ export function DateRangePicker({ value, onChange, align = 'left' }: Props) {
       setDraft(value)
       setPicking('start')
       setHover(null)
+      setDragging(null)
+      didDrag.current = false
       // Pré-active le mode jour unique si la valeur courante est déjà une seule journée.
       setSingleDay(value.mode === 'custom' && !!value.customFrom && value.customFrom === value.customTo)
     }
@@ -54,6 +63,14 @@ export function DateRangePicker({ value, onChange, align = 'left' }: Props) {
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
   }, [open])
+
+  // Fin du glissé même si on relâche hors de la grille (souris sortie du calendrier).
+  useEffect(() => {
+    if (!dragging) return
+    const onUp = () => setDragging(null)
+    window.addEventListener('mouseup', onUp)
+    return () => window.removeEventListener('mouseup', onUp)
+  }, [dragging])
 
   const draftRange = useMemo(() => buildPeriodRange(draft), [draft])
   const today = startOfDay(new Date())
@@ -86,6 +103,8 @@ export function DateRangePicker({ value, onChange, align = 'left' }: Props) {
 
   function clickDay(day: Date) {
     if (day > today) return
+    // On vient de relâcher un glissé : le clic qui suit ne doit pas re-sélectionner.
+    if (didDrag.current) { didDrag.current = false; return }
     const iso = toDateInputValue(day)
     // Mode jour unique : un seul clic fixe début ET fin sur le jour cliqué.
     if (singleDay) {
@@ -94,20 +113,72 @@ export function DateRangePicker({ value, onChange, align = 'left' }: Props) {
       setHover(null)
       return
     }
-    const startFresh = picking === 'start' || draft.mode !== 'custom' || !draft.customFrom
-    if (startFresh) {
-      setDraft((d) => ({ ...d, mode: 'custom', customFrom: iso, customTo: iso }))
-      setPicking('end')
-    } else {
-      const from = parseDateInput(draft.customFrom)
+    const hasRange = draft.mode === 'custom' && !!draft.customFrom
+    // 2e clic : on pose la fin (avec inversion si on clique avant le début).
+    if (picking === 'end' && hasRange) {
+      const from = parseDateInput(draft.customFrom!)
       setDraft((d) =>
         day < from
           ? { ...d, mode: 'custom', customFrom: iso, customTo: d.customFrom }
           : { ...d, mode: 'custom', customFrom: d.customFrom, customTo: iso },
       )
       setPicking('start')
+      setHover(null)
+      return
     }
+    // Plage déjà complète : un clic supplémentaire déplace le curseur le plus proche
+    // au lieu de tout recommencer (3e clic, 4e clic… ajustent la plage existante).
+    if (hasRange) {
+      const from = parseDateInput(draft.customFrom!)
+      const to = parseDateInput(draft.customTo ?? draft.customFrom!)
+      const closerToStart = Math.abs(day.getTime() - from.getTime()) <= Math.abs(day.getTime() - to.getTime())
+      setDraft((d) => {
+        if (closerToStart) {
+          // Déplace le début ; s'il dépasse la fin, les deux s'inversent.
+          return day > to
+            ? { ...d, mode: 'custom', customFrom: d.customTo ?? d.customFrom, customTo: iso }
+            : { ...d, mode: 'custom', customFrom: iso }
+        }
+        // Déplace la fin ; si elle passe avant le début, les deux s'inversent.
+        return day < from
+          ? { ...d, mode: 'custom', customFrom: iso, customTo: d.customFrom }
+          : { ...d, mode: 'custom', customTo: iso }
+      })
+      setPicking('start')
+      setHover(null)
+      return
+    }
+    // Aucune plage (preset actif / première ouverture) : on pose le début.
+    setDraft((d) => ({ ...d, mode: 'custom', customFrom: iso, customTo: iso }))
+    setPicking('end')
     setHover(null)
+  }
+
+  // Appui sur un curseur (début ou fin) : démarre le glissé. Le curseur opposé
+  // reste ancré ; on recalcule la plage comme min/max(ancre, jour survolé).
+  function onDayMouseDown(day: Date) {
+    if (singleDay || day > today) return
+    if (draft.mode !== 'custom' || !draft.customFrom) return
+    const iso = toDateInputValue(day)
+    const isStart = draft.customFrom === iso
+    const isEnd = (draft.customTo ?? draft.customFrom) === iso
+    if (!isStart && !isEnd) return
+    const edge: 'start' | 'end' = isEnd ? 'end' : 'start'
+    dragAnchor.current = edge === 'end' ? draft.customFrom : (draft.customTo ?? draft.customFrom)
+    didDrag.current = false
+    setDragging(edge)
+  }
+
+  function onDayMouseEnter(day: Date) {
+    if (day > today) return
+    if (dragging && dragAnchor.current) {
+      didDrag.current = true
+      const anchor = parseDateInput(dragAnchor.current)
+      const [a, b] = day < anchor ? [day, anchor] : [anchor, day]
+      setDraft((d) => ({ ...d, mode: 'custom', customFrom: toDateInputValue(a), customTo: toDateInputValue(b) }))
+      return
+    }
+    if (picking === 'end') setHover(day)
   }
 
   // Plage affichée : pendant le choix de la fin, on prévisualise jusqu'au jour survolé.
@@ -159,8 +230,9 @@ export function DateRangePicker({ value, onChange, align = 'left' }: Props) {
             return (
               <button key={day.toISOString()} type="button" className={cls} disabled={disabled}
                 style={{ opacity: inMonth ? 1 : 0.4 }}
+                onMouseDown={() => onDayMouseDown(day)}
                 onClick={() => clickDay(day)}
-                onMouseEnter={() => { if (picking === 'end' && !disabled) setHover(day) }}>
+                onMouseEnter={() => onDayMouseEnter(day)}>
                 {day.getDate()}
               </button>
             )
@@ -179,7 +251,7 @@ export function DateRangePicker({ value, onChange, align = 'left' }: Props) {
       </button>
 
       {open && (
-        <div className={`drp-panel ${align === 'right' ? 'drp-panel--right' : ''}`}>
+        <div className={`drp-panel ${align === 'right' ? 'drp-panel--right' : ''} ${dragging ? 'is-dragging' : ''}`}>
           <div className="drp-presets">
             <div className="drp-group">
               <span className="drp-group-title">Période à ce jour</span>
