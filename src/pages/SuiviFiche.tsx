@@ -76,6 +76,13 @@ export function FicheCompletePage() {
     return m
   }, [users])
 
+  // On n'affiche que les projets signés dans la fiche : les dossiers en
+  // qualification / devis / perdu / abandonné ne sont pas pertinents ici.
+  const signedProjects = useMemo(
+    () => (details ?? []).filter((p) => p.status === 'signe'),
+    [details],
+  )
+
   if (
     role
     && role !== 'admin'
@@ -128,13 +135,13 @@ export function FicheCompletePage() {
               )}
               {loadingProjects ? (
                 <LoadingBlock label="Chargement des dossiers…" />
-              ) : details && details.length > 0 ? (
-                details.map((p) => (
+              ) : signedProjects.length > 0 ? (
+                signedProjects.map((p) => (
                   <ProjectDossierSection key={p.id} project={p} commercialName={usersById.get(p.commercialId)} />
                 ))
               ) : (
                 <div className="rounded-xl border border-dashed border-line px-4 py-8 text-center text-sm text-faint">
-                  Aucun projet pour ce client.
+                  Aucun projet signé pour ce client.
                 </div>
               )}
             </div>
