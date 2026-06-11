@@ -1,10 +1,24 @@
-import { Link } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Link, Navigate } from 'react-router-dom'
 import Orb from '../components/visual/Orb'
 import { useAuth } from '../lib/auth'
 
 export function Landing() {
   const status = useAuth((s) => s.status)
+  const role = useAuth((s) => s.user?.role)
+  const hydrate = useAuth((s) => s.hydrate)
   const isAuthed = status === 'authed'
+
+  // Si une session existe déjà, on hydrate puis on redirige automatiquement
+  // vers le CRM (le RootLayout/Landing ne passe pas par RequireAuth, donc
+  // sans ça le statut resterait "loading").
+  useEffect(() => {
+    if (status === 'loading') void hydrate()
+  }, [status, hydrate])
+
+  if (isAuthed) {
+    return <Navigate to={role === 'technicien' ? '/planning' : '/overview'} replace />
+  }
 
   return (
     <main className="relative h-screen w-full overflow-hidden bg-[#030303] text-white">
