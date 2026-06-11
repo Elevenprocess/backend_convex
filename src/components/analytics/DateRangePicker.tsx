@@ -25,11 +25,19 @@ export function DateRangePicker({ value, onChange, align = 'left' }: Props) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<PeriodState>(value)
   const [view, setView] = useState(() => new Date())
+  // Étape de sélection : 'start' = on place le curseur bleu (entrant),
+  // 'end' = on place le curseur vert (sortant). `hover` prévisualise la plage.
+  const [picking, setPicking] = useState<'start' | 'end'>('start')
+  const [hover, setHover] = useState<Date | null>(null)
   const ref = useRef<HTMLDivElement>(null)
 
   const wasOpen = useRef(false)
   useEffect(() => {
-    if (open && !wasOpen.current) setDraft(value)
+    if (open && !wasOpen.current) {
+      setDraft(value)
+      setPicking('start')
+      setHover(null)
+    }
     wasOpen.current = open
   }, [open, value])
 
@@ -47,6 +55,8 @@ export function DateRangePicker({ value, onChange, align = 'left' }: Props) {
   const prevView = new Date(view.getFullYear(), view.getMonth() - 1, 1)
 
   function selectPreset(mode: PeriodMode) {
+    setPicking('start')
+    setHover(null)
     if (mode === 'last_n_days') {
       setDraft((d) => ({ ...d, mode, lastN: d.lastN ?? 30, includeToday: d.includeToday ?? true }))
     } else {
@@ -54,27 +64,50 @@ export function DateRangePicker({ value, onChange, align = 'left' }: Props) {
     }
   }
 
+  // Sélection à deux curseurs :
+  //  • 1er clic (ou après une plage déjà complète) → pose le DÉBUT (bleu),
+  //    on passe en attente de la FIN.
+  //  • 2e clic → pose la FIN (vert). Si on clique AVANT le début, on inverse
+  //    intelligemment : le plus tôt devient le bleu, l'ancien début le vert.
   function clickDay(day: Date) {
     if (day > today) return
     const iso = toDateInputValue(day)
-    setDraft((d) => {
-      if (d.mode !== 'custom' || (d.customFrom && d.customTo && d.customFrom !== d.customTo)) {
-        return { ...d, mode: 'custom', customFrom: iso, customTo: iso }
-      }
-      const from = parseDateInput(d.customFrom)
-      if (day < from) return { ...d, mode: 'custom', customFrom: iso, customTo: d.customFrom }
-      return { ...d, mode: 'custom', customFrom: d.customFrom, customTo: iso }
-    })
+    const startFresh = picking === 'start' || draft.mode !== 'custom' || !draft.customFrom
+    if (startFresh) {
+      setDraft((d) => ({ ...d, mode: 'custom', customFrom: iso, customTo: iso }))
+      setPicking('end')
+    } else {
+      const from = parseDateInput(draft.customFrom)
+      setDraft((d) =>
+        day < from
+          ? { ...d, mode: 'custom', customFrom: iso, customTo: d.customFrom }
+          : { ...d, mode: 'custom', customFrom: d.customFrom, customTo: iso },
+      )
+      setPicking('start')
+    }
+    setHover(null)
   }
 
-  function isEdge(day: Date) {
-    return toDateInputValue(day) === toDateInputValue(new Date(draftRange.from))
-      || toDateInputValue(day) === toDateInputValue(new Date(draftRange.to))
+  // Plage affichée : pendant le choix de la fin, on prévisualise jusqu'au jour survolé.
+  const preview = useMemo(() => {
+    if (draft.mode === 'custom' && picking === 'end' && hover && draft.customFrom) {
+      const from = parseDateInput(draft.customFrom)
+      const [a, b] = hover < from ? [hover, from] : [from, hover]
+      return { from: a, to: b }
+    }
+    return { from: new Date(draftRange.from), to: new Date(draftRange.to) }
+  }, [draft, picking, hover, draftRange])
+
+  function edgeKind(day: Date): 'start' | 'end' | null {
+    const iso = toDateInputValue(day)
+    if (iso === toDateInputValue(preview.from)) return 'start'
+    if (iso === toDateInputValue(preview.to)) return 'end'
+    return null
   }
   function inRange(day: Date) {
     const t = startOfDay(day).getTime()
-    return t >= startOfDay(new Date(draftRange.from)).getTime()
-      && t <= endOfDay(new Date(draftRange.to)).getTime()
+    return t >= startOfDay(preview.from).getTime()
+      && t <= endOfDay(preview.to).getTime()
   }
 
   function renderCal(viewDate: Date, side: 'left' | 'right') {
@@ -96,10 +129,16 @@ export function DateRangePicker({ value, onChange, align = 'left' }: Props) {
           {monthMatrix(viewDate).map((day) => {
             const inMonth = day.getMonth() === viewDate.getMonth()
             const disabled = day > today
-            const cls = ['drp-day', isEdge(day) ? 'edge' : inRange(day) ? 'in-range' : ''].join(' ')
+            const edge = edgeKind(day)
+            const cls = [
+              'drp-day',
+              edge === 'start' ? 'edge edge-start' : edge === 'end' ? 'edge edge-end' : inRange(day) ? 'in-range' : '',
+            ].join(' ')
             return (
               <button key={day.toISOString()} type="button" className={cls} disabled={disabled}
-                style={{ opacity: inMonth ? 1 : 0.4 }} onClick={() => clickDay(day)}>
+                style={{ opacity: inMonth ? 1 : 0.4 }}
+                onClick={() => clickDay(day)}
+                onMouseEnter={() => { if (picking === 'end' && !disabled) setHover(day) }}>
                 {day.getDate()}
               </button>
             )
@@ -175,7 +214,13 @@ export function DateRangePicker({ value, onChange, align = 'left' }: Props) {
             </div>
             <div className="drp-foot">
               <span className="drp-foot-label">
-                Du {formatShortDate(new Date(draftRange.from))} au {formatShortDate(new Date(draftRange.to))}
+                <span className={`drp-cursor drp-cursor--start ${picking === 'start' ? 'is-active' : ''}`}>
+                  Début {formatShortDate(new Date(draftRange.from))}
+                </span>
+                <span className="drp-foot-sep">→</span>
+                <span className={`drp-cursor drp-cursor--end ${picking === 'end' ? 'is-active' : ''}`}>
+                  Fin {formatShortDate(new Date(draftRange.to))}
+                </span>
               </span>
               <div className="drp-actions">
                 <button type="button" className="drp-btn" onClick={() => setOpen(false)}>Annuler</button>
