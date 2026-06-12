@@ -237,13 +237,13 @@ export function Sidebar() {
         type="button"
         className="sb-workspace"
         onClick={() => navigate('/overview')}
-        title="Electro Concept OI"
+        title="VELORA"
       >
         <span className="sb-workspace-logo">
           <img src="/favicon.png" alt="" />
         </span>
         <span className="sb-workspace-meta">
-          <span className="sb-workspace-name">Electro Concept</span>
+          <span className="sb-workspace-name">VELORA</span>
           <span className="sb-workspace-tag">
             <span className="sb-workspace-dot" aria-hidden="true" />
             {ROLE_TAG[role] ?? role}

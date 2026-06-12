@@ -406,7 +406,7 @@ function OverviewSetter() {
       <main className="overview-shot-page flex-grow overflow-auto">
         <div className="overview-air-header">
           <div>
-            <span className="shot-eyebrow">ECOI SaaS · setter</span>
+            <span className="shot-eyebrow">VELORA · setter</span>
             <h1>Mon activité appels</h1>
           </div>
           <div className="overview-profile-chip">
@@ -415,7 +415,7 @@ function OverviewSetter() {
             </div>
             <div>
               <strong>{me?.name ?? display.firstName}</strong>
-              <small>{me?.email ?? 'Setter ECOI'}</small>
+              <small>{me?.email ?? 'Setter VELORA'}</small>
             </div>
           </div>
         </div>
@@ -615,7 +615,7 @@ function OverviewCommercialSolo() {
       <main className="overview-shot-page overview-commercial-page flex-grow overflow-auto">
         <div className="overview-air-header">
           <div>
-            <span className="shot-eyebrow">ECOI SaaS · commercial</span>
+            <span className="shot-eyebrow">VELORA · commercial</span>
             <h1>Mon espace</h1>
             <p className="text-sm text-muted mt-2">Vos RDV honorés et vos débriefs à remplir.</p>
           </div>
@@ -746,7 +746,7 @@ function OverviewCommercialLead() {
       <main className="overview-shot-page overview-commercial-page flex-grow overflow-auto">
         <div className="overview-air-header">
           <div>
-            <span className="shot-eyebrow">ECOI SaaS · pilotage commercial</span>
+            <span className="shot-eyebrow">VELORA · pilotage commercial</span>
             <h1>Pilotage de l'équipe</h1>
             <p className="text-sm text-muted mt-2">
               Performance de l'équipe closing, classement et atteinte des objectifs du mois.
@@ -969,7 +969,7 @@ function OverviewAdmin() {
       <main className="overview-shot-page flex-grow overflow-auto">
         <section className="overview-air-header">
           <div>
-            <div className="shot-eyebrow">ECOI SaaS · données réelles</div>
+            <div className="shot-eyebrow">VELORA · données réelles</div>
             <h1>Vue d’ensemble</h1>
             <p className="text-sm text-muted mt-2">{funnelRange.label}</p>
           </div>

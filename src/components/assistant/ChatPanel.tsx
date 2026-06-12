@@ -126,10 +126,10 @@ export function ChatPanel() {
       </button>
 
       {open && (
-        <section className="assistant-panel" aria-label="Assistant IA ECOI">
+        <section className="assistant-panel" aria-label="Assistant IA VELORA">
           <header className="assistant-header">
             <div>
-              <p className="assistant-eyebrow">Assistant ECOI</p>
+              <p className="assistant-eyebrow">Assistant VELORA</p>
               <h2>Copilote IA</h2>
               <span>Connecté à tes leads, RDV, clients et stats.</span>
             </div>

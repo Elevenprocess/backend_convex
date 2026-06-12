@@ -35,9 +35,9 @@ export function Landing() {
       <header className="relative z-10 flex h-20 items-center justify-between px-6 sm:px-10 lg:px-14">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/12 bg-white/[0.08] text-sm font-black backdrop-blur-2xl">
-            E
+            V
           </div>
-          <p className="text-xs font-black uppercase tracking-[0.32em] text-white/80">ECOI</p>
+          <p className="text-xs font-black uppercase tracking-[0.32em] text-white/80">VELORA</p>
         </div>
 
         <Link

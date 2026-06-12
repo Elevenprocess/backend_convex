@@ -42,7 +42,7 @@ export function AcceptInvitation() {
     <main className="min-h-screen flex items-center justify-center bg-ivoire px-4">
       <form onSubmit={submit} className="glass-card w-full max-w-md p-8 space-y-5">
         <div>
-          <div className="eyebrow text-or">ECOI</div>
+          <div className="eyebrow text-or">VELORA</div>
           <h1 className="text-2xl font-bold mt-1">Créer votre mot de passe</h1>
           <p className="text-sm text-muted mt-2">Finalisez votre accès à la plateforme.</p>
         </div>

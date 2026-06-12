@@ -116,7 +116,7 @@ export function MyProfile() {
                     )}
                   </div>
                 </div>
-                <span className="profile-avatar-badge">ECOI</span>
+                <span className="profile-avatar-badge">VELORA</span>
               </div>
 
               <div className="min-w-0 flex-1 text-center md:text-left">
