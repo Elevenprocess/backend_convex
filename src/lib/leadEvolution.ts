@@ -36,6 +36,11 @@ export function buildLeadEvolutionPoints(
   granularity: EvolutionGranularity,
   totals: { leads: number; qualified: number; signed: number },
 ): LeadEvolutionPoint[] {
+  // Le backend pré-remplit tous les buckets de la plage à 0, y compris ceux PAS ENCORE COMMENCÉS
+  // (heures à venir d'aujourd'hui…). On les exclut : sinon ils s'empilent à 0 contre le bord droit
+  // de l'axe live et la courbe plonge verticalement au lieu de s'arrêter au dernier point réel.
+  const nowMs = Date.now()
+
   if (granularity === 'hour') {
     const rangeStart = startOfDay(new Date(range.from)).getTime()
     const rangeEnd = endOfDay(new Date(range.to)).getTime()
@@ -45,6 +50,7 @@ export function buildLeadEvolutionPoints(
         const t = new Date(point.date).getTime()
         return t >= rangeStart && t <= rangeEnd
       })
+      .filter((point) => new Date(`${point.date}T${String(point.hour).padStart(2, '0')}:00:00`).getTime() <= nowMs)
       .sort((a, b) => hourKey(a).localeCompare(hourKey(b)))
     if (activeHours.length > 0) {
       return distributeTotalsAcrossHours(activeHours, totals)
@@ -54,15 +60,18 @@ export function buildLeadEvolutionPoints(
 
   const rangeStart = dateKey(range.from)
   const rangeEnd = dateKey(range.to)
+  // Bucket « commencé » = son jour de début est ≤ maintenant (point.date = début du bucket
+  // pour jour/semaine/mois) ; on garde le bucket en cours, on jette ceux du futur.
+  const hasStarted = (point: { date: string }) => new Date(`${point.date}T00:00:00`).getTime() <= nowMs
   const inRange = daily
     .filter((point) => point.date >= rangeStart && point.date <= rangeEnd)
     .sort((a, b) => a.date.localeCompare(b.date))
 
-  if (granularity === 'week') return bucketEvolution(inRange, weekBucket)
-  if (granularity === 'month') return bucketEvolution(inRange, monthBucket)
+  if (granularity === 'week') return bucketEvolution(inRange, weekBucket).filter(hasStarted)
+  if (granularity === 'month') return bucketEvolution(inRange, monthBucket).filter(hasStarted)
 
   // day
-  return inRange.map((point) => ({
+  return inRange.filter(hasStarted).map((point) => ({
     key: point.date,
     t: new Date(`${point.date}T12:00:00`).getTime(),
     date: point.date,
