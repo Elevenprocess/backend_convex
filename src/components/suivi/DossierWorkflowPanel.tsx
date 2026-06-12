@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useAuth } from '../../lib/auth'
 import { useClients, useSubsteps, useUsers } from '../../lib/hooks'
 import { bootstrapClient, updateSubstep } from '../../lib/api'
@@ -7,7 +7,6 @@ import type { Dossier } from '../../lib/suivi'
 import type { UpdateSubstepPatch, WorkflowPhase } from '../../lib/types'
 import { TechnicienVtPicker } from './TechnicienVtPicker'
 import { WorkflowBoard } from './WorkflowBoard'
-import { DocumentsHub } from './DocumentsHub'
 
 type Props = {
   dossier: Dossier
@@ -33,20 +32,7 @@ export function DossierWorkflowPanel({ dossier }: Props) {
   const [savingId, setSavingId] = useState<string | null>(null)
   const [initializing, setInitializing] = useState(false)
   const [initError, setInitError] = useState<string | null>(null)
-  const [view, setView] = useState<'workflow' | 'documents'>('workflow')
   const today = todayIso()
-
-  const docCounts = useMemo(() => {
-    const list = substeps ?? []
-    let present = 0
-    let expected = 0
-    for (const s of list) {
-      expected += s.expectedDocs.length
-      const presentTypes = new Set(s.documents.map((d) => d.type))
-      present += s.expectedDocs.filter((t) => presentTypes.has(t)).length
-    }
-    return { present, expected }
-  }, [substeps])
 
   const canInitDossier = role === 'admin' || role === 'responsable_technique' || role === 'back_office' || role === 'delivrabilite'
 
@@ -77,18 +63,6 @@ export function DossierWorkflowPanel({ dossier }: Props) {
     <div className="suivi-main-col">
       <TechnicienVtPicker leadId={dossier.lead.id} />
       <section id="workflow" className="suivi-timeline-wrap">
-        <header className="suivi-timeline-head suivi-detail-sticky">
-          <div className="suivi-detail-tabs" role="tablist">
-            <button type="button" role="tab" aria-selected={view === 'workflow'}
-              className={view === 'workflow' ? 'is-active' : ''} onClick={() => setView('workflow')}>
-              Workflow
-            </button>
-            <button type="button" role="tab" aria-selected={view === 'documents'}
-              className={view === 'documents' ? 'is-active' : ''} onClick={() => setView('documents')}>
-              Documents {docCounts.expected > 0 && <span className="suivi-tab-count">{docCounts.present}/{docCounts.expected}</span>}
-            </button>
-          </div>
-        </header>
         {!client ? (
           <div className="wf-init">
             <p className="wf-empty">Dossier pas encore initialisé (aucun client lié à ce lead).</p>
@@ -103,10 +77,8 @@ export function DossierWorkflowPanel({ dossier }: Props) {
           </div>
         ) : (substeps == null && substepsLoading) ? (
           <p className="wf-empty">Chargement du workflow…</p>
-        ) : view === 'documents' ? (
-          <DocumentsHub substeps={substeps ?? []} today={today} onDocsChanged={refetch} />
         ) : (
-          <WorkflowBoard substeps={substeps ?? []} onMutate={onMutate} today={today} users={users ?? []} savingId={savingId} onDocsChanged={refetch} onGoToDocs={() => setView('documents')} canEditPhase={canEditPhase} />
+          <WorkflowBoard substeps={substeps ?? []} onMutate={onMutate} today={today} users={users ?? []} savingId={savingId} onDocsChanged={refetch} canEditPhase={canEditPhase} />
         )}
       </section>
     </div>
