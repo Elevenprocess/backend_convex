@@ -1,14 +1,21 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { formatDate } from '../../lib/suivi'
-import { PROJECT_STATUS_LABEL, type DebriefResponse, type ProjectDetailResponse } from '../../lib/types'
-import { Section, Empty, DevisRow, AttachmentRow, DebriefCard } from './fiche-parts'
+import { PROJECT_STATUS_LABEL, type DebriefResponse, type Devis, type ProjectDetailResponse } from '../../lib/types'
+import { Section, Empty, DevisRow, AttachmentRow, DebriefCard, SectionAddButton, NoteEntryRow } from './fiche-parts'
 import { AuthImage } from './AuthImage'
 import { PhotoLightbox } from './PhotoLightbox'
 import { DebriefDetailModal } from './DebriefDetailModal'
+import { DevisPreviewModal } from './DevisPreviewModal'
+import { AddNoteModal } from './AddNoteModal'
+import { uploadDevis, uploadProjectAttachment, updateProject } from '../../lib/api'
+import { parseNotesJournal, prependNote, type NoteEntry } from '../../lib/notesJournal'
+import { useAuth } from '../../lib/auth'
 
 type Props = {
   project: ProjectDetailResponse
   commercialName?: string
+  /** Appelé après un ajout (devis/photo/document/note) pour rafraîchir le projet. */
+  onChanged?: () => void
 }
 
 const PREVIEW_LIMIT = 3
@@ -25,28 +32,84 @@ function ShowMore({ total, expanded, onToggle, noun }: { total: number; expanded
 
 /**
  * Un « dossier » de projet du client : en-tête (nom, statut, date, commercial)
- * puis les éléments créés par les commerciaux — devis, photos, documents,
- * débriefs — scopés à ce projet. Chaque liste n'affiche que 3 éléments puis
- * propose « voir plus » ; photos en lightbox, débriefs en popup détaillée.
+ * puis les éléments — devis, photos, documents, notes, débriefs — scopés à ce
+ * projet. L'équipe delivery peut AJOUTER depuis chaque section (« + ») ; tout
+ * s'ouvre en pop-up (aperçu PDF des devis, lightbox photos, détail note/débrief),
+ * jamais de redirection.
  */
-export function ProjectDossierSection({ project, commercialName }: Props) {
+export function ProjectDossierSection({ project, commercialName, onChanged }: Props) {
+  const authorName = useAuth((s) => s.user?.name) ?? 'Inconnu'
   const photos = project.attachments.filter((a) => a.kind === 'photo')
   const documents = project.attachments.filter((a) => a.kind !== 'photo')
   const debriefs = [...project.debriefs].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   )
+  const notes = parseNotesJournal(project.notes)
 
   const [devisOpen, setDevisOpen] = useState(false)
   const [photosOpen, setPhotosOpen] = useState(false)
   const [docsOpen, setDocsOpen] = useState(false)
+  const [notesOpen, setNotesOpen] = useState(false)
   const [debriefsOpen, setDebriefsOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [selectedDebrief, setSelectedDebrief] = useState<DebriefResponse | null>(null)
+  const [previewDevis, setPreviewDevis] = useState<Devis | null>(null)
+  const [selectedNote, setSelectedNote] = useState<NoteEntry | null>(null)
+  const [noteModalOpen, setNoteModalOpen] = useState(false)
+  const [savingNote, setSavingNote] = useState(false)
+
+  const [busy, setBusy] = useState<null | 'devis' | 'photo' | 'document'>(null)
+  const [error, setError] = useState<string | null>(null)
+  const devisInput = useRef<HTMLInputElement | null>(null)
+  const photoInput = useRef<HTMLInputElement | null>(null)
+  const docInput = useRef<HTMLInputElement | null>(null)
 
   const visibleDevis = devisOpen ? project.devis : project.devis.slice(0, PREVIEW_LIMIT)
   const visiblePhotos = photosOpen ? photos : photos.slice(0, PREVIEW_LIMIT)
   const visibleDocs = docsOpen ? documents : documents.slice(0, PREVIEW_LIMIT)
+  const visibleNotes = notesOpen ? notes : notes.slice(0, PREVIEW_LIMIT)
   const visibleDebriefs = debriefsOpen ? debriefs : debriefs.slice(0, PREVIEW_LIMIT)
+
+  async function handleDevisFile(file: File) {
+    setBusy('devis')
+    setError(null)
+    try {
+      const created = await uploadDevis(project.leadId, undefined, file, { projectId: project.id })
+      onChanged?.()
+      setPreviewDevis(created) // « affiche le devis qui vient d'être scané »
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Échec de l'ajout du devis.")
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleAttachmentFile(file: File, kind: 'photo' | 'document') {
+    setBusy(kind)
+    setError(null)
+    try {
+      await uploadProjectAttachment(project.id, file, { kind })
+      onChanged?.()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : `Échec de l'ajout du ${kind === 'photo' ? 'photo' : 'document'}.`)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleAddNote(text: string) {
+    setSavingNote(true)
+    setError(null)
+    try {
+      await updateProject(project.id, { notes: prependNote(project.notes, authorName, text) })
+      setNoteModalOpen(false)
+      onChanged?.()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Échec de l'ajout de la note.")
+    } finally {
+      setSavingNote(false)
+    }
+  }
 
   return (
     <article className="space-y-6 rounded-2xl border border-line bg-cream p-5">
@@ -61,14 +124,23 @@ export function ProjectDossierSection({ project, commercialName }: Props) {
         </div>
       </header>
 
-      <Section title="Devis" count={project.devis.length}>
+      {error && (
+        <div className="rounded-xl bg-rouille-tint px-3 py-2 text-xs font-semibold text-rouille">{error}</div>
+      )}
+
+      {/* Inputs fichiers cachés, déclenchés par les boutons « + ». */}
+      <input ref={devisInput} type="file" accept="application/pdf,.pdf" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void handleDevisFile(f) }} />
+      <input ref={photoInput} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void handleAttachmentFile(f, 'photo') }} />
+      <input ref={docInput} type="file" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void handleAttachmentFile(f, 'document') }} />
+
+      <Section title="Devis" count={project.devis.length} action={<SectionAddButton label="Ajouter un devis" busy={busy === 'devis'} onClick={() => devisInput.current?.click()} />}>
         {project.devis.length === 0 ? (
           <Empty>Aucun devis.</Empty>
         ) : (
           <>
             <ul className="space-y-2">
               {visibleDevis.map((d) => (
-                <DevisRow key={d.id} devis={d} />
+                <DevisRow key={d.id} devis={d} onPreview={() => setPreviewDevis(d)} />
               ))}
             </ul>
             <ShowMore total={project.devis.length} expanded={devisOpen} onToggle={() => setDevisOpen((v) => !v)} noun="devis" />
@@ -76,7 +148,7 @@ export function ProjectDossierSection({ project, commercialName }: Props) {
         )}
       </Section>
 
-      <Section title="Photos" count={photos.length}>
+      <Section title="Photos" count={photos.length} action={<SectionAddButton label="Ajouter une photo" busy={busy === 'photo'} onClick={() => photoInput.current?.click()} />}>
         {photos.length === 0 ? (
           <Empty>Aucune photo.</Empty>
         ) : (
@@ -99,7 +171,7 @@ export function ProjectDossierSection({ project, commercialName }: Props) {
         )}
       </Section>
 
-      <Section title="Documents" count={documents.length}>
+      <Section title="Documents" count={documents.length} action={<SectionAddButton label="Ajouter un document" busy={busy === 'document'} onClick={() => docInput.current?.click()} />}>
         {documents.length === 0 ? (
           <Empty>Aucun document.</Empty>
         ) : (
@@ -110,6 +182,21 @@ export function ProjectDossierSection({ project, commercialName }: Props) {
               ))}
             </ul>
             <ShowMore total={documents.length} expanded={docsOpen} onToggle={() => setDocsOpen((v) => !v)} noun="documents" />
+          </>
+        )}
+      </Section>
+
+      <Section title="Notes" count={notes.length} action={<SectionAddButton label="Ajouter une note" onClick={() => setNoteModalOpen(true)} />}>
+        {notes.length === 0 ? (
+          <Empty>Aucune note.</Empty>
+        ) : (
+          <>
+            <div className="space-y-2">
+              {visibleNotes.map((n, i) => (
+                <NoteEntryRow key={i} header={n.header} body={n.body} onClick={() => setSelectedNote(n)} />
+              ))}
+            </div>
+            <ShowMore total={notes.length} expanded={notesOpen} onToggle={() => setNotesOpen((v) => !v)} noun="notes" />
           </>
         )}
       </Section>
@@ -136,6 +223,28 @@ export function ProjectDossierSection({ project, commercialName }: Props) {
           onIndexChange={setLightboxIndex}
           onClose={() => setLightboxIndex(null)}
         />
+      )}
+
+      {previewDevis && (
+        <DevisPreviewModal devis={previewDevis} onClose={() => setPreviewDevis(null)} />
+      )}
+
+      {noteModalOpen && (
+        <AddNoteModal onSubmit={handleAddNote} onClose={() => setNoteModalOpen(false)} saving={savingNote} />
+      )}
+
+      {selectedNote && (
+        <div className="doc-preview-backdrop" role="dialog" aria-modal="true" aria-label="Note" onClick={() => setSelectedNote(null)}>
+          <div className="doc-preview" style={{ maxWidth: 540 }} onClick={(e) => e.stopPropagation()}>
+            <header className="doc-preview-head">
+              <div className="doc-preview-title"><span className="truncate">{selectedNote.header ?? 'Note'}</span></div>
+              <button type="button" className="doc-preview-close" onClick={() => setSelectedNote(null)} aria-label="Fermer">✕</button>
+            </header>
+            <div className="doc-preview-body" style={{ padding: 16, display: 'block' }}>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-text">{selectedNote.body}</p>
+            </div>
+          </div>
+        </div>
       )}
 
       {selectedDebrief && (

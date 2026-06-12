@@ -30,17 +30,29 @@ const DEVIS_STATUS_META: Record<DevisStatus, { label: string; tone: string }> = 
   perdu: { label: 'Perdu', tone: 'is-lost' },
 }
 
-export function Section({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
+export function Section({ title, count, action, children }: { title: string; count?: number; action?: ReactNode; children: ReactNode }) {
   return (
     <section>
-      <h3 className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-cuivre">
-        {title}
-        {count != null && count > 0 && (
-          <span className="rounded-full bg-or-tint px-1.5 py-0.5 text-[10px] font-black text-or-dark">{count}</span>
-        )}
-      </h3>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-cuivre">
+          {title}
+          {count != null && count > 0 && (
+            <span className="rounded-full bg-or-tint px-1.5 py-0.5 text-[10px] font-black text-or-dark">{count}</span>
+          )}
+        </h3>
+        {action}
+      </div>
       {children}
     </section>
+  )
+}
+
+/** Petit bouton « + » des en-têtes de section (Devis, Photos, Documents, Notes). */
+export function SectionAddButton({ onClick, label, busy = false }: { onClick: () => void; label: string; busy?: boolean }) {
+  return (
+    <button type="button" className="fiche-section-add" onClick={onClick} disabled={busy} title={label} aria-label={label}>
+      {busy ? <span className="fiche-section-add-spin" aria-hidden /> : <Icon name="plus" size={14} />}
+    </button>
   )
 }
 
@@ -59,7 +71,7 @@ export function Empty({ children }: { children: ReactNode }) {
   return <div className="rounded-xl border border-dashed border-line px-3 py-4 text-center text-xs text-faint">{children}</div>
 }
 
-export function DevisRow({ devis }: { devis: Devis }) {
+export function DevisRow({ devis, onPreview }: { devis: Devis; onPreview?: () => void }) {
   const montant = devis.montantTtc ?? devis.montantNet ?? devis.montantHt
   const status = DEVIS_STATUS_META[devis.status] ?? { label: devis.status, tone: 'is-neutral' }
   const meta = [
@@ -69,7 +81,15 @@ export function DevisRow({ devis }: { devis: Devis }) {
   ].filter(Boolean)
   return (
     <li className="fiche-devis-card">
-      <div className="fiche-devis-main">
+      {/* Clic sur le corps de la ligne → aperçu PDF en pop-up (pas de redirection). */}
+      <button
+        type="button"
+        className={`fiche-devis-main${onPreview ? ' is-clickable' : ''}`}
+        onClick={onPreview}
+        disabled={!onPreview}
+        title={onPreview ? 'Aperçu du devis' : undefined}
+        style={onPreview ? undefined : { cursor: 'default' }}
+      >
         <span className="fiche-devis-icon"><Icon name="tag" size={16} /></span>
         <div className="min-w-0 flex-1">
           <div className="fiche-devis-top">
@@ -78,7 +98,7 @@ export function DevisRow({ devis }: { devis: Devis }) {
           </div>
           {meta.length > 0 && <div className="fiche-devis-meta">{meta.join(' · ')}</div>}
         </div>
-      </div>
+      </button>
       <div className="fiche-devis-foot">
         <span className="fiche-devis-amount">{montant ? `${Number(montant).toLocaleString('fr-FR')} €` : '—'}</span>
         <button
@@ -90,6 +110,16 @@ export function DevisRow({ devis }: { devis: Devis }) {
         </button>
       </div>
     </li>
+  )
+}
+
+/** Une entrée du journal de notes : aperçu cliquable → pop-up texte complet. */
+export function NoteEntryRow({ header, body, onClick }: { header: string | null; body: string; onClick: () => void }) {
+  return (
+    <button type="button" className="fiche-note-row" onClick={onClick} title="Voir la note">
+      {header && <span className="fiche-note-head">{header}</span>}
+      <span className="fiche-note-body">{body}</span>
+    </button>
   )
 }
 

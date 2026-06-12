@@ -60,6 +60,14 @@ export function FicheCompletePage() {
     }
   }, [leadId])
 
+  // Re-fetch d'un seul projet après un ajout (devis/photo/document/note) depuis
+  // une carte, pour rafraîchir ses pièces sans recharger toute la fiche.
+  const refreshProject = (projectId: string) => {
+    void getProjectDetail(projectId)
+      .then((fresh) => setDetails((prev) => (prev ? prev.map((p) => (p.id === fresh.id ? fresh : p)) : prev)))
+      .catch(() => undefined)
+  }
+
   // Fermer le drawer workflow avec Échap.
   useEffect(() => {
     if (!workflowOpen) return
@@ -138,7 +146,12 @@ export function FicheCompletePage() {
                 <LoadingBlock label="Chargement des dossiers…" />
               ) : signedProjects.length > 0 ? (
                 signedProjects.map((p) => (
-                  <ProjectDossierSection key={p.id} project={p} commercialName={usersById.get(p.commercialId)} />
+                  <ProjectDossierSection
+                    key={p.id}
+                    project={p}
+                    commercialName={usersById.get(p.commercialId)}
+                    onChanged={() => refreshProject(p.id)}
+                  />
                 ))
               ) : (
                 <div className="rounded-xl border border-dashed border-line px-4 py-8 text-center text-sm text-faint">
