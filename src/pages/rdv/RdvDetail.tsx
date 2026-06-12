@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
@@ -13,7 +12,6 @@ import {
   type RdvStatus,
   type RdvLocation,
 } from '../../lib/types'
-import { DebriefModal } from './DebriefModal'
 
 const LOCATION_LABEL: Record<RdvLocation, string> = {
   domicile: 'Visite à domicile',
@@ -40,7 +38,6 @@ const RDV_STATUS_BADGE: Record<RdvStatus, string> = {
 export function RdvDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const [debriefOpen, setDebriefOpen] = useState(false)
 
   const { data: rdv, loading: rdvLoading, error: rdvError } = useRdv(id)
   const { data: lead } = useLead(rdv?.leadId)
@@ -95,8 +92,9 @@ export function RdvDetail() {
           <span className={`status-badge ${RDV_STATUS_BADGE[rdv.status]}`}>{RDV_STATUS_LABEL[rdv.status]}</span>
           <button className="btn-secondary px-4 py-2 rounded-xl text-sm">Reprogrammer</button>
           <button
-            onClick={() => setDebriefOpen(true)}
-            className="btn-primary px-5 py-2 rounded-xl text-sm"
+            onClick={() => lead && navigate(`/leads/${lead.id}?debrief=${rdv.id}`)}
+            disabled={!lead}
+            className="btn-primary px-5 py-2 rounded-xl text-sm disabled:opacity-50"
           >
             Lancer le débrief
           </button>
@@ -177,17 +175,6 @@ export function RdvDetail() {
         </div>
       </main>
 
-      {debriefOpen && lead && (
-        <DebriefModal
-          rdv={rdv}
-          lead={lead}
-          onClose={() => setDebriefOpen(false)}
-          onSave={() => {
-            setDebriefOpen(false)
-            navigate('/rdv')
-          }}
-        />
-      )}
     </AppShell>
   )
 }

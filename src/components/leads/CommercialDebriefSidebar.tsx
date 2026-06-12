@@ -41,6 +41,9 @@ type Props = {
     outcome: 'vente' | 'non_vente',
   ) => void
   onBack?: () => void
+  // RDV à pré-sélectionner à l'ouverture (ex. débrief lancé depuis la page d'un
+  // RDV précis). Si absent / introuvable, on retombe sur le RDV le plus pertinent.
+  initialRdvId?: string | null
   className?: string
 }
 
@@ -261,11 +264,11 @@ function clearDebriefDraft(leadId: string, rdvId: string | null): void {
   }
 }
 
-export function CommercialDebriefSidebar({ lead, onClose, onSaved, onValidated, onResolveVenteProject, onSubmitFromFiche, onBack, className = '' }: Props) {
+export function CommercialDebriefSidebar({ lead, onClose, onSaved, onValidated, onResolveVenteProject, onSubmitFromFiche, onBack, initialRdvId, className = '' }: Props) {
   const { data: rdvs, loading: rdvsLoading, refetch: refetchRdvs } = useRdvList({ leadId: lead.id })
   const sortedRdvs = useMemo(() => sortRdvsForDebrief(rdvs ?? []), [rdvs])
   const hasReporteHistory = useMemo(() => sortedRdvs.some((r) => r.status === 'reporte' || r.result === 'reporte'), [sortedRdvs])
-  const [selectedRdvId, setSelectedRdvId] = useState<string | null>(sortedRdvs[0]?.id ?? null)
+  const [selectedRdvId, setSelectedRdvId] = useState<string | null>(initialRdvId ?? sortedRdvs[0]?.id ?? null)
   const selectedRdv = useMemo(() => sortedRdvs.find((r) => r.id === selectedRdvId) ?? sortedRdvs[0] ?? null, [sortedRdvs, selectedRdvId])
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)

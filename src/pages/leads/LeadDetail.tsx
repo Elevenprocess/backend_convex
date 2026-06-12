@@ -66,6 +66,8 @@ export function LeadDetail() {
   const [debriefs, setDebriefs] = useState<DebriefResponse[]>([])
   const [debriefRefreshKey, setDebriefRefreshKey] = useState(0)
   const [debriefOpen, setDebriefOpen] = useState(false)
+  // RDV ciblé par ?debrief=<rdvId> (ou null = laisser le sidebar choisir le plus pertinent).
+  const [debriefRdvId, setDebriefRdvId] = useState<string | null>(null)
   const [assignOpen, setAssignOpen] = useState(false)
   // Attribution d'un débrief NON-VENTE fait depuis la fiche (sans RDV) quand ≥2
   // projets existent : payload en attente + sélecteur de projet. La vente ne passe
@@ -85,7 +87,9 @@ export function LeadDetail() {
   // → on ouvre directement le débrief, puis on nettoie l'URL pour que le bouton
   // « Retour » / un refresh ne le ré-ouvre pas en boucle.
   useEffect(() => {
-    if (!searchParams.get('debrief')) return
+    const targetRdvId = searchParams.get('debrief')
+    if (!targetRdvId) return
+    setDebriefRdvId(targetRdvId)
     setDebriefOpen(true)
     const next = new URLSearchParams(searchParams)
     next.delete('debrief')
@@ -220,7 +224,7 @@ export function LeadDetail() {
             <span className="hidden lg:inline">Note</span>
           </button>
           <button
-            onClick={() => setDebriefOpen(true)}
+            onClick={() => { setDebriefRdvId(null); setDebriefOpen(true) }}
             title="Débrief structuré sur RDV planifié (wizard)"
             className="px-3 sm:px-4 py-2 rounded-[14px] text-xs sm:text-sm font-semibold border border-or text-or-dark bg-or/10 hover:bg-or/20 flex items-center gap-2 whitespace-nowrap"
           >
@@ -385,6 +389,7 @@ export function LeadDetail() {
           />
           <CommercialDebriefSidebar
             lead={lead}
+            initialRdvId={debriefRdvId}
             onSubmitFromFiche={handleFicheDebrief}
             onResolveVenteProject={resolveVenteProject}
             onSaved={() => setDebriefRefreshKey((k) => k + 1)}
