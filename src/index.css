@@ -5053,6 +5053,14 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
   animation: none;
   stroke-dasharray: none;
 }
+/* Géométrie de référence pour le marqueur hover : présente dans le DOM (getPointAtLength) mais invisible. */
+.lead-evolution-measure { fill: none; stroke: none; animation: none; }
+/* Dernier segment (bucket en cours, façon Shopify) : même couleur/épaisseur mais discontinu. */
+.lead-evolution-line--dashed {
+  stroke-dasharray: 5 7;
+  stroke-dashoffset: 0;
+  animation: leadEvoFade .45s ease .55s both;
+}
 .lead-evolution-compare {
   fill: none;
   stroke: var(--color-faint);
@@ -5151,6 +5159,7 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 @media (prefers-reduced-motion: reduce) {
   .lead-evolution-anim,
   .lead-evolution-line--draw,
+  .lead-evolution-line--dashed,
   .lead-evolution-live { animation: none; }
   .lead-evolution-line--draw { stroke-dashoffset: 0; }
 }

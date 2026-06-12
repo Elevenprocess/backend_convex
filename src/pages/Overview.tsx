@@ -1093,10 +1093,10 @@ const GRANULARITY_SUBTITLE: Record<EvolutionGranularity, string> = {
   month: 'Leads traités par mois',
 }
 
-function smoothPath(coords: { x: number; y: number }[]): string {
-  if (coords.length === 0) return ''
-  if (coords.length === 1) return `M ${coords[0].x.toFixed(1)} ${coords[0].y.toFixed(1)}`
-  let d = `M ${coords[0].x.toFixed(1)} ${coords[0].y.toFixed(1)}`
+// Courbes de Bézier segment par segment (contrôles calculés avec les voisins du tracé COMPLET) :
+// on peut découper la courbe en partie pleine + partie pointillée sans casser la tangente au raccord.
+function smoothSegments(coords: { x: number; y: number }[]): string[] {
+  const segments: string[] = []
   for (let i = 0; i < coords.length - 1; i += 1) {
     const p0 = coords[i - 1] ?? coords[i]
     const p1 = coords[i]
@@ -1106,9 +1106,16 @@ function smoothPath(coords: { x: number; y: number }[]): string {
     const cp1y = p1.y + (p2.y - p0.y) / 6
     const cp2x = p2.x - (p3.x - p1.x) / 6
     const cp2y = p2.y - (p3.y - p1.y) / 6
-    d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`
+    segments.push(`C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`)
   }
-  return d
+  return segments
+}
+
+function smoothPath(coords: { x: number; y: number }[]): string {
+  if (coords.length === 0) return ''
+  const head = `M ${coords[0].x.toFixed(1)} ${coords[0].y.toFixed(1)}`
+  if (coords.length === 1) return head
+  return `${head} ${smoothSegments(coords).join(' ')}`
 }
 
 // Y exact SUR la courbe pour une abscisse X donnée (le tracé est monotone en X,
@@ -1176,19 +1183,37 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
   const domain = computeEvolutionDomain(range, granularity)
   const ticks = buildEvolutionTicks(domain, granularity)
   const useTime = domain.end > domain.start && safePoints.every((point) => Number.isFinite(point.t) && point.t > 0)
+  // Période « en cours » (aujourd'hui / cette semaine / ce mois…) : le dernier bucket est incomplet.
+  // Façon Shopify : son point est ancré à « maintenant » (bord droit de l'axe live) et le dernier
+  // segment passe en pointillés — les périodes passées restent 100 % en trait plein.
+  const nowMs = Date.now()
+  const isLive = useTime && nowMs >= domain.start && nowMs <= new Date(range.to).getTime()
   const xForTime = (t: number) => padLeft + ((clamp(t, domain.start, domain.end) - domain.start) / (domain.end - domain.start)) * chartWidth
   const xForIndex = (index: number) => padLeft + (safePoints.length === 1 ? chartWidth / 2 : (index / (safePoints.length - 1)) * chartWidth)
-  const xFor = (index: number) => (useTime ? xForTime(safePoints[index].t) : xForIndex(index))
+  const xFor = (index: number) => {
+    if (!useTime) return xForIndex(index)
+    if (isLive && index === safePoints.length - 1) return xForTime(nowMs)
+    return xForTime(safePoints[index].t)
+  }
   const yFor = (value: number) => padTop + chartHeight - (value / max) * chartHeight
 
   const currentCoords = safePoints.map((point, index) => ({ x: xFor(index), y: yFor(point[activeKey]) }))
   const currentPath = smoothPath(currentCoords)
+  // Découpe plein / pointillé : tout sauf le dernier segment en plein, dernier segment (bucket en cours)
+  // en pointillés. Contrôles issus du tracé complet → tangente continue au raccord.
+  const splitLive = isLive && currentCoords.length >= 2
+  const segments = splitLive ? smoothSegments(currentCoords) : []
+  const solidPath = splitLive
+    ? `M ${currentCoords[0].x.toFixed(1)} ${currentCoords[0].y.toFixed(1)}${segments.length > 1 ? ` ${segments.slice(0, -1).join(' ')}` : ''}`
+    : currentPath
+  const prevCoord = splitLive ? currentCoords[currentCoords.length - 2] : null
+  const dashedPath = splitLive && prevCoord ? `M ${prevCoord.x.toFixed(1)} ${prevCoord.y.toFixed(1)} ${segments[segments.length - 1]}` : ''
   const areaPath = currentPath ? `${currentPath} L ${xFor(safePoints.length - 1).toFixed(1)} ${(height - padBottom).toFixed(1)} L ${xFor(0).toFixed(1)} ${(height - padBottom).toFixed(1)} Z` : ''
   const animKey = `${range.from}|${range.to}|${granularity}|${activeKey}`
   const lastIndex = safePoints.length - 1
   const liveX = xFor(lastIndex)
   const liveY = yFor(safePoints[lastIndex][activeKey])
-  const showLive = useTime && currentPath !== ''
+  const showLive = isLive && currentPath !== ''
 
   const gridRatios = [0, 0.25, 0.5, 0.75, 1]
   const fallbackLabelStep = Math.max(1, Math.ceil((safePoints.length - 1) / 5))
@@ -1323,7 +1348,10 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
           })}
           <g key={animKey} className="lead-evolution-anim">
             {areaPath ? <path d={areaPath} fill="url(#leadEvolutionFill)" stroke="none" /> : null}
-            {currentPath ? <path ref={lineRef} d={currentPath} className="lead-evolution-line lead-evolution-line--draw" /> : null}
+            {/* Tracé complet invisible : sert uniquement de géométrie de référence pour le marqueur hover (yOnPathAtX). */}
+            {currentPath ? <path ref={lineRef} d={currentPath} className="lead-evolution-measure" /> : null}
+            {solidPath ? <path d={solidPath} className="lead-evolution-line lead-evolution-line--draw" /> : null}
+            {dashedPath ? <path d={dashedPath} className="lead-evolution-line lead-evolution-line--dashed" /> : null}
           </g>
           {showLive ? (
             <g key={`live-${animKey}`} className="lead-evolution-live" pointerEvents="none">
