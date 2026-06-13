@@ -9,6 +9,7 @@ import { fullName, type LeadResponse, type RdvResponse, type RdvStatus, type VtC
 import { useAuth } from '../../lib/auth'
 import { leadSearchPath } from '../../lib/leadPaths'
 import { matchesCalendarFilters, type CalendarFilterState } from '../../lib/calendarFilters'
+import { type Sector, SECTORS, sectorFromCity } from '../../lib/sector'
 import { rdvCardCategory, type RdvCardCategory } from './rdvCardCategory'
 
 const DEFAULT_HOURS = Array.from({ length: 12 }, (_, i) => 8 + i)
@@ -35,9 +36,6 @@ type CalendarItem =
   | { source: 'local'; id: string; scheduledAt: string; status: RdvStatus; rdv: RdvResponse }
   | { source: 'ghl'; id: string; scheduledAt: string; status: 'ghl'; event: GhlCalendarEvent }
   | { source: 'vt'; id: string; scheduledAt: string; status: 'vt'; vt: VtCalendarEntry }
-
-type Sector = 'Nord' | 'Sud' | 'Est' | 'Ouest' | 'Autre'
-const SECTORS: Sector[] = ['Nord', 'Sud', 'Est', 'Ouest', 'Autre']
 
 // Rôles autorisés sur chaque feed calendrier — miroir des @Roles côté backend.
 // Appeler un feed hors périmètre renvoie 403 (ex. technicien sur /ghl-calendar/events),
@@ -89,38 +87,11 @@ const STATUS_BADGE_LABEL: Partial<Record<RdvStatus, string>> = {
   annule: 'Annulé',
 }
 
-// Communes de La Réunion → secteur (préfixe pour gérer "Saint-André", "Saint-Andre", "St-André"...)
-const CITY_SECTOR_PREFIXES: Array<[string, Sector]> = [
-  ['saint-denis', 'Nord'], ['sainte-marie', 'Nord'], ['sainte-suzanne', 'Nord'], ['salazie', 'Nord'],
-  ['saint-andre', 'Est'], ['bras-panon', 'Est'], ['saint-benoit', 'Est'], ['sainte-rose', 'Est'], ['plaine-des-palmistes', 'Est'],
-  ['saint-paul', 'Ouest'], ['le-port', 'Ouest'], ['la-possession', 'Ouest'], ['possession', 'Ouest'], ['saint-leu', 'Ouest'], ['trois-bassins', 'Ouest'],
-  ['saint-pierre', 'Sud'], ['saint-joseph', 'Sud'], ['saint-louis', 'Sud'], ['le-tampon', 'Sud'], ['tampon', 'Sud'], ['cilaos', 'Sud'], ['etang-sale', 'Sud'], ['petite-ile', 'Sud'], ['petit-ile', 'Sud'], ['les-avirons', 'Sud'], ['entre-deux', 'Sud'],
-]
-
 // La VT n'a pas d'heure en base : on la pose à 08:00 heure Réunion pour
 // l'afficher dans la grille horaire, sur la bonne journée.
 function vtScheduledAt(date: string): string {
   // date = 'YYYY-MM-DD'. 08:00 Réunion = 04:00 UTC (UTC+4).
   return `${date.slice(0, 10)}T04:00:00.000Z`
-}
-
-function normalizeCityKey(city: string | null | undefined): string {
-  if (!city) return ''
-  return city
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/^st-/, 'saint-')
-    .replace(/^ste-/, 'sainte-')
-    .replace(/\s+/g, '-')
-    .replace(/[^a-z0-9-]/g, '')
-}
-
-function sectorFromCity(city: string | null | undefined): Sector {
-  const key = normalizeCityKey(city)
-  if (!key) return 'Autre'
-  for (const [prefix, sector] of CITY_SECTOR_PREFIXES) if (key.startsWith(prefix)) return sector
-  return 'Autre'
 }
 
 function sectorForItem(item: CalendarItem, lead?: LeadResponse): Sector {

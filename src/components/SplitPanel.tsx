@@ -19,6 +19,7 @@ import { useCall, type CallState } from '../lib/call'
 import { useCallLogs, useRdvList, createCallLog, createRdv, updateLead, updateGhlAppointment, useGhlCalendarConfig, useGhlFreeSlots, createGhlAppointment, syncLeadGhlCalendarEvents, type GhlCalendarEvent } from '../lib/hooks'
 import { useAuth } from '../lib/auth'
 import { leadDetailPath } from '../lib/leadPaths'
+import { sectorFromCity } from '../lib/sector'
 
 type Tab = { id: string; label: string; icon?: IconName }
 
@@ -900,6 +901,20 @@ function NotesTab({
   void notes
   void setNotes
 
+  // Secteur déduit automatiquement de la ville du lead (mapping unique des 24 communes,
+  // cf. lib/sector). Évite que le setter choisisse le mauvais secteur à la main.
+  const sectorCity = form.city || lead.city || ''
+  const suggestedSector = useMemo(() => {
+    const s = sectorFromCity(sectorCity)
+    return s === 'Autre' ? '' : s
+  }, [sectorCity])
+
+  // Pré-sélection : à l'arrivée sur l'étape secteur, si rien n'est choisi et qu'on a une
+  // suggestion fiable depuis la ville, on la pose. Le setter reste libre de la changer.
+  useEffect(() => {
+    if (step === 'secteur' && !sector && suggestedSector) setSector(suggestedSector)
+  }, [step, sector, suggestedSector])
+
   // Restaure le workflow en cours depuis localStorage (par lead.id) — survit aux
   // remounts (PersistentLeadSidebar peut se démonter brièvement quand useLead
   // refetch, F5, déconnexion WS, etc.) sans faire perdre la saisie en cours.
@@ -1316,14 +1331,36 @@ function NotesTab({
       {step === 'secteur' && (
         <div className="space-y-4">
           <div className="text-[10px] font-bold tracking-widest uppercase text-faint">Secteur de l’adresse client</div>
+          {suggestedSector ? (
+            <div className="rounded-[14px] border border-success/30 bg-success-tint px-3 py-2 text-xs text-text">
+              Secteur déduit de la ville <span className="font-semibold">« {sectorCity} »</span> :{' '}
+              <span className="font-bold">{suggestedSector}</span>. Pré-sélectionné — change-le seulement si l’adresse réelle est ailleurs.
+            </div>
+          ) : sectorCity ? (
+            <div className="rounded-[14px] border border-rouille/30 bg-rouille-tint px-3 py-2 text-xs text-text">
+              Ville <span className="font-semibold">« {sectorCity} »</span> non reconnue automatiquement — choisis le secteur à la main.
+            </div>
+          ) : (
+            <div className="rounded-[14px] border border-line bg-white/70 px-3 py-2 text-xs text-muted">
+              Aucune ville renseignée — choisis le secteur à la main.
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-2">
             {(['Nord', 'Sud', 'Est', 'Ouest'] as const).map((s) => (
-              <button key={s} onClick={() => { setSector(s); setStep('rdv') }} className={`rounded-[18px] border p-4 text-left ${sector === s ? 'border-or bg-or-tint text-or-dark' : 'border-line bg-white/70 hover:bg-white'}`}>
+              <button key={s} onClick={() => { setSector(s); setStep('rdv') }} className={`relative rounded-[18px] border p-4 text-left ${sector === s ? 'border-or bg-or-tint text-or-dark' : 'border-line bg-white/70 hover:bg-white'}`}>
+                {suggestedSector === s && (
+                  <span className="absolute right-2 top-2 rounded-full bg-success/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-success">Suggéré</span>
+                )}
                 <Icon name="map-pin" size={16} />
                 <div className="font-bold mt-2">{s}</div>
               </button>
             ))}
           </div>
+          {sector && suggestedSector && sector !== suggestedSector && (
+            <div className="rounded-[14px] border border-rouille/40 bg-rouille-tint px-3 py-2 text-xs text-text">
+              ⚠️ Tu as choisi <span className="font-bold">{sector}</span> alors que la ville « {sectorCity} » correspond au secteur <span className="font-bold">{suggestedSector}</span>. Vérifie l’adresse avant de continuer.
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setStep('qualification')} className="rounded-xl border border-line bg-white/70 py-2 text-sm font-semibold hover:bg-white">Retour</button>
             <button onClick={() => setStep('rdv')} disabled={!sector} className="btn-primary rounded-xl py-2 text-sm disabled:opacity-50">Next · calendrier</button>
