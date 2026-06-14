@@ -5319,13 +5319,16 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 .assistant-history { min-width: 0; padding: 13px 11px; border-right: 1px solid var(--color-line-soft); background: transparent; display: flex; flex-direction: column; gap: 10px; }
 .assistant-new { border: 1px solid var(--color-line); background: transparent; color: var(--color-text); border-radius: 10px; padding: 8px 10px; font-size: 12px; font-weight: 600; cursor: pointer; transition: border-color .15s ease, color .15s ease; }
 .assistant-new:hover { border-color: var(--color-or); color: var(--color-or-dark); }
-.assistant-delete { border: none; background: transparent; color: var(--color-muted); border-radius: 9px; padding: 6px 8px; font-size: 11.5px; font-weight: 500; cursor: pointer; transition: color .15s ease; }
-.assistant-delete:hover { color: var(--color-rouille); }
 .assistant-history-list { min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 1px; }
-.assistant-history-list > button { position: relative; text-align: left; border: none; background: transparent; color: var(--color-muted); border-radius: 8px; padding: 8px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; transition: background .15s ease, color .15s ease; }
-.assistant-history-list > button:hover { background: var(--color-line-soft); color: var(--color-text); }
-.assistant-history-list > button.active { color: var(--color-text); }
-.assistant-history-list > button.active::before { content: ''; position: absolute; left: 1px; top: 9px; bottom: 9px; width: 2px; border-radius: 2px; background: var(--color-or); }
+/* Ligne d'historique : zone cliquable (ouvrir) + bouton corbeille (supprimer). */
+.assistant-history-item { position: relative; display: flex; align-items: center; gap: 2px; border-radius: 8px; transition: background .15s ease; }
+.assistant-history-item:hover { background: var(--color-line-soft); }
+.assistant-history-item.active::before { content: ''; position: absolute; left: 1px; top: 9px; bottom: 9px; width: 2px; border-radius: 2px; background: var(--color-or); }
+.assistant-history-open { flex: 1; min-width: 0; position: relative; text-align: left; border: none; background: transparent; color: var(--color-muted); border-radius: 8px; padding: 8px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; transition: color .15s ease; }
+.assistant-history-item:hover .assistant-history-open, .assistant-history-item.active .assistant-history-open { color: var(--color-text); }
+.assistant-history-del { flex-shrink: 0; opacity: 0; border: none; background: transparent; color: var(--color-muted); border-radius: 7px; padding: 6px; margin-right: 4px; cursor: pointer; display: inline-flex; align-items: center; transition: opacity .15s ease, color .15s ease, background .15s ease; }
+.assistant-history-item:hover .assistant-history-del, .assistant-history-del:focus-visible { opacity: 1; }
+.assistant-history-del:hover { color: var(--color-rouille); background: var(--color-rouille-tint); }
 .assistant-history-list span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; }
 .assistant-history-list small, .assistant-history-list p { font-size: 10.5px; color: var(--color-faint); margin: 0; }
 .assistant-chat { min-width: 0; min-height: 0; display: flex; flex-direction: column; }

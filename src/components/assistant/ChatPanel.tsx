@@ -7,6 +7,7 @@ import { useAuth } from '../../lib/auth'
 import { updateLead, assignLead } from '../../lib/hooks'
 import { ToolConfirmation } from './ToolConfirmation'
 import { Markdown } from './Markdown'
+import { Icon } from '../Icon'
 
 const WRITE_TOOLS = new Set(['updateLeadStatus', 'assignLead'])
 
@@ -156,24 +157,36 @@ export function ChatPanel() {
               </button>
               <div className="assistant-history-list">
                 {conversations.map((conversation) => (
-                  <button
+                  <div
                     key={conversation.id}
-                    type="button"
-                    className={conversation.id === conversationId ? 'active' : ''}
-                    onClick={() => setConversationId(conversation.id)}
-                    title={conversation.title}
+                    className={`assistant-history-item${conversation.id === conversationId ? ' active' : ''}`}
                   >
-                    <span>{conversation.title}</span>
-                    <small>{new Date(conversation.updatedAt).toLocaleDateString('fr-FR')}</small>
-                  </button>
+                    <button
+                      type="button"
+                      className="assistant-history-open"
+                      onClick={() => setConversationId(conversation.id)}
+                      title={conversation.title}
+                    >
+                      <span>{conversation.title}</span>
+                      <small>{new Date(conversation.updatedAt).toLocaleDateString('fr-FR')}</small>
+                    </button>
+                    <button
+                      type="button"
+                      className="assistant-history-del"
+                      aria-label="Supprimer la conversation"
+                      title="Supprimer"
+                      onClick={() => {
+                        if (window.confirm(`Supprimer la conversation « ${conversation.title} » ?`)) {
+                          void deleteConversation(conversation.id)
+                        }
+                      }}
+                    >
+                      <Icon name="trash" size={13} />
+                    </button>
+                  </div>
                 ))}
                 {conversations.length === 0 && <p>Aucune conversation.</p>}
               </div>
-              {conversationId && (
-                <button type="button" className="assistant-delete" onClick={() => void deleteConversation(conversationId)}>
-                  Supprimer
-                </button>
-              )}
             </aside>
 
             <main className="assistant-chat">
