@@ -1,7 +1,7 @@
 import type { Dossier } from '../../lib/suivi'
 import { formatCurrency, formatDate } from '../../lib/suivi'
 import { fullName, initials, STATUS_LABEL, type DebriefResponse } from '../../lib/types'
-import { Section, Field, DebriefCard } from './fiche-parts'
+import { Section, Field, DebriefCard, formatDebriefFinancing } from './fiche-parts'
 
 type Props = {
   dossier: Dossier
@@ -19,6 +19,18 @@ export function FicheClientPanel({ dossier, debriefs }: Props) {
   const generalDebriefs = [...debriefs]
     .filter((d) => d.projectId == null)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
+  // « Financement » = méthode de paiement choisie au débriefing. On prend le
+  // débrief le plus récent qui en porte une (tous projets confondus), avec repli
+  // sur le financement saisi au RDV si aucun débrief n'a été renseigné.
+  const financingValue =
+    [...debriefs]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .map(formatDebriefFinancing)
+      .find((v): v is string => Boolean(v))
+    ?? (dossier.rdv?.financingType
+      ? formatDebriefFinancing({ financingType: dossier.rdv.financingType, paymentSubMethod: null, financingOrg: null })
+      : null)
 
   return (
     <aside className="space-y-7 rounded-2xl border border-line bg-white p-5 lg:sticky lg:top-4">
@@ -52,7 +64,7 @@ export function FicheClientPanel({ dossier, debriefs }: Props) {
           <Field label="Commercial" value={dossier.commercial?.name} />
           <Field label="RDV" value={dossier.rdv?.scheduledAt ? formatDate(dossier.rdv.scheduledAt) : null} />
           <Field label="Montant" value={dossier.amount ? formatCurrency(dossier.amount) : null} />
-          <Field label="Financement" value={dossier.rdv?.financingType ?? null} />
+          <Field label="Financement" value={financingValue} />
           <Field
             label="Signé le"
             value={dossier.rdv?.signatureAt ? formatDate(dossier.rdv.signatureAt) : (dossier.signedAt ? formatDate(dossier.signedAt) : null)}

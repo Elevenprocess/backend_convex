@@ -24,6 +24,22 @@ const FINANCING_TYPE_SHORT: Record<string, string> = {
   paiement_12x: 'Paiement 12x',
 }
 
+/**
+ * Résume la méthode de paiement / financement saisie au débriefing :
+ * type de financement + sous-méthode (chèque/espèces/virement) + organisme
+ * (CMOI/Sofider) le cas échéant. Renvoie null si rien n'a été renseigné.
+ */
+export function formatDebriefFinancing(
+  d: Pick<DebriefResponse, 'financingType' | 'paymentSubMethod' | 'financingOrg'>,
+): string | null {
+  const bits = [
+    d.financingType ? FINANCING_TYPE_SHORT[d.financingType] ?? d.financingType : null,
+    d.paymentSubMethod ? PAYMENT_SUB_METHOD_LABEL[d.paymentSubMethod] : null,
+    d.financingOrg ? FINANCING_ORG_LABEL[d.financingOrg] : null,
+  ].filter(Boolean)
+  return bits.length > 0 ? bits.join(' · ') : null
+}
+
 const DEVIS_STATUS_META: Record<DevisStatus, { label: string; tone: string }> = {
   brouillon: { label: 'Brouillon', tone: 'is-neutral' },
   en_attente: { label: 'En attente', tone: 'is-warn' },
@@ -294,11 +310,7 @@ export function AttachmentRow({
 }
 
 export function DebriefCard({ debrief, onClick }: { debrief: DebriefResponse; onClick?: () => void }) {
-  const financingBits = [
-    debrief.financingType ? FINANCING_TYPE_SHORT[debrief.financingType] ?? debrief.financingType : null,
-    debrief.paymentSubMethod ? PAYMENT_SUB_METHOD_LABEL[debrief.paymentSubMethod] : null,
-    debrief.financingOrg ? FINANCING_ORG_LABEL[debrief.financingOrg] : null,
-  ].filter(Boolean)
+  const financing = formatDebriefFinancing(debrief)
   const acompte =
     debrief.acompteAmount != null
       ? `acompte ${debrief.acompteAmount} €${debrief.acomptePercent != null ? ` (${debrief.acomptePercent} %)` : ''}`
@@ -317,9 +329,9 @@ export function DebriefCard({ debrief, onClick }: { debrief: DebriefResponse; on
       </div>
       {debrief.notes && <p className="line-clamp-2 whitespace-pre-wrap text-xs leading-relaxed text-muted">{debrief.notes}</p>}
       {debrief.objection && <p className="mt-1 line-clamp-1 text-[11px] font-semibold text-faint">Objection : {debrief.objection}</p>}
-      {(financingBits.length > 0 || acompte) && (
+      {(financing || acompte) && (
         <p className="mt-1 truncate text-[11px] font-semibold text-faint">
-          {[financingBits.join(' · '), acompte].filter(Boolean).join(' · ')}
+          {[financing, acompte].filter(Boolean).join(' · ')}
         </p>
       )}
       {onClick && <span className="fiche-debrief-more">Voir le détail →</span>}
