@@ -24,17 +24,30 @@ const FINANCING_TYPE_SHORT: Record<string, string> = {
   paiement_12x: 'Paiement 12x',
 }
 
-/**
- * Résume la méthode de paiement / financement saisie au débriefing :
- * type de financement + sous-méthode (chèque/espèces/virement) + organisme
- * (CMOI/Sofider) le cas échéant. Renvoie null si rien n'a été renseigné.
- */
-export function formatDebriefFinancing(
-  d: Pick<DebriefResponse, 'financingType' | 'paymentSubMethod' | 'financingOrg'>,
-): string | null {
+type DebriefFinancing = Pick<DebriefResponse, 'financingType' | 'paymentSubMethod' | 'financingOrg'>
+
+/** Type de financement (+ organisme CMOI/Sofider) saisi au débriefing. */
+export function formatDebriefFinancingType(d: DebriefFinancing): string | null {
   const bits = [
     d.financingType ? FINANCING_TYPE_SHORT[d.financingType] ?? d.financingType : null,
-    d.paymentSubMethod ? PAYMENT_SUB_METHOD_LABEL[d.paymentSubMethod] : null,
+    d.financingOrg ? FINANCING_ORG_LABEL[d.financingOrg] : null,
+  ].filter(Boolean)
+  return bits.length > 0 ? bits.join(' · ') : null
+}
+
+/** Méthode de paiement (chèque / espèces / virement) saisie au débriefing. */
+export function formatDebriefPaymentMethod(d: DebriefFinancing): string | null {
+  return d.paymentSubMethod ? PAYMENT_SUB_METHOD_LABEL[d.paymentSubMethod] : null
+}
+
+/**
+ * Résumé complet « type + méthode + organisme » sur une ligne (carte débrief).
+ * Renvoie null si rien n'a été renseigné.
+ */
+export function formatDebriefFinancing(d: DebriefFinancing): string | null {
+  const bits = [
+    d.financingType ? FINANCING_TYPE_SHORT[d.financingType] ?? d.financingType : null,
+    formatDebriefPaymentMethod(d),
     d.financingOrg ? FINANCING_ORG_LABEL[d.financingOrg] : null,
   ].filter(Boolean)
   return bits.length > 0 ? bits.join(' · ') : null

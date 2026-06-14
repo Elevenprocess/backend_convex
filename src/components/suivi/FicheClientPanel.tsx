@@ -1,7 +1,7 @@
 import type { Dossier } from '../../lib/suivi'
 import { formatCurrency, formatDate } from '../../lib/suivi'
 import { fullName, initials, STATUS_LABEL, type DebriefResponse } from '../../lib/types'
-import { Section, Field, DebriefCard, formatDebriefFinancing } from './fiche-parts'
+import { Section, Field, DebriefCard, formatDebriefFinancingType, formatDebriefPaymentMethod } from './fiche-parts'
 
 type Props = {
   dossier: Dossier
@@ -20,17 +20,21 @@ export function FicheClientPanel({ dossier, debriefs }: Props) {
     .filter((d) => d.projectId == null)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
-  // « Financement » = méthode de paiement choisie au débriefing. On prend le
-  // débrief le plus récent qui en porte une (tous projets confondus), avec repli
-  // sur le financement saisi au RDV si aucun débrief n'a été renseigné.
+  // Financement & méthode de paiement = ce qui a été saisi au débriefing. On prend
+  // le débrief le plus récent qui porte une de ces infos (tous projets confondus),
+  // puis on en dérive le TYPE (+ organisme) et la MÉTHODE (chèque/espèces/virement)
+  // depuis le MÊME débrief, pour deux champs cohérents. Repli sur le financement
+  // du RDV pour le type si aucun débrief n'est renseigné.
+  const financingDebrief = [...debriefs]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .find((d) => d.financingType || d.paymentSubMethod || d.financingOrg) ?? null
+
   const financingValue =
-    [...debriefs]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .map(formatDebriefFinancing)
-      .find((v): v is string => Boolean(v))
+    (financingDebrief ? formatDebriefFinancingType(financingDebrief) : null)
     ?? (dossier.rdv?.financingType
-      ? formatDebriefFinancing({ financingType: dossier.rdv.financingType, paymentSubMethod: null, financingOrg: null })
+      ? formatDebriefFinancingType({ financingType: dossier.rdv.financingType, paymentSubMethod: null, financingOrg: null })
       : null)
+  const paymentMethodValue = financingDebrief ? formatDebriefPaymentMethod(financingDebrief) : null
 
   return (
     <aside className="space-y-7 rounded-2xl border border-line bg-white p-5 lg:sticky lg:top-4">
@@ -56,7 +60,6 @@ export function FicheClientPanel({ dossier, debriefs }: Props) {
           <Field label="Code postal" value={lead.postalCode} />
           <Field label="Ville" value={lead.city} />
           <Field label="Logement" value={lead.typeLogement} />
-          <Field label="Revenu fiscal" value={lead.revenuFiscal ? `${lead.revenuFiscal.toLocaleString('fr-FR')} €` : null} />
           <Field label="Source" value={lead.source} />
           <Field label="Canal" value={lead.canalAcquisition} />
           <Field label="Campagne" value={lead.campaign} />
@@ -69,6 +72,7 @@ export function FicheClientPanel({ dossier, debriefs }: Props) {
             label="Signé le"
             value={dossier.rdv?.signatureAt ? formatDate(dossier.rdv.signatureAt) : (dossier.signedAt ? formatDate(dossier.signedAt) : null)}
           />
+          <Field label="Méthode de paiement" value={paymentMethodValue} wide />
         </dl>
       </Section>
 
