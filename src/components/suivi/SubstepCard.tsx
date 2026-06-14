@@ -21,7 +21,10 @@ export function SubstepCard({ substep, users, today, onOpen }: Props) {
   const gauge = slaGaugeInfo(substep.deadline, today)
   const stateClass = blocked ? 'is-blocked' : done ? 'is-done' : locked ? 'is-locked' : 'is-active'
 
-  const technicien = users?.find((u) => u.id === substep.responsableId)?.name ?? null
+  // Technicien affiché seulement sur les phases terrain (VT / installation / MES).
+  // Les phases back-office (DP, racco, consuel) n'ont pas de technicien attribué.
+  const isFieldPhase = substep.phase === 'vt' || substep.phase === 'installation' || substep.phase === 'mes'
+  const technicien = isFieldPhase ? (users?.find((u) => u.id === substep.responsableId)?.name ?? null) : null
   const expectedTotal = substep.expectedDocs.length
   const presentTypes = new Set(substep.documents.map((d) => d.type))
   const docsPresent = substep.expectedDocs.filter((t) => presentTypes.has(t)).length

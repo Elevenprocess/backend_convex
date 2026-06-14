@@ -57,6 +57,10 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
   const gauge = slaGaugeInfo(substep.deadline, today)
   const docStatus = substepDocStatus(substep)
   const techniciens = users.filter((u) => u.role === 'technicien')
+  // Phases terrain (technicien réel sur site). Les phases back-office (DP, racco,
+  // consuel) ne sont que des démarches administratives : pas de technicien à y
+  // attribuer — uniquement date, notes et dépôt de pièces / photos.
+  const isFieldPhase = substep.phase === 'vt' || substep.phase === 'installation' || substep.phase === 'mes'
 
   const debounced = (patch: UpdateSubstepPatch) => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current)
@@ -118,7 +122,9 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
           {readOnly ? (
             <dl className="wf-modal-ro">
               <div><dt>Date</dt><dd>{substep.dateRealisee || '—'}</dd></div>
-              <div><dt>Technicien</dt><dd>{techniciens.find((t) => t.id === substep.responsableId)?.name ?? '—'}</dd></div>
+              {isFieldPhase && (
+                <div><dt>Technicien</dt><dd>{techniciens.find((t) => t.id === substep.responsableId)?.name ?? '—'}</dd></div>
+              )}
               <div><dt>Notes</dt><dd>{substep.notes || '—'}</dd></div>
             </dl>
           ) : (
@@ -133,19 +139,21 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
                 />
               </section>
 
-              <section className="wf-modal-section">
-                <h3><Icon name="users" size={13} /> Technicien attribué</h3>
-                <select
-                  className="wf-modal-input"
-                  value={responsable}
-                  onChange={(e) => { setResponsable(e.target.value); onMutate(substep.id, { responsableId: e.target.value || null }) }}
-                >
-                  <option value="">Aucun — à attribuer</option>
-                  {techniciens.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
-              </section>
+              {isFieldPhase && (
+                <section className="wf-modal-section">
+                  <h3><Icon name="users" size={13} /> Technicien attribué</h3>
+                  <select
+                    className="wf-modal-input"
+                    value={responsable}
+                    onChange={(e) => { setResponsable(e.target.value); onMutate(substep.id, { responsableId: e.target.value || null }) }}
+                  >
+                    <option value="">Aucun — à attribuer</option>
+                    {techniciens.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </section>
+              )}
 
               <section className="wf-modal-section">
                 <h3><Icon name="edit" size={13} /> Notes</h3>

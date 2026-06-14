@@ -4802,32 +4802,62 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
 .wf-init .wf-empty { padding-bottom: 0; }
 .wf-init-error { color: var(--color-rouille); font-size: 13px; margin: 0; }
 
-/* Bandeau d'avancement global du dossier. */
-.wf-overall { display: flex; flex-direction: column; gap: 9px; padding: 14px 16px; border: 1px solid var(--color-line); border-radius: 14px; background: var(--color-cream); }
-.wf-overall-text { display: flex; align-items: baseline; gap: 10px; }
-.wf-overall-pct { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; color: var(--color-text); font-variant-numeric: tabular-nums; line-height: 1; }
-.wf-overall-label { font-size: 12px; font-weight: 600; color: var(--color-muted); }
-.wf-overall-track { height: 7px; border-radius: 999px; background: var(--color-line); overflow: hidden; }
-.wf-overall-fill { height: 100%; background: var(--color-or); border-radius: 999px; transition: width .35s ease; }
+/* Bandeau d'avancement global du dossier — anneau conique + piste. */
+.wf-overall {
+  display: flex; align-items: center; gap: 18px; padding: 16px 18px;
+  border: 1px solid var(--color-line); border-radius: 18px;
+  background:
+    radial-gradient(130% 130% at 0% 0%, var(--color-or-tint) 0%, transparent 52%),
+    linear-gradient(180deg, #fff, var(--color-cream));
+  box-shadow: 0 1px 2px rgba(20, 35, 28, .04);
+}
+.wf-overall.is-complete { border-color: color-mix(in srgb, var(--color-or) 35%, var(--color-line)); }
+.wf-overall-ring {
+  position: relative; flex-shrink: 0; width: 58px; height: 58px; border-radius: 50%;
+  display: grid; place-items: center; transition: background .45s ease;
+}
+.wf-overall-ring::after { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: #fff; box-shadow: inset 0 0 0 1px var(--color-line-soft); }
+.wf-overall-ring-num { position: relative; z-index: 1; font-size: 15px; font-weight: 800; letter-spacing: -.02em; color: var(--color-text); font-variant-numeric: tabular-nums; }
+.wf-overall-ring-num i { font-style: normal; font-size: 9px; font-weight: 700; color: var(--color-muted); margin-left: 1px; }
+.wf-overall.is-complete .wf-overall-ring-num { color: var(--color-or-dark); }
+.wf-overall-text { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1; }
+.wf-overall-label { font-size: 13.5px; font-weight: 700; letter-spacing: -.01em; color: var(--color-text); }
+.wf-overall-sub { font-size: 11.5px; font-weight: 600; color: var(--color-muted); }
+.wf-overall-track { height: 7px; border-radius: 999px; background: var(--color-line); overflow: hidden; margin-top: 2px; }
+.wf-overall-fill { height: 100%; background: linear-gradient(90deg, var(--color-or-dark), var(--color-or-light)); border-radius: 999px; transition: width .45s cubic-bezier(.2, .7, .2, 1); }
 
 /* Pastille d'avancement (par section / colonne). */
 .wf-progress { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .wf-progress-bar { width: 54px; height: 5px; border-radius: 999px; background: var(--color-line); overflow: hidden; }
-.wf-progress-fill { display: block; height: 100%; background: var(--color-or); border-radius: 999px; transition: width .3s ease; }
+.wf-progress-fill { display: block; height: 100%; background: linear-gradient(90deg, var(--color-or-dark), var(--color-or-light)); border-radius: 999px; transition: width .3s ease; }
 .wf-progress-count { font-size: 11px; font-weight: 700; color: var(--color-muted); font-variant-numeric: tabular-nums; }
 .wf-progress.is-complete .wf-progress-count { color: var(--color-or); }
 
 /* Sections : à plat, séparées par du blanc + un filet fin (plus de boîtes empilées). */
 .wf-section { padding: 0; }
 .wf-section + .wf-section { border-top: 1px solid var(--color-line-soft); padding-top: 26px; }
-.wf-section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-bottom: 18px; }
-.wf-section-titles { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.wf-section-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 18px; }
+.wf-section-titles { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .wf-section-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-cuivre); }
 .wf-section-head h3 { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; color: var(--color-text); margin: 0; }
+.wf-section-chev { color: var(--color-faint); transition: transform .18s ease; }
+/* Pastille-icône de section. */
+.wf-section-badge {
+  flex-shrink: 0; width: 30px; height: 30px; border-radius: 9px; display: inline-grid; place-items: center;
+  background: var(--color-cuivre-tint); color: var(--color-cuivre);
+}
+.wf-section-amont .wf-section-badge,
+.wf-section-aval .wf-section-badge { background: var(--color-or-tint); color: var(--color-or-dark); }
 
-.wf-parallel { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
-.wf-col-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
-.wf-col-title { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-muted); }
+.wf-parallel { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+/* Chaque démarche = un rail parallèle clairement délimité. */
+.wf-col { padding: 14px 14px 8px; border: 1px solid var(--color-line-soft); border-radius: 14px; background: linear-gradient(180deg, #fff, var(--color-cream)); }
+.wf-col-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.wf-col-title { display: inline-flex; align-items: center; gap: 7px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-muted); }
+.wf-col-title::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--color-cuivre); flex-shrink: 0; }
+@media (max-width: 720px) {
+  .wf-parallel { grid-template-columns: 1fr; }
+}
 
 .wf-list { display: flex; flex-direction: column; gap: 4px; }
 
@@ -4891,8 +4921,13 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
   background: var(--color-cream-darker); color: var(--color-muted);
 }
 .wf-node-chip.is-missing { background: var(--color-rouille-tint); color: var(--color-rouille); }
-.wf-node-open { margin-left: auto; display: inline-flex; color: var(--color-faint); }
-.wf-node-btn:hover:not(:disabled) .wf-node-open { color: var(--color-cuivre); }
+.wf-node-open { margin-left: auto; display: inline-flex; color: var(--color-faint); transition: transform .15s ease, color .15s ease; }
+.wf-node-btn:hover:not(:disabled) .wf-node-open { color: var(--color-cuivre); transform: translateX(2px); }
+/* Polish : pastilles plus nettes + marqueur réactif au survol du nœud. */
+.wf-node-chip { border: 1px solid var(--color-line-soft); }
+.wf-node-chip.is-missing { border-color: transparent; }
+.wf-substep-node:hover .wf-substep-marker { box-shadow: 0 0 0 4px var(--color-cream-darker); }
+.wf-substep-node.is-active:hover .wf-substep-marker { box-shadow: 0 0 0 4px var(--color-cuivre-tint); }
 
 /* === Pop-up d'un module du workflow ==================================== */
 .wf-modal { width: min(520px, 96vw); }

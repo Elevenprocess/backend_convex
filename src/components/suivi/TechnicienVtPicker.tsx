@@ -26,7 +26,10 @@ export function TechnicienVtPicker({ leadId }: Props) {
   const client = (clients ?? [])[0]
   const techniciens = (users ?? []).filter((u) => u.role === 'technicien')
 
-  if (!client) return null
+  // Le bloc technicien VT ne concerne que les rôles qui l'attribuent réellement
+  // (amont technique). Pour la délivrabilité / finances qui ne font que des
+  // démarches administratives, on ne l'affiche pas du tout — il polluait l'en-tête.
+  if (!client || !canAssign) return null
 
   const current = techniciens.find((t) => t.id === client.technicienVtId) ?? null
 
@@ -42,13 +45,13 @@ export function TechnicienVtPicker({ leadId }: Props) {
   }
 
   // Vue par défaut : carte du technicien attribué (ou état « à attribuer »).
-  const showCard = !editing || !canAssign
+  const showCard = !editing
 
   return (
     <aside className="suivi-side glass-card tech-picker">
       <header className="suivi-side-head tech-picker-head">
         <strong><Icon name="users" size={14} /> Technicien VT</strong>
-        {canAssign && current && !editing && (
+        {current && !editing && (
           <button type="button" className="tech-picker-edit" onClick={() => setEditing(true)} disabled={saving}>
             Modifier
           </button>
@@ -64,7 +67,7 @@ export function TechnicienVtPicker({ leadId }: Props) {
               <span className="tech-picker-role"><Icon name="check" size={11} /> Technicien attribué</span>
             </div>
           </div>
-        ) : canAssign ? (
+        ) : (
           <button type="button" className="tech-picker-card is-empty" onClick={() => setEditing(true)} disabled={saving}>
             <span className="tech-picker-avatar is-empty">?</span>
             <div className="tech-picker-info">
@@ -72,14 +75,6 @@ export function TechnicienVtPicker({ leadId }: Props) {
               <span className="tech-picker-role">Cliquer pour attribuer →</span>
             </div>
           </button>
-        ) : (
-          <div className="tech-picker-card is-empty">
-            <span className="tech-picker-avatar is-empty">?</span>
-            <div className="tech-picker-info">
-              <span className="tech-picker-name">Aucun technicien</span>
-              <span className="tech-picker-role">À attribuer</span>
-            </div>
-          </div>
         )
       ) : (
         <div className="tech-picker-editor">

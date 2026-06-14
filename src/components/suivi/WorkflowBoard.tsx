@@ -3,8 +3,16 @@ import { SubstepCard } from './SubstepCard'
 import { SubstepModal } from './SubstepModal'
 import { groupSubsteps, SUIVI_SECTIONS } from '../../lib/suivi-board'
 import { useCollapsibleState } from '../../lib/useCollapsibleState'
-import { Icon } from '../Icon'
+import { Icon, type IconName } from '../Icon'
 import type { SubstepResponse, UpdateSubstepPatch, UserResponse, WorkflowPhase } from '../../lib/types'
+
+// Pastille-icône en tête de chaque section, pour ancrer visuellement les 3 temps
+// du dossier (préparation terrain → démarches admin → installation).
+const SECTION_ICON: Record<typeof SUIVI_SECTIONS[number]['key'], IconName> = {
+  amont: 'home',
+  backoffice: 'mail',
+  aval: 'settings',
+}
 
 type Props = {
   substeps: SubstepResponse[]
@@ -48,7 +56,8 @@ function CollapsibleWfSection({
     <section className={`wf-section wf-section-${section.key}`}>
       <header className="wf-section-head">
         <button type="button" className="wf-section-toggle" onClick={toggle} aria-expanded={!collapsed}>
-          <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={15} className="text-faint" />
+          <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={15} className="wf-section-chev" />
+          <span className="wf-section-badge" aria-hidden><Icon name={SECTION_ICON[section.key]} size={15} /></span>
           <span className="wf-section-titles">
             <span className="wf-section-eyebrow">{section.eyebrow}</span>
             <span className="wf-section-title-text">{section.title}</span>
@@ -80,13 +89,20 @@ export function WorkflowBoard({ substeps, onMutate, today, users, savingId, onDo
   return (
     <div className="wf-board">
       {overallTotal > 0 && (
-        <div className="wf-overall">
-          <div className="wf-overall-text">
-            <span className="wf-overall-pct">{overallPct}%</span>
-            <span className="wf-overall-label">{overallDone} / {overallTotal} étapes terminées</span>
+        <div className={`wf-overall${overallPct === 100 ? ' is-complete' : ''}`}>
+          <div
+            className="wf-overall-ring"
+            style={{ background: `conic-gradient(var(--color-or) ${overallPct * 3.6}deg, var(--color-line) 0)` }}
+            aria-hidden
+          >
+            <span className="wf-overall-ring-num">{overallPct}<i>%</i></span>
           </div>
-          <div className="wf-overall-track" aria-hidden>
-            <div className="wf-overall-fill" style={{ width: `${overallPct}%` }} />
+          <div className="wf-overall-text">
+            <span className="wf-overall-label">Avancement du dossier</span>
+            <span className="wf-overall-sub">{overallDone} / {overallTotal} étapes terminées</span>
+            <div className="wf-overall-track" aria-hidden>
+              <div className="wf-overall-fill" style={{ width: `${overallPct}%` }} />
+            </div>
           </div>
         </div>
       )}
