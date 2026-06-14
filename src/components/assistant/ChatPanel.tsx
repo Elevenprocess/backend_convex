@@ -6,6 +6,7 @@ import { getAssistantConversation, useChatWidget } from '../../lib/chatWidget'
 import { useAuth } from '../../lib/auth'
 import { updateLead, assignLead } from '../../lib/hooks'
 import { ToolConfirmation } from './ToolConfirmation'
+import { Markdown } from './Markdown'
 
 const WRITE_TOOLS = new Set(['updateLeadStatus', 'assignLead'])
 
@@ -39,6 +40,11 @@ export function ChatPanel() {
   const [input, setInput] = useState('')
   const [historyLoading, setHistoryLoading] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
+  // Id de conversation attribué PENDANT le stream en cours (nouvelle conversation
+  // créée côté backend, renvoyé via l'en-tête). On l'utilise pour NE PAS recharger
+  // les messages depuis la base à ce moment-là : la base n'a pas encore la réponse
+  // de l'IA (sauvée en fin de stream), un reload effacerait le message en cours.
+  const activeStreamConvRef = useRef<string | null>(null)
 
   const transport = useMemo(() => new DefaultChatTransport<UIMessage>({
     api: buildApiUrl('/assistant/chat'),
@@ -46,7 +52,10 @@ export function ChatPanel() {
     fetch: async (input, init) => {
       const res = await fetch(input, init)
       const id = res.headers.get('X-Assistant-Conversation-Id')
-      if (id) setConversationId(id)
+      if (id) {
+        activeStreamConvRef.current = id
+        setConversationId(id)
+      }
       return res
     },
     prepareSendMessagesRequest: ({ messages }) => ({
@@ -87,6 +96,10 @@ export function ChatPanel() {
       setMessages([])
       return
     }
+    // Conversation venant d'être créée par le stream en cours → les messages
+    // locaux (question + réponse en cours de frappe) sont déjà à l'écran, on ne
+    // recharge PAS depuis la base (qui n'a pas encore la réponse).
+    if (conversationId === activeStreamConvRef.current) return
     setHistoryLoading(true)
     getAssistantConversation(conversationId)
       .then((detail) => {
@@ -168,8 +181,11 @@ export function ChatPanel() {
                 {historyLoading && <div className="assistant-empty">Chargement…</div>}
                 {!historyLoading && messages.length === 0 && (
                   <div className="assistant-empty">
-                    <strong>Demande-moi un résumé, une recherche ou un point de suivi.</strong>
-                    <span>Ex: “Montre mes RDV de demain” ou “Quels leads chauds relancer ?”</span>
+                    <strong>Bonjour {(user.name ?? '').trim().split(' ')[0] || ''} 👋</strong>
+                    <span>Je suis ton copilote VELORA. Demande-moi par exemple :</span>
+                    <span>• « Combien de nouveaux leads aujourd'hui / hier ? »</span>
+                    <span>• « Qu'a fait tel setter aujourd'hui ? »</span>
+                    <span>• « Montre mes RDV de demain » · « Quels leads chauds relancer ? »</span>
                   </div>
                 )}
                 {messages.map((message) => {
@@ -185,7 +201,9 @@ export function ChatPanel() {
                   return (
                     <div key={message.id}>
                       {text && (
-                        <div className={`assistant-message ${isUser ? 'user' : 'assistant'}`}>{text}</div>
+                        <div className={`assistant-message ${isUser ? 'user' : 'assistant assistant-md'}`}>
+                          {isUser ? text : <Markdown text={text} />}
+                        </div>
                       )}
                       {pendingWrites.map((p: any) => (
                         <ToolConfirmation
