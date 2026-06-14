@@ -93,10 +93,18 @@ export function MyProfile() {
     ['GHL location ID', user.ghlLocationId || '—'],
   ]
 
-  const profileStats = [
+  const memberSince = useMemo(() => {
+    if (!user.createdAt) return null
+    return new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(new Date(user.createdAt))
+  }, [user.createdAt])
+
+  // Une seule source de vérité pour rôle / équipe (+ secteur commercial) : on ne ré-affiche
+  // plus ces mêmes infos en pastilles ET en chips comme avant (d'où le « Admin » répété 4×).
+  // Le statut actif/inactif vit dans le badge de présence, pas dans les credentials.
+  const credentials: [string, string][] = [
     ['Rôle', roleLabel(user.role)],
     ['Équipe', teamLabel(user.team)],
-    ['Statut', user.active ? 'Actif' : 'Inactif'],
+    ...(user.role === 'commercial' ? ([['Secteur', sectorInfo.label]] as [string, string][]) : []),
   ]
 
   return (
@@ -104,49 +112,61 @@ export function MyProfile() {
       <Topbar eyebrow="MON COMPTE" title="Voir mon profil" />
       <main className="profile-page flex-grow overflow-auto px-6 pt-4 pb-8 md:px-8">
         <div className="mx-auto max-w-6xl space-y-5">
-          <section className="profile-hero-card glass-card border border-line-soft bg-white p-5 md:p-8">
-            <div className="flex flex-col gap-6 md:flex-row md:items-center">
-              <div className="profile-avatar-shell shrink-0 self-center md:self-auto">
+          <section className="profile-identity glass-card border border-line-soft">
+            <div className="profile-cover" aria-hidden="true">
+              <span className="profile-cover-glow" />
+              <svg className="profile-cover-lines" viewBox="0 0 640 240" preserveAspectRatio="none" fill="none">
+                <path d="M-20 196 C 120 150, 220 232, 360 178 S 600 120, 700 168" />
+                <path d="M-20 156 C 140 110, 240 196, 380 138 S 600 80, 700 128" />
+                <path d="M-20 116 C 160 74, 260 158, 400 100 S 600 44, 700 92" />
+                <path d="M-20 76 C 180 40, 280 120, 420 64 S 600 12, 700 58" />
+              </svg>
+              <span className="profile-cover-wordmark">VELORA</span>
+            </div>
+
+            <div className="profile-identity-main">
+              <div className="profile-avatar-shell">
                 <div className="profile-avatar-ring">
                   <div className="profile-avatar-photo">
                     {image ? (
                       <img src={image} alt="Photo de profil" className="h-full w-full object-cover" />
                     ) : (
-                      <span className="text-5xl font-black text-or-dark uppercase">{initials}</span>
+                      <span className="profile-avatar-initials">{initials}</span>
                     )}
                   </div>
                 </div>
-                <span className="profile-avatar-badge">VELORA</span>
+                <label className="profile-avatar-edit" aria-label="Changer la photo">
+                  <Icon name="edit" size={14} />
+                  <input type="file" accept="image/*" onChange={handlePhoto} className="hidden" />
+                </label>
               </div>
 
-              <div className="min-w-0 flex-1 text-center md:text-left">
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div className="min-w-0">
-                    <p className="eyebrow text-or-dark">Profil professionnel</p>
-                    <h1 className="mt-1 truncate text-3xl font-black tracking-tight md:text-4xl">{user.name}</h1>
-                    <p className="mt-1 truncate text-sm font-semibold text-muted">{user.email}</p>
-                  </div>
-                  <label className="profile-photo-button mx-auto md:mx-0">
-                    <Icon name="plus" size={15} />
-                    Changer la photo
-                    <input type="file" accept="image/*" onChange={handlePhoto} className="hidden" />
-                  </label>
-                </div>
+              <div className="profile-identity-info">
+                <span className={`profile-presence ${user.active ? 'is-active' : 'is-inactive'}`}>
+                  <span className="profile-presence-dot" />
+                  {user.active ? 'Compte actif' : 'Compte inactif'}
+                </span>
+                <h1 className="profile-name">{user.name}</h1>
+                <p className="profile-email">
+                  <Icon name="mail" size={14} />
+                  <span className="truncate">{user.email}</span>
+                </p>
+                {memberSince && <p className="profile-since">Membre depuis {memberSince}</p>}
+              </div>
 
-                <div className="profile-stat-strip mt-5">
-                  {profileStats.map(([label, value]) => (
-                    <div key={label} className="profile-stat-pill">
-                      <div className="text-sm font-black truncate">{value}</div>
-                      <div className="eyebrow text-[9px]">{label}</div>
+              <div className="profile-identity-side">
+                <label className="profile-photo-button">
+                  <Icon name="plus" size={15} />
+                  Changer la photo
+                  <input type="file" accept="image/*" onChange={handlePhoto} className="hidden" />
+                </label>
+                <div className="profile-credentials">
+                  {credentials.map(([label, value]) => (
+                    <div key={label} className="profile-credential">
+                      <span className="profile-credential-label">{label}</span>
+                      <span className="profile-credential-value" title={value}>{value}</span>
                     </div>
                   ))}
-                </div>
-
-                <div className="mt-5 flex flex-wrap justify-center gap-2 md:justify-start">
-                  <span className="profile-chip profile-chip-dark">{roleLabel(user.role)}</span>
-                  <span className="profile-chip profile-chip-soft">{teamLabel(user.team)}</span>
-                  <span className="profile-chip profile-chip-success">{user.active ? 'Compte actif' : 'Compte inactif'}</span>
-                  {user.role === 'commercial' && <span className="profile-chip profile-chip-info">Secteur GHL : {sectorInfo.label}</span>}
                 </div>
               </div>
             </div>
