@@ -7,7 +7,7 @@ import { PhotoLightbox } from './PhotoLightbox'
 import { DebriefDetailModal } from './DebriefDetailModal'
 import { DevisPreviewModal } from './DevisPreviewModal'
 import { AddNoteModal } from './AddNoteModal'
-import { uploadDevis, uploadProjectAttachment, updateProject } from '../../lib/api'
+import { uploadDevis, uploadProjectAttachment, updateProject, pollDevisOcr, deleteDevis } from '../../lib/api'
 import { parseNotesJournal, prependNote, type NoteEntry } from '../../lib/notesJournal'
 import { useAuth } from '../../lib/auth'
 
@@ -59,12 +59,18 @@ export function ProjectDossierSection({ project, commercialName, onChanged }: Pr
   const [savingNote, setSavingNote] = useState(false)
 
   const [busy, setBusy] = useState<null | 'devis' | 'photo' | 'document'>(null)
+  const [deletingDevisId, setDeletingDevisId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const devisInput = useRef<HTMLInputElement | null>(null)
   const photoInput = useRef<HTMLInputElement | null>(null)
   const docInput = useRef<HTMLInputElement | null>(null)
 
-  const visibleDevis = devisOpen ? project.devis : project.devis.slice(0, PREVIEW_LIMIT)
+  // Devis triés du plus récent au plus ancien : le devis qu'on vient de scanner
+  // apparaît en tête (donc toujours visible, même section repliée).
+  const sortedDevis = [...project.devis].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  )
+  const visibleDevis = devisOpen ? sortedDevis : sortedDevis.slice(0, PREVIEW_LIMIT)
   const visiblePhotos = photosOpen ? photos : photos.slice(0, PREVIEW_LIMIT)
   const visibleDocs = docsOpen ? documents : documents.slice(0, PREVIEW_LIMIT)
   const visibleNotes = notesOpen ? notes : notes.slice(0, PREVIEW_LIMIT)
@@ -75,12 +81,31 @@ export function ProjectDossierSection({ project, commercialName, onChanged }: Pr
     setError(null)
     try {
       const created = await uploadDevis(project.leadId, undefined, file, { projectId: project.id })
+      // Déplie la section pour que le devis qu'on vient d'ajouter soit visible
+      // et affiche tout de suite sa carte en mode « Scan OCR… ».
+      setDevisOpen(true)
       onChanged?.()
-      setPreviewDevis(created) // « affiche le devis qui vient d'être scané »
+      // Suit l'OCR en arrière-plan : la fiche est rafraîchie à chaque étape
+      // jusqu'à ce que le scan soit terminé (done) ou en échec (failed).
+      void pollDevisOcr(created.id, { onTick: () => onChanged?.() }).catch(() => undefined)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Échec de l'ajout du devis.")
     } finally {
       setBusy(null)
+    }
+  }
+
+  async function handleDeleteDevis(d: Devis) {
+    if (!window.confirm(`Supprimer définitivement le devis « ${d.devisNumber || d.filename} » ?`)) return
+    setDeletingDevisId(d.id)
+    setError(null)
+    try {
+      await deleteDevis(d.id)
+      onChanged?.()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Échec de la suppression du devis.')
+    } finally {
+      setDeletingDevisId(null)
     }
   }
 
@@ -140,7 +165,13 @@ export function ProjectDossierSection({ project, commercialName, onChanged }: Pr
           <>
             <ul className="space-y-2">
               {visibleDevis.map((d) => (
-                <DevisRow key={d.id} devis={d} onPreview={() => setPreviewDevis(d)} />
+                <DevisRow
+                  key={d.id}
+                  devis={d}
+                  onPreview={() => setPreviewDevis(d)}
+                  onDelete={() => void handleDeleteDevis(d)}
+                  deleting={deletingDevisId === d.id}
+                />
               ))}
             </ul>
             <ShowMore total={project.devis.length} expanded={devisOpen} onToggle={() => setDevisOpen((v) => !v)} noun="devis" />

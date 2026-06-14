@@ -3,10 +3,12 @@ import { Icon } from '../Icon'
 import { DocumentPreviewModal } from './DocumentPreviewModal'
 import { formatDate } from '../../lib/suivi'
 import { attachmentRawUrl, downloadDevisPdf } from '../../lib/api'
+import { DevisScanLoader } from '../devis/DevisScanLoader'
 import {
   DEBRIEF_OUTCOME_LABEL,
   PAYMENT_SUB_METHOD_LABEL,
   FINANCING_ORG_LABEL,
+  cleanField,
   type Devis,
   type DevisStatus,
   type ProjectAttachmentResponse,
@@ -71,7 +73,95 @@ export function Empty({ children }: { children: ReactNode }) {
   return <div className="rounded-xl border border-dashed border-line px-3 py-4 text-center text-xs text-faint">{children}</div>
 }
 
-export function DevisRow({ devis, onPreview }: { devis: Devis; onPreview?: () => void }) {
+/** Formate un montant numérique (string BDD ou number) en « 1 234 € ». */
+function fmtMoney(v: string | number | null | undefined): string {
+  if (v == null || v === '') return '—'
+  const n = Number(v)
+  return Number.isFinite(n) ? `${n.toLocaleString('fr-FR')} €` : '—'
+}
+
+/** Bloc détaillé d'un devis scanné, affiché quand la carte est « développée ». */
+function DevisDetail({ devis }: { devis: Devis }) {
+  const lignes = devis.lignes ?? []
+  const echeancier = devis.echeancier ?? []
+  const financing = devis.financingType ? FINANCING_TYPE_SHORT[devis.financingType] ?? devis.financingType : null
+  return (
+    <div className="fiche-devis-detail">
+      {devis.ocrStatus === 'failed' && (
+        <div className="rounded-lg bg-rouille-tint px-3 py-2 text-[11px] font-semibold text-rouille">
+          Scan OCR en échec{devis.ocrError ? ` : ${cleanField(devis.ocrError)}` : '.'} — les champs ci-dessous peuvent être vides.
+        </div>
+      )}
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+        <Field label="Numéro" value={cleanField(devis.devisNumber)} />
+        <Field label="Date" value={devis.devisDate ? formatDate(devis.devisDate) : null} />
+        <Field label="Expiration" value={devis.dateExpiration ? formatDate(devis.dateExpiration) : null} />
+        <Field label="Puissance" value={devis.puissanceKwc ? `${devis.puissanceKwc} kWc` : null} />
+        <Field label="Panneaux" value={devis.nbPanneaux != null ? String(devis.nbPanneaux) : null} />
+        <Field label="Délai" value={cleanField(devis.delaiExecution)} />
+        <Field label="Montant HT" value={devis.montantHt ? fmtMoney(devis.montantHt) : null} />
+        <Field label="TVA" value={devis.montantTva ? fmtMoney(devis.montantTva) : null} />
+        <Field label="Montant TTC" value={devis.montantTtc ? fmtMoney(devis.montantTtc) : null} />
+        <Field label="Net à payer" value={devis.montantNet ? fmtMoney(devis.montantNet) : null} />
+        <Field label="Financement" value={financing} />
+        <Field label="Prime EDF" value={devis.primeAutoconsommation ? fmtMoney(devis.primeAutoconsommation) : null} />
+      </dl>
+
+      {devis.kits && (
+        <div className="mt-3">
+          <dt className="text-[10px] font-bold uppercase tracking-wide text-faint">Kit</dt>
+          <dd className="text-[12px] font-semibold text-text">{cleanField(devis.kits)}</dd>
+        </div>
+      )}
+
+      {lignes.length > 0 && (
+        <div className="mt-3">
+          <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-faint">Lignes ({lignes.length})</div>
+          <ul className="space-y-1">
+            {lignes.map((l, i) => (
+              <li key={i} className="flex items-baseline justify-between gap-3 text-[12px]">
+                <span className="min-w-0 flex-1 truncate text-text">
+                  {l.qty ? `${l.qty} × ` : ''}{cleanField(l.designation) ?? '—'}
+                </span>
+                <span className="shrink-0 font-bold tabular-nums text-text">{fmtMoney(l.totalTtc ?? l.totalHt)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {echeancier.length > 0 && (
+        <div className="mt-3">
+          <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-faint">Échéancier ({echeancier.length})</div>
+          <ul className="space-y-1">
+            {echeancier.map((e, i) => (
+              <li key={i} className="flex items-baseline justify-between gap-3 text-[12px]">
+                <span className="min-w-0 flex-1 truncate text-muted">{cleanField(e.label) ?? e.phase ?? '—'}</span>
+                <span className="shrink-0 font-bold tabular-nums text-text">{fmtMoney(e.montant)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function DevisRow({
+  devis,
+  onPreview,
+  onDelete,
+  deleting = false,
+  defaultExpanded = false,
+}: {
+  devis: Devis
+  onPreview?: () => void
+  onDelete?: () => void
+  deleting?: boolean
+  defaultExpanded?: boolean
+}) {
+  const [expanded, setExpanded] = useState(defaultExpanded)
+  const scanning = devis.ocrStatus === 'pending' || devis.ocrStatus === 'processing'
   const montant = devis.montantTtc ?? devis.montantNet ?? devis.montantHt
   const status = DEVIS_STATUS_META[devis.status] ?? { label: devis.status, tone: 'is-neutral' }
   const meta = [
@@ -95,20 +185,52 @@ export function DevisRow({ devis, onPreview }: { devis: Devis; onPreview?: () =>
           <div className="fiche-devis-top">
             <span className="fiche-devis-num">{devis.devisNumber || devis.filename}</span>
             <span className={`fiche-devis-status ${status.tone}`}>{status.label}</span>
+            {scanning && <span className="fiche-devis-status is-info">Scan OCR…</span>}
           </div>
           {meta.length > 0 && <div className="fiche-devis-meta">{meta.join(' · ')}</div>}
         </div>
       </button>
+
+      {/* Pendant l'OCR : anneau de chargement à la place du détail. */}
+      {scanning && <DevisScanLoader ocrStatus={devis.ocrStatus} />}
+
       <div className="fiche-devis-foot">
         <span className="fiche-devis-amount">{montant ? `${Number(montant).toLocaleString('fr-FR')} €` : '—'}</span>
-        <button
-          type="button"
-          onClick={() => void downloadDevisPdf(devis.id, devis.filename)}
-          className="fiche-devis-dl"
-        >
-          <Icon name="download" size={13} /> PDF
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          {!scanning && (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="fiche-devis-dl"
+              aria-expanded={expanded}
+            >
+              <Icon name="chevron-down" size={13} />
+              {expanded ? 'Réduire' : 'Développer'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => void downloadDevisPdf(devis.id, devis.filename)}
+            className="fiche-devis-dl"
+          >
+            <Icon name="download" size={13} /> PDF
+          </button>
+          {onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              disabled={deleting}
+              className="fiche-devis-dl text-rouille hover:text-rouille"
+              title="Supprimer le devis"
+            >
+              <Icon name="trash" size={13} /> {deleting ? '…' : 'Supprimer'}
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Détail développé/réduit (réduit par défaut). */}
+      {!scanning && expanded && <DevisDetail devis={devis} />}
     </li>
   )
 }

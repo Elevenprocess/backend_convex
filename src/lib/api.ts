@@ -269,6 +269,33 @@ export function retryDevisOcr(devisId: string): Promise<Devis> {
   return api<Devis>(`/devis/${devisId}/retry-ocr`, { method: 'POST' })
 }
 
+export function deleteDevis(devisId: string): Promise<{ id: string; deleted: true }> {
+  return api(`/devis/${devisId}`, { method: 'DELETE' })
+}
+
+/**
+ * Suit l'avancement de l'OCR d'un devis fraîchement déposé : interroge
+ * GET /devis/:id jusqu'à ce que l'OCR soit terminé (`done`) ou en échec
+ * (`failed`), ou jusqu'au timeout. Renvoie le devis final. `onTick` permet de
+ * rafraîchir l'UI à chaque sondage (ex. réafficher la fiche projet).
+ */
+export async function pollDevisOcr(
+  devisId: string,
+  opts: { intervalMs?: number; timeoutMs?: number; onTick?: (d: Devis) => void } = {},
+): Promise<Devis> {
+  const intervalMs = opts.intervalMs ?? 1500
+  const timeoutMs = opts.timeoutMs ?? 90_000
+  const started = Date.now()
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const d = await getDevis(devisId)
+    opts.onTick?.(d)
+    if (d.ocrStatus === 'done' || d.ocrStatus === 'failed') return d
+    if (Date.now() - started > timeoutMs) return d
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+}
+
 export async function downloadDevisPdf(devisId: string, suggestedName?: string): Promise<void> {
   const res = await fetch(buildApiUrl(`/devis/${devisId}/pdf`), {
     credentials: 'include',
