@@ -593,14 +593,11 @@ function OverviewCommercialSolo() {
     const honored = inPeriod.filter((r) => r.status === 'honore').length
     const planifie = inPeriod.filter((r) => r.status === 'planifie').length
 
-    // Débriefs à remplir triés par client récent (date d'arrivée du lead, repli RDV).
-    const leadArrival = (r: RdvResponse): string => {
-      const full = leadById.get(r.leadId)
-      return full?.arrivalAt ?? full?.createdAt ?? r.createdAt
-    }
+    // Débriefs à remplir triés par date de RDV, du plus proche (le plus récent) au
+    // plus loin (le plus ancien) — c'est la date affichée sur chaque ligne.
     const debriefs = list
       .filter(needsDebrief)
-      .sort((a, b) => leadArrival(b).localeCompare(leadArrival(a)))
+      .sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt))
       .map((r) => ({ rdv: r, lead: r.lead ?? leadById.get(r.leadId) }))
 
     return { honored, planifie, debriefs }
@@ -698,17 +695,14 @@ function OverviewCommercialLead() {
     const list = rdvs ?? []
     const leadById = new Map((allLeads ?? []).map((l) => [l.id, l]))
     const todayIso = new Date().toISOString().slice(0, 10)
-    const leadArrival = (r: RdvResponse): string => {
-      const full = leadById.get(r.leadId)
-      return full?.arrivalAt ?? full?.createdAt ?? r.createdAt
-    }
     const upcoming = list
       .filter((r) => r.status === 'planifie' && r.scheduledAt >= todayIso)
       .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))
       .map((r) => ({ rdv: r, lead: r.lead ?? leadById.get(r.leadId) }))
+    // Débriefs triés par date de RDV, du plus proche (récent) au plus loin (ancien).
     const debriefs = list
       .filter(needsDebrief)
-      .sort((a, b) => leadArrival(b).localeCompare(leadArrival(a)))
+      .sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt))
       .map((r) => ({ rdv: r, lead: r.lead ?? leadById.get(r.leadId) }))
     return { upcoming, debriefs }
   }, [rdvs, allLeads])
