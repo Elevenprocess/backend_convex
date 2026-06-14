@@ -36,10 +36,10 @@ export function Section({ title, count, action, children }: { title: string; cou
   return (
     <section>
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-cuivre">
+        <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-cuivre">
           {title}
           {count != null && count > 0 && (
-            <span className="rounded-full bg-or-tint px-1.5 py-0.5 text-[10px] font-black text-or-dark">{count}</span>
+            <span className="rounded-full bg-or-tint px-1.5 py-0.5 text-[10px] font-semibold text-or-dark">{count}</span>
           )}
         </h3>
         {action}
@@ -61,8 +61,8 @@ export function SectionAddButton({ onClick, label, busy = false }: { onClick: ()
 export function Field({ label, value, href, wide }: { label: string; value: string | null | undefined; href?: string; wide?: boolean }) {
   return (
     <div className={wide ? 'col-span-2' : ''}>
-      <dt className="text-[10px] font-bold uppercase tracking-wide text-faint">{label}</dt>
-      <dd className="break-words text-[13px] font-bold text-text">
+      <dt className="text-[10px] font-semibold uppercase tracking-wide text-faint">{label}</dt>
+      <dd className="break-words text-[13px] font-medium text-text">
         {value ? (href ? <a href={href} className="text-or-dark hover:text-or">{value}</a> : value) : '—'}
       </dd>
     </div>
@@ -109,21 +109,21 @@ function DevisDetail({ devis }: { devis: Devis }) {
 
       {devis.kits && (
         <div className="mt-3">
-          <dt className="text-[10px] font-bold uppercase tracking-wide text-faint">Kit</dt>
+          <dt className="text-[10px] font-semibold uppercase tracking-wide text-faint">Kit</dt>
           <dd className="text-[12px] font-semibold text-text">{cleanField(devis.kits)}</dd>
         </div>
       )}
 
       {lignes.length > 0 && (
         <div className="mt-3">
-          <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-faint">Lignes ({lignes.length})</div>
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-faint">Lignes ({lignes.length})</div>
           <ul className="space-y-1">
             {lignes.map((l, i) => (
               <li key={i} className="flex items-baseline justify-between gap-3 text-[12px]">
                 <span className="min-w-0 flex-1 truncate text-text">
                   {l.qty ? `${l.qty} × ` : ''}{cleanField(l.designation) ?? '—'}
                 </span>
-                <span className="shrink-0 font-bold tabular-nums text-text">{fmtMoney(l.totalTtc ?? l.totalHt)}</span>
+                <span className="shrink-0 font-semibold tabular-nums text-text">{fmtMoney(l.totalTtc ?? l.totalHt)}</span>
               </li>
             ))}
           </ul>
@@ -132,12 +132,12 @@ function DevisDetail({ devis }: { devis: Devis }) {
 
       {echeancier.length > 0 && (
         <div className="mt-3">
-          <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-faint">Échéancier ({echeancier.length})</div>
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-faint">Échéancier ({echeancier.length})</div>
           <ul className="space-y-1">
             {echeancier.map((e, i) => (
               <li key={i} className="flex items-baseline justify-between gap-3 text-[12px]">
                 <span className="min-w-0 flex-1 truncate text-muted">{cleanField(e.label) ?? e.phase ?? '—'}</span>
-                <span className="shrink-0 font-bold tabular-nums text-text">{fmtMoney(e.montant)}</span>
+                <span className="shrink-0 font-semibold tabular-nums text-text">{fmtMoney(e.montant)}</span>
               </li>
             ))}
           </ul>
@@ -266,7 +266,7 @@ export function AttachmentRow({
         className="min-w-0 flex-1 text-left"
         title={attachment.label || attachment.filename}
       >
-        <div className="truncate text-[13px] font-bold text-text">{attachment.label || attachment.filename}</div>
+        <div className="truncate text-[13px] font-medium text-text">{attachment.label || attachment.filename}</div>
         <div className="text-[10px] text-muted">
           {Math.max(1, Math.round(attachment.sizeBytes / 1024))} Ko · {formatDate(attachment.createdAt)}
         </div>
@@ -310,10 +310,10 @@ export function DebriefCard({ debrief, onClick }: { debrief: DebriefResponse; on
       {...(onClick ? { role: 'button', tabIndex: 0, onClick, onKeyDown: (e: ReactKeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } } } : {})}
     >
       <div className="mb-1 flex items-baseline justify-between gap-2">
-        <span className="text-[13px] font-black text-text">
+        <span className="text-[13px] font-semibold text-text">
           Débrief · {DEBRIEF_OUTCOME_LABEL[debrief.outcome] ?? debrief.outcome}
         </span>
-        <span className="shrink-0 text-[10px] font-bold text-faint">{formatDate(debrief.createdAt)}</span>
+        <span className="shrink-0 text-[10px] font-medium text-faint">{formatDate(debrief.createdAt)}</span>
       </div>
       {debrief.notes && <p className="line-clamp-2 whitespace-pre-wrap text-xs leading-relaxed text-muted">{debrief.notes}</p>}
       {debrief.objection && <p className="mt-1 line-clamp-1 text-[11px] font-semibold text-faint">Objection : {debrief.objection}</p>}

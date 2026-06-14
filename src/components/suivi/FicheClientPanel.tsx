@@ -23,14 +23,14 @@ export function FicheClientPanel({ dossier, debriefs }: Props) {
   return (
     <aside className="space-y-7 rounded-2xl border border-line bg-white p-5 lg:sticky lg:top-4">
       <header className="flex items-center gap-3">
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-or-tint text-base font-black text-or-dark">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-or-tint text-base font-semibold text-or-dark">
           {initials(lead)}
         </span>
         <div className="min-w-0">
           <div className="eyebrow text-or-dark">Fiche client</div>
-          <h2 className="truncate text-lg font-black text-text">{fullName(lead) || 'Client sans nom'}</h2>
+          <h2 className="truncate text-lg font-semibold text-text">{fullName(lead) || 'Client sans nom'}</h2>
           <div className="mt-0.5 flex items-center gap-2 text-xs text-muted">
-            <span className="rounded-full bg-cream px-2 py-0.5 font-bold text-or-dark">{STATUS_LABEL[lead.status]}</span>
+            <span className="rounded-full bg-cream px-2 py-0.5 font-medium text-or-dark">{STATUS_LABEL[lead.status]}</span>
             {lead.city && <span>· {lead.city}</span>}
           </div>
         </div>
@@ -69,10 +69,10 @@ export function FicheClientPanel({ dossier, debriefs }: Props) {
             {setterNote && (
               <article className="rounded-xl border border-line bg-white p-3.5 [border-left:3px_solid_var(--color-cuivre)]">
                 <div className="mb-1 flex items-baseline justify-between gap-2">
-                  <span className="text-[13px] font-black text-text">
+                  <span className="text-[13px] font-semibold text-text">
                     Note setter{dossier.setter?.name ? ` · ${dossier.setter.name}` : ''}
                   </span>
-                  {lead.latestCallAt && <span className="shrink-0 text-[10px] font-bold text-faint">{formatDate(lead.latestCallAt)}</span>}
+                  {lead.latestCallAt && <span className="shrink-0 text-[10px] font-medium text-faint">{formatDate(lead.latestCallAt)}</span>}
                 </div>
                 <p className="whitespace-pre-wrap text-xs leading-relaxed text-muted">{setterNote}</p>
               </article>

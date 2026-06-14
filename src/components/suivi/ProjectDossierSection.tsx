@@ -156,9 +156,9 @@ export function ProjectDossierSection({ project, commercialName, onChanged }: Pr
   return (
     <article className="space-y-6 rounded-2xl border border-line bg-cream p-5">
       <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-3">
-        <h2 className="text-base font-black text-text">{project.name || 'Projet'}</h2>
+        <h2 className="text-base font-semibold text-text">{project.name || 'Projet'}</h2>
         <div className="flex items-center gap-2 text-xs text-muted">
-          <span className="rounded-full bg-or-tint px-2 py-0.5 font-bold text-or-dark">
+          <span className="rounded-full bg-or-tint px-2 py-0.5 font-medium text-or-dark">
             {PROJECT_STATUS_LABEL[project.status] ?? project.status}
           </span>
           <span>· créé le {formatDate(project.createdAt)}</span>
