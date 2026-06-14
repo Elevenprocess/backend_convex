@@ -245,7 +245,15 @@ export function NoteEntryRow({ header, body, onClick }: { header: string | null;
   )
 }
 
-export function AttachmentRow({ attachment }: { attachment: ProjectAttachmentResponse }) {
+export function AttachmentRow({
+  attachment,
+  onDelete,
+  deleting = false,
+}: {
+  attachment: ProjectAttachmentResponse
+  onDelete?: () => void
+  deleting?: boolean
+}) {
   const [open, setOpen] = useState(false)
   return (
     <li className="flex items-center gap-3 rounded-xl border border-line bg-white px-3 py-2.5">
@@ -263,6 +271,18 @@ export function AttachmentRow({ attachment }: { attachment: ProjectAttachmentRes
           {Math.max(1, Math.round(attachment.sizeBytes / 1024))} Ko · {formatDate(attachment.createdAt)}
         </div>
       </button>
+      {onDelete && (
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={deleting}
+          className="shrink-0 rounded-lg p-1.5 text-faint transition-colors hover:bg-rouille-tint hover:text-rouille disabled:opacity-60"
+          title="Supprimer le document"
+          aria-label="Supprimer le document"
+        >
+          {deleting ? '…' : <Icon name="trash" size={14} />}
+        </button>
+      )}
       {open && (
         <DocumentPreviewModal
           doc={{ url: attachmentRawUrl(attachment.id), filename: attachment.filename, mimeType: attachment.contentType, label: attachment.label }}

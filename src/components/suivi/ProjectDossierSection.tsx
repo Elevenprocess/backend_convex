@@ -2,12 +2,13 @@ import { useRef, useState } from 'react'
 import { formatDate } from '../../lib/suivi'
 import { PROJECT_STATUS_LABEL, type DebriefResponse, type Devis, type ProjectDetailResponse } from '../../lib/types'
 import { Section, Empty, DevisRow, AttachmentRow, DebriefCard, SectionAddButton, NoteEntryRow } from './fiche-parts'
+import { Icon } from '../Icon'
 import { AuthImage } from './AuthImage'
 import { PhotoLightbox } from './PhotoLightbox'
 import { DebriefDetailModal } from './DebriefDetailModal'
 import { DevisPreviewModal } from './DevisPreviewModal'
 import { AddNoteModal } from './AddNoteModal'
-import { uploadDevis, uploadProjectAttachment, updateProject, pollDevisOcr, deleteDevis } from '../../lib/api'
+import { uploadDevis, uploadProjectAttachment, updateProject, pollDevisOcr, deleteDevis, deleteProjectAttachment } from '../../lib/api'
 import { parseNotesJournal, prependNote, type NoteEntry } from '../../lib/notesJournal'
 import { useAuth } from '../../lib/auth'
 
@@ -60,6 +61,7 @@ export function ProjectDossierSection({ project, commercialName, onChanged }: Pr
 
   const [busy, setBusy] = useState<null | 'devis' | 'photo' | 'document'>(null)
   const [deletingDevisId, setDeletingDevisId] = useState<string | null>(null)
+  const [deletingAttachmentId, setDeletingAttachmentId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const devisInput = useRef<HTMLInputElement | null>(null)
   const photoInput = useRef<HTMLInputElement | null>(null)
@@ -119,6 +121,21 @@ export function ProjectDossierSection({ project, commercialName, onChanged }: Pr
       setError(e instanceof Error ? e.message : `Échec de l'ajout du ${kind === 'photo' ? 'photo' : 'document'}.`)
     } finally {
       setBusy(null)
+    }
+  }
+
+  async function handleDeleteAttachment(id: string, kind: 'photo' | 'document', name: string) {
+    const noun = kind === 'photo' ? 'la photo' : 'le document'
+    if (!window.confirm(`Supprimer ${noun} « ${name} » ?`)) return
+    setDeletingAttachmentId(id)
+    setError(null)
+    try {
+      await deleteProjectAttachment(id)
+      onChanged?.()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : `Échec de la suppression de ${noun}.`)
+    } finally {
+      setDeletingAttachmentId(null)
     }
   }
 
@@ -186,15 +203,26 @@ export function ProjectDossierSection({ project, commercialName, onChanged }: Pr
           <>
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
               {visiblePhotos.map((p, i) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setLightboxIndex(i)}
-                  className="fiche-photo-tile"
-                  title={p.label || p.filename}
-                >
-                  <AuthImage attachmentId={p.id} alt={p.label || p.filename} className="fiche-photo-img" />
-                </button>
+                <div key={p.id} className="group relative">
+                  <button
+                    type="button"
+                    onClick={() => setLightboxIndex(i)}
+                    className="fiche-photo-tile"
+                    title={p.label || p.filename}
+                  >
+                    <AuthImage attachmentId={p.id} alt={p.label || p.filename} className="fiche-photo-img" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteAttachment(p.id, 'photo', p.label || p.filename)}
+                    disabled={deletingAttachmentId === p.id}
+                    className="absolute right-1 top-1 grid size-6 place-items-center rounded-full bg-black/55 text-white opacity-0 transition-opacity hover:bg-rouille focus:opacity-100 group-hover:opacity-100 disabled:opacity-60"
+                    title="Supprimer la photo"
+                    aria-label="Supprimer la photo"
+                  >
+                    {deletingAttachmentId === p.id ? '…' : <Icon name="trash" size={12} />}
+                  </button>
+                </div>
               ))}
             </div>
             <ShowMore total={photos.length} expanded={photosOpen} onToggle={() => setPhotosOpen((v) => !v)} noun="photos" />
@@ -209,7 +237,12 @@ export function ProjectDossierSection({ project, commercialName, onChanged }: Pr
           <>
             <ul className="space-y-2">
               {visibleDocs.map((doc) => (
-                <AttachmentRow key={doc.id} attachment={doc} />
+                <AttachmentRow
+                  key={doc.id}
+                  attachment={doc}
+                  onDelete={() => void handleDeleteAttachment(doc.id, 'document', doc.label || doc.filename)}
+                  deleting={deletingAttachmentId === doc.id}
+                />
               ))}
             </ul>
             <ShowMore total={documents.length} expanded={docsOpen} onToggle={() => setDocsOpen((v) => !v)} noun="documents" />
