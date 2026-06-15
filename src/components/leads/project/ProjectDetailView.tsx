@@ -46,7 +46,7 @@ type Props = {
   onRdvDebrief?: () => void
 }
 
-export function ProjectDetailView({ project, onChanged, onRdvDebrief }: Props) {
+export function ProjectDetailView({ project, lead, onChanged, onRdvDebrief }: Props) {
   const role = useAuth((s) => s.user?.role)
   const hideDevis = !!role && DEVIS_HIDDEN_ROLES.includes(role)
   const visibleTabs = hideDevis ? TABS.filter((t) => t.id !== 'devis') : TABS
@@ -202,6 +202,7 @@ export function ProjectDetailView({ project, onChanged, onRdvDebrief }: Props) {
             {tab === 'debriefs' && (
               <ProjectDebriefsTab
                 project={project}
+                lead={lead}
                 debriefs={detail.debriefs}
                 onChanged={refresh}
                 onRdvDebrief={onRdvDebrief}

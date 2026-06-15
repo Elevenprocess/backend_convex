@@ -44,6 +44,10 @@ type Props = {
   // RDV à pré-sélectionner à l'ouverture (ex. débrief lancé depuis la page d'un
   // RDV précis). Si absent / introuvable, on retombe sur le RDV le plus pertinent.
   initialRdvId?: string | null
+  // Force un débrief « libre » (sans RDV) : ignore les RDV du lead et soumet
+  // systématiquement via onSubmitFromFiche. Utilisé depuis la page projet où le
+  // débrief doit être rattaché au projet courant, pas à un RDV.
+  forceFreeDebrief?: boolean
   className?: string
 }
 
@@ -264,9 +268,11 @@ function clearDebriefDraft(leadId: string, rdvId: string | null): void {
   }
 }
 
-export function CommercialDebriefSidebar({ lead, onClose, onSaved, onValidated, onResolveVenteProject, onSubmitFromFiche, onBack, initialRdvId, className = '' }: Props) {
+export function CommercialDebriefSidebar({ lead, onClose, onSaved, onValidated, onResolveVenteProject, onSubmitFromFiche, onBack, initialRdvId, forceFreeDebrief = false, className = '' }: Props) {
   const { data: rdvs, loading: rdvsLoading, refetch: refetchRdvs } = useRdvList({ leadId: lead.id })
-  const sortedRdvs = useMemo(() => sortRdvsForDebrief(rdvs ?? []), [rdvs])
+  // En mode « débrief libre » (page projet), on neutralise complètement les RDV :
+  // pas de sélecteur, pas de pré-remplissage, soumission via onSubmitFromFiche.
+  const sortedRdvs = useMemo(() => (forceFreeDebrief ? [] : sortRdvsForDebrief(rdvs ?? [])), [rdvs, forceFreeDebrief])
   const hasReporteHistory = useMemo(() => sortedRdvs.some((r) => r.status === 'reporte' || r.result === 'reporte'), [sortedRdvs])
   const [selectedRdvId, setSelectedRdvId] = useState<string | null>(initialRdvId ?? sortedRdvs[0]?.id ?? null)
   const selectedRdv = useMemo(() => sortedRdvs.find((r) => r.id === selectedRdvId) ?? sortedRdvs[0] ?? null, [sortedRdvs, selectedRdvId])
@@ -547,7 +553,7 @@ export function CommercialDebriefSidebar({ lead, onClose, onSaved, onValidated, 
               <RdvSelector rdvs={sortedRdvs} selectedId={selectedRdv?.id ?? null} onSelect={setSelectedRdvId} />
             )}
 
-            {sortedRdvs.length === 0 && (
+            {sortedRdvs.length === 0 && !forceFreeDebrief && (
               <div className="rounded-2xl border border-dashed border-line bg-white/40 px-4 py-3 text-center text-xs text-muted">
                 Aucun RDV — débrief libre (rappel téléphonique, vente directe…).
               </div>

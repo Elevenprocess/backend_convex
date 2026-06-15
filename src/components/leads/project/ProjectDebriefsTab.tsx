@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Icon } from '../../Icon'
 import { Spinner } from '../../Spinner'
-import { ApiError, createDebrief, deleteDebrief } from '../../../lib/api'
+import { ApiError, createDebrief, createLeadDebrief, deleteDebrief } from '../../../lib/api'
 import {
   DEBRIEF_ACCEPTANCE_FACTOR_LABEL,
   DEBRIEF_NON_SALE_REASON_LABEL,
@@ -11,6 +11,7 @@ import {
   type DebriefAcceptanceFactor,
   type DebriefOutcome,
   type DebriefResponse,
+  type LeadResponse,
   type ProjectResponse,
 } from '../../../lib/types'
 import {
@@ -19,9 +20,17 @@ import {
   isDebriefFormValid,
   type DebriefFormValue,
 } from './DebriefFormFields'
+import { CommercialDebriefSidebar } from '../CommercialDebriefSidebar'
+import { useAuth } from '../../../lib/auth'
+
+// Côté commercial, le débrief projet réutilise le wizard multi-étapes commun
+// (même expérience que depuis la fiche / la navigation) plutôt que le formulaire
+// inline simplifié réservé à l'admin.
+const WIZARD_DEBRIEF_ROLES = ['commercial', 'commercial_lead']
 
 type Props = {
   project: ProjectResponse
+  lead: LeadResponse
   debriefs: DebriefResponse[]
   onChanged: () => void
   // Optionnel : remonté par ProjectDetailView pour ouvrir le débrief RDV.
@@ -36,8 +45,11 @@ const OUTCOME_TONE: Record<DebriefOutcome, { bg: string; text: string; icon: 'tr
   non_vente: { bg: 'bg-rouille-tint', text: 'text-rouille', icon: 'x' },
 }
 
-export function ProjectDebriefsTab({ project, debriefs, onChanged }: Props) {
+export function ProjectDebriefsTab({ project, lead, debriefs, onChanged }: Props) {
+  const role = useAuth((s) => s.user?.role)
+  const useWizard = !!role && WIZARD_DEBRIEF_ROLES.includes(role)
   const [adding, setAdding] = useState(false)
+  const [wizardOpen, setWizardOpen] = useState(false)
   const [form, setForm] = useState<DebriefFormValue>(EMPTY_DEBRIEF_FORM)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -93,8 +105,8 @@ export function ProjectDebriefsTab({ project, debriefs, onChanged }: Props) {
       <div className="flex flex-col gap-2">
         <button
           type="button"
-          onClick={() => setAdding(true)}
-          disabled={adding}
+          onClick={() => (useWizard ? setWizardOpen(true) : setAdding(true))}
+          disabled={adding || wizardOpen}
           className="btn-primary w-full px-4 py-2.5 rounded-2xl text-sm font-bold inline-flex items-center justify-center gap-2 disabled:opacity-60"
         >
           <Icon name="plus" size={14} />
@@ -102,7 +114,30 @@ export function ProjectDebriefsTab({ project, debriefs, onChanged }: Props) {
         </button>
       </div>
 
-      {adding && (
+      {useWizard && wizardOpen && (
+        <>
+          <button
+            type="button"
+            aria-label="Fermer le débriefing"
+            onClick={() => setWizardOpen(false)}
+            className="fixed inset-0 z-[135] bg-text/40 backdrop-blur-sm md:hidden"
+          />
+          <CommercialDebriefSidebar
+            lead={lead}
+            forceFreeDebrief
+            onClose={() => setWizardOpen(false)}
+            onSubmitFromFiche={(payload) => {
+              // Débrief rattaché directement à CE projet (pas de résolution lead-level).
+              void createLeadDebrief(lead.id, { ...payload, projectId: project.id })
+                .then(() => onChanged())
+                .catch(() => onChanged())
+            }}
+            className="fixed top-0 right-0 bottom-0 z-[140]"
+          />
+        </>
+      )}
+
+      {!useWizard && adding && (
         <div className="rounded-2xl border-2 border-or bg-white p-4 space-y-4 text-sm">
           <div className="flex items-center justify-between gap-2">
             <div className="eyebrow text-or-dark text-[10px]">Nouveau débrief</div>
