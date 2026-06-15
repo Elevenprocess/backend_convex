@@ -20,7 +20,7 @@ type TopbarProps = {
   onTabChange?: (id: string) => void
 }
 
-export function Topbar({ eyebrow, title }: TopbarProps) {
+export function Topbar(_props: TopbarProps) {
   const user = useDisplayUser()
   const authUser = useAuth((s) => s.user)
   const isAdmin = user.role === 'admin' || user.role === 'commercial_lead'
@@ -103,12 +103,6 @@ export function Topbar({ eyebrow, title }: TopbarProps) {
             <line x1="3" y1="18" x2="21" y2="18" />
           </svg>
         </button>
-        {(eyebrow || title) && (
-          <div className="min-w-0">
-            {eyebrow && <span className="eyebrow block">{eyebrow}</span>}
-            {title && <h2 className="text-base font-bold truncate">{title}</h2>}
-          </div>
-        )}
       </div>
 
       <div className="main-nav-center flex items-center justify-center" aria-live="polite" aria-label={isLoading ? 'Chargement en cours' : 'Aucun chargement'}>

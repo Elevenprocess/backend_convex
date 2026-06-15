@@ -3852,6 +3852,16 @@ body {
   .app-topbar { padding-left: 12px; padding-right: 12px; gap: 8px; }
   /* Sur mobile, on masque le loader central du navbar. */
   .main-nav-center { display: none; }
+
+  /* Leads — lisibilité du tableau sur mobile.
+     La colonne NOM ne reste plus collée : en sticky elle recouvrait les autres
+     colonnes au scroll horizontal et cachait les infos des leads. */
+  .lead-table .lead-sticky-head,
+  .lead-table .lead-sticky-cell { position: static; box-shadow: none; }
+  .lead-table thead tr th { padding: 10px 10px; }
+  .lead-table tbody tr td { padding: 10px 10px; }
+  /* Rail de filtres plus compact pour laisser de la largeur au tableau. */
+  .leads-rail { width: 168px; padding: 12px 8px 14px 8px; }
 }
 
 @keyframes sb-fadein {

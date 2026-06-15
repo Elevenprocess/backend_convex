@@ -241,7 +241,7 @@ export function Sidebar() {
         title="VELORA"
       >
         <span className="sb-workspace-logo">
-          <VeloraMark key={location.pathname} />
+          <VeloraMark />
         </span>
         <span className="sb-workspace-meta">
           <span className="sb-workspace-name">VELORA</span>
