@@ -686,9 +686,19 @@ function OverviewCommercialLead() {
     return { ca, ventes, rdv, closing: closingCount ? Math.round(closingSum / closingCount) : 0 }
   }, [objectives])
 
+  // Photo de profil par commercial : l'annuaire (useUsers) porte l'image, pas le
+  // classement (AnalyticsCommercialPerf). On la rattache par id pour afficher la
+  // vraie photo plutôt que les initiales dans le board.
+  const avatarByCommercial = useMemo(() => {
+    const m = new Map<string, string | null>()
+    for (const u of users ?? []) m.set(u.id, u.image)
+    return m
+  }, [users])
+
   const leaderboardRows: LeaderboardRow[] = commercials.map((perf) => ({
     perf,
     objective: objByCommercial.get(perf.id) ?? null,
+    avatarUrl: avatarByCommercial.get(perf.id) ?? null,
   }))
 
   const { upcoming, debriefs } = useMemo(() => {

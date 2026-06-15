@@ -5720,7 +5720,8 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 .lead-board-rank.is-gold { background: #F3E2B0; color: #8A6B1E; }
 .lead-board-rank.is-silver { background: #E4E8EC; color: #5C6670; }
 .lead-board-rank.is-bronze { background: #EAD7C4; color: #8A5A33; }
-.lead-board-avatar { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 999px; background: var(--color-or-tint); color: var(--color-or-dark); font-size: 12px; font-weight: 900; }
+.lead-board-avatar { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 999px; background: var(--color-or-tint); color: var(--color-or-dark); font-size: 12px; font-weight: 900; overflow: hidden; flex-shrink: 0; }
+.lead-board-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 999px; }
 .lead-board-id { min-width: 0; }
 .lead-board-id strong { display: block; font-size: 14px; font-weight: 900; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lead-board-id small { font-size: 11px; color: var(--color-faint); font-weight: 600; }
@@ -5742,6 +5743,36 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
   .lead-board-ca { grid-column: 1 / -1; }
   .lead-board-metric { display: none; }
 }
+
+/* Classement de l'équipe — mode sombre */
+[data-theme="dark"] .lead-board { background: #08110C; border-color: rgba(255, 255, 255, 0.08); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
+[data-theme="dark"] .lead-board-head h3,
+[data-theme="dark"] .lead-board-id strong,
+[data-theme="dark"] .lead-board-ca-val,
+[data-theme="dark"] .lead-board-metric-val { color: rgba(255, 255, 255, 0.95); }
+[data-theme="dark"] .lead-board-id small,
+[data-theme="dark"] .lead-board-metric small { color: rgba(255, 255, 255, 0.45); }
+[data-theme="dark"] .lead-board-empty { color: rgba(255, 255, 255, 0.55); }
+[data-theme="dark"] .lead-board-row:hover { background: rgba(255, 255, 255, 0.04); border-color: rgba(255, 255, 255, 0.12); }
+[data-theme="dark"] .lead-board-rank { background: rgba(255, 255, 255, 0.06); color: rgba(255, 255, 255, 0.55); }
+[data-theme="dark"] .lead-board-bar { background: rgba(255, 255, 255, 0.1); }
+[data-theme="dark"] .lead-board-bar-target { background: rgba(255, 255, 255, 0.85); }
+
+/* Modal objectifs — mode sombre */
+[data-theme="dark"] .obj-modal { background: #0D1812; border-color: rgba(255, 255, 255, 0.1); }
+[data-theme="dark"] .obj-modal-head,
+[data-theme="dark"] .obj-modal-foot { background: #08110C; border-color: rgba(255, 255, 255, 0.08); }
+[data-theme="dark"] .obj-modal-head h2 { color: rgba(255, 255, 255, 0.95); }
+[data-theme="dark"] .obj-grid-head { background: #0D1812; border-color: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.45); }
+[data-theme="dark"] .obj-row { border-color: rgba(255, 255, 255, 0.06); }
+[data-theme="dark"] .obj-name { color: rgba(255, 255, 255, 0.92); }
+[data-theme="dark"] .obj-row input { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.1); color: rgba(255, 255, 255, 0.92); }
+[data-theme="dark"] .obj-row input:focus { border-color: var(--color-or); }
+[data-theme="dark"] .obj-empty { color: rgba(255, 255, 255, 0.55); }
+[data-theme="dark"] .obj-dirty { color: rgba(255, 255, 255, 0.45); }
+[data-theme="dark"] .obj-modal-close,
+[data-theme="dark"] .obj-btn-ghost { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.1); color: rgba(255, 255, 255, 0.9); }
+[data-theme="dark"] .obj-btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); }
 
 /* Modal objectifs */
 .obj-modal-backdrop { position: fixed; inset: 0; z-index: 120; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(15, 30, 22, .5); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }

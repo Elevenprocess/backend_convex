@@ -3,6 +3,7 @@ import type { AnalyticsCommercialPerf, CommercialObjectiveResponse } from '../..
 export type LeaderboardRow = {
   perf: AnalyticsCommercialPerf
   objective: CommercialObjectiveResponse | null
+  avatarUrl?: string | null
 }
 
 const eur0 = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 })
@@ -46,14 +47,16 @@ export function CommercialLeaderboard({ rows, onEditObjectives }: { rows: Leader
         <ol className="lead-board-list">
           {sorted.map((row, i) => {
             const rank = i + 1
-            const { perf, objective } = row
+            const { perf, objective, avatarUrl } = row
             const caPct = pct(perf.ca, objective?.caTarget)
             const ventesPct = pct(perf.signed, objective?.ventesTarget)
             const barCa = Math.round((perf.ca / maxCa) * 100)
             return (
               <li key={perf.id} className="lead-board-row">
                 <span className={`lead-board-rank ${rankClass(rank)}`}>{rank}</span>
-                <span className="lead-board-avatar">{perf.initials}</span>
+                <span className="lead-board-avatar">
+                  {avatarUrl ? <img src={avatarUrl} alt={perf.name} /> : perf.initials}
+                </span>
 
                 <div className="lead-board-id">
                   <strong>{perf.name}</strong>
