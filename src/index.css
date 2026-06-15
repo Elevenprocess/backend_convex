@@ -5279,6 +5279,38 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 .wf-modal-ro dt { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--color-faint); }
 .wf-modal-ro dd { margin: 0; font-size: 13px; color: var(--color-text); font-weight: 600; }
 .wf-modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--color-line); background: var(--color-card); }
+/* CTA principal du pop-up de module (« Marquer envoyée », « Valider »…). */
+.wf-cta-primary {
+  display: inline-flex; align-items: center; gap: 8px;
+  border: none; border-radius: 10px; padding: 9px 18px;
+  font-family: inherit; font-size: 13px; font-weight: 700; letter-spacing: -.01em;
+  color: #fff; cursor: pointer;
+  background: linear-gradient(180deg, var(--color-or-light), var(--color-or));
+  box-shadow:
+    0 1px 2px rgba(20, 35, 28, .18),
+    0 8px 18px -6px color-mix(in srgb, var(--color-or) 60%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, .2);
+  transition: transform .12s ease, box-shadow .18s ease, filter .15s ease;
+}
+.wf-cta-primary:hover:not(:disabled) {
+  transform: translateY(-1px); filter: saturate(1.06);
+  box-shadow:
+    0 2px 4px rgba(20, 35, 28, .2),
+    0 14px 26px -8px color-mix(in srgb, var(--color-or) 70%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, .24);
+}
+.wf-cta-primary:active:not(:disabled) { transform: translateY(0); box-shadow: 0 1px 2px rgba(20, 35, 28, .2), inset 0 1px 2px rgba(0, 0, 0, .12); }
+.wf-cta-primary:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; filter: grayscale(.25); }
+.wf-cta-primary svg { flex-shrink: 0; }
+/* Ghost assorti (« Fermer », « Rouvrir le module »). */
+.wf-cta-ghost {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--color-line); background: var(--color-card); color: var(--color-muted);
+  border-radius: 10px; padding: 9px 16px; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.wf-cta-ghost:hover:not(:disabled) { background: var(--color-cream); color: var(--color-text); border-color: var(--color-cuivre); }
+.wf-cta-ghost:disabled { opacity: .5; cursor: not-allowed; }
 
 /* === Page Finances — table des acomptes =============================== */
 .fin-table-wrap { padding: 0; }
@@ -5607,7 +5639,7 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 .mass-assign-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 /* --- Bouton secondaire --- */
-.btn-ghost { border: 1px solid var(--color-line); background: #fff; color: var(--color-muted); border-radius: 8px; padding: 7px 16px; font-size: 12.5px; font-weight: 700; cursor: pointer; transition: background .15s, color .15s; }
+.btn-ghost { border: 1px solid var(--color-line); background: var(--color-card); color: var(--color-muted); border-radius: 8px; padding: 7px 16px; font-size: 12.5px; font-weight: 700; cursor: pointer; transition: background .15s, color .15s; }
 .btn-ghost:hover:not(:disabled) { background: var(--color-cream); color: var(--color-text); }
 .btn-ghost:disabled { opacity: .5; cursor: not-allowed; }
 

@@ -213,9 +213,15 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
 
         {!readOnly && (
           <footer className="wf-modal-foot">
-            <button type="button" className="btn-ghost" onClick={onClose}>Fermer</button>
-            <button type="button" className="btn-primary" disabled={(!substep.unlocked && !done) || saving} onClick={onToggleDone}>
-              {done ? 'Rouvrir le module' : substep.actionLabel}
+            <button type="button" className="wf-cta-ghost" onClick={onClose}>Fermer</button>
+            <button
+              type="button"
+              className={done ? 'wf-cta-ghost' : 'wf-cta-primary'}
+              disabled={(!substep.unlocked && !done) || saving}
+              onClick={onToggleDone}
+            >
+              {!done && !saving && <Icon name="check" size={15} strokeWidth={2.6} />}
+              {saving ? 'Enregistrement…' : done ? 'Rouvrir le module' : substep.actionLabel}
             </button>
           </footer>
         )}
