@@ -417,7 +417,10 @@ function StatusPill({ label, tone }: { label: string; tone: 'green' | 'red' | 'n
 }
 
 function needsDebrief(rdv: RdvResponse) {
-  return (rdv.status === 'honore' || rdv.result != null) && !rdv.debriefFilledAt && !rdv.notes?.trim()
+  // Un débrief ne se réclame qu'APRÈS le RDV : on exclut les RDV futurs
+  // (ex. report vers une date à venir reste en attente jusqu'au nouveau créneau).
+  const isPast = !rdv.scheduledAt || new Date(rdv.scheduledAt).getTime() <= Date.now()
+  return (rdv.status === 'honore' || rdv.result != null) && !rdv.debriefFilledAt && !rdv.notes?.trim() && isPast
 }
 
 function leadName(lead?: LeadResponse) {
