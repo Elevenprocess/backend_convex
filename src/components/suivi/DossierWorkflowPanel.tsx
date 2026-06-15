@@ -5,7 +5,6 @@ import { bootstrapClient, updateSubstep } from '../../lib/api'
 import { todayIso } from '../../lib/suivi-board'
 import type { Dossier } from '../../lib/suivi'
 import type { UpdateSubstepPatch, WorkflowPhase } from '../../lib/types'
-import { TechnicienVtPicker } from './TechnicienVtPicker'
 import { WorkflowBoard } from './WorkflowBoard'
 
 type Props = {
@@ -61,7 +60,6 @@ export function DossierWorkflowPanel({ dossier }: Props) {
 
   return (
     <div className="suivi-main-col">
-      <TechnicienVtPicker leadId={dossier.lead.id} />
       <section id="workflow" className="suivi-timeline-wrap">
         {!client ? (
           <div className="wf-init">
