@@ -5331,6 +5331,15 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 .drp-btn--primary { background: var(--color-or); color: #fff; border-color: var(--color-or); }
 .drp-btn--primary:disabled { opacity: 0.45; cursor: default; }
 
+/* Mode sombre : les surfaces blanches codées en dur ne réagissent pas aux variables,
+   on les repasse sur la surface sombre du thème (sinon panneau blanc / texte clair). */
+[data-theme="dark"] .drp-trigger { background: #08110C; border-color: rgba(255, 255, 255, 0.08); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
+[data-theme="dark"] .drp-panel { background: #08110C; border-color: rgba(255, 255, 255, 0.08); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5); }
+[data-theme="dark"] .drp-presets { background: rgba(255, 255, 255, 0.02); }
+[data-theme="dark"] .drp-lastn input[type="number"] { background: rgba(255, 255, 255, 0.04); color: var(--color-text); }
+[data-theme="dark"] .drp-btn { background: rgba(255, 255, 255, 0.04); }
+[data-theme="dark"] .drp-btn--primary { background: var(--color-or); }
+
 /* === Rangée KPI + comparaison ========================================== */
 .kpi-comparison-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 @media (max-width: 900px) { .kpi-comparison-row { grid-template-columns: repeat(2, 1fr); } }
