@@ -597,7 +597,7 @@ function OverviewCommercialSolo() {
     // plus loin (le plus ancien) — c'est la date affichée sur chaque ligne.
     const debriefs = list
       .filter(needsDebrief)
-      .sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt))
+      .sort((a, b) => (b.scheduledAt ?? '').localeCompare(a.scheduledAt ?? ''))
       .map((r) => ({ rdv: r, lead: r.lead ?? leadById.get(r.leadId) }))
 
     return { honored, planifie, debriefs }
@@ -706,13 +706,13 @@ function OverviewCommercialLead() {
     const leadById = new Map((allLeads ?? []).map((l) => [l.id, l]))
     const todayIso = new Date().toISOString().slice(0, 10)
     const upcoming = list
-      .filter((r) => r.status === 'planifie' && r.scheduledAt >= todayIso)
-      .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))
+      .filter((r) => r.status === 'planifie' && (r.scheduledAt ?? '') >= todayIso)
+      .sort((a, b) => (a.scheduledAt ?? '').localeCompare(b.scheduledAt ?? ''))
       .map((r) => ({ rdv: r, lead: r.lead ?? leadById.get(r.leadId) }))
     // Débriefs triés par date de RDV, du plus proche (récent) au plus loin (ancien).
     const debriefs = list
       .filter(needsDebrief)
-      .sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt))
+      .sort((a, b) => (b.scheduledAt ?? '').localeCompare(a.scheduledAt ?? ''))
       .map((r) => ({ rdv: r, lead: r.lead ?? leadById.get(r.leadId) }))
     return { upcoming, debriefs }
   }, [rdvs, allLeads])
@@ -1031,8 +1031,14 @@ function OverviewAdmin() {
           />
           </section>
 
-          <aside className="overview-admin-side-rail" aria-label="Répartition des leads">
-            <LeadPieAnalysis segments={leadSegments} totalFallback={stats.leads} />
+          <aside className="overview-admin-side-rail" aria-label="Répartition des appels">
+            <LeadPieAnalysis
+              segments={leadSegments}
+              totalFallback={0}
+              title="Répartition des appels"
+              unitSingular="appel"
+              unitPlural="appels"
+            />
             <DebriefPieCard
               title="Débrief qualifié"
               subtitle="facteurs d'acceptation des ventes"
@@ -1655,7 +1661,21 @@ function DebriefPieCard({ title, subtitle, segments }: { title: string; subtitle
   )
 }
 
-function LeadPieAnalysis({ segments, totalFallback = 0, leads }: { segments?: LeadSegment[]; totalFallback?: number; leads?: LeadResponse[] }) {
+function LeadPieAnalysis({
+  segments,
+  totalFallback = 0,
+  leads,
+  title = 'Répartition des leads',
+  unitSingular = 'lead',
+  unitPlural = 'leads',
+}: {
+  segments?: LeadSegment[]
+  totalFallback?: number
+  leads?: LeadResponse[]
+  title?: string
+  unitSingular?: string
+  unitPlural?: string
+}) {
   const resolvedSegments = segments ?? leadStatusSegments(leads ?? [])
   const total = resolvedSegments.reduce((sum, segment) => sum + segment.value, 0) || totalFallback
   const visibleSegments: InteractivePieSegment[] = resolvedSegments.length > 0
@@ -1665,18 +1685,18 @@ function LeadPieAnalysis({ segments, totalFallback = 0, leads }: { segments?: Le
 
   return (
     <div className="overview-air-card overview-air-pie">
-      <CardHead title="Répartition des leads" icon="target" />
+      <CardHead title={title} icon="target" />
       <div className="overview-pie-body">
         <InteractivePie
           segments={visibleSegments}
           size={178}
           innerRadius={52}
           centerTop={<strong>{fmtCompact(total)}</strong>}
-          centerBottom={<span>leads</span>}
+          centerBottom={<span>{unitPlural}</span>}
           activeIndex={activeIndex}
           onActiveChange={setActiveIndex}
-          valueLabel="lead"
-          valueLabelPlural="leads"
+          valueLabel={unitSingular}
+          valueLabelPlural={unitPlural}
         />
         <div className="overview-pie-legend">
           {visibleSegments.length === 0 ? (
