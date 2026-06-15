@@ -240,7 +240,7 @@ export function Sidebar() {
         title="VELORA"
       >
         <span className="sb-workspace-logo">
-          <img src="/favicon.png" alt="" />
+          <img src="/velora-logo.svg" alt="" />
         </span>
         <span className="sb-workspace-meta">
           <span className="sb-workspace-name">VELORA</span>
