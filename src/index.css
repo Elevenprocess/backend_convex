@@ -5217,7 +5217,7 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
 .wf-node-btn:hover:not(:disabled) { border-color: var(--color-cuivre); box-shadow: 0 4px 14px rgba(20, 35, 28, .08); }
 .wf-node-btn:active:not(:disabled) { transform: translateY(1px); }
 .wf-node-btn:disabled { cursor: default; background: var(--color-cream); }
-.wf-substep-node.is-active .wf-node-btn { border-color: var(--color-cuivre); box-shadow: 0 0 0 3px var(--color-cuivre-tint); }
+.wf-substep-node.is-active .wf-node-btn { border-color: var(--color-cuivre); box-shadow: 0 0 0 1.5px var(--color-cuivre-tint); }
 .wf-substep-node.is-done .wf-node-btn { border-color: var(--color-line); background: var(--color-cream); }
 .wf-substep-node.is-blocked .wf-node-btn { border-color: var(--color-rouille); box-shadow: 0 0 0 3px var(--color-rouille-tint); }
 .wf-node-summary { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
