@@ -45,11 +45,11 @@ export function AddNoteModal({
             onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); submit() } }}
             placeholder="Note de suivi (visite technique, relance, point de blocage…)"
             rows={6}
-            className="w-full rounded-xl border border-line bg-white px-3 py-2 text-sm text-text focus:border-or focus:outline-none"
+            className="w-full rounded-xl border border-line bg-card px-3 py-2 text-sm text-text focus:border-or focus:outline-none"
             style={{ resize: 'vertical' }}
           />
           <div className="mt-3 flex items-center justify-end gap-2">
-            <button type="button" className="rounded-xl border border-line bg-white px-4 py-2 text-sm font-semibold text-muted" onClick={onClose}>
+            <button type="button" className="rounded-xl border border-line bg-card px-4 py-2 text-sm font-semibold text-muted" onClick={onClose}>
               Annuler
             </button>
             <button

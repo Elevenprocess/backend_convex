@@ -71,6 +71,9 @@
   /* Neutrals (light mode — slight green tint, mostly white) */
   --color-cream: #F4F8F4;
   --color-cream-darker: #F1F6F0;
+  /* Surface des cartes posées sur le fond (blanc en clair, surface surélevée en sombre).
+     Utiliser `bg-card` / var(--color-card) au lieu de #fff pour rester theme-aware. */
+  --color-card: #FFFFFF;
   --color-text: #0F1E16;
   --color-muted: #5E7264;
   --color-faint: #93A89A;
@@ -2871,6 +2874,7 @@ body {
   --color-info: #8A9C92;
   --color-cream: #0E1A14;
   --color-cream-darker: #060F0B;
+  --color-card: rgba(255, 255, 255, 0.05);
   --color-text: #DCE6DE;
   --color-muted: #9BAFA1;
   --color-faint: #6B8074;
@@ -4013,13 +4017,13 @@ body {
 
 /* Édition inline de la fiche (admin / responsable_technique / back_office) */
 .suivi-edit-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.suivi-edit-btn { font-family: inherit; cursor: pointer; font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 9px; border: 1px solid var(--color-line); background: #fff; color: var(--color-text); transition: background .15s ease, opacity .15s ease; }
+.suivi-edit-btn { font-family: inherit; cursor: pointer; font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 9px; border: 1px solid var(--color-line); background: var(--color-card); color: var(--color-text); transition: background .15s ease, opacity .15s ease; }
 .suivi-edit-btn:hover:not(:disabled) { background: var(--color-cream); }
 .suivi-edit-btn.primary { background: var(--color-or); border-color: var(--color-or); color: #fff; }
 .suivi-edit-btn.primary:hover:not(:disabled) { opacity: .9; background: var(--color-or); }
 .suivi-edit-btn:disabled { opacity: .55; cursor: not-allowed; }
 .suivi-edit-error { font-size: 11px; font-weight: 600; color: var(--color-rouille); }
-.suivi-side-list .suivi-edit-input { width: 100%; border: 1px solid var(--color-line-soft); border-radius: 7px; padding: 5px 8px; font-size: 13px; font-weight: 600; color: var(--color-text); background: #fff; }
+.suivi-side-list .suivi-edit-input { width: 100%; border: 1px solid var(--color-line-soft); border-radius: 7px; padding: 5px 8px; font-size: 13px; font-weight: 600; color: var(--color-text); background: var(--color-card); }
 .suivi-side-list .suivi-edit-input:focus { outline: none; border-color: var(--color-cuivre); }
 
 /* Historique fiche : note setter + débriefs (timeline minimaliste) */
@@ -4214,12 +4218,12 @@ button.suivi-side-cta { font-family: inherit; cursor: pointer; width: 100%; }
 .fiche-wf-drawer-head {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
   padding: 18px 22px; border-bottom: 1px solid var(--color-line);
-  background: rgba(255, 255, 255, .7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  background: var(--color-card); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
 }
 .fiche-wf-drawer-head h2 { margin: 2px 0 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; color: var(--color-text); }
 .fiche-wf-drawer-close {
   flex-shrink: 0; width: 36px; height: 36px; border-radius: 999px; border: 1px solid var(--color-line);
-  background: #fff; color: var(--color-muted); font-size: 15px; font-weight: 500; cursor: pointer;
+  background: var(--color-card); color: var(--color-muted); font-size: 15px; font-weight: 500; cursor: pointer;
   display: flex; align-items: center; justify-content: center; transition: background .15s ease, color .15s ease;
 }
 .fiche-wf-drawer-close:hover { background: var(--color-rouille-tint); color: var(--color-rouille); }
@@ -4236,11 +4240,11 @@ button.suivi-side-cta { font-family: inherit; cursor: pointer; width: 100%; }
 .tech-picker-edit { border: none; background: transparent; color: var(--color-or-dark); font-family: inherit; font-size: 12px; font-weight: 800; cursor: pointer; padding: 2px 4px; border-radius: 6px; transition: background .15s ease; }
 .tech-picker-edit:hover { background: var(--color-or-tint); }
 .tech-picker-edit:disabled { opacity: .5; cursor: default; }
-.tech-picker-card { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--color-line); background: #fff; font-family: inherit; }
+.tech-picker-card { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--color-line); background: var(--color-card); font-family: inherit; }
 button.tech-picker-card { cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
 button.tech-picker-card:hover { border-color: var(--color-or-light); box-shadow: 0 8px 22px rgba(20, 35, 28, .08); transform: translateY(-1px); }
 button.tech-picker-card:disabled { opacity: .6; cursor: default; transform: none; box-shadow: none; }
-.tech-picker-card.is-assigned { border-color: var(--color-or-light); background: linear-gradient(180deg, var(--color-or-tint), #fff); }
+.tech-picker-card.is-assigned { border-color: var(--color-or-light); background: linear-gradient(180deg, var(--color-or-tint), var(--color-card)); }
 .tech-picker-card.is-empty { border-style: dashed; }
 .tech-picker-avatar { flex-shrink: 0; width: 42px; height: 42px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 900; background: var(--color-or); color: #fff; letter-spacing: .02em; }
 .tech-picker-avatar.is-empty { background: var(--color-cream); color: var(--color-faint); }
@@ -4249,7 +4253,7 @@ button.tech-picker-card:disabled { opacity: .6; cursor: default; transform: none
 .tech-picker-role { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: var(--color-or-dark); }
 .tech-picker-card.is-empty .tech-picker-role { color: var(--color-muted); }
 .tech-picker-editor { display: flex; flex-direction: column; gap: 8px; }
-.tech-picker-select { width: 100%; border-radius: 10px; border: 1px solid var(--color-line-soft); padding: 10px 12px; font-size: 13px; font-weight: 700; font-family: inherit; color: var(--color-text); background: #fff; }
+.tech-picker-select { width: 100%; border-radius: 10px; border: 1px solid var(--color-line-soft); padding: 10px 12px; font-size: 13px; font-weight: 700; font-family: inherit; color: var(--color-text); background: var(--color-card); }
 .tech-picker-select:focus { outline: none; border-color: var(--color-or); box-shadow: 0 0 0 3px var(--color-or-tint); }
 .tech-picker-cancel { align-self: flex-start; border: none; background: transparent; color: var(--color-muted); font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer; padding: 2px 4px; }
 .tech-picker-cancel:hover { color: var(--color-rouille); }
@@ -4258,11 +4262,11 @@ button.tech-picker-card:disabled { opacity: .6; cursor: default; transform: none
 /* Aperçu document / mandat en pop-up */
 .doc-preview-backdrop { position: fixed; inset: 0; z-index: 210; display: flex; align-items: center; justify-content: center; padding: 28px; background: rgba(15, 30, 22, .58); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); animation: fiche-wf-fade .16s ease; }
 .doc-preview { width: min(1000px, 94vw); height: min(88vh, 900px); display: flex; flex-direction: column; background: var(--color-cream-darker); border: 1px solid var(--color-line); border-radius: 18px; box-shadow: 0 40px 90px rgba(20, 35, 28, .34); overflow: hidden; }
-.doc-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--color-line); background: #fff; }
+.doc-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--color-line); background: var(--color-card); }
 .doc-preview-title { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 14px; font-weight: 900; color: var(--color-text); }
 .doc-preview-icon { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 9px; background: var(--color-or-tint); color: var(--color-or-dark); }
 .doc-preview-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-.doc-preview-open, .doc-preview-close { width: 34px; height: 34px; border-radius: 999px; border: 1px solid var(--color-line); background: #fff; color: var(--color-muted); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .15s ease, color .15s ease, border-color .15s ease; }
+.doc-preview-open, .doc-preview-close { width: 34px; height: 34px; border-radius: 999px; border: 1px solid var(--color-line); background: var(--color-card); color: var(--color-muted); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .15s ease, color .15s ease, border-color .15s ease; }
 .doc-preview-open:hover { background: var(--color-or-tint); color: var(--color-or-dark); border-color: var(--color-or-light); }
 .doc-preview-close:hover { background: var(--color-rouille-tint); color: var(--color-rouille); }
 .doc-preview-body { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; background: #1c2620; }
@@ -4281,7 +4285,7 @@ button.tech-picker-card:disabled { opacity: .6; cursor: default; transform: none
 .fiche-show-more:hover { background: var(--color-or-tint); border-color: var(--color-or-light); }
 
 /* Carte devis */
-.fiche-devis-card { display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--color-line); background: #fff; border-radius: 14px; padding: 12px 14px; transition: border-color .15s ease, box-shadow .15s ease; }
+.fiche-devis-card { display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--color-line); background: var(--color-card); border-radius: 14px; padding: 12px 14px; transition: border-color .15s ease, box-shadow .15s ease; }
 .fiche-devis-card:hover { border-color: var(--color-or-light); box-shadow: 0 10px 26px rgba(20, 35, 28, .08); }
 .fiche-devis-main { display: flex; align-items: flex-start; gap: 11px; }
 .fiche-devis-icon { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 10px; background: var(--color-or-tint); color: var(--color-or-dark); }
@@ -4291,12 +4295,12 @@ button.tech-picker-card:disabled { opacity: .6; cursor: default; transform: none
 .fiche-devis-status { flex-shrink: 0; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; padding: 3px 8px; border-radius: 999px; }
 .fiche-devis-status.is-ok { background: var(--color-or-tint); color: var(--color-or-dark); }
 .fiche-devis-status.is-warn { background: var(--color-cuivre-tint); color: var(--color-cuivre); }
-.fiche-devis-status.is-info { background: #dceaf2; color: var(--color-info); }
+.fiche-devis-status.is-info { background: var(--color-info-tint); color: var(--color-info); }
 .fiche-devis-status.is-lost { background: var(--color-rouille-tint); color: var(--color-rouille); }
 .fiche-devis-status.is-neutral { background: var(--color-cream); color: var(--color-muted); }
 .fiche-devis-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid var(--color-line); padding-top: 10px; }
 .fiche-devis-amount { font-size: 16px; font-weight: 650; letter-spacing: -0.01em; color: var(--color-text); }
-.fiche-devis-dl { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 9px; border: 1px solid var(--color-line); background: #fff; color: var(--color-muted); font-family: inherit; font-size: 11px; font-weight: 600; cursor: pointer; transition: background .15s ease, color .15s ease; }
+.fiche-devis-dl { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 9px; border: 1px solid var(--color-line); background: var(--color-card); color: var(--color-muted); font-family: inherit; font-size: 11px; font-weight: 600; cursor: pointer; transition: background .15s ease, color .15s ease; }
 .fiche-devis-dl:hover { background: var(--color-or); border-color: var(--color-or); color: #fff; }
 
 /* Devis : corps de ligne cliquable → aperçu PDF en pop-up */
@@ -4305,14 +4309,14 @@ button.fiche-devis-main.is-clickable { cursor: pointer; }
 button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color-or-dark); }
 
 /* Bouton « + » des en-têtes de section (ajout devis/photo/document/note) */
-.fiche-section-add { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--color-line); background: #fff; color: var(--color-or-dark); cursor: pointer; transition: background .15s ease, border-color .15s ease, color .15s ease; }
+.fiche-section-add { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--color-line); background: var(--color-card); color: var(--color-or-dark); cursor: pointer; transition: background .15s ease, border-color .15s ease, color .15s ease; }
 .fiche-section-add:hover:not(:disabled) { background: var(--color-or); border-color: var(--color-or); color: #fff; }
 .fiche-section-add:disabled { opacity: .6; cursor: default; }
 .fiche-section-add-spin { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--color-or-light); border-top-color: var(--color-or-dark); animation: fiche-add-spin .7s linear infinite; }
 @keyframes fiche-add-spin { to { transform: rotate(360deg); } }
 
 /* Journal de notes : entrée cliquable → pop-up texte complet */
-.fiche-note-row { display: flex; flex-direction: column; gap: 3px; width: 100%; text-align: left; border: 1px solid var(--color-line); background: #fff; border-radius: 12px; padding: 10px 12px; cursor: pointer; font: inherit; transition: border-color .15s ease, box-shadow .15s ease; }
+.fiche-note-row { display: flex; flex-direction: column; gap: 3px; width: 100%; text-align: left; border: 1px solid var(--color-line); background: var(--color-card); border-radius: 12px; padding: 10px 12px; cursor: pointer; font: inherit; transition: border-color .15s ease, box-shadow .15s ease; }
 .fiche-note-row:hover { border-color: var(--color-cuivre); box-shadow: 0 8px 20px rgba(20, 35, 28, .07); }
 .fiche-note-head { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--color-cuivre); }
 .fiche-note-body { font-size: 12.5px; color: var(--color-muted); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
@@ -4326,7 +4330,7 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
 @keyframes fiche-photo-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 
 /* Carte débrief (cliquable → popup) */
-.fiche-debrief-card { position: relative; border: 1px solid var(--color-line); background: #fff; border-radius: 12px; padding: 14px; }
+.fiche-debrief-card { position: relative; border: 1px solid var(--color-line); background: var(--color-card); border-radius: 12px; padding: 14px; }
 .fiche-debrief-card.is-clickable { cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
 .fiche-debrief-card.is-clickable:hover { border-color: var(--color-cuivre); box-shadow: 0 10px 24px rgba(20, 35, 28, .08); transform: translateY(-1px); }
 .fiche-debrief-card.is-clickable:focus-visible { outline: 2px solid var(--color-cuivre); outline-offset: 2px; }
@@ -4349,10 +4353,10 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
 /* Modal détail (débrief) */
 .fiche-modal-backdrop { position: fixed; inset: 0; z-index: 120; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(15, 30, 22, .5); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); animation: fiche-wf-fade .16s ease; }
 .fiche-modal { width: min(560px, 96vw); max-height: 88vh; display: flex; flex-direction: column; background: var(--color-cream-darker); border: 1px solid var(--color-line); border-radius: 20px; box-shadow: 0 40px 90px rgba(20, 35, 28, .3); overflow: hidden; }
-.fiche-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 18px 20px; border-bottom: 1px solid var(--color-line); background: #fff; }
+.fiche-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 18px 20px; border-bottom: 1px solid var(--color-line); background: var(--color-card); }
 .fiche-modal-head h2 { margin: 2px 0 0; font-size: 18px; font-weight: 900; color: var(--color-text); }
 .fiche-modal-sub { margin: 3px 0 0; font-size: 12px; font-weight: 700; color: var(--color-muted); }
-.fiche-modal-close { flex-shrink: 0; width: 34px; height: 34px; border-radius: 999px; border: 1px solid var(--color-line); background: #fff; color: var(--color-muted); font-size: 14px; cursor: pointer; }
+.fiche-modal-close { flex-shrink: 0; width: 34px; height: 34px; border-radius: 999px; border: 1px solid var(--color-line); background: var(--color-card); color: var(--color-muted); font-size: 14px; cursor: pointer; }
 .fiche-modal-close:hover { background: var(--color-rouille-tint); color: var(--color-rouille); }
 .fiche-modal-body { padding: 18px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
 .fiche-debrief-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; margin: 0; }
@@ -5110,7 +5114,7 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
   border: 1px solid var(--color-line); border-radius: 18px;
   background:
     radial-gradient(130% 130% at 0% 0%, var(--color-or-tint) 0%, transparent 52%),
-    linear-gradient(180deg, #fff, var(--color-cream));
+    linear-gradient(180deg, var(--color-card), var(--color-cream));
   box-shadow: 0 1px 2px rgba(20, 35, 28, .04);
 }
 .wf-overall.is-complete { border-color: color-mix(in srgb, var(--color-or) 35%, var(--color-line)); }
@@ -5118,7 +5122,7 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
   position: relative; flex-shrink: 0; width: 58px; height: 58px; border-radius: 50%;
   display: grid; place-items: center; transition: background .45s ease;
 }
-.wf-overall-ring::after { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: #fff; box-shadow: inset 0 0 0 1px var(--color-line-soft); }
+.wf-overall-ring::after { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: var(--color-cream); box-shadow: inset 0 0 0 1px var(--color-line-soft); }
 .wf-overall-ring-num { position: relative; z-index: 1; font-size: 15px; font-weight: 800; letter-spacing: -.02em; color: var(--color-text); font-variant-numeric: tabular-nums; }
 .wf-overall-ring-num i { font-style: normal; font-size: 9px; font-weight: 700; color: var(--color-muted); margin-left: 1px; }
 .wf-overall.is-complete .wf-overall-ring-num { color: var(--color-or-dark); }
@@ -5153,7 +5157,7 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
 
 .wf-parallel { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 /* Chaque démarche = un rail parallèle clairement délimité. */
-.wf-col { padding: 14px 14px 8px; border: 1px solid var(--color-line-soft); border-radius: 14px; background: linear-gradient(180deg, #fff, var(--color-cream)); }
+.wf-col { padding: 14px 14px 8px; border: 1px solid var(--color-line-soft); border-radius: 14px; background: linear-gradient(180deg, var(--color-card), var(--color-cream)); }
 .wf-col-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .wf-col-title { display: inline-flex; align-items: center; gap: 7px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-muted); }
 .wf-col-title::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--color-cuivre); flex-shrink: 0; }
@@ -5262,7 +5266,7 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
 .wf-modal-input:focus { outline: none; border-color: var(--color-cuivre); box-shadow: 0 0 0 3px var(--color-cuivre-tint); }
 textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 .wf-modal-docs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.wf-modal-doc { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--color-line-soft); border-radius: 9px; background: #fff; }
+.wf-modal-doc { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--color-line-soft); border-radius: 9px; background: var(--color-card); }
 .wf-modal-doc.is-missing { border-style: dashed; background: var(--color-cream); }
 .wf-modal-doc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 600; color: var(--color-text); text-decoration: none; text-align: left; background: none; border: none; padding: 0; font-family: inherit; cursor: pointer; }
 .wf-modal-doc-name:hover { color: var(--color-cuivre); }
@@ -5274,7 +5278,7 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 .wf-modal-ro div { display: grid; grid-template-columns: 90px 1fr; gap: 10px; align-items: baseline; }
 .wf-modal-ro dt { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--color-faint); }
 .wf-modal-ro dd { margin: 0; font-size: 13px; color: var(--color-text); font-weight: 600; }
-.wf-modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--color-line); background: #fff; }
+.wf-modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--color-line); background: var(--color-card); }
 
 /* === Page Finances — table des acomptes =============================== */
 .fin-table-wrap { padding: 0; }
@@ -5300,7 +5304,7 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 .wf-docs-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--color-faint); }
 .wf-docs-missing { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 999px; font-size: 10px; letter-spacing: .02em; background: var(--color-rouille-tint); color: var(--color-rouille); text-transform: none; }
 .wf-docs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.wf-doc { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--color-line-soft); border-radius: 8px; background: #fff; }
+.wf-doc { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--color-line-soft); border-radius: 8px; background: var(--color-card); }
 .wf-doc-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex: 1; color: var(--color-text); text-decoration: none; font-size: 12.5px; font-weight: 600; }
 .wf-doc-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wf-doc-name:hover { color: var(--color-cuivre); }
@@ -5553,7 +5557,7 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 
 /* --- Détail dossier : onglets + en-tête sticky --- */
 .suivi-detail-sticky { position: sticky; top: 0; z-index: 5; background: var(--color-cream-darker); padding-top: 6px; padding-bottom: 10px; }
-.suivi-detail-tabs { display: inline-flex; gap: 3px; padding: 3px; background: #fff; border: 1px solid var(--color-line); border-radius: 12px; }
+.suivi-detail-tabs { display: inline-flex; gap: 3px; padding: 3px; background: var(--color-card); border: 1px solid var(--color-line); border-radius: 12px; }
 .suivi-detail-tabs button { display: inline-flex; align-items: center; gap: 7px; padding: 7px 16px; border: none; background: transparent; border-radius: 9px; font-size: 13px; font-weight: 700; color: var(--color-muted); cursor: pointer; transition: background .15s, color .15s; }
 .suivi-detail-tabs button.is-active { background: var(--color-or); color: #fff; }
 .suivi-tab-count { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: rgba(255,255,255,.25); }

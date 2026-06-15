@@ -37,7 +37,7 @@ export function FicheClientPanel({ dossier, debriefs }: Props) {
   const paymentMethodValue = financingDebrief ? formatDebriefPaymentMethod(financingDebrief) : null
 
   return (
-    <aside className="space-y-7 rounded-2xl border border-line bg-white p-5 lg:sticky lg:top-4">
+    <aside className="space-y-7 rounded-2xl border border-line bg-card p-5 lg:sticky lg:top-4">
       <header className="flex items-center gap-3">
         <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-or-tint text-base font-semibold text-or-dark">
           {initials(lead)}
@@ -83,7 +83,7 @@ export function FicheClientPanel({ dossier, debriefs }: Props) {
               <DebriefCard key={d.id} debrief={d} />
             ))}
             {setterNote && (
-              <article className="rounded-xl border border-line bg-white p-3.5 [border-left:3px_solid_var(--color-cuivre)]">
+              <article className="rounded-xl border border-line bg-card p-3.5 [border-left:3px_solid_var(--color-cuivre)]">
                 <div className="mb-1 flex items-baseline justify-between gap-2">
                   <span className="text-[13px] font-semibold text-text">
                     Note setter{dossier.setter?.name ? ` · ${dossier.setter.name}` : ''}
