@@ -3801,6 +3801,11 @@ body {
 @media (max-width: 767px) {
   .topbar-burger { display: inline-flex; }
 
+  /* Sur mobile, pas d'animation du logo : affichage direct du V et des anneaux. */
+  .velora-mark .velora-v,
+  .velora-mark .velora-ring--sm { stroke-dashoffset: 0; animation: none; }
+  .velora-mark .velora-ring--lg { opacity: 1; transform: none; animation: none; }
+
   /* La sidebar devient un drawer plein-hauteur en overlay */
   .app-sidebar {
     position: fixed;
@@ -3845,7 +3850,8 @@ body {
 
   /* Topbar : compactage des éléments */
   .app-topbar { padding-left: 12px; padding-right: 12px; gap: 8px; }
-  .main-nav-center { min-width: 0; }
+  /* Sur mobile, on masque le loader central du navbar. */
+  .main-nav-center { display: none; }
 }
 
 @keyframes sb-fadein {
