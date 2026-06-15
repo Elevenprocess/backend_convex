@@ -4279,7 +4279,7 @@ button.tech-picker-card:disabled { opacity: .6; cursor: default; transform: none
 /* Bouton « voir plus » des sections de la fiche */
 .fiche-show-more {
   margin-top: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px;
-  border: 1px solid var(--color-line); background: #fff; color: var(--color-or-dark); font-family: inherit;
+  border: 1px solid var(--color-line); background: var(--color-card); color: var(--color-or-dark); font-family: inherit;
   font-size: 12px; font-weight: 800; cursor: pointer; transition: background .15s ease, border-color .15s ease;
 }
 .fiche-show-more:hover { background: var(--color-or-tint); border-color: var(--color-or-light); }
@@ -5211,7 +5211,7 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
 /* === Nœud cliquable du workflow (façon N8N) ============================ */
 .wf-node-btn {
   width: 100%; text-align: left; border: 1px solid var(--color-line); border-radius: 12px;
-  background: #fff; padding: 10px 12px; cursor: pointer;
+  background: var(--color-card); padding: 10px 12px; cursor: pointer;
   transition: border-color .15s ease, box-shadow .15s ease, transform .04s ease;
 }
 .wf-node-btn:hover:not(:disabled) { border-color: var(--color-cuivre); box-shadow: 0 4px 14px rgba(20, 35, 28, .08); }
