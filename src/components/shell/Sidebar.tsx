@@ -4,6 +4,7 @@ import { Icon, type IconName } from '../Icon'
 import { useRole, useDisplayUser, type Role } from '../../lib/role'
 import { useAuth } from '../../lib/auth'
 import { useNavSidebar } from '../../lib/navSidebar'
+import { VeloraMark } from './VeloraMark'
 import { useTheme } from '../../lib/theme'
 import { leadListPath } from '../../lib/leadPaths'
 
@@ -240,7 +241,7 @@ export function Sidebar() {
         title="VELORA"
       >
         <span className="sb-workspace-logo">
-          <img src="/velora-logo.svg" alt="" />
+          <VeloraMark key={location.pathname} />
         </span>
         <span className="sb-workspace-meta">
           <span className="sb-workspace-name">VELORA</span>

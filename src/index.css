@@ -1704,10 +1704,49 @@ body {
   overflow: visible;
   position: relative;
 }
-.sb-workspace-logo img {
+.sb-workspace-logo img,
+.sb-workspace-logo .velora-mark {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  overflow: visible;
+}
+
+/* Logo animé : le V se trace comme un trait (After Effects), les anneaux se
+   dessinent autour. Rejoué à chaque navigation via la `key` côté Sidebar. */
+.velora-mark .velora-v {
+  /* Longueur des deux segments du V (≈ 2 × 78). */
+  stroke-dasharray: 156;
+  stroke-dashoffset: 156;
+  animation: velora-draw-v 0.7s cubic-bezier(0.65, 0, 0.35, 1) 0.28s forwards;
+}
+.velora-mark .velora-ring--sm {
+  /* Circonférence ≈ 2π × 82. */
+  stroke-dasharray: 515;
+  stroke-dashoffset: 515;
+  animation: velora-draw-ring 0.7s ease-out forwards;
+}
+.velora-mark .velora-ring--lg {
+  opacity: 0;
+  transform-origin: 120px 120px;
+  animation: velora-fade-ring 0.6s ease-out 0.45s forwards;
+}
+
+@keyframes velora-draw-v {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes velora-draw-ring {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes velora-fade-ring {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .velora-mark .velora-v,
+  .velora-mark .velora-ring--sm { stroke-dashoffset: 0; animation: none; }
+  .velora-mark .velora-ring--lg { opacity: 1; animation: none; }
 }
 .sb-workspace-meta {
   flex: 1 1 auto;
