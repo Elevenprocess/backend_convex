@@ -16,8 +16,8 @@ const DEFAULT_HOURS = Array.from({ length: 12 }, (_, i) => 8 + i)
 const DAY_LABELS = ['LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM', 'DIM']
 const REUNION_TZ = 'Indian/Reunion'
 const REUNION_OFFSET_MS = 4 * 60 * 60 * 1000
-// Durée par défaut d'un RDV : ~1h. Sert au rendu visuel uniquement (pas en BDD).
-const RDV_DURATION_MIN = 60
+// Durée par défaut d'un RDV : 1h30. Sert au rendu visuel uniquement (pas en BDD).
+const RDV_DURATION_MIN = 90
 // Niveaux de zoom vertical (px par heure). Permet de comprimer/aérer l'agenda
 // pour limiter le scroll. Persistant via localStorage.
 const HOUR_HEIGHT_LEVELS = [24, 32, 48, 64, 96, 128] as const
