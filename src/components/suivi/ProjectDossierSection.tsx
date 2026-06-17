@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { formatDate } from '../../lib/suivi'
 import { PROJECT_STATUS_LABEL, type DebriefResponse, type Devis, type ProjectDetailResponse } from '../../lib/types'
 import { Section, Empty, DevisRow, AttachmentRow, DebriefCard, SectionAddButton, NoteEntryRow } from './fiche-parts'
@@ -45,9 +45,18 @@ function ShowMore({ total, expanded, onToggle, noun }: { total: number; expanded
  */
 export function ProjectDossierSection({ project, commercialName, dossier, onChanged }: Props) {
   const authorName = useAuth((s) => s.user?.name) ?? 'Inconnu'
-  // Chaque projet est replié par défaut : on ne déploie son contenu (pièces +
-  // workflow délivrabilité) qu'à la sélection. État mémorisé par projet.
+  // Chaque projet est replié par défaut : on ne déploie ses pièces qu'à la
+  // sélection. État mémorisé par projet.
   const [collapsed, toggleCollapsed] = useCollapsibleState(`fiche.project.${project.id}`, true)
+  // Le workflow délivrabilité s'ouvre dans un pop-up, via le bouton « Voir workflow ».
+  const [workflowOpen, setWorkflowOpen] = useState(false)
+
+  useEffect(() => {
+    if (!workflowOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setWorkflowOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [workflowOpen])
   const photos = project.attachments.filter((a) => a.kind === 'photo')
   const documents = project.attachments.filter((a) => a.kind !== 'photo')
   const debriefs = [...project.debriefs].sort(
@@ -164,25 +173,33 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
   return (
     <article className="space-y-6 rounded-2xl border border-line bg-cream p-5">
       <header className={collapsed ? '' : 'border-b border-line pb-3'}>
-        <button
-          type="button"
-          className="flex w-full items-center gap-3 text-left"
-          onClick={toggleCollapsed}
-          aria-expanded={!collapsed}
-        >
-          <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={18} className="shrink-0 text-muted" />
-          <div className="flex flex-1 flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-base font-semibold text-text">{project.name || 'Projet'}</h2>
-            <div className="flex items-center gap-2 text-xs text-muted">
-              <span className="rounded-full bg-or-tint px-2 py-0.5 font-medium text-or-dark">
-                {PROJECT_STATUS_LABEL[project.status] ?? project.status}
-              </span>
-              <span>· créé le {formatDate(project.createdAt)}</span>
-              {commercialName && <span>· {commercialName}</span>}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="flex flex-1 items-center gap-3 text-left"
+            onClick={toggleCollapsed}
+            aria-expanded={!collapsed}
+          >
+            <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={18} className="shrink-0 text-muted" />
+            <div className="flex flex-1 flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-base font-semibold text-text">{project.name || 'Projet'}</h2>
+              <div className="flex items-center gap-2 text-xs text-muted">
+                <span className="rounded-full bg-or-tint px-2 py-0.5 font-medium text-or-dark">
+                  {PROJECT_STATUS_LABEL[project.status] ?? project.status}
+                </span>
+                <span>· créé le {formatDate(project.createdAt)}</span>
+                {commercialName && <span>· {commercialName}</span>}
+              </div>
             </div>
-          </div>
-          <span className="shrink-0 text-xs font-medium text-or-dark">{collapsed ? 'Développer' : 'Réduire'}</span>
-        </button>
+            <span className="shrink-0 text-xs font-medium text-or-dark">{collapsed ? 'Développer' : 'Réduire'}</span>
+          </button>
+          <button type="button" className="fiche-wf-open-btn shrink-0" onClick={() => setWorkflowOpen(true)}>
+            <span>Voir workflow</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M5 12h14M13 6l6 6-6 6" />
+            </svg>
+          </button>
+        </div>
         {collapsed && (
           <p className="mt-2 pl-[30px] text-xs text-muted">
             {project.devis.length} devis · {photos.length} photos · {documents.length} documents · {notes.length} notes · {debriefs.length} débriefs
@@ -305,12 +322,24 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
           </>
         )}
       </Section>
-
-      <section className="border-t border-line pt-4">
-        <span className="eyebrow text-or-dark">Workflow délivrabilité</span>
-        <DossierWorkflowPanel dossier={dossier} />
-      </section>
       </>
+      )}
+
+      {workflowOpen && (
+        <div className="fiche-modal-backdrop" role="dialog" aria-modal="true" aria-label="Workflow délivrabilité" onClick={() => setWorkflowOpen(false)}>
+          <div className="fiche-modal" style={{ width: 'min(960px, 96vw)' }} onClick={(e) => e.stopPropagation()}>
+            <header className="fiche-modal-head">
+              <div className="min-w-0">
+                <span className="eyebrow text-or-dark">Workflow délivrabilité</span>
+                <h2 className="truncate">{project.name || 'Projet'}</h2>
+              </div>
+              <button type="button" className="fiche-modal-close" onClick={() => setWorkflowOpen(false)} aria-label="Fermer le workflow">✕</button>
+            </header>
+            <div className="fiche-modal-body">
+              <DossierWorkflowPanel dossier={dossier} />
+            </div>
+          </div>
+        </div>
       )}
 
       {lightboxIndex != null && photos[lightboxIndex] && (

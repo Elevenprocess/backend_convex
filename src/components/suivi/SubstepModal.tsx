@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../Icon'
 import { FileDropzone } from '../FileDropzone'
-import { DocumentPreviewModal, type DocPreview } from './DocumentPreviewModal'
+import { SubstepDocPreviewModal } from './SubstepDocPreviewModal'
 import {
   PHASE_ICON,
   PHASE_LABEL,
@@ -9,8 +9,8 @@ import {
   substepDocStatus,
   fileKind,
 } from '../../lib/suivi-board'
-import { uploadSubstepDocuments, deleteSubstepDocument, substepDocumentRawUrl } from '../../lib/api'
-import type { SubstepResponse, UpdateSubstepPatch, UserResponse } from '../../lib/types'
+import { uploadSubstepDocuments, deleteSubstepDocument } from '../../lib/api'
+import type { SubstepDocument, SubstepResponse, UpdateSubstepPatch, UserResponse } from '../../lib/types'
 
 type Props = {
   substep: SubstepResponse
@@ -37,7 +37,7 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
   const [responsable, setResponsable] = useState(substep.responsableId ?? '')
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
-  const [preview, setPreview] = useState<DocPreview | null>(null)
+  const [preview, setPreview] = useState<SubstepDocument | null>(null)
   const debounceRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -176,7 +176,7 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
                 {docStatus.present.map((d) => (
                   <li key={d.id} className="wf-modal-doc">
                     <span className={`dochub-thumb kind-${fileKind(d.mimeType)}`}>{KIND_LABEL[fileKind(d.mimeType)]}</span>
-                    <button type="button" className="wf-modal-doc-name" onClick={() => setPreview({ url: substepDocumentRawUrl(d.id), filename: d.filename, mimeType: d.mimeType })} title={d.filename}>{d.filename}</button>
+                    <button type="button" className="wf-modal-doc-name" onClick={() => setPreview(d)} title={d.filename}>{d.filename}</button>
                     <span className="wf-modal-doc-meta">{Math.max(1, Math.round(d.sizeBytes / 1024))} Ko</span>
                     {!readOnly && (
                       <button type="button" className="dochub-doc-del" aria-label="Supprimer" onClick={() => void onDeleteDoc(d.id)}>
@@ -226,7 +226,7 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
           </footer>
         )}
 
-        {preview && <DocumentPreviewModal doc={preview} onClose={() => setPreview(null)} />}
+        {preview && <SubstepDocPreviewModal doc={preview} onClose={() => setPreview(null)} />}
       </div>
     </div>
   )

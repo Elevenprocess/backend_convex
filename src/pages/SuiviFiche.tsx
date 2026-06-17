@@ -118,7 +118,7 @@ export function FicheCompletePage() {
                 <div>
                   <span className="eyebrow text-or-dark">Dossiers commerciaux</span>
                   <h2>Projets & pièces du client</h2>
-                  <p className="text-xs text-muted">Déployez un projet pour voir ses pièces et son workflow.</p>
+                  <p className="text-xs text-muted">Déployez un projet pour voir ses pièces, ou « Voir workflow » pour son suivi délivrabilité.</p>
                 </div>
               </header>
 

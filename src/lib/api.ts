@@ -509,6 +509,25 @@ export function substepDocumentRawUrl(documentId: string): string {
   return buildApiUrl(`/documents/${documentId}/raw`)
 }
 
+/**
+ * Récupère le binaire d'un document de sous-étape via fetch authentifié (cookie
+ * de session) et renvoie un object URL. On passe par un blob (et non l'URL brute
+ * en src) car un `blob:` s'affiche toujours inline dans une <img>/<iframe>, quel
+ * que soit l'environnement, ce qui évite les soucis d'aperçu cross-origin.
+ * À révoquer (URL.revokeObjectURL) au démontage.
+ */
+export async function fetchSubstepDocumentObjectUrl(documentId: string): Promise<string> {
+  const res = await fetch(buildApiUrl(`/documents/${documentId}/raw`), {
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, text || `Chargement du document échoué : ${res.status}`)
+  }
+  const blob = await res.blob()
+  return URL.createObjectURL(blob)
+}
+
 // ─── Notifications ─────────────────────────────────────────
 export function markNotificationRead(id: string): Promise<NotificationResponse> {
   return api<NotificationResponse>(`/notifications/${id}/read`, { method: 'PATCH' })

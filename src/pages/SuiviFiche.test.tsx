@@ -119,10 +119,14 @@ describe('FicheCompletePage', () => {
     expect(screen.queryByText('2605-0393')).not.toBeInTheDocument()
     const toggle = await screen.findByText('Développer')
 
-    // Au déploiement, les pièces du projet et son workflow s'affichent.
+    // Au déploiement, les pièces du projet s'affichent (le workflow reste dans son pop-up).
     fireEvent.click(toggle)
     expect(await screen.findByText('2605-0393')).toBeInTheDocument()
     expect(await screen.findByText('Mandat')).toBeInTheDocument()
+    expect(screen.queryByText('Workflow délivrabilité')).not.toBeInTheDocument()
+
+    // Le workflow s'ouvre dans un pop-up via « Voir workflow ».
+    fireEvent.click(screen.getAllByText('Voir workflow')[0])
     expect(await screen.findByText('Workflow délivrabilité')).toBeInTheDocument()
   })
 
