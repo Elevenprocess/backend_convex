@@ -326,19 +326,25 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
       )}
 
       {workflowOpen && (
-        <div className="fiche-modal-backdrop" role="dialog" aria-modal="true" aria-label="Workflow délivrabilité" onClick={() => setWorkflowOpen(false)}>
-          <div className="fiche-modal" style={{ width: 'min(960px, 96vw)' }} onClick={(e) => e.stopPropagation()}>
-            <header className="fiche-modal-head">
+        <div className="fiche-wf-drawer-backdrop" onClick={() => setWorkflowOpen(false)}>
+          <aside
+            className="fiche-wf-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Workflow délivrabilité"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="fiche-wf-drawer-head">
               <div className="min-w-0">
                 <span className="eyebrow text-or-dark">Workflow délivrabilité</span>
                 <h2 className="truncate">{project.name || 'Projet'}</h2>
               </div>
-              <button type="button" className="fiche-modal-close" onClick={() => setWorkflowOpen(false)} aria-label="Fermer le workflow">✕</button>
+              <button type="button" className="fiche-wf-drawer-close" onClick={() => setWorkflowOpen(false)} aria-label="Fermer le workflow">✕</button>
             </header>
-            <div className="fiche-modal-body">
+            <div className="fiche-wf-drawer-body">
               <DossierWorkflowPanel dossier={dossier} />
             </div>
-          </div>
+          </aside>
         </div>
       )}
 

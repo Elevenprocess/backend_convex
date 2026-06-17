@@ -1,5 +1,5 @@
 import type { IconName } from '../components/Icon'
-import type { ClientResponse, SubstepDocument, SubstepResponse, WorkflowPhase } from './types'
+import type { ClientResponse, SubstepDocument, SubstepResponse, WorkflowPhase, WorkflowSubstepKey } from './types'
 
 export type BoardColumn = { key: string; title: string; phases: WorkflowPhase[] }
 export type BoardSection = {
@@ -74,6 +74,31 @@ export function todayIso(): string {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${d.getFullYear()}-${m}-${day}`
+}
+
+/**
+ * Description propre à chaque module du workflow, affichée dans son pop-up.
+ * Permet à l'équipe délivrabilité de savoir précisément ce qu'attend l'étape —
+ * chaque sous-étape (notamment back-office DP / racco / consuel) a la sienne.
+ */
+export const SUBSTEP_DESCRIPTION: Record<WorkflowSubstepKey, string> = {
+  vt_planifie: "Planifier la visite technique (idéalement sous 72h) et prévenir le technicien.",
+  vt_attribuee: "Attribuer la VT à un technicien : il appelle le client avant de se déplacer.",
+  vt_validee: "Le technicien réalise la VT et confirme la faisabilité. Si non validée → devis perdu.",
+  vt_mandat: "Faire signer le mandat de représentation pour les démarches administratives.",
+  dp_a_faire: "Préparer la déclaration préalable de travaux (DP) à déposer en mairie.",
+  dp_envoyee_mairie: "DP déposée/envoyée à la mairie ; déposer ici le récépissé de dépôt.",
+  dp_validee: "Certificat de non-opposition (CNO) reçu de la mairie. Si refus → devis perdu.",
+  dp_prolongation: "Optionnel : prolongation du délai d'instruction de la DP si la mairie le demande.",
+  racco_a_faire: "Constituer la demande de raccordement auprès d'Enedis (EDF).",
+  racco_envoye: "Demande de raccordement envoyée à Enedis ; en attente de la proposition.",
+  racco_validee: "Proposition de raccordement validée / convention de raccordement signée.",
+  racco_completude: "Fournir les pièces de complétude réclamées par Enedis pour le dossier.",
+  consuel_a_faire: "Préparer la demande de Consuel (attestation de conformité de l'installation électrique).",
+  consuel_valide: "Consuel validé : attestation de conformité obtenue.",
+  install_a_faire: "Planifier l'installation avec l'équipe de pose et confirmer la date au client.",
+  install_effectuee: "Installation réalisée (début/fin de pose) ; point client effectué.",
+  enquete_satisfaction: "Enquête de satisfaction après mise en service et clôture qualité du dossier.",
 }
 
 export const PHASE_LABEL: Record<WorkflowPhase, string> = {

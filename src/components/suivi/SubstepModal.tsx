@@ -5,6 +5,7 @@ import { SubstepDocPreviewModal } from './SubstepDocPreviewModal'
 import {
   PHASE_ICON,
   PHASE_LABEL,
+  SUBSTEP_DESCRIPTION,
   slaGaugeInfo,
   substepDocStatus,
   fileKind,
@@ -115,6 +116,10 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
         </header>
 
         <div className="fiche-modal-body">
+          {SUBSTEP_DESCRIPTION[substep.key] && (
+            <p className="fiche-modal-text">{SUBSTEP_DESCRIPTION[substep.key]}</p>
+          )}
+
           {!substep.unlocked && !done && (
             <p className="wf-locked-note"><Icon name="shield" size={13} /> Ce module se débloquera une fois l'étape précédente terminée.</p>
           )}
