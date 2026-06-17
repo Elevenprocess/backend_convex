@@ -12,19 +12,21 @@ import type { SubstepDocument } from '../../lib/types'
  */
 export function SubstepDocPreviewModal({ doc, onClose }: { doc: SubstepDocument; onClose: () => void }) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null)
+  const [detectedMime, setDetectedMime] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let url: string | null = null
     let cancelled = false
     fetchSubstepDocumentObjectUrl(doc.id)
-      .then((u) => {
+      .then((r) => {
         if (cancelled) {
-          URL.revokeObjectURL(u)
+          URL.revokeObjectURL(r.url)
           return
         }
-        url = u
-        setObjectUrl(u)
+        url = r.url
+        setObjectUrl(r.url)
+        setDetectedMime(r.mimeType)
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Aperçu du document indisponible.')
@@ -69,7 +71,7 @@ export function SubstepDocPreviewModal({ doc, onClose }: { doc: SubstepDocument;
 
   return (
     <DocumentPreviewModal
-      doc={{ url: objectUrl, filename: doc.filename, mimeType: doc.mimeType }}
+      doc={{ url: objectUrl, filename: doc.filename, mimeType: detectedMime ?? doc.mimeType }}
       onClose={onClose}
     />
   )

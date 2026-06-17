@@ -510,13 +510,30 @@ export function substepDocumentRawUrl(documentId: string): string {
 }
 
 /**
+ * Détecte le type d'un fichier via ses octets magiques (signatures). Indispensable
+ * quand le mimeType stocké est générique (`application/octet-stream`) ou que le nom
+ * n'a pas d'extension : sans ça l'aperçu tombe en « type non supporté ».
+ */
+function sniffMimeFromBytes(b: Uint8Array): string | null {
+  if (b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return 'application/pdf' // %PDF
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'image/png'
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg'
+  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return 'image/gif'
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return 'image/webp' // RIFF…WEBP
+  return null
+}
+
+/**
  * Récupère le binaire d'un document de sous-étape via fetch authentifié (cookie
- * de session) et renvoie un object URL. On passe par un blob (et non l'URL brute
- * en src) car un `blob:` s'affiche toujours inline dans une <img>/<iframe>, quel
- * que soit l'environnement, ce qui évite les soucis d'aperçu cross-origin.
+ * de session) et renvoie un object URL + le type MIME réel. On passe par un blob
+ * (et non l'URL brute en src) car un `blob:` s'affiche toujours inline dans une
+ * <img>/<iframe>, ce qui évite les soucis d'aperçu cross-origin ; et on renifle
+ * les octets pour fiabiliser le type même si le mimeType en base est faux.
  * À révoquer (URL.revokeObjectURL) au démontage.
  */
-export async function fetchSubstepDocumentObjectUrl(documentId: string): Promise<string> {
+export async function fetchSubstepDocumentObjectUrl(
+  documentId: string,
+): Promise<{ url: string; mimeType: string | null }> {
   const res = await fetch(buildApiUrl(`/documents/${documentId}/raw`), {
     credentials: 'include',
   })
@@ -525,7 +542,15 @@ export async function fetchSubstepDocumentObjectUrl(documentId: string): Promise
     throw new ApiError(res.status, text || `Chargement du document échoué : ${res.status}`)
   }
   const blob = await res.blob()
-  return URL.createObjectURL(blob)
+  let sniffed: string | null = null
+  try {
+    const head = new Uint8Array(await blob.slice(0, 12).arrayBuffer())
+    sniffed = sniffMimeFromBytes(head)
+  } catch {
+    // arrayBuffer indisponible → on retombe sur blob.type / mimeType en base
+  }
+  const fromBlob = blob.type && blob.type !== 'application/octet-stream' ? blob.type : null
+  return { url: URL.createObjectURL(blob), mimeType: sniffed ?? fromBlob }
 }
 
 // ─── Notifications ─────────────────────────────────────────
