@@ -8,6 +8,7 @@ import { useAcomptes } from '../lib/hooks'
 import { recordAcompte } from '../lib/api'
 import { todayIso } from '../lib/suivi-board'
 import { formatDate } from '../lib/suivi'
+import { formatPaymentMethod } from '../lib/types'
 import type { AcompteResponse, AcompteStatut } from '../lib/types'
 
 const STATUT_META: Record<AcompteStatut, { label: string; cls: string }> = {
@@ -121,6 +122,7 @@ export function Finances() {
                   <th>Commercial</th>
                   <th>Montant total</th>
                   <th>Acompte</th>
+                  <th>Méthode de paiement</th>
                   <th>Statut</th>
                   <th>Encaissé le</th>
                   <th aria-label="actions" />
@@ -138,6 +140,7 @@ export function Finances() {
                         {money(a.acompteAmount)}
                         {a.acomptePercent != null && <span className="text-faint text-xs"> ({a.acomptePercent}%)</span>}
                       </td>
+                      <td className="text-muted">{formatPaymentMethod(a.financingType, a.paymentSubMethod, a.financingOrg) ?? '—'}</td>
                       <td><span className={`fin-pill ${meta.cls}`}>{meta.label}</span></td>
                       <td className="text-muted">{a.dateEncaissement ? formatDate(a.dateEncaissement) : '—'}</td>
                       <td className="text-right">
@@ -202,7 +205,13 @@ function RecordAcompteModal({
           <div className="min-w-0">
             <span className="eyebrow text-or-dark">Acompte</span>
             <h2>{acompte.clientName ?? 'Client'}</h2>
-            <p className="fiche-modal-sub">Acompte attendu : {money(acompte.acompteAmount)}</p>
+            <p className="fiche-modal-sub">
+              Acompte attendu : {money(acompte.acompteAmount)}
+              {(() => {
+                const method = formatPaymentMethod(acompte.financingType, acompte.paymentSubMethod, acompte.financingOrg)
+                return method ? ` · ${method}` : ''
+              })()}
+            </p>
           </div>
           <button type="button" className="fiche-modal-close" onClick={onClose} aria-label="Fermer">✕</button>
         </header>

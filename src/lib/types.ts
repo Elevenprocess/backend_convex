@@ -393,6 +393,33 @@ export type FinancingType =
   | 'paiement_10x'
   | 'paiement_12x'
 
+export const FINANCING_TYPE_LABEL: Record<string, string> = {
+  comptant: 'Comptant',
+  financement: 'Financement',
+  financement_sans_apport: 'Financement sans apport',
+  apport_financement: 'Apport + financement',
+  paiement_10x: 'Paiement 10x',
+  paiement_12x: 'Paiement 12x',
+}
+
+// Compose un libellé lisible de la méthode de paiement choisie au débrief :
+// type de financement + sous-méthode (chèque/espèces/virement) ou organisme
+// (CMOI/Sofider). Ex : « Comptant · Chèque », « Financement · CMOI ».
+export function formatPaymentMethod(
+  financingType: string | null | undefined,
+  paymentSubMethod: string | null | undefined,
+  financingOrg: string | null | undefined,
+): string | null {
+  const type = financingType ? FINANCING_TYPE_LABEL[financingType] ?? financingType : null
+  const sub = paymentSubMethod
+    ? PAYMENT_SUB_METHOD_LABEL[paymentSubMethod as PaymentSubMethod] ?? paymentSubMethod
+    : financingOrg
+      ? FINANCING_ORG_LABEL[financingOrg as FinancingOrg] ?? financingOrg
+      : null
+  const parts = [type, sub].filter(Boolean)
+  return parts.length > 0 ? parts.join(' · ') : null
+}
+
 // Résumé du lead embarqué dans la réponse RDV (backend toRdvResponse) : permet
 // d'afficher nom / ville / téléphone du prospect sans jointure /leads cliente.
 export type RdvLeadSummary = {
@@ -925,6 +952,7 @@ export type AcompteResponse = {
   acompteAmount: string | null
   acomptePercent: number | null
   paymentSubMethod: string | null
+  financingOrg: string | null
   financingType: string | null
   signedAt: string | null
   statut: AcompteStatut
