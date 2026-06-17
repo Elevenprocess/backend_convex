@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { useVirtualizer, type Virtualizer } from '@tanstack/react-virtual'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
@@ -330,6 +331,12 @@ function LeadsSetter() {
     [mine, selectedId],
   )
   const tableScrollRef = useRememberedLeadTableScroll('ecoi.leads.setter.tableScroll.v1', filtered, selectedId)
+  const virtualizer = useLeadRowVirtualizer(tableScrollRef, filtered.length)
+  const selectedRowIndex = useMemo(
+    () => (selectedId ? filtered.findIndex((l) => l.id === selectedId) : -1),
+    [filtered, selectedId],
+  )
+  useScrollSelectedLeadIntoView(virtualizer, selectedRowIndex)
 
   return (
     <AppShell>
@@ -398,24 +405,40 @@ function LeadsSetter() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((l) => {
-                      const lockedBy = leadLocks.get(l.id)
-                      const lockedByOther = lockedBy && lockedBy.setterId !== me?.id
+                    {(() => {
+                      const items = virtualizer.getVirtualItems()
+                      const totalSize = virtualizer.getTotalSize()
+                      const colSpan = orderedColumns.length
+                      const paddingTop = items.length ? items[0].start : 0
+                      const paddingBottom = items.length ? totalSize - items[items.length - 1].end : 0
                       return (
-                        <tr
-                          key={l.id}
-                          data-lead-id={l.id}
-                          className={`border-b border-line-soft last:border-0 cursor-pointer transition-colors ${
-                            selected?.id === l.id ? 'bg-or/20 shadow-[inset_4px_0_0_var(--color-or-dark)] !text-text' :
-                            lockedByOther ? 'bg-line-soft/40 opacity-60' : 'hover:bg-white/40'
-                          }`}
-                          title={lockedByOther ? `${lockedBy!.setterName} est en train de bosser sur ce lead` : undefined}
-                          onClick={() => selectLead(l.id)}
-                        >
-                          {orderedColumns.map((column) => renderSetterCell(column.key, l, userMap, startCall, setOpenComment, lockedByOther ? lockedBy : null))}
-                        </tr>
+                        <>
+                          <SpacerRow height={paddingTop} colSpan={colSpan} />
+                          {items.map((vi) => {
+                            const l = filtered[vi.index]
+                            const lockedBy = leadLocks.get(l.id)
+                            const lockedByOther = lockedBy && lockedBy.setterId !== me?.id
+                            return (
+                              <tr
+                                key={l.id}
+                                ref={virtualizer.measureElement}
+                                data-index={vi.index}
+                                data-lead-id={l.id}
+                                className={`border-b border-line-soft last:border-0 cursor-pointer transition-colors ${
+                                  selected?.id === l.id ? 'bg-or/20 shadow-[inset_4px_0_0_var(--color-or-dark)] !text-text' :
+                                  lockedByOther ? 'bg-line-soft/40 opacity-60' : 'hover:bg-white/40'
+                                }`}
+                                title={lockedByOther ? `${lockedBy!.setterName} est en train de bosser sur ce lead` : undefined}
+                                onClick={() => selectLead(l.id)}
+                              >
+                                {orderedColumns.map((column) => renderSetterCell(column.key, l, userMap, startCall, setOpenComment, lockedByOther ? lockedBy : null))}
+                              </tr>
+                            )
+                          })}
+                          <SpacerRow height={paddingBottom} colSpan={colSpan} />
+                        </>
                       )
-                    })}
+                    })()}
                   </tbody>
                 </table>
                 </div>
@@ -527,6 +550,12 @@ function LeadsAdmin() {
   const allFilteredSelected = filtered.length > 0 && selectedFilteredIds.length === filtered.length
   const someFilteredSelected = selectedFilteredIds.length > 0 && !allFilteredSelected
   const tableScrollRef = useRememberedLeadTableScroll('ecoi.leads.admin.tableScroll.v1', filtered, selectedId)
+  const virtualizer = useLeadRowVirtualizer(tableScrollRef, filtered.length)
+  const selectedRowIndex = useMemo(
+    () => (selectedId ? filtered.findIndex((l) => l.id === selectedId) : -1),
+    [filtered, selectedId],
+  )
+  useScrollSelectedLeadIntoView(virtualizer, selectedRowIndex)
 
   useEffect(() => {
     const existingIds = new Set(leads.map((lead) => lead.id))
@@ -683,28 +712,46 @@ function LeadsAdmin() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((l) => (
-                  <tr
-                    key={l.id}
-                    data-lead-id={l.id}
-                    className={`border-b border-line-soft last:border-0 cursor-pointer transition-colors ${
-                      selectedId === l.id ? 'bg-or/20 shadow-[inset_4px_0_0_var(--color-or-dark)] !text-text' : selectedLeadIds.includes(l.id) ? 'bg-or/10' : 'hover:bg-white/40'
-                    }`}
-                    onDoubleClick={() => selectLead(l.id)}
-                    title="Double-cliquer pour ouvrir le détail du lead"
-                  >
-                    <Td className="text-center" onClick={(event) => event.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={selectedLeadIds.includes(l.id)}
-                        onChange={(event) => toggleLeadSelection(l.id, event.target.checked)}
-                        className="h-4 w-4 cursor-pointer accent-or"
-                        aria-label={`Sélectionner ${fullName(l) || 'ce lead'}`}
-                      />
-                    </Td>
-                    {orderedColumns.map((column) => renderAdminCell(column.key, l, userMap, setOpenComment, { onDelete: handleDeleteLead, deletingLeadId }))}
-                  </tr>
-                ))}
+                {(() => {
+                  const items = virtualizer.getVirtualItems()
+                  const totalSize = virtualizer.getTotalSize()
+                  const colSpan = orderedColumns.length + 1
+                  const paddingTop = items.length ? items[0].start : 0
+                  const paddingBottom = items.length ? totalSize - items[items.length - 1].end : 0
+                  return (
+                    <>
+                      <SpacerRow height={paddingTop} colSpan={colSpan} />
+                      {items.map((vi) => {
+                        const l = filtered[vi.index]
+                        return (
+                          <tr
+                            key={l.id}
+                            ref={virtualizer.measureElement}
+                            data-index={vi.index}
+                            data-lead-id={l.id}
+                            className={`border-b border-line-soft last:border-0 cursor-pointer transition-colors ${
+                              selectedId === l.id ? 'bg-or/20 shadow-[inset_4px_0_0_var(--color-or-dark)] !text-text' : selectedLeadIds.includes(l.id) ? 'bg-or/10' : 'hover:bg-white/40'
+                            }`}
+                            onDoubleClick={() => selectLead(l.id)}
+                            title="Double-cliquer pour ouvrir le détail du lead"
+                          >
+                            <Td className="text-center" onClick={(event) => event.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={selectedLeadIds.includes(l.id)}
+                                onChange={(event) => toggleLeadSelection(l.id, event.target.checked)}
+                                className="h-4 w-4 cursor-pointer accent-or"
+                                aria-label={`Sélectionner ${fullName(l) || 'ce lead'}`}
+                              />
+                            </Td>
+                            {orderedColumns.map((column) => renderAdminCell(column.key, l, userMap, setOpenComment, { onDelete: handleDeleteLead, deletingLeadId }))}
+                          </tr>
+                        )
+                      })}
+                      <SpacerRow height={paddingBottom} colSpan={colSpan} />
+                    </>
+                  )
+                })()}
               </tbody>
             </table>
             </div>
@@ -1648,6 +1695,45 @@ function CollapsibleSection({
   )
 }
 
+// Tableau leads virtualisé : on ne monte que les lignes visibles (+ overscan) au lieu
+// des ~500 lignes × ~13 cellules. Compatible <table> grâce aux lignes-espaceurs en
+// haut/bas du tbody, qui conservent la hauteur totale (donc le scroll natif + la
+// restauration de scrollTop continuent de marcher). Le thead sticky reste intact.
+const ESTIMATED_LEAD_ROW_HEIGHT = 53
+
+function useLeadRowVirtualizer(
+  scrollRef: RefObject<HTMLDivElement | null>,
+  count: number,
+): Virtualizer<HTMLDivElement, Element> {
+  return useVirtualizer({
+    count,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ESTIMATED_LEAD_ROW_HEIGHT,
+    overscan: 12,
+  })
+}
+
+// Centre la ligne du lead sélectionné dans le viewport virtualisé.
+function useScrollSelectedLeadIntoView(
+  virtualizer: Virtualizer<HTMLDivElement, Element>,
+  selectedIndex: number,
+) {
+  useEffect(() => {
+    // 'auto' = scroll minimal seulement si la ligne n'est pas déjà visible
+    // (évite de recentrer/sauter quand on clique une ligne déjà à l'écran).
+    if (selectedIndex >= 0) virtualizer.scrollToIndex(selectedIndex, { align: 'auto' })
+  }, [selectedIndex, virtualizer])
+}
+
+function SpacerRow({ height, colSpan }: { height: number; colSpan: number }) {
+  if (height <= 0) return null
+  return (
+    <tr aria-hidden="true">
+      <td colSpan={colSpan} style={{ height, padding: 0, border: 0 }} />
+    </tr>
+  )
+}
+
 function useRememberedLeadTableScroll(
   storageKey: string,
   rows: LeadResponse[],
@@ -1659,19 +1745,11 @@ function useRememberedLeadTableScroll(
     const el = scrollRef.current
     if (!el) return
 
-    const raf = window.requestAnimationFrame(() => {
-      if (selectedLeadId) {
-        const selectedRow = Array.from(el.querySelectorAll<HTMLElement>('tr[data-lead-id]'))
-          .find((row) => row.dataset.leadId === selectedLeadId)
-        if (selectedRow) {
-          const rowRect = selectedRow.getBoundingClientRect()
-          const containerRect = el.getBoundingClientRect()
-          const rowIsVisible = rowRect.top >= containerRect.top && rowRect.bottom <= containerRect.bottom
-          if (!rowIsVisible) selectedRow.scrollIntoView({ block: 'center', inline: 'nearest' })
-          return
-        }
-      }
+    // Quand un lead est sélectionné, le composant gère lui-même le scroll via
+    // virtualizer.scrollToIndex (la ligne peut ne pas être montée dans le DOM).
+    if (selectedLeadId) return
 
+    const raf = window.requestAnimationFrame(() => {
       const raw = window.localStorage.getItem(storageKey)
       if (!raw) return
       try {

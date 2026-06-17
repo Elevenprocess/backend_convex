@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api, ApiError, assignLeadToCommercial } from './api'
 import { notifyClipboardCopied } from './clipboardToast'
 import { notifyRealtimeRefresh, REALTIME_REFRESH_EVENT, type RealtimeRefreshPayload } from './realtime'
@@ -99,6 +99,37 @@ function writeCache(cacheKey: string | null, entry: FetchCacheEntry) {
   }
 }
 
+// Coalescing des requêtes concurrentes : l'Overview monte plusieurs sous-vues qui
+// demandent les mêmes listes (leads/users/rdv) au même instant. Sans ça, chaque hook
+// lançait sa propre requête réseau identique avant que le cache ne soit rempli.
+// Ici on partage une seule promesse par cacheKey, on écrit le cache à la résolution,
+// puis on libère l'entrée in-flight. La requête n'est jamais abortée par le démontage
+// d'un seul abonné : elle va au bout et réchauffe le cache pour les montages suivants.
+const inflightRequests = new Map<string, Promise<unknown>>()
+
+function sharedFetch<T>(
+  path: string,
+  query: Record<string, string | number | undefined | null> | undefined,
+  cacheKey: string | null,
+): Promise<T> {
+  if (cacheKey) {
+    const existing = inflightRequests.get(cacheKey)
+    if (existing) return existing as Promise<T>
+  }
+  useNetworkActivity.getState().start()
+  const promise = api<T>(path, { query })
+    .then((d) => {
+      writeCache(cacheKey, { data: d, timestamp: Date.now() })
+      return d
+    })
+    .finally(() => {
+      useNetworkActivity.getState().stop()
+      if (cacheKey) inflightRequests.delete(cacheKey)
+    })
+  if (cacheKey) inflightRequests.set(cacheKey, promise as Promise<unknown>)
+  return promise
+}
+
 async function prefetchFetchCache<T>(
   path: string,
   query?: Record<string, string | number | undefined | null>,
@@ -110,9 +141,7 @@ async function prefetchFetchCache<T>(
     const cached = readCachedData<T>(cacheKey)
     if (cached !== null) return cached
   }
-  const data = await api<T>(path, { query })
-  writeCache(cacheKey, { data, timestamp: Date.now() })
-  return data
+  return sharedFetch<T>(path, query, cacheKey)
 }
 
 function deleteCache(cacheKey: string) {
@@ -163,7 +192,6 @@ function useFetch<T>(
   const [loading, setLoading] = useState(path !== null && cachedData === null && !options?.silentInitialLoading)
   const [error, setError] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
-  const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (path === null) {
@@ -185,30 +213,25 @@ function useFetch<T>(
     // sans relancer l'API. Le bouton/flow qui appelle refetch() force toujours un refresh.
     if (latestCachedEntry && tick === 0 && !options?.refreshCachedOnMount) return
 
-    abortRef.current?.abort()
-    const ctrl = new AbortController()
-    abortRef.current = ctrl
+    let cancelled = false
     setLoading(latestCachedData === undefined && !options?.silentInitialLoading)
     setError(null)
-    useNetworkActivity.getState().start()
-    api<T>(path, { query, signal: ctrl.signal })
+    sharedFetch<T>(path, query, cacheKey)
       .then((d) => {
-        if (ctrl.signal.aborted) return
-        writeCache(cacheKey, { data: d, timestamp: Date.now() })
+        if (cancelled) return
         setData(d)
       })
       .catch((e) => {
-        if (ctrl.signal.aborted) return
+        if (cancelled) return
         const msg = e instanceof ApiError ? `${e.status} — ${e.message}` : (e as Error).message
         setError(msg)
         if (latestCachedData === undefined) setData(null)
       })
       .finally(() => {
-        useNetworkActivity.getState().stop()
-        if (!ctrl.signal.aborted) setLoading(false)
+        if (!cancelled) setLoading(false)
       })
     return () => {
-      ctrl.abort()
+      cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, queryKey, tick])
