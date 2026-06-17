@@ -11,10 +11,15 @@ import { AddNoteModal } from './AddNoteModal'
 import { uploadDevis, uploadProjectAttachment, updateProject, pollDevisOcr, deleteDevis, deleteProjectAttachment } from '../../lib/api'
 import { parseNotesJournal, prependNote, type NoteEntry } from '../../lib/notesJournal'
 import { useAuth } from '../../lib/auth'
+import { useCollapsibleState } from '../../lib/useCollapsibleState'
+import { DossierWorkflowPanel } from './DossierWorkflowPanel'
+import type { Dossier } from '../../lib/suivi'
 
 type Props = {
   project: ProjectDetailResponse
   commercialName?: string
+  /** Dossier du client : permet d'afficher son workflow quand le projet est déployé. */
+  dossier: Dossier
   /** Appelé après un ajout (devis/photo/document/note) pour rafraîchir le projet. */
   onChanged?: () => void
 }
@@ -38,8 +43,11 @@ function ShowMore({ total, expanded, onToggle, noun }: { total: number; expanded
  * s'ouvre en pop-up (aperçu PDF des devis, lightbox photos, détail note/débrief),
  * jamais de redirection.
  */
-export function ProjectDossierSection({ project, commercialName, onChanged }: Props) {
+export function ProjectDossierSection({ project, commercialName, dossier, onChanged }: Props) {
   const authorName = useAuth((s) => s.user?.name) ?? 'Inconnu'
+  // Chaque projet est replié par défaut : on ne déploie son contenu (pièces +
+  // workflow délivrabilité) qu'à la sélection. État mémorisé par projet.
+  const [collapsed, toggleCollapsed] = useCollapsibleState(`fiche.project.${project.id}`, true)
   const photos = project.attachments.filter((a) => a.kind === 'photo')
   const documents = project.attachments.filter((a) => a.kind !== 'photo')
   const debriefs = [...project.debriefs].sort(
@@ -155,17 +163,35 @@ export function ProjectDossierSection({ project, commercialName, onChanged }: Pr
 
   return (
     <article className="space-y-6 rounded-2xl border border-line bg-cream p-5">
-      <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-3">
-        <h2 className="text-base font-semibold text-text">{project.name || 'Projet'}</h2>
-        <div className="flex items-center gap-2 text-xs text-muted">
-          <span className="rounded-full bg-or-tint px-2 py-0.5 font-medium text-or-dark">
-            {PROJECT_STATUS_LABEL[project.status] ?? project.status}
-          </span>
-          <span>· créé le {formatDate(project.createdAt)}</span>
-          {commercialName && <span>· {commercialName}</span>}
-        </div>
+      <header className={collapsed ? '' : 'border-b border-line pb-3'}>
+        <button
+          type="button"
+          className="flex w-full items-center gap-3 text-left"
+          onClick={toggleCollapsed}
+          aria-expanded={!collapsed}
+        >
+          <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={18} className="shrink-0 text-muted" />
+          <div className="flex flex-1 flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-base font-semibold text-text">{project.name || 'Projet'}</h2>
+            <div className="flex items-center gap-2 text-xs text-muted">
+              <span className="rounded-full bg-or-tint px-2 py-0.5 font-medium text-or-dark">
+                {PROJECT_STATUS_LABEL[project.status] ?? project.status}
+              </span>
+              <span>· créé le {formatDate(project.createdAt)}</span>
+              {commercialName && <span>· {commercialName}</span>}
+            </div>
+          </div>
+          <span className="shrink-0 text-xs font-medium text-or-dark">{collapsed ? 'Développer' : 'Réduire'}</span>
+        </button>
+        {collapsed && (
+          <p className="mt-2 pl-[30px] text-xs text-muted">
+            {project.devis.length} devis · {photos.length} photos · {documents.length} documents · {notes.length} notes · {debriefs.length} débriefs
+          </p>
+        )}
       </header>
 
+      {!collapsed && (
+      <>
       {error && (
         <div className="rounded-xl bg-rouille-tint px-3 py-2 text-xs font-semibold text-rouille">{error}</div>
       )}
@@ -279,6 +305,13 @@ export function ProjectDossierSection({ project, commercialName, onChanged }: Pr
           </>
         )}
       </Section>
+
+      <section className="border-t border-line pt-4">
+        <span className="eyebrow text-or-dark">Workflow délivrabilité</span>
+        <DossierWorkflowPanel dossier={dossier} />
+      </section>
+      </>
+      )}
 
       {lightboxIndex != null && photos[lightboxIndex] && (
         <PhotoLightbox

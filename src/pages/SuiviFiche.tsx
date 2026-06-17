@@ -10,7 +10,6 @@ import { listProjectsByLead, getProjectDetail } from '../lib/api'
 import { fullName, type ProjectDetailResponse } from '../lib/types'
 import { FicheClientPanel } from '../components/suivi/FicheClientPanel'
 import { ProjectDossierSection } from '../components/suivi/ProjectDossierSection'
-import { DossierWorkflowPanel } from '../components/suivi/DossierWorkflowPanel'
 
 /**
  * Page « Fiche complète » d'un client : la fiche (coordonnées + historique
@@ -35,7 +34,6 @@ export function FicheCompletePage() {
   const [details, setDetails] = useState<ProjectDetailResponse[] | null>(null)
   const [loadingProjects, setLoadingProjects] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [workflowOpen, setWorkflowOpen] = useState(false)
 
   const leadId = dossier?.lead.id
   useEffect(() => {
@@ -67,16 +65,6 @@ export function FicheCompletePage() {
       .then((fresh) => setDetails((prev) => (prev ? prev.map((p) => (p.id === fresh.id ? fresh : p)) : prev)))
       .catch(() => undefined)
   }
-
-  // Fermer le drawer workflow avec Échap.
-  useEffect(() => {
-    if (!workflowOpen) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setWorkflowOpen(false)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [workflowOpen])
 
   const usersById = useMemo(() => {
     const m = new Map<string, string>()
@@ -130,13 +118,8 @@ export function FicheCompletePage() {
                 <div>
                   <span className="eyebrow text-or-dark">Dossiers commerciaux</span>
                   <h2>Projets & pièces du client</h2>
+                  <p className="text-xs text-muted">Déployez un projet pour voir ses pièces et son workflow.</p>
                 </div>
-                <button type="button" className="fiche-wf-open-btn" onClick={() => setWorkflowOpen(true)}>
-                  <span>Voir le workflow</span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                    <path d="M5 12h14M13 6l6 6-6 6" />
-                  </svg>
-                </button>
               </header>
 
               {error && (
@@ -149,6 +132,7 @@ export function FicheCompletePage() {
                   <ProjectDossierSection
                     key={p.id}
                     project={p}
+                    dossier={dossier}
                     commercialName={usersById.get(p.commercialId)}
                     onChanged={() => refreshProject(p.id)}
                   />
@@ -159,36 +143,6 @@ export function FicheCompletePage() {
                 </div>
               )}
             </div>
-          </div>
-        )}
-
-        {dossier && workflowOpen && (
-          <div className="fiche-wf-drawer-backdrop" onClick={() => setWorkflowOpen(false)}>
-            <aside
-              className="fiche-wf-drawer"
-              role="dialog"
-              aria-modal="true"
-              aria-label="Workflow délivrabilité"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <header className="fiche-wf-drawer-head">
-                <div className="min-w-0">
-                  <span className="eyebrow text-or-dark">Workflow délivrabilité</span>
-                  <h2 className="truncate">{fullName(dossier.lead) || 'Client sans nom'}</h2>
-                </div>
-                <button
-                  type="button"
-                  className="fiche-wf-drawer-close"
-                  onClick={() => setWorkflowOpen(false)}
-                  aria-label="Fermer le workflow"
-                >
-                  ✕
-                </button>
-              </header>
-              <div className="fiche-wf-drawer-body">
-                <DossierWorkflowPanel dossier={dossier} />
-              </div>
-            </aside>
           </div>
         )}
       </main>

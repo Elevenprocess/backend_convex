@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import type { LeadResponse, UserResponse, ProjectResponse, ProjectDetailResponse } from '../lib/types'
 
@@ -12,11 +12,15 @@ const useLeadsMock = vi.fn()
 const useRdvListMock = vi.fn()
 const useUsersMock = vi.fn()
 const useLeadDebriefsMock = vi.fn()
+const useClientsMock = vi.fn()
+const useSubstepsMock = vi.fn()
 vi.mock('../lib/hooks', () => ({
   useLeads: (...a: unknown[]) => useLeadsMock(...a),
   useRdvList: (...a: unknown[]) => useRdvListMock(...a),
   useUsers: (...a: unknown[]) => useUsersMock(...a),
   useLeadDebriefs: (...a: unknown[]) => useLeadDebriefsMock(...a),
+  useClients: (...a: unknown[]) => useClientsMock(...a),
+  useSubsteps: (...a: unknown[]) => useSubstepsMock(...a),
 }))
 
 const listProjectsByLeadMock = vi.fn()
@@ -26,6 +30,14 @@ vi.mock('../lib/api', () => ({
   getProjectDetail: (...a: unknown[]) => getProjectDetailMock(...a),
   attachmentRawUrl: (id: string) => `/raw/${id}`,
   downloadDevisPdf: vi.fn(),
+  bootstrapClient: vi.fn(),
+  updateSubstep: vi.fn(),
+  uploadDevis: vi.fn(),
+  uploadProjectAttachment: vi.fn(),
+  updateProject: vi.fn(),
+  pollDevisOcr: vi.fn(),
+  deleteDevis: vi.fn(),
+  deleteProjectAttachment: vi.fn(),
 }))
 
 const authStateRef = { user: { id: 'admin-1', name: 'Admin', role: 'admin', active: true } as UserResponse }
@@ -53,7 +65,7 @@ const project: ProjectResponse = {
   addressLine: null,
   postalCode: null,
   city: null,
-  status: 'devis_en_cours' as ProjectResponse['status'],
+  status: 'signe' as ProjectResponse['status'],
   notes: null,
   createdAt: '2026-05-01T10:00:00.000Z',
   updatedAt: '2026-05-01T10:00:00.000Z',
@@ -88,19 +100,30 @@ beforeEach(() => {
   useRdvListMock.mockReturnValue({ data: [], loading: false })
   useUsersMock.mockReturnValue({ data: [commercial] })
   useLeadDebriefsMock.mockReturnValue({ data: [] })
+  useClientsMock.mockReturnValue({ data: [], loading: false, refetch: vi.fn() })
+  useSubstepsMock.mockReturnValue({ data: [], loading: false, refetch: vi.fn() })
   listProjectsByLeadMock.mockResolvedValue([project])
   getProjectDetailMock.mockResolvedValue(projectDetail)
+  try { window.localStorage.clear() } catch { /* jsdom */ }
 })
 
 describe('FicheCompletePage', () => {
-  it('affiche la fiche client et les dossiers groupés par projet', async () => {
+  it('affiche la fiche client et les projets repliés, puis déploie pièces + workflow', async () => {
     renderAt('/suivi/lead-1/fiche')
 
     expect(await screen.findByText('Jean Dupont')).toBeInTheDocument()
     const projectHeading = await screen.findByText('Installation 8 kWc')
     expect(projectHeading).toBeInTheDocument()
+
+    // Replié par défaut : les pièces ne sont pas visibles, mais le bouton « Développer » l'est.
+    expect(screen.queryByText('2605-0393')).not.toBeInTheDocument()
+    const toggle = await screen.findByText('Développer')
+
+    // Au déploiement, les pièces du projet et son workflow s'affichent.
+    fireEvent.click(toggle)
     expect(await screen.findByText('2605-0393')).toBeInTheDocument()
     expect(await screen.findByText('Mandat')).toBeInTheDocument()
+    expect(await screen.findByText('Workflow délivrabilité')).toBeInTheDocument()
   })
 
   it('affiche « Dossier introuvable » pour un id inconnu', async () => {
