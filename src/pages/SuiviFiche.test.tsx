@@ -8,14 +8,14 @@ vi.mock('../components/shell/AppShell', () => ({
 }))
 vi.mock('../components/shell/Topbar', () => ({ Topbar: () => null }))
 
-const useLeadsMock = vi.fn()
+const useLeadMock = vi.fn()
 const useRdvListMock = vi.fn()
 const useUsersMock = vi.fn()
 const useLeadDebriefsMock = vi.fn()
 const useClientsMock = vi.fn()
 const useSubstepsMock = vi.fn()
 vi.mock('../lib/hooks', () => ({
-  useLeads: (...a: unknown[]) => useLeadsMock(...a),
+  useLead: (...a: unknown[]) => useLeadMock(...a),
   useRdvList: (...a: unknown[]) => useRdvListMock(...a),
   useUsers: (...a: unknown[]) => useUsersMock(...a),
   useLeadDebriefs: (...a: unknown[]) => useLeadDebriefsMock(...a),
@@ -96,7 +96,7 @@ function renderAt(path: string) {
 beforeEach(() => {
   vi.clearAllMocks()
   authStateRef.user = { id: 'admin-1', name: 'Admin', role: 'admin', active: true } as UserResponse
-  useLeadsMock.mockReturnValue({ data: [lead], loading: false })
+  useLeadMock.mockReturnValue({ data: lead, loading: false })
   useRdvListMock.mockReturnValue({ data: [], loading: false })
   useUsersMock.mockReturnValue({ data: [commercial] })
   useLeadDebriefsMock.mockReturnValue({ data: [] })
@@ -131,6 +131,7 @@ describe('FicheCompletePage', () => {
   })
 
   it('affiche « Dossier introuvable » pour un id inconnu', async () => {
+    useLeadMock.mockReturnValue({ data: null, loading: false })
     renderAt('/suivi/inconnu/fiche')
     expect(await screen.findByText('Dossier introuvable.')).toBeInTheDocument()
   })

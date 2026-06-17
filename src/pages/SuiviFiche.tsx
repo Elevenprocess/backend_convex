@@ -4,8 +4,8 @@ import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { LoadingBlock } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
-import { useLeads, useRdvList, useUsers, useLeadDebriefs } from '../lib/hooks'
-import { buildDossiers } from '../lib/suivi'
+import { useLead, useRdvList, useUsers, useLeadDebriefs } from '../lib/hooks'
+import { buildDossier, readWorkflowState } from '../lib/suivi'
 import { listProjectsByLead, getProjectDetail } from '../lib/api'
 import { fullName, type ProjectDetailResponse } from '../lib/types'
 import { FicheClientPanel } from '../components/suivi/FicheClientPanel'
@@ -20,14 +20,30 @@ import { ProjectDossierSection } from '../components/suivi/ProjectDossierSection
 export function FicheCompletePage() {
   const role = useAuth((s) => s.user?.role)
   const { id } = useParams<{ id: string }>()
-  const { data: leads, loading: leadsLoading } = useLeads({ limit: 500 })
-  const { data: rdvs, loading: rdvLoading } = useRdvList({ limit: 200 })
+  // On charge directement le lead ciblé (et ses RDV) au lieu de ratisser des
+  // centaines de leads pour en retrouver un : plus rapide, moins de payload, et
+  // fiable même si le dossier n'était pas dans la première page de la liste.
+  const { data: lead, loading: leadLoading } = useLead(id)
+  const { data: rdvs } = useRdvList(id ? { leadId: id } : null)
   const { data: users } = useUsers()
 
   const dossier = useMemo(() => {
-    if (!id || !leads) return null
-    return buildDossiers(leads ?? [], rdvs ?? [], users ?? [], {}).find((d) => d.id === id) ?? null
-  }, [id, leads, rdvs, users])
+    if (!id || !lead) return null
+    const userMap = new Map((users ?? []).map((u) => [u.id, u]))
+    const rdv = [...(rdvs ?? [])].sort(
+      (a, b) => new Date(b.signatureAt ?? b.scheduledAt ?? b.updatedAt).getTime()
+        - new Date(a.signatureAt ?? a.scheduledAt ?? a.updatedAt).getTime(),
+    )[0]
+    const commercialId = rdv?.commercialId ?? lead.latestRdvCommercialId ?? lead.assignedToId
+    const setterId = lead.setterId ?? lead.assignedSetterIds?.[0]
+    return buildDossier(
+      lead,
+      rdv,
+      commercialId ? userMap.get(commercialId) : undefined,
+      setterId ? userMap.get(setterId) : undefined,
+      readWorkflowState(lead.id),
+    )
+  }, [id, lead, rdvs, users])
 
   const { data: leadDebriefs } = useLeadDebriefs(dossier?.lead.id)
 
@@ -90,7 +106,10 @@ export function FicheCompletePage() {
   ) return <Navigate to="/overview" replace />
   if (!id) return <Navigate to="/suivi" replace />
 
-  const isLoading = leadsLoading || rdvLoading
+  // Spinner plein écran uniquement au premier chargement : une fois le lead en
+  // main, un refetch en arrière-plan (event realtime) ne doit pas refaire
+  // clignoter « Chargement de la fiche… ».
+  const isLoading = leadLoading && !lead
 
   return (
     <AppShell flat>
