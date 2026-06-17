@@ -5,25 +5,27 @@ import { Topbar } from '../components/shell/Topbar'
 import { LoadingBlock } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
 import { useAcomptes } from '../lib/hooks'
-import { recordAcompte } from '../lib/api'
+import { recordEcheance } from '../lib/api'
 import { todayIso } from '../lib/suivi-board'
 import { formatDate } from '../lib/suivi'
 import { formatPaymentMethod } from '../lib/types'
-import type { AcompteResponse, AcompteStatut } from '../lib/types'
+import type { AcompteResponse, AcompteStatut, EcheanceLine } from '../lib/types'
 
 const STATUT_META: Record<AcompteStatut, { label: string; cls: string }> = {
-  attendu: { label: 'Attendu', cls: 'bg-cuivre-tint text-cuivre' },
+  en_attente: { label: 'En attente', cls: 'bg-line text-faint' },
+  a_encaisser: { label: 'À encaisser', cls: 'bg-cuivre-tint text-cuivre' },
   encaisse: { label: 'Encaissé', cls: 'bg-or-tint text-or-dark' },
   en_retard: { label: 'En retard', cls: 'bg-rouille-tint text-rouille' },
   annule: { label: 'Annulé', cls: 'bg-line text-faint' },
 }
 
 const FILTERS: Array<{ key: 'tous' | AcompteStatut; label: string }> = [
-  { key: 'tous', label: 'Tous' },
-  { key: 'attendu', label: 'Attendus' },
-  { key: 'encaisse', label: 'Encaissés' },
+  { key: 'tous', label: 'Toutes' },
+  { key: 'a_encaisser', label: 'À encaisser' },
+  { key: 'en_attente', label: 'En attente' },
+  { key: 'encaisse', label: 'Encaissées' },
   { key: 'en_retard', label: 'En retard' },
-  { key: 'annule', label: 'Annulés' },
+  { key: 'annule', label: 'Annulées' },
 ]
 
 function money(v: string | null): string {
@@ -37,13 +39,14 @@ export function Finances() {
   const { data: acomptes, loading, refetch } = useAcomptes(role === 'admin' || role === 'finances')
   const [filter, setFilter] = useState<'tous' | AcompteStatut>('tous')
   const [query, setQuery] = useState('')
-  const [editing, setEditing] = useState<AcompteResponse | null>(null)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [editing, setEditing] = useState<{ acompte: AcompteResponse; tranche: EcheanceLine } | null>(null)
 
   const rows = useMemo(() => {
     const list = acomptes ?? []
     const q = query.trim().toLowerCase()
     return list.filter((a) => {
-      if (filter !== 'tous' && a.statut !== filter) return false
+      if (filter !== 'tous' && !a.echeances.some((e) => e.statut === filter)) return false
       if (q && !(a.clientName ?? '').toLowerCase().includes(q)) return false
       return true
     })
@@ -51,18 +54,29 @@ export function Finances() {
 
   const totals = useMemo(() => {
     const list = acomptes ?? []
-    let attendu = 0
+    let aEncaisser = 0
     let encaisse = 0
+    let aVenir = 0
     let nbRetard = 0
     for (const a of list) {
-      const att = Number(a.acompteAmount ?? 0) || 0
-      const reel = Number(a.montantReel ?? 0) || 0
-      if (a.statut === 'encaisse') encaisse += reel || att
-      else if (a.statut === 'en_retard') { nbRetard += 1; attendu += att }
-      else if (a.statut === 'attendu') attendu += att
+      for (const e of a.echeances) {
+        const prevu = Number(e.montantPrevu ?? 0) || 0
+        if (e.statut === 'encaisse') encaisse += Number(e.montantReel ?? e.montantPrevu ?? 0) || 0
+        else if (e.statut === 'a_encaisser') aEncaisser += prevu
+        else if (e.statut === 'en_retard') { nbRetard += 1; aEncaisser += prevu }
+        else if (e.statut === 'en_attente') aVenir += prevu
+      }
     }
-    return { attendu, encaisse, nbRetard }
+    return { aEncaisser, encaisse, aVenir, nbRetard }
   }, [acomptes])
+
+  const toggle = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
 
   if (role && role !== 'admin' && role !== 'finances') return <Navigate to="/overview" replace />
 
@@ -70,14 +84,20 @@ export function Finances() {
     <AppShell flat>
       <Topbar eyebrow="FINANCES" title="Suivi des acomptes" />
       <main className="suivi-page flex-grow overflow-y-auto px-4 sm:px-8 pt-4 pb-8">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-5">
           <div className="glass-card p-4">
-            <span className="eyebrow text-or-dark">Acomptes attendus</span>
-            <p className="text-2xl font-black mt-1">{totals.attendu.toLocaleString('fr-FR')} €</p>
+            <span className="eyebrow text-or-dark">À encaisser</span>
+            <p className="text-2xl font-black mt-1">{totals.aEncaisser.toLocaleString('fr-FR')} €</p>
+            <p className="text-xs text-faint mt-0.5">jalon franchi, en attente d'encaissement</p>
           </div>
           <div className="glass-card p-4">
-            <span className="eyebrow text-or-dark">Encaissés</span>
+            <span className="eyebrow text-or-dark">Encaissé</span>
             <p className="text-2xl font-black mt-1">{totals.encaisse.toLocaleString('fr-FR')} €</p>
+          </div>
+          <div className="glass-card p-4">
+            <span className="eyebrow text-or-dark">À venir</span>
+            <p className="text-2xl font-black mt-1">{totals.aVenir.toLocaleString('fr-FR')} €</p>
+            <p className="text-xs text-faint mt-0.5">tranches dont le jalon n'est pas atteint</p>
           </div>
           <div className="glass-card p-4">
             <span className="eyebrow text-or-dark">En retard</span>
@@ -111,44 +131,41 @@ export function Finances() {
           <LoadingBlock label="Chargement des acomptes…" />
         ) : rows.length === 0 ? (
           <div className="rounded-xl border border-dashed border-line px-4 py-10 text-center text-sm text-faint">
-            Aucun acompte {filter !== 'tous' ? `« ${FILTERS.find((f) => f.key === filter)?.label.toLowerCase()} »` : ''}.
+            Aucune vente {filter !== 'tous' ? `« ${FILTERS.find((f) => f.key === filter)?.label.toLowerCase()} »` : 'à suivre'}.
           </div>
         ) : (
           <div className="fin-table-wrap glass-card overflow-hidden">
             <table className="fin-table">
               <thead>
                 <tr>
+                  <th aria-label="déplier" style={{ width: 32 }} />
                   <th>Client</th>
                   <th>Commercial</th>
-                  <th>Montant total</th>
-                  <th>Acompte</th>
                   <th>Méthode de paiement</th>
-                  <th>Statut</th>
-                  <th>Encaissé le</th>
-                  <th aria-label="actions" />
+                  <th>Montant total</th>
+                  <th>Échéancier</th>
+                  <th>À récupérer</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((a) => {
-                  const meta = STATUT_META[a.statut]
+                  const isOpen = expanded.has(a.debriefId)
+                  const nbEncaisse = a.echeances.filter((e) => e.statut === 'encaisse').length
+                  const restant = a.echeances
+                    .filter((e) => e.statut !== 'encaisse' && e.statut !== 'annule')
+                    .reduce((s, e) => s + (Number(e.montantPrevu ?? 0) || 0), 0)
+                  const method = formatPaymentMethod(a.financingType, a.paymentSubMethod, a.financingOrg)
                   return (
-                    <tr key={a.debriefId}>
-                      <td className="font-semibold text-text">{a.clientName ?? '—'}</td>
-                      <td className="text-muted">{a.commercialName ?? '—'}</td>
-                      <td>{money(a.montantTotal)}</td>
-                      <td className="font-semibold">
-                        {money(a.acompteAmount)}
-                        {a.acomptePercent != null && <span className="text-faint text-xs"> ({a.acomptePercent}%)</span>}
-                      </td>
-                      <td className="text-muted">{formatPaymentMethod(a.financingType, a.paymentSubMethod, a.financingOrg) ?? '—'}</td>
-                      <td><span className={`fin-pill ${meta.cls}`}>{meta.label}</span></td>
-                      <td className="text-muted">{a.dateEncaissement ? formatDate(a.dateEncaissement) : '—'}</td>
-                      <td className="text-right">
-                        <button type="button" className="fin-action" onClick={() => setEditing(a)}>
-                          {a.statut === 'encaisse' ? 'Modifier' : 'Enregistrer'}
-                        </button>
-                      </td>
-                    </tr>
+                    <FinanceVenteRows
+                      key={a.debriefId}
+                      acompte={a}
+                      isOpen={isOpen}
+                      onToggle={() => toggle(a.debriefId)}
+                      method={method}
+                      nbEncaisse={nbEncaisse}
+                      restant={restant}
+                      onEdit={(tranche) => setEditing({ acompte: a, tranche })}
+                    />
                   )
                 })}
               </tbody>
@@ -157,8 +174,9 @@ export function Finances() {
         )}
 
         {editing && (
-          <RecordAcompteModal
-            acompte={editing}
+          <RecordEcheanceModal
+            acompte={editing.acompte}
+            tranche={editing.tranche}
             onClose={() => setEditing(null)}
             onSaved={() => { setEditing(null); refetch() }}
           />
@@ -168,13 +186,74 @@ export function Finances() {
   )
 }
 
-function RecordAcompteModal({
-  acompte, onClose, onSaved,
-}: { acompte: AcompteResponse; onClose: () => void; onSaved: () => void }) {
-  const [statut, setStatut] = useState<AcompteStatut>(acompte.statut === 'attendu' ? 'encaisse' : acompte.statut)
-  const [montantReel, setMontantReel] = useState(acompte.montantReel ?? acompte.acompteAmount ?? '')
-  const [date, setDate] = useState(acompte.dateEncaissement ?? todayIso())
-  const [notes, setNotes] = useState(acompte.notes ?? '')
+function FinanceVenteRows({
+  acompte: a, isOpen, onToggle, method, nbEncaisse, restant, onEdit,
+}: {
+  acompte: AcompteResponse
+  isOpen: boolean
+  onToggle: () => void
+  method: string | null
+  nbEncaisse: number
+  restant: number
+  onEdit: (tranche: EcheanceLine) => void
+}) {
+  return (
+    <>
+      <tr className="cursor-pointer" onClick={onToggle}>
+        <td className="text-faint text-center">{isOpen ? '▾' : '▸'}</td>
+        <td className="font-semibold text-text">{a.clientName ?? '—'}</td>
+        <td className="text-muted">{a.commercialName ?? '—'}</td>
+        <td className="text-muted">
+          {method ?? '—'}
+          {a.edfRecepisse && <span className="ml-1.5 fin-pill bg-or-tint text-or-dark">Récépissé EDF</span>}
+        </td>
+        <td>{money(a.montantTotal)}</td>
+        <td className="text-muted">{nbEncaisse}/{a.echeances.length} encaissée{a.echeances.length > 1 ? 's' : ''}</td>
+        <td className="font-semibold">{restant > 0 ? `${restant.toLocaleString('fr-FR')} €` : '—'}</td>
+      </tr>
+      {isOpen && a.echeances.map((e) => {
+        const meta = STATUT_META[e.statut]
+        return (
+          <tr key={e.ordre} className="bg-cream-darker/40">
+            <td />
+            <td colSpan={2} className="pl-2">
+              <span className="font-semibold text-text">Tranche {e.ordre}</span>
+              <span className="text-faint"> · {e.label}</span>
+              {e.percent != null && <span className="text-faint text-xs"> ({e.percent}%)</span>}
+            </td>
+            <td className="text-xs">
+              {e.jalonKey
+                ? e.jalonAtteint
+                  ? <span className="text-or-dark font-semibold">✓ jalon franchi</span>
+                  : <span className="text-faint">jalon en attente</span>
+                : <span className="text-faint">—</span>}
+            </td>
+            <td className="font-semibold">{money(e.statut === 'encaisse' ? (e.montantReel ?? e.montantPrevu) : e.montantPrevu)}</td>
+            <td>
+              <span className={`fin-pill ${meta.cls}`}>{meta.label}</span>
+              {e.dateEncaissement && <span className="text-faint text-xs ml-2">{formatDate(e.dateEncaissement)}</span>}
+            </td>
+            <td className="text-right">
+              <button type="button" className="fin-action" onClick={(ev) => { ev.stopPropagation(); onEdit(e) }}>
+                {e.statut === 'encaisse' ? 'Modifier' : 'Enregistrer'}
+              </button>
+            </td>
+          </tr>
+        )
+      })}
+    </>
+  )
+}
+
+function RecordEcheanceModal({
+  acompte, tranche, onClose, onSaved,
+}: { acompte: AcompteResponse; tranche: EcheanceLine; onClose: () => void; onSaved: () => void }) {
+  const [statut, setStatut] = useState<AcompteStatut>(
+    tranche.statut === 'encaisse' || tranche.statut === 'annule' ? tranche.statut : 'encaisse',
+  )
+  const [montantReel, setMontantReel] = useState(tranche.montantReel ?? tranche.montantPrevu ?? '')
+  const [date, setDate] = useState(tranche.dateEncaissement ?? todayIso())
+  const [notes, setNotes] = useState(tranche.notes ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -184,7 +263,8 @@ function RecordAcompteModal({
     setSaving(true)
     setError(null)
     try {
-      await recordAcompte(acompte.debriefId, {
+      await recordEcheance(acompte.debriefId, {
+        ordre: tranche.ordre,
         statut,
         montantReel: isEncaisse ? (montantReel || null) : null,
         dateEncaissement: isEncaisse ? (date || null) : null,
@@ -199,18 +279,15 @@ function RecordAcompteModal({
   }
 
   return (
-    <div className="fiche-modal-backdrop" role="dialog" aria-modal="true" aria-label="Enregistrer l'acompte" onClick={onClose}>
+    <div className="fiche-modal-backdrop" role="dialog" aria-modal="true" aria-label="Enregistrer la tranche" onClick={onClose}>
       <div className="fiche-modal wf-modal" onClick={(e) => e.stopPropagation()}>
         <header className="fiche-modal-head">
           <div className="min-w-0">
-            <span className="eyebrow text-or-dark">Acompte</span>
+            <span className="eyebrow text-or-dark">Acompte · tranche {tranche.ordre}</span>
             <h2>{acompte.clientName ?? 'Client'}</h2>
             <p className="fiche-modal-sub">
-              Acompte attendu : {money(acompte.acompteAmount)}
-              {(() => {
-                const method = formatPaymentMethod(acompte.financingType, acompte.paymentSubMethod, acompte.financingOrg)
-                return method ? ` · ${method}` : ''
-              })()}
+              {tranche.label}
+              {tranche.percent != null ? ` · ${tranche.percent}%` : ''} · prévu {money(tranche.montantPrevu)}
             </p>
           </div>
           <button type="button" className="fiche-modal-close" onClick={onClose} aria-label="Fermer">✕</button>
@@ -221,7 +298,8 @@ function RecordAcompteModal({
             <h3>Statut</h3>
             <select className="wf-modal-input" value={statut} onChange={(e) => setStatut(e.target.value as AcompteStatut)}>
               <option value="encaisse">Encaissé</option>
-              <option value="attendu">Attendu</option>
+              <option value="a_encaisser">À encaisser</option>
+              <option value="en_attente">En attente</option>
               <option value="en_retard">En retard</option>
               <option value="annule">Annulé</option>
             </select>

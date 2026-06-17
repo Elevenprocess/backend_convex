@@ -1,6 +1,6 @@
 import type {
   AcompteResponse,
-  RecordAcomptePatch,
+  RecordEcheancePatch,
   ClientResponse,
   CommercialObjectiveResponse,
   DebriefResponse,
@@ -238,11 +238,12 @@ export function listAcomptes(): Promise<AcompteResponse[]> {
   return api<AcompteResponse[]>('/payments/acomptes')
 }
 
-export function recordAcompte(
+// Enregistre l'encaissement d'une tranche de l'échéancier (ordre dans le body).
+export function recordEcheance(
   debriefId: string,
-  patch: RecordAcomptePatch,
+  patch: RecordEcheancePatch,
 ): Promise<AcompteResponse> {
-  return api<AcompteResponse>(`/payments/acomptes/${debriefId}`, { method: 'PATCH', body: patch })
+  return api<AcompteResponse>(`/payments/acomptes/${debriefId}/echeances`, { method: 'PATCH', body: patch })
 }
 
 export function getDevis(devisId: string): Promise<Devis> {
