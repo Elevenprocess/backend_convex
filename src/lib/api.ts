@@ -215,6 +215,17 @@ export function bootstrapClient(leadId: string): Promise<ClientResponse> {
   })
 }
 
+/**
+ * Initialise un dossier indépendant scopé à un PROJET précis (workflow propre
+ * à ce projet, distinct des autres projets du même lead).
+ */
+export function bootstrapClientForProject(projectId: string): Promise<ClientResponse> {
+  return api<ClientResponse>('/clients/bootstrap', {
+    method: 'POST',
+    body: { projectId },
+  })
+}
+
 export function getSubsteps(clientId: string): Promise<SubstepResponse[]> {
   return api<SubstepResponse[]>('/substeps', { query: { clientId } })
 }

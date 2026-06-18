@@ -407,12 +407,14 @@ export function useClients(filters?: {
   technicienVtId?: string
   phase?: string
   leadId?: string
+  projectId?: string
   unassignedVt?: boolean
 } | null): Async<ClientResponse[]> {
   const query = filters === null ? undefined : {
     technicienVtId: filters?.technicienVtId,
     phase: filters?.phase,
     leadId: filters?.leadId,
+    projectId: filters?.projectId,
     unassignedVt: filters?.unassignedVt ? 'true' : undefined,
   }
   return useFetch<ClientResponse[]>(filters === null ? null : '/clients', query)

@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { useAuth } from '../../lib/auth'
 import { useClients, useSubsteps, useUsers } from '../../lib/hooks'
-import { bootstrapClient, updateSubstep } from '../../lib/api'
+import { bootstrapClient, bootstrapClientForProject, updateSubstep } from '../../lib/api'
 import { todayIso } from '../../lib/suivi-board'
 import type { Dossier } from '../../lib/suivi'
 import type { UpdateSubstepPatch, WorkflowPhase } from '../../lib/types'
@@ -9,6 +9,11 @@ import { WorkflowBoard } from './WorkflowBoard'
 
 type Props = {
   dossier: Dossier
+  /**
+   * Quand fourni, le workflow est scopé à CE projet (dossier indépendant par
+   * projet). Sinon, fallback legacy scopé au lead (page détail historique).
+   */
+  projectId?: string
 }
 
 /**
@@ -16,7 +21,7 @@ type Props = {
  * Workflow / Documents et bootstrap du dossier. Extrait de SuiviDetail pour
  * être réutilisé tel quel dans la page détail et dans le drawer de la fiche.
  */
-export function DossierWorkflowPanel({ dossier }: Props) {
+export function DossierWorkflowPanel({ dossier, projectId }: Props) {
   const role = useAuth((s) => s.user?.role)
   const FIELD_PHASES: WorkflowPhase[] = ['vt', 'installation']
   const canEditPhase = (phase: WorkflowPhase) =>
@@ -24,7 +29,11 @@ export function DossierWorkflowPanel({ dossier }: Props) {
       : role === 'technicien' ? FIELD_PHASES.includes(phase)
         : true
 
-  const { data: clients, refetch: refetchClients } = useClients({ leadId: dossier.lead.id })
+  // Scoping par projet si projectId fourni (workflow indépendant par projet),
+  // sinon par lead (dossier legacy de la page détail).
+  const { data: clients, refetch: refetchClients } = useClients(
+    projectId ? { projectId } : { leadId: dossier.lead.id },
+  )
   const { data: users } = useUsers()
   const client = clients?.[0] ?? null
   const { data: substeps, loading: substepsLoading, refetch } = useSubsteps(client ? { clientId: client.id } : null)
@@ -39,14 +48,14 @@ export function DossierWorkflowPanel({ dossier }: Props) {
     setInitializing(true)
     setInitError(null)
     try {
-      await bootstrapClient(dossier.lead.id)
+      await (projectId ? bootstrapClientForProject(projectId) : bootstrapClient(dossier.lead.id))
       refetchClients()
     } catch (e) {
       setInitError(e instanceof Error ? e.message : 'Échec de l’initialisation du dossier')
     } finally {
       setInitializing(false)
     }
-  }, [dossier.lead.id, refetchClients])
+  }, [projectId, dossier.lead.id, refetchClients])
 
   const onMutate = useCallback(async (id: string, patch: UpdateSubstepPatch) => {
     setSavingId(id)

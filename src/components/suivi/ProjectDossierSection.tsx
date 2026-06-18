@@ -342,7 +342,7 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
               <button type="button" className="fiche-wf-drawer-close" onClick={() => setWorkflowOpen(false)} aria-label="Fermer le workflow">✕</button>
             </header>
             <div className="fiche-wf-drawer-body">
-              <DossierWorkflowPanel dossier={dossier} />
+              <DossierWorkflowPanel dossier={dossier} projectId={project.id} />
             </div>
           </aside>
         </div>
