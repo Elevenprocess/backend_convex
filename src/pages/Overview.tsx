@@ -852,25 +852,34 @@ function OverviewAdmin() {
 
   useEffect(() => {
     let cancelled = false
-    const warmupTimer = window.setTimeout(() => {
-      if (cancelled) return
+    // Préchauffage du cache pour les AUTRES périodes (bascule d'onglet instantanée).
+    // - On exclut la période courante ET la période de comparaison : la page les
+    //   charge déjà elle-même (useAnalyticsSummary/Funnel + prevRange plus bas).
+    // - Sans `force` : si une période est déjà en cache, aucun appel backend.
+    // - En SÉQUENTIEL (une période après l'autre) au lieu de ~12 requêtes
+    //   analytics lourdes lancées en parallèle, qui saturaient la DB au montage
+    //   et ralentissaient le chargement initial.
+    const warmupTimer = window.setTimeout(async () => {
       const initialRange = buildFunnelPeriodRange(DEFAULT_FUNNEL_PERIOD)
-      const currentKey = `${initialRange.from}|${initialRange.to}`
-      const warmupRanges = getOverviewWarmupRanges()
-      const previous = previousRange(initialRange)
-      void Promise.allSettled([
-        ...warmupRanges.flatMap((range) => {
-          const filters = { from: range.from, to: range.to }
-          const force = `${range.from}|${range.to}` !== currentKey
-          return [
-            prefetchAnalyticsSummary(filters, { force }),
-            prefetchAnalyticsFunnel(filters, { force }),
-          ]
-        }),
-        prefetchAnalyticsSummary({ from: previous.from, to: previous.to }, { force: true }),
-        prefetchAnalyticsFunnel({ from: previous.from, to: previous.to }, { force: true }),
+      const excluded = new Set([
+        `${initialRange.from}|${initialRange.to}`,
+        (() => {
+          const p = previousRange(initialRange)
+          return `${p.from}|${p.to}`
+        })(),
       ])
-    }, 220)
+      const ranges = getOverviewWarmupRanges().filter(
+        (range) => !excluded.has(`${range.from}|${range.to}`),
+      )
+      for (const range of ranges) {
+        if (cancelled) return
+        const filters = { from: range.from, to: range.to }
+        await Promise.allSettled([
+          prefetchAnalyticsSummary(filters),
+          prefetchAnalyticsFunnel(filters),
+        ])
+      }
+    }, 600)
     return () => {
       cancelled = true
       window.clearTimeout(warmupTimer)

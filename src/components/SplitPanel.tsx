@@ -235,8 +235,6 @@ type InfosEditable = {
   city: string
   postalCode: string
   status: LeadResponse['status']
-  typeLogement: string
-  revenuFiscal: string
 }
 
 function leadToInfosForm(lead: LeadResponse): InfosEditable {
@@ -252,8 +250,6 @@ function leadToInfosForm(lead: LeadResponse): InfosEditable {
     city: cleanField(lead.city) ?? '',
     postalCode: cleanField(lead.postalCode) ?? '',
     status: lead.status,
-    typeLogement: cleanField(lead.typeLogement) ?? '',
-    revenuFiscal: lead.revenuFiscal?.toString() ?? '',
   }
 }
 
@@ -268,8 +264,6 @@ type LeadNotesForm = {
   addressLine: string
   city: string
   postalCode: string
-  typeLogement: string
-  revenuFiscal: string
 }
 
 function leadToNotesForm(lead: LeadResponse): LeadNotesForm {
@@ -281,8 +275,6 @@ function leadToNotesForm(lead: LeadResponse): LeadNotesForm {
     addressLine: cleanField(lead.addressLine) ?? '',
     city: cleanField(lead.city) ?? '',
     postalCode: cleanField(lead.postalCode) ?? '',
-    typeLogement: cleanField(lead.typeLogement) ?? '',
-    revenuFiscal: lead.revenuFiscal?.toString() ?? '',
   }
 }
 
@@ -315,10 +307,6 @@ function InfosTab({ lead, userMap, onSaved }: { lead: LeadResponse; userMap?: Ma
         if (form[key] === initial[key]) continue
         if (key === 'status') {
           patch.status = form.status
-          continue
-        }
-        if (key === 'revenuFiscal') {
-          patch.revenuFiscal = parseRevenuFiscal(form.revenuFiscal)
           continue
         }
         const trimmed = (form[key] as string).trim()
@@ -356,8 +344,6 @@ function InfosTab({ lead, userMap, onSaved }: { lead: LeadResponse; userMap?: Ma
         <Field label="ADRESSE" value={fieldOrDash(lead.addressLine)} />
         <Field label="CODE POSTAL" value={fieldOrDash(lead.postalCode)} />
         <Field label="VILLE" value={fieldOrDash(lead.city)} />
-        <Field label="TYPE LOGEMENT" value={fieldOrDash(lead.typeLogement)} />
-        <Field label="REVENU FISCAL" value={lead.revenuFiscal != null ? lead.revenuFiscal.toLocaleString('fr-FR') : '—'} />
         <Field label="SOURCE" value={prettySource(lead)} />
         {lead.utmSource && <Field label="UTM" value={lead.utmSource} />}
         <Field label="STATUT" value={STATUS_LABEL[lead.status]} />
@@ -395,8 +381,6 @@ function InfosTab({ lead, userMap, onSaved }: { lead: LeadResponse; userMap?: Ma
       <EditableField label="ADRESSE" value={form.addressLine} onChange={(v) => setForm((f) => ({ ...f, addressLine: v }))} />
       <EditableField label="CODE POSTAL" value={form.postalCode} onChange={(v) => setForm((f) => ({ ...f, postalCode: v }))} placeholder="97400" />
       <EditableField label="VILLE" value={form.city} onChange={(v) => setForm((f) => ({ ...f, city: v }))} />
-      <EditableField label="TYPE LOGEMENT" value={form.typeLogement} onChange={(v) => setForm((f) => ({ ...f, typeLogement: v }))} placeholder="ex: maison" />
-      <EditableField label="REVENU FISCAL" value={form.revenuFiscal} onChange={(v) => setForm((f) => ({ ...f, revenuFiscal: v }))} placeholder="ex: 25000" />
       <div>
         <div className="text-[10px] font-bold text-faint uppercase tracking-widest mb-1">STATUT</div>
         <select
@@ -649,8 +633,6 @@ function EditRdvForm({ rdv, lead, onCancel, onSaved }: { rdv: RdvResponse; lead:
         addressLine: info.addressLine.trim() === '' ? null : info.addressLine.trim(),
         city: info.city.trim() === '' ? null : info.city.trim(),
         postalCode: info.postalCode.trim() === '' ? null : info.postalCode.trim(),
-        typeLogement: info.typeLogement.trim() === '' ? null : info.typeLogement.trim(),
-        revenuFiscal: parseRevenuFiscal(info.revenuFiscal),
       }
       await updateGhlAppointment(rdv.id, payload)
       onSaved()
@@ -701,10 +683,6 @@ function EditRdvForm({ rdv, lead, onCancel, onSaved }: { rdv: RdvResponse; lead:
         <div className="grid grid-cols-2 gap-2">
           <Input label="Ville" value={info.city} onChange={set('city')} />
           <Input label="Code postal" value={info.postalCode} onChange={set('postalCode')} placeholder="97400" />
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <Input label="Type logement" value={info.typeLogement} onChange={set('typeLogement')} />
-          <Input label="Revenu fiscal" value={info.revenuFiscal} onChange={set('revenuFiscal')} />
         </div>
       </div>
     </div>
@@ -936,6 +914,7 @@ function NotesTab({
           rdvDate: string
           rdvAt: string
           form: typeof defaultForm
+          leadSnapshot: typeof defaultForm
         }>
         setSetterStatus(parsed.setterStatus ?? statusToSetterStatus(lead.status))
         setStep(parsed.step ?? 'eligibility')
@@ -945,7 +924,20 @@ function NotesTab({
         setSector(parsed.sector ?? '')
         setRdvDate(parsed.rdvDate ?? todayInputValue())
         setRdvAt(parsed.rdvAt ?? '')
-        setForm({ ...defaultForm, ...(parsed.form ?? {}) })
+        // Fusion à la restauration : on privilégie la valeur FRAÎCHE du lead (modif
+        // faite dans l'onglet Infos pendant qu'on était ailleurs) SAUF pour les champs
+        // que le setter avait lui-même édités ici (valeur persistée ≠ snapshot lead
+        // persisté). Sans snapshot (anciens brouillons), on garde la saisie persistée.
+        const persistedForm: Partial<typeof defaultForm> = parsed.form ?? {}
+        const persistedSnapshot = parsed.leadSnapshot
+        const mergedForm = { ...defaultForm }
+        for (const key of Object.keys(defaultForm) as (keyof typeof defaultForm)[]) {
+          const persistedVal = persistedForm[key]
+          if (persistedVal === undefined) continue
+          const setterEdited = persistedSnapshot ? persistedVal !== persistedSnapshot[key] : true
+          if (setterEdited) mergedForm[key] = persistedVal
+        }
+        setForm(mergedForm)
         setError(null)
         setSuccess(null)
         return
@@ -986,7 +978,7 @@ function NotesTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     lead.firstName, lead.lastName, lead.email, lead.phone, lead.addressLine,
-    lead.city, lead.postalCode, lead.typeLogement, lead.revenuFiscal,
+    lead.city, lead.postalCode,
   ])
 
   // Sauvegarde à chaque modification (debounced via React batching) — clé par lead.
@@ -995,6 +987,10 @@ function NotesTab({
     try {
       localStorage.setItem(notesTabStorageKey(lead.id), JSON.stringify({
         setterStatus, step, eligibilityNotes, commentaire, callbackAt, sector, rdvDate, rdvAt, form,
+        // Snapshot des valeurs lead sur lesquelles `form` était aligné : permet, à la
+        // restauration (remount après passage par l'onglet Infos), de distinguer un
+        // champ édité par le setter ici d'un champ resté à la valeur du lead.
+        leadSnapshot: leadSnapshotRef.current,
       }))
     } catch {}
   }, [lead.id, setterStatus, step, eligibilityNotes, commentaire, callbackAt, sector, rdvDate, rdvAt, form])
@@ -1061,7 +1057,6 @@ function NotesTab({
     try {
       if (!sector) throw new Error('Sélectionne un secteur.')
       if (!rdvAt) throw new Error('Choisis une date de rendez-vous.')
-      const revenu = parseRevenuFiscal(form.revenuFiscal)
       const firstName = cleanField(form.firstName)
       const lastName = cleanField(form.lastName)
       const email = cleanField(form.email)
@@ -1069,10 +1064,8 @@ function NotesTab({
       const addressLine = cleanField(form.addressLine)
       const city = cleanField(form.city)
       const postalCode = cleanField(form.postalCode)
-      const typeLogement = cleanField(form.typeLogement)
       if (email && !isValidEmail(email)) throw new Error('Email invalide : corrige ou vide le champ email.')
       if (postalCode && postalCode.length > 20) throw new Error('Code postal trop long : 20 caractères maximum.')
-      if (typeLogement && typeLogement.length > 80) throw new Error('Type logement trop long : 80 caractères maximum.')
       const leadPatch = {
         status: 'qualifie',
         firstName,
@@ -1082,8 +1075,6 @@ function NotesTab({
         addressLine,
         city,
         postalCode,
-        typeLogement,
-        revenuFiscal: revenu,
       } as const
       const rdvPromise = ghlConfig?.configured
         ? createGhlAppointment({
@@ -1100,8 +1091,6 @@ function NotesTab({
           addressLine,
           city,
           postalCode,
-          typeLogement,
-          revenuFiscal: revenu,
         })
         : createRdv({
           leadId: lead.id,
@@ -1416,10 +1405,6 @@ function NotesTab({
             <Input label="Ville" value={form.city} onChange={(v) => setForm({ ...form, city: v })} />
             <Input label="Code postal" value={form.postalCode} onChange={(v) => setForm({ ...form, postalCode: v })} />
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Input label="Type logement" value={form.typeLogement} onChange={(v) => setForm({ ...form, typeLogement: v })} />
-            <Input label="Revenu fiscal" value={form.revenuFiscal} onChange={(v) => setForm({ ...form, revenuFiscal: v })} />
-          </div>
           <div className="rounded-[18px] border border-or/20 bg-or-tint p-4 space-y-2">
             <div className="text-[10px] font-bold tracking-widest uppercase text-or-dark">Résumé final avant validation</div>
             <Field label="LEAD" value={`${form.firstName} ${form.lastName}`.trim() || fullName(lead)} />
@@ -1733,18 +1718,6 @@ function rdvAtToReunionIso(value: string): string {
   const [date, time] = value.split('T')
   if (!date || !time) return new Date(value).toISOString()
   return new Date(`${date}T${time}:00+04:00`).toISOString()
-}
-
-function parseRevenuFiscal(value: string): number | null {
-  const cleaned = cleanField(value)
-  if (!cleaned) return null
-  const normalized = cleaned.replace(/[\s\u00a0]/g, '').replace(',', '.')
-  const parsed = Number(normalized)
-  if (!Number.isFinite(parsed)) throw new Error('Le revenu fiscal doit être un nombre.')
-  if (!Number.isInteger(parsed)) throw new Error('Le revenu fiscal doit être un nombre entier.')
-  if (parsed < 0) throw new Error('Le revenu fiscal ne peut pas être négatif.')
-  if (parsed > 10_000_000) throw new Error('Le revenu fiscal doit être inférieur à 10 000 000.')
-  return parsed
 }
 
 function isValidEmail(value: string): boolean {
