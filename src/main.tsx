@@ -18,6 +18,7 @@ import { RdvCalendar } from './pages/rdv/RdvCalendar'
 import { RdvDetail } from './pages/rdv/RdvDetail'
 import { RdvSplit } from './pages/rdv/RdvSplit'
 import { Analytics } from './pages/Analytics'
+import { Ads } from './pages/Ads'
 import { Suivi } from './pages/Suivi'
 import { Finances } from './pages/Finances'
 import { SuiviDetail } from './pages/SuiviDetail'
@@ -43,6 +44,14 @@ function NoTechnicien({ children }: { children: ReactElement }) {
   const role = useAuth((s) => s.user?.role)
   if (role === 'technicien') return <Navigate to="/planning" replace />
   return children
+}
+
+// Page Publicité (/ads) : réservée à l'admin et au commercial_lead (suivi ROAS).
+// Tout autre rôle est renvoyé vers son accueil. Garde positive (allowlist).
+function RequireAdsAccess({ children }: { children: ReactElement }) {
+  const role = useAuth((s) => s.user?.role)
+  if (role === 'admin' || role === 'commercial_lead') return children
+  return <Navigate to="/overview" replace />
 }
 
 // Agenda /rdv : interdit au technicien (→ planning) et au commercial individuel
@@ -78,6 +87,7 @@ const router = createHashRouter([
           { path: '/rdv/split', element: <RdvSplit /> },
           { path: '/rdv/:id', element: <RdvDetail /> },
           { path: '/analytics', element: <NoTechnicien><Analytics /></NoTechnicien> },
+          { path: '/ads', element: <RequireAdsAccess><Ads /></RequireAdsAccess> },
           { path: '/suivi', element: <NoTechnicien><Suivi /></NoTechnicien> },
           { path: '/suivi/:id', element: <SuiviDetail /> },
           { path: '/suivi/:id/fiche', element: <FicheCompletePage /> },

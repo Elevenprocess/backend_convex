@@ -54,6 +54,7 @@ const SECTIONS: Section[] = [
     label: 'Analytics',
     items: [
       { to: '/analytics', icon: 'chart', label: 'Analytics', roles: NON_SALES_REP_ROLES },
+      { to: '/ads', icon: 'target', label: 'Publicité', roles: ['admin', 'commercial_lead'] },
     ],
   },
   {

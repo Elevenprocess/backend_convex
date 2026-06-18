@@ -370,6 +370,73 @@ export type AnalyticsSummaryResponse = {
   commercial: AnalyticsCommercialSummary | null
 }
 
+// ─── Ads / ROAS (Meta tracking) ───────────────────────────
+// Canaux d'acquisition publicitaire (aligné sur ad_channel enum côté backend).
+export type AdChannel =
+  | 'meta'
+  | 'google'
+  | 'tiktok'
+  | 'linkedin'
+  | 'microsoft'
+  | 'organic'
+  | 'referral'
+  | 'direct'
+  | 'other'
+
+export const AD_CHANNEL_LABEL: Record<AdChannel, string> = {
+  meta: 'Meta (Facebook/Instagram)',
+  google: 'Google',
+  tiktok: 'TikTok',
+  linkedin: 'LinkedIn',
+  microsoft: 'Microsoft',
+  organic: 'Organique',
+  referral: 'Recommandation',
+  direct: 'Direct',
+  other: 'Autre',
+}
+
+export type AdsLevel = 'campaign' | 'adset' | 'ad'
+
+export interface AdsReportRow {
+  level: AdsLevel
+  campaignId: string | null
+  campaign: string | null
+  adsetId?: string | null
+  adset?: string | null
+  adId?: string | null
+  ad?: string | null
+  spend: number
+  impressions: number
+  clicks: number
+  leads: number
+  cpl: number
+  devisSignes: number
+  ca: number
+  roas: number
+  tauxSignature: number
+  unmatched?: 'spend_no_leads' | 'leads_no_spend' | null
+}
+
+export interface AdsReport {
+  rows: AdsReportRow[]
+  totals: Omit<AdsReportRow, 'level' | 'campaign' | 'campaignId'>
+}
+
+// Mapping éditable source GHL brute → canal normalisé.
+export interface SourceMapEntry {
+  id: string
+  rawSource: string
+  channel: AdChannel
+  label: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface UnmappedSource {
+  raw: string
+  n: number
+}
+
 export type RdvStatus = 'planifie' | 'honore' | 'no_show' | 'reporte' | 'annule'
 export type RdvResult = 'signe' | 'reflexion' | 'perdu' | 'no_show' | 'reporte'
 export type RdvLocation = 'domicile' | 'agence' | 'visio'

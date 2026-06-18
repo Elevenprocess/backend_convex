@@ -5,6 +5,9 @@ import { notifyRealtimeRefresh, REALTIME_REFRESH_EVENT, type RealtimeRefreshPayl
 import { useNetworkActivity } from './networkActivity'
 import type {
   AcompteResponse,
+  AdChannel,
+  AdsLevel,
+  AdsReport,
   CallLogResponse,
   ClientResponse,
   DebriefResponse,
@@ -559,6 +562,28 @@ export function prefetchAnalyticsFunnel(filters?: {
   sector?: string
 }, options?: { force?: boolean }): Promise<AnalyticsFunnelResponse | null> {
   return prefetchFetchCache<AnalyticsFunnelResponse>('/analytics/funnel', filters, options)
+}
+
+// ─── Ads / ROAS (Meta tracking) ─────────────────────────────
+// Rapport ROAS cohorte. Path-keyed cache (cf. useAnalyticsSummary) : chaque
+// (from, to, level, channel) a sa propre entrée — le drill-down adset/ad
+// déclenche un fetch indépendant mémorisé.
+export function useAdsReport(params: {
+  from: string
+  to: string
+  level?: AdsLevel
+  channel?: AdChannel
+} | null): Async<AdsReport> {
+  const query = params === null ? undefined : {
+    from: params.from,
+    to: params.to,
+    level: params.level ?? 'campaign',
+    channel: params.channel ?? 'meta',
+  }
+  return useFetch<AdsReport>(params === null ? null : '/analytics/ads', query, {
+    refreshCachedOnMount: true,
+    silentInitialLoading: true,
+  })
 }
 
 // ─── Debrief analytics ──────────────────────────────────────

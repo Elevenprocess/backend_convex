@@ -1,5 +1,8 @@
 import type {
   AcompteResponse,
+  AdChannel,
+  AdsLevel,
+  AdsReport,
   RecordEcheancePatch,
   ClientResponse,
   CommercialObjectiveResponse,
@@ -12,8 +15,10 @@ import type {
   ProjectDetailResponse,
   ProjectResponse,
   ProjectStatus,
+  SourceMapEntry,
   SubstepResponse,
   SubstepDocument,
+  UnmappedSource,
   UpdateSubstepPatch,
   UpsertCommercialObjectivePayload,
 } from './types'
@@ -563,6 +568,54 @@ export async function fetchSubstepDocumentObjectUrl(
   }
   const fromBlob = blob.type && blob.type !== 'application/octet-stream' ? blob.type : null
   return { url: URL.createObjectURL(blob), mimeType: sniffed ?? fromBlob }
+}
+
+// ─── Ads / ROAS (Meta tracking) ───────────────────────────
+// Rapport ROAS cohorte par campagne/adset/ad. Réservé admin + commercial_lead
+// (garde @Roles côté API). `level` pilote le niveau de drill-down.
+export function fetchAdsReport(params: {
+  from: string
+  to: string
+  level?: AdsLevel
+  channel?: AdChannel
+}): Promise<AdsReport> {
+  return api<AdsReport>('/analytics/ads', {
+    query: {
+      from: params.from,
+      to: params.to,
+      level: params.level ?? 'campaign',
+      channel: params.channel ?? 'meta',
+    },
+  })
+}
+
+/** Resync / backfill de la dépense publicitaire (admin). */
+export function resyncAdSpend(body: { from: string; to: string }): Promise<{
+  synced: number
+  totalSpend: string
+  skipped: boolean
+}> {
+  return api('/ad-spend/sync', { method: 'POST', body })
+}
+
+/** Liste du mapping source brute → canal (admin). */
+export function fetchSourceMap(): Promise<SourceMapEntry[]> {
+  return api<SourceMapEntry[]>('/source-map')
+}
+
+/** Sources GHL brutes non encore classées (canal = other), avec leur volume (admin). */
+export function fetchUnmappedSources(): Promise<UnmappedSource[]> {
+  return api<UnmappedSource[]>('/source-map/unmapped')
+}
+
+/** Crée/met à jour un mapping. `reapply` rejoue le classifieur sur les leads existants (admin). */
+export function upsertSourceMap(body: {
+  rawSource: string
+  channel: AdChannel
+  label: string
+  reapply?: boolean
+}): Promise<SourceMapEntry> {
+  return api<SourceMapEntry>('/source-map', { method: 'POST', body })
 }
 
 // ─── Notifications ─────────────────────────────────────────
