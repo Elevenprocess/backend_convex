@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Spinner } from '../components/Spinner'
-import { Icon } from '../components/Icon'
+import { Icon, type IconName } from '../components/Icon'
 import { useAuth } from '../lib/auth'
 import { useAdsReport } from '../lib/hooks'
 import {
@@ -151,6 +151,27 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
           <MagicKpi label="ROAS" value={fmtRoas(totals?.roas)} sub="CA / dépense" accent={roasAccent(totals?.roas)} icon="chart" />
           <MagicKpi label="TX SIGNATURE" value={fmtPct(totals?.tauxSignature)} sub="Devis signés / leads" accent="success" icon="check" progress={pctValue(totals?.tauxSignature)} />
         </div>
+
+        {(rows.length > 0 || (totals?.impressions ?? 0) > 0) && (
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-6">
+              <div className="glass-card p-6 lg:col-span-3">
+                <SectionHead icon="filter" eyebrow="ENTONNOIR D'ACQUISITION" title="Du clic au devis signé" />
+                <AcquisitionFunnel totals={totals} />
+              </div>
+              <div className="glass-card p-6 lg:col-span-2">
+                <SectionHead icon="tag" eyebrow="RÉPARTITION" title="Dépense par campagne" />
+                <SpendDonut rows={rows} />
+              </div>
+            </div>
+            {rows.length > 0 && (
+              <div className="glass-card p-6">
+                <SectionHead icon="trophy" eyebrow="RENTABILITÉ" title="ROAS par campagne" hint="repère vertical = seuil 1×" />
+                <RoasByCampaign rows={rows} />
+              </div>
+            )}
+          </>
+        )}
 
         <div className="glass-card p-6">
           <div className="flex items-center justify-between mb-4">
@@ -554,6 +575,240 @@ function UnmappedRow({ source, onSaved }: { source: UnmappedSource; onSaved: () 
       {err && <span className="text-xs text-rouille w-full">{err}</span>}
     </div>
   )
+}
+
+// ===== Visualisations (dérivées des totals + rows, aucun appel back en plus) =====
+
+type AdsTotals = AdsReport['totals']
+
+function SectionHead({ icon, eyebrow, title, hint }: {
+  icon: IconName
+  eyebrow: string
+  title: string
+  hint?: string
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 mb-5">
+      <div className="flex items-center gap-3">
+        <span className="grid place-items-center w-9 h-9 rounded-xl bg-or-tint text-or-dark flex-shrink-0">
+          <Icon name={icon} size={18} />
+        </span>
+        <div>
+          <span className="eyebrow">{eyebrow}</span>
+          <h3 className="font-extrabold leading-tight">{title}</h3>
+        </div>
+      </div>
+      {hint && <span className="eyebrow text-faint text-right whitespace-nowrap">{hint}</span>}
+    </div>
+  )
+}
+
+// Entonnoir tapered : Impressions → Clics → Leads → Devis signés.
+const FUNNEL_COLORS = ['#6B8C7C', '#3E9A6F', '#1F7857', '#B59241']
+
+function AcquisitionFunnel({ totals }: { totals?: AdsTotals }) {
+  const stages = [
+    { label: 'Impressions', value: Math.round(totals?.impressions ?? 0) },
+    { label: 'Clics', value: Math.round(totals?.clicks ?? 0) },
+    { label: 'Leads', value: Math.round(totals?.leads ?? 0) },
+    { label: 'Devis signés', value: Math.round(totals?.devisSignes ?? 0) },
+  ]
+  const maxVal = Math.max(stages[0].value, 1)
+  const W = 360
+  const bandH = 50
+  const gap = 30
+  const cx = W / 2
+  const maxW = W - 40
+  const widthFor = (v: number) => Math.max(12, (v / maxVal) * maxW)
+  const H = stages.length * bandH + (stages.length - 1) * gap
+
+  const conversions = [
+    { label: 'CTR', sub: 'clic / impression', v: pct1(stages[1].value, stages[0].value) },
+    { label: 'Conv. lead', sub: 'lead / clic', v: pct1(stages[2].value, stages[1].value) },
+    { label: 'Signature', sub: 'devis / lead', v: pct1(stages[3].value, stages[2].value) },
+  ]
+
+  return (
+    <div className="grid sm:grid-cols-[1fr_minmax(150px,200px)] gap-6 items-center">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="Entonnoir d'acquisition">
+        {stages.map((s, i) => {
+          const y = i * (bandH + gap)
+          const topW = widthFor(s.value)
+          const botW = widthFor(stages[i + 1]?.value ?? s.value)
+          const points = `${cx - topW / 2},${y} ${cx + topW / 2},${y} ${cx + botW / 2},${y + bandH} ${cx - botW / 2},${y + bandH}`
+          const conv = i < stages.length - 1 && s.value > 0 ? Math.round((stages[i + 1].value / s.value) * 100) : null
+          return (
+            <g key={s.label}>
+              <polygon points={points} fill={FUNNEL_COLORS[i]} />
+              <text x={cx} y={y + bandH / 2 - 3} textAnchor="middle" fill="#ffffff" fontWeight={800} fontSize={17}>{fmtInt(s.value)}</text>
+              <text x={cx} y={y + bandH / 2 + 13} textAnchor="middle" fill="#ffffff" fillOpacity={0.85} fontSize={10} fontWeight={700} letterSpacing={0.4}>{s.label.toUpperCase()}</text>
+              {conv != null && (
+                <>
+                  <rect x={cx - 30} y={y + bandH + gap / 2 - 11} width={60} height={20} rx={10} fill="var(--color-or-tint)" />
+                  <text x={cx} y={y + bandH + gap / 2 + 3} textAnchor="middle" fill="var(--color-or-dark)" fontSize={11} fontWeight={800}>▾ {conv}%</text>
+                </>
+              )}
+            </g>
+          )
+        })}
+      </svg>
+
+      <div className="space-y-2.5">
+        {conversions.map((c) => (
+          <div key={c.label} className="rounded-2xl border border-line-soft bg-white/55 px-3.5 py-2.5">
+            <div className="flex items-baseline justify-between">
+              <span className="text-sm font-bold">{c.label}</span>
+              <span className="text-lg font-extrabold text-or-dark tabular-nums">{c.v}%</span>
+            </div>
+            <div className="text-[11px] text-faint">{c.sub}</div>
+            <div className="mt-1.5 h-1.5 rounded-full bg-line-soft overflow-hidden">
+              <div className="h-full rounded-full bg-or" style={{ width: `${Math.min(100, c.v)}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Donut : répartition de la dépense entre les 5 plus grosses campagnes + « Autres ».
+const DONUT_PALETTE = ['#1F7857', '#3E9A6F', '#B59241', '#A85D2E', '#6B8C7C', '#C4D3CA']
+
+function SpendDonut({ rows }: { rows: AdsReportRow[] }) {
+  const sorted = useMemo(
+    () => rows.filter((r) => (r.spend ?? 0) > 0).sort((a, b) => (b.spend ?? 0) - (a.spend ?? 0)),
+    [rows],
+  )
+  const segments = useMemo(() => {
+    const top = sorted.slice(0, 5).map((r, i) => ({
+      label: r.campaign?.trim() || '— (sans nom)',
+      value: r.spend ?? 0,
+      color: DONUT_PALETTE[i],
+    }))
+    const rest = sorted.slice(5).reduce((s, r) => s + (r.spend ?? 0), 0)
+    if (rest > 0) top.push({ label: 'Autres', value: rest, color: DONUT_PALETTE[5] })
+    return top
+  }, [sorted])
+  const total = segments.reduce((s, x) => s + x.value, 0)
+
+  if (segments.length === 0 || total === 0) {
+    return <ChartEmpty message="Aucune dépense rattachée à une campagne." />
+  }
+
+  const R = 90
+  const r = 56
+  return (
+    <div className="grid grid-cols-[150px_1fr] sm:grid-cols-[170px_1fr] gap-5 items-center">
+      <div className="relative w-[150px] h-[150px] sm:w-[170px] sm:h-[170px] mx-auto">
+        <svg viewBox="-100 -100 200 200" className="w-full h-full -rotate-90">
+          {segments.length === 1 ? (
+            <>
+              <path d={arcPath(R, r, 0, Math.PI)} fill={segments[0].color} />
+              <path d={arcPath(R, r, Math.PI, 2 * Math.PI)} fill={segments[0].color} />
+            </>
+          ) : (() => {
+            let acc = 0
+            return segments.map((s) => {
+              const a0 = (acc / total) * 2 * Math.PI
+              acc += s.value
+              const a1 = (acc / total) * 2 * Math.PI
+              return <path key={s.label} d={arcPath(R, r, a0, a1)} fill={s.color} stroke="var(--color-line-soft)" strokeWidth={1.5} />
+            })
+          })()}
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          <div className="text-lg font-extrabold leading-none tabular-nums">{fmtEur(total)}</div>
+          <div className="eyebrow mt-1">dépense</div>
+        </div>
+      </div>
+      <ul className="space-y-1.5 min-w-0">
+        {segments.map((s) => (
+          <li key={s.label} className="flex items-center gap-2 text-sm">
+            <i className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: s.color }} />
+            <span className="font-semibold truncate flex-1 min-w-0">{s.label}</span>
+            <span className="font-bold tabular-nums flex-shrink-0">{Math.round((s.value / total) * 100)}%</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+// Barres classées par ROAS, colorées vert/rouille autour du seuil 1×.
+function RoasByCampaign({ rows }: { rows: AdsReportRow[] }) {
+  const list = useMemo(
+    () => rows.filter((r) => (r.spend ?? 0) > 0).sort((a, b) => (b.roas ?? 0) - (a.roas ?? 0)).slice(0, 8),
+    [rows],
+  )
+  if (list.length === 0) return <ChartEmpty message="Aucune campagne avec dépense sur la période." />
+
+  const maxRoas = Math.max(...list.map((r) => r.roas ?? 0), 2)
+  const breakEven = (1 / maxRoas) * 100
+
+  return (
+    <div className="space-y-3">
+      {list.map((r, i) => {
+        const roas = r.roas ?? 0
+        const good = roas >= 1
+        const pct = Math.min(100, (roas / maxRoas) * 100)
+        return (
+          <div key={r.campaignId ?? r.campaign ?? i}>
+            <div className="flex items-baseline justify-between gap-3 mb-1">
+              <span className="text-sm font-semibold truncate min-w-0">{r.campaign?.trim() || '— (sans nom)'}</span>
+              <span className="text-sm font-bold tabular-nums flex-shrink-0">
+                <span className={good ? 'text-success' : 'text-rouille'}>{fmtRoas(roas)}</span>
+                <span className="text-faint font-semibold"> · {fmtEur(r.spend)}</span>
+              </span>
+            </div>
+            <div className="relative h-3 rounded-full bg-line-soft overflow-hidden">
+              <div
+                className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-500"
+                style={{ width: `${pct}%`, background: good ? '#1F7857' : '#A85D2E' }}
+              />
+              <div
+                className="absolute top-[-2px] bottom-[-2px] w-px bg-faint/70"
+                style={{ left: `${breakEven}%` }}
+                aria-hidden="true"
+              />
+            </div>
+          </div>
+        )
+      })}
+      <div className="flex items-center gap-4 pt-1 text-[11px] text-faint font-semibold">
+        <span className="flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: '#1F7857' }} /> rentable (≥ 1×)</span>
+        <span className="flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: '#A85D2E' }} /> à perte (&lt; 1×)</span>
+      </div>
+    </div>
+  )
+}
+
+function ChartEmpty({ message }: { message: string }) {
+  return (
+    <div className="rounded-2xl border border-line-soft bg-white/50 p-6 text-center text-sm text-muted">{message}</div>
+  )
+}
+
+// Secteur de donut (repris du pattern DebriefAnalytics), repère 0 = 3h, sens horaire.
+function polarXY(radius: number, angle: number): [number, number] {
+  return [radius * Math.cos(angle), radius * Math.sin(angle)]
+}
+function arcPath(outer: number, inner: number, a0: number, a1: number): string {
+  const [sx, sy] = polarXY(outer, a1)
+  const [ex, ey] = polarXY(outer, a0)
+  const [isx, isy] = polarXY(inner, a1)
+  const [iex, iey] = polarXY(inner, a0)
+  const large = a1 - a0 > Math.PI ? 1 : 0
+  return [
+    'M', sx, sy,
+    'A', outer, outer, 0, large, 0, ex, ey,
+    'L', iex, iey,
+    'A', inner, inner, 0, large, 1, isx, isy,
+    'Z',
+  ].join(' ')
+}
+
+function pct1(a: number, b: number): number {
+  return b > 0 ? Math.round((a / b) * 100) : 0
 }
 
 // ===== Helpers d'affichage =====
