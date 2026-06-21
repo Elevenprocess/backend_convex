@@ -230,6 +230,7 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
                   devis={d}
                   onPreview={() => setPreviewDevis(d)}
                   onDelete={() => void handleDeleteDevis(d)}
+                  onUpdated={() => onChanged?.()}
                   deleting={deletingDevisId === d.id}
                 />
               ))}
