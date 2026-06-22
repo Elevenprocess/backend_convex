@@ -5165,15 +5165,16 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
   .wf-parallel { grid-template-columns: 1fr; }
 }
 
-.wf-list { display: flex; flex-direction: column; gap: 4px; }
+.wf-list { display: flex; flex-direction: column; gap: 2px; max-width: 320px; }
 
-/* Une sous-étape = un nœud relié au suivant par un filet vertical. */
-.wf-substep { position: relative; display: grid; grid-template-columns: 28px 1fr; gap: 14px; padding: 8px 10px 8px 0; }
-.wf-substep:not(:last-child)::before { content: ''; position: absolute; left: 13px; top: 22px; bottom: -26px; width: 2px; background: var(--color-line); }
+/* Une sous-étape = un nœud compact (rond + titre) relié au suivant par un
+   filet vertical. Le détail apparaît au survol dans l'info-bulle. */
+.wf-substep { position: relative; padding: 3px 0; }
+.wf-substep:not(:last-child)::before { content: ''; position: absolute; left: 13px; top: 30px; bottom: -3px; width: 2px; background: var(--color-line); }
 .wf-substep.is-done:not(:last-child)::before { background: var(--color-or); }
 .wf-substep.is-locked { opacity: 0.5; }
 
-.wf-substep-marker { position: relative; z-index: 1; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; background: var(--color-cream); border: 2px solid var(--color-line); color: var(--color-muted); transition: box-shadow .18s ease, border-color .18s ease; }
+.wf-substep-marker { position: relative; z-index: 1; flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; background: var(--color-cream); border: 2px solid var(--color-line); color: var(--color-muted); transition: box-shadow .18s ease, border-color .18s ease; }
 .wf-substep.is-active .wf-substep-marker { border-color: var(--color-cuivre); color: var(--color-cuivre); box-shadow: 0 0 0 4px var(--color-cuivre-tint); }
 .wf-substep.is-done .wf-substep-marker { background: var(--color-or); border-color: var(--color-or); color: #fff; }
 .wf-substep.is-blocked .wf-substep-marker { background: var(--color-rouille); border-color: var(--color-rouille); color: #fff; box-shadow: 0 0 0 4px var(--color-rouille-tint); }
@@ -5208,32 +5209,53 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
 .wf-substep.is-done .wf-cta:hover:not(:disabled) { background: var(--color-cream); opacity: 1; }
 .wf-saving { color: var(--color-muted); font-size: 12px; }
 
-/* === Nœud cliquable du workflow (façon N8N) ============================ */
+/* === Nœud cliquable du workflow (rond + titre, détail au survol) ======== */
 .wf-node-btn {
-  width: 100%; text-align: left; border: 1px solid var(--color-line); border-radius: 12px;
-  background: var(--color-card); padding: 10px 12px; cursor: pointer;
-  transition: border-color .15s ease, box-shadow .15s ease, transform .04s ease;
+  position: relative; display: flex; align-items: center; gap: 10px;
+  width: 100%; text-align: left; border: none; background: transparent;
+  padding: 2px 6px 2px 0; cursor: pointer; border-radius: 999px;
+  transition: transform .04s ease;
 }
-.wf-node-btn:hover:not(:disabled) { border-color: var(--color-cuivre); box-shadow: 0 4px 14px rgba(20, 35, 28, .08); }
 .wf-node-btn:active:not(:disabled) { transform: translateY(1px); }
-.wf-node-btn:disabled { cursor: default; background: var(--color-cream); }
-.wf-substep-node.is-active .wf-node-btn { border-color: var(--color-cuivre); box-shadow: 0 0 0 1.5px var(--color-cuivre-tint); }
-.wf-substep-node.is-done .wf-node-btn { border-color: var(--color-line); background: var(--color-cream); }
-.wf-substep-node.is-blocked .wf-node-btn { border-color: var(--color-rouille); box-shadow: 0 0 0 3px var(--color-rouille-tint); }
+.wf-node-btn:disabled { cursor: default; }
+.wf-node-title {
+  font-size: 13px; font-weight: 600; color: var(--color-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.wf-substep.is-done .wf-node-title { color: var(--color-muted); }
+
+/* Info-bulle ouverte au survol (ou focus clavier), ancrée sous le cercle. */
+.wf-node-tip {
+  position: absolute; top: 34px; left: 0; z-index: 30;
+  min-width: 210px; max-width: 280px;
+  display: flex; flex-direction: column; gap: 7px;
+  padding: 10px 12px; text-align: left;
+  background: var(--color-card); border: 1px solid var(--color-line); border-radius: 12px;
+  box-shadow: 0 14px 34px rgba(20, 35, 28, .18);
+  opacity: 0; visibility: hidden; transform: translateY(-4px);
+  transition: opacity .15s ease, transform .15s ease, visibility .15s;
+  pointer-events: none;
+}
+.wf-node-btn:hover:not(:disabled) .wf-node-tip,
+.wf-node-btn:focus-visible .wf-node-tip {
+  opacity: 1; visibility: visible; transform: translateY(0);
+}
+.wf-node-tip-title { font-size: 12.5px; font-weight: 700; color: var(--color-text); }
 .wf-node-summary { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .wf-node-chip {
   display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
   font-size: 10.5px; font-weight: 700; letter-spacing: .02em;
   background: var(--color-cream-darker); color: var(--color-muted);
+  border: 1px solid var(--color-line-soft);
 }
-.wf-node-chip.is-missing { background: var(--color-rouille-tint); color: var(--color-rouille); }
-.wf-node-open { margin-left: auto; display: inline-flex; color: var(--color-faint); transition: transform .15s ease, color .15s ease; }
-.wf-node-btn:hover:not(:disabled) .wf-node-open { color: var(--color-cuivre); transform: translateX(2px); }
-/* Polish : pastilles plus nettes + marqueur réactif au survol du nœud. */
-.wf-node-chip { border: 1px solid var(--color-line-soft); }
-.wf-node-chip.is-missing { border-color: transparent; }
-.wf-substep-node:hover .wf-substep-marker { box-shadow: 0 0 0 4px var(--color-cream-darker); }
-.wf-substep-node.is-active:hover .wf-substep-marker { box-shadow: 0 0 0 4px var(--color-cuivre-tint); }
+.wf-node-chip.is-missing { background: var(--color-rouille-tint); color: var(--color-rouille); border-color: transparent; }
+.wf-node-tip-cta {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 700; letter-spacing: .02em; color: var(--color-cuivre);
+}
+/* Marqueur réactif au survol du nœud. */
+.wf-node-btn:hover:not(:disabled) .wf-substep-marker { box-shadow: 0 0 0 4px var(--color-cream-darker); }
+.wf-substep-node.is-active .wf-node-btn:hover:not(:disabled) .wf-substep-marker { box-shadow: 0 0 0 4px var(--color-cuivre-tint); }
 
 /* === Pop-up d'un module du workflow ==================================== */
 .wf-modal { width: min(520px, 96vw); }

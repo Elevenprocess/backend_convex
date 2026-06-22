@@ -32,33 +32,34 @@ export function SubstepCard({ substep, users, today, onOpen }: Props) {
 
   return (
     <article className={`wf-substep wf-substep-node ${stateClass}`}>
-      <div className="wf-substep-marker" aria-hidden>
-        {done ? <Icon name="check" size={15} strokeWidth={2.6} /> : blocked ? <span>!</span> : <span>{substep.position}</span>}
-      </div>
+      {/* Nœud compact : juste le rond + le titre. Tout le détail (échéance,
+          technicien, pièces) n'apparaît qu'au survol dans l'info-bulle sous le
+          cercle ; le clic ouvre le pop-up (SubstepModal) via onOpen. */}
+      <button type="button" className="wf-node-btn" onClick={onOpen} disabled={locked}>
+        <span className="wf-substep-marker" aria-hidden>
+          {done ? <Icon name="check" size={15} strokeWidth={2.6} /> : blocked ? <span>!</span> : <span>{substep.position}</span>}
+        </span>
+        <span className="wf-node-title">{substep.label}{substep.optional ? ' (option.)' : ''}</span>
 
-      <button type="button" className="wf-substep-main wf-node-btn" onClick={onOpen} disabled={locked}>
-        <header className="wf-substep-head">
-          <strong>{substep.label}{substep.optional ? ' (option.)' : ''}</strong>
-          <div className="wf-substep-tags">
-            {gauge && <span className={`wf-gauge wf-gauge-${gauge.tone}`}><Icon name="clock" size={12} /> {gauge.label}</span>}
-            {substep.missingDocument && <span className="wf-badge-missing"><Icon name="tag" size={12} /> pièce manquante</span>}
-          </div>
-        </header>
-
-        {locked ? (
-          <p className="wf-locked-note"><Icon name="shield" size={13} /> En attente d'une étape précédente</p>
-        ) : (
-          <div className="wf-node-summary">
-            {substep.dateRealisee && <span className="wf-node-chip"><Icon name="calendar" size={12} /> {substep.dateRealisee}</span>}
-            {technicien && <span className="wf-node-chip"><Icon name="users" size={12} /> {technicien}</span>}
-            {expectedTotal > 0 && (
-              <span className={`wf-node-chip${docsMissing > 0 ? ' is-missing' : ''}`}>
-                <Icon name="tag" size={12} /> {docsPresent}/{expectedTotal} pièces
-              </span>
-            )}
-            <span className="wf-node-open"><Icon name="chevron-right" size={14} /></span>
-          </div>
-        )}
+        <span className="wf-node-tip" role="tooltip">
+          <span className="wf-node-tip-title">{substep.label}{substep.optional ? ' (option.)' : ''}</span>
+          {locked ? (
+            <span className="wf-locked-note"><Icon name="shield" size={13} /> En attente d'une étape précédente</span>
+          ) : (
+            <span className="wf-node-summary">
+              {gauge && <span className={`wf-gauge wf-gauge-${gauge.tone}`}><Icon name="clock" size={12} /> {gauge.label}</span>}
+              {substep.missingDocument && <span className="wf-badge-missing"><Icon name="tag" size={12} /> pièce manquante</span>}
+              {substep.dateRealisee && <span className="wf-node-chip"><Icon name="calendar" size={12} /> {substep.dateRealisee}</span>}
+              {technicien && <span className="wf-node-chip"><Icon name="users" size={12} /> {technicien}</span>}
+              {expectedTotal > 0 && (
+                <span className={`wf-node-chip${docsMissing > 0 ? ' is-missing' : ''}`}>
+                  <Icon name="tag" size={12} /> {docsPresent}/{expectedTotal} pièces
+                </span>
+              )}
+              <span className="wf-node-tip-cta"><Icon name="chevron-right" size={13} /> Ouvrir</span>
+            </span>
+          )}
+        </span>
       </button>
     </article>
   )
