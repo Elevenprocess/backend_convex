@@ -396,7 +396,7 @@ export function PublicDebriefWizard({ client, commercialName, rdv, initialForm, 
 
   if (done) {
     return (
-      <div className="glass-card p-8 text-center">
+      <div className="rounded-3xl border border-line bg-white p-8 text-center shadow-sm">
         <div className="relative mx-auto mb-4 h-20 w-20">
           <span className="absolute inset-0 rounded-full bg-success/25 debrief-success-ring" />
           <span className="relative flex h-20 w-20 items-center justify-center rounded-full bg-success text-white shadow-lg debrief-success-pop">
@@ -411,21 +411,38 @@ export function PublicDebriefWizard({ client, commercialName, rdv, initialForm, 
     )
   }
 
+  const initials = clientName.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || 'C'
+
   return (
-    <div className="space-y-4">
-      {/* En-tête client */}
-      <div className="glass-card p-5">
-        <div className="eyebrow text-or-dark">Débriefing commercial</div>
-        <h2 className="mt-1 text-lg font-black text-text">{clientName}</h2>
-        <div className="mt-2 space-y-0.5 text-sm text-muted">
-          {client?.email && <div>📧 {client.email}</div>}
-          {client?.phone && <div>📞 {client.phone}</div>}
-          <div>🗓️ {formatRdvFull(rdv.scheduledAt)}</div>
+    <div className="space-y-5 pb-28">
+      {/* Bandeau marque */}
+      <div className="flex items-center justify-between">
+        <div className="eyebrow text-or-dark">VELORA · Débrief</div>
+        <span className="rounded-full border border-line bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-muted">
+          Étape {Math.min(currentStep, stepSequence.length - 1) + 1}/{stepSequence.length}
+        </span>
+      </div>
+
+      {/* Carte client */}
+      <div className="rounded-3xl border border-line bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-or-tint text-base font-black text-or-dark">
+            {initials}
+          </div>
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-black text-text">{clientName}</h1>
+            <div className="text-xs font-bold uppercase tracking-[0.12em] text-faint">Débrief du rendez-vous</div>
+          </div>
         </div>
-        {commercialName && <div className="mt-1 text-xs text-faint">Commercial : {commercialName}</div>}
+        <div className="mt-4 grid gap-1.5">
+          {client?.email && <InfoRow emoji="📧" text={client.email} />}
+          {client?.phone && <InfoRow emoji="📞" text={client.phone} />}
+          <InfoRow emoji="🗓️" text={formatRdvFull(rdv.scheduledAt)} />
+          {commercialName && <InfoRow emoji="👤" text={`Commercial · ${commercialName}`} />}
+        </div>
         {rdv.alreadyDebriefed && (
-          <div className="mt-3 rounded-xl bg-info-tint px-3 py-2 text-sm">
-            Ce RDV a déjà un débrief — tu peux le compléter / le corriger ci-dessous.
+          <div className="mt-3 rounded-xl border border-or/30 bg-or-tint px-3 py-2 text-xs font-bold text-or-dark">
+            Ce RDV a déjà un débrief — tu peux le compléter ou le corriger.
           </div>
         )}
       </div>
@@ -446,7 +463,7 @@ export function PublicDebriefWizard({ client, commercialName, rdv, initialForm, 
 
       <ProgressDots total={stepSequence.length} currentIndex={Math.min(currentStep, stepSequence.length - 1)} />
 
-      <div className="glass-card p-5">
+      <div className="rounded-3xl border border-line bg-white p-5 shadow-sm">
         {currentStepId === 'result' && <Step1Result form={form} update={update} />}
         {currentStepId === 'objection_v' && <Step2VObjection form={form} update={update} />}
         {currentStepId === 'acceptance_v' && <Step3VAcceptance form={form} update={update} toggleAcceptance={toggleAcceptance} />}
@@ -458,36 +475,47 @@ export function PublicDebriefWizard({ client, commercialName, rdv, initialForm, 
 
       {error && <div className="rounded-xl border border-rouille/40 bg-rouille-tint px-3 py-2 text-sm font-bold text-rouille">{error}</div>}
 
-      {/* Navigation */}
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setCurrentStep((s) => Math.max(0, s - 1))}
-          disabled={isFirstStep || saving}
-          className={`rounded-2xl border border-line px-4 py-3 text-sm font-bold transition ${isFirstStep || saving ? 'bg-cream-darker text-faint cursor-not-allowed' : 'bg-white text-text hover:bg-cream'}`}
-        >
-          ← Retour
-        </button>
-        {!isLastStep ? (
+      {/* Barre d'action fixe en bas */}
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/95 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-lg items-center gap-2 px-4 py-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
           <button
             type="button"
-            onClick={() => { if (canAdvanceStep(currentStepId, form)) setCurrentStep((s) => s + 1) }}
-            disabled={!canAdvanceStep(currentStepId, form) || saving}
-            className={`flex-1 rounded-2xl px-4 py-3 text-sm font-black tracking-wide transition ${canAdvanceStep(currentStepId, form) && !saving ? 'bg-text text-white hover:bg-text/90 shadow-md' : 'bg-cream-darker text-faint cursor-not-allowed'}`}
+            onClick={() => setCurrentStep((s) => Math.max(0, s - 1))}
+            disabled={isFirstStep || saving}
+            className={`rounded-2xl border px-4 py-3 text-sm font-bold transition ${isFirstStep || saving ? 'border-line bg-cream-darker text-faint cursor-not-allowed' : 'border-line bg-white text-text hover:bg-cream'}`}
           >
-            Continuer →
+            ← Retour
           </button>
-        ) : (
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={!canSubmit || saving}
-            className={`flex-1 rounded-2xl px-4 py-3 text-sm font-black tracking-wide transition ${canSubmit && !saving ? 'bg-success text-white hover:bg-success/90 shadow-md' : 'bg-cream-darker text-faint cursor-not-allowed'}`}
-          >
-            {saving ? 'Enregistrement…' : 'Enregistrer le débrief'}
-          </button>
-        )}
+          {!isLastStep ? (
+            <button
+              type="button"
+              onClick={() => { if (canAdvanceStep(currentStepId, form)) setCurrentStep((s) => s + 1) }}
+              disabled={!canAdvanceStep(currentStepId, form) || saving}
+              className={`flex-1 rounded-2xl px-4 py-3 text-sm font-black tracking-wide transition ${canAdvanceStep(currentStepId, form) && !saving ? 'bg-text text-white hover:bg-text/90 shadow-sm' : 'bg-cream-darker text-faint cursor-not-allowed'}`}
+            >
+              Continuer →
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!canSubmit || saving}
+              className={`flex-1 rounded-2xl px-4 py-3 text-sm font-black tracking-wide transition ${canSubmit && !saving ? 'bg-success text-white hover:bg-success/90 shadow-sm' : 'bg-cream-darker text-faint cursor-not-allowed'}`}
+            >
+              {saving ? 'Enregistrement…' : 'Enregistrer le débrief'}
+            </button>
+          )}
+        </div>
       </div>
+    </div>
+  )
+}
+
+function InfoRow({ emoji, text }: { emoji: string; text: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-line bg-cream/50 px-3 py-2 text-sm">
+      <span className="shrink-0">{emoji}</span>
+      <span className="truncate font-medium text-text/80">{text}</span>
     </div>
   )
 }
