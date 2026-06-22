@@ -101,6 +101,8 @@ export type LeadResponse = {
   latestCallAt: string | null
   firstCallAt: string | null
   latestCallComment: string | null
+  // Setter du dernier appel = celui qui a réellement qualifié le lead (cf. analytics).
+  latestCallSetterId: string | null
   assignedSetterIds: string[]
   latestRdvAt: string | null
   latestRdvStatus: RdvStatus | null

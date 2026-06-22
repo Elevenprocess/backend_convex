@@ -366,8 +366,8 @@ function OverviewSetter() {
       loggedCalls.filter((c) => c.result === 'joint' || c.result === 'rdv_pris').length,
       classified.filter((l) => connectedStatuses.includes(l.status)).length,
     )
-    const qualifies = classified.filter((l) => qualifiedStatuses.includes(l.status)).length
-    const rdvPris = classified.filter((l) => l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe').length
+    const qualifies = classified.filter((l) => qualifiedStatuses.includes(l.status) && qualifiedBySetter(l, me?.id)).length
+    const rdvPris = classified.filter((l) => (l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe') && qualifiedBySetter(l, me?.id)).length
     const leadsToday = ownLeads.filter((l) => isCreatedToday(l.createdAt)).length
     return {
       appels,
@@ -2000,6 +2000,15 @@ function leadsKpiLabelFor(mode: FunnelPeriodMode): string {
 function belongsToSetter(lead: LeadResponse, setterId: string | undefined): boolean {
   if (!setterId) return true
   return lead.setterId === setterId || (lead.assignedSetterIds ?? []).includes(setterId)
+}
+
+// La qualification d'un lead n'est créditée qu'au setter qui l'a réellement fait
+// basculer = celui de son dernier appel loggé (repli sur le propriétaire si aucun
+// appel tracé). Sinon plusieurs setters ayant appelé le même lead se voyaient tous
+// créditer la qualification (cf. même logique côté backend analytics).
+function qualifiedBySetter(lead: LeadResponse, setterId: string | undefined): boolean {
+  if (!setterId) return true
+  return (lead.latestCallSetterId ?? lead.setterId) === setterId
 }
 
 type ActivityPoint = { label: string; value: number }

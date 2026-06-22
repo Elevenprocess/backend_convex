@@ -5,7 +5,7 @@ import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
 import { LoadingScreen } from '../../components/Spinner'
 import { useUser, useCallLogs, useLeads, useRdvList } from '../../lib/hooks'
-import type { CallLogResponse, CallResult } from '../../lib/types'
+import type { CallLogResponse, CallResult, LeadResponse } from '../../lib/types'
 
 export function ProfilSetter() {
   const { id } = useParams()
@@ -45,7 +45,11 @@ export function ProfilSetter() {
   const rdvPris = rdvs?.length ?? 0
   const rdvHonore = (rdvs ?? []).filter((r) => r.status === 'honore').length
   const leadsCount = leads?.length ?? 0
-  const leadsQualif = (leads ?? []).filter((l) => l.status === 'qualifie' || l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe').length
+  // Qualifié crédité au seul setter qui a réellement fait basculer le lead = celui de
+  // son dernier appel loggé (repli sur le propriétaire). Aligné sur le backend analytics.
+  const qualifiedByThisSetter = (l: LeadResponse) =>
+    (l.latestCallSetterId ?? l.setterId) === id
+  const leadsQualif = (leads ?? []).filter((l) => (l.status === 'qualifie' || l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe') && qualifiedByThisSetter(l)).length
 
   return (
     <AppShell flat>
