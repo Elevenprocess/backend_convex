@@ -8,7 +8,7 @@ import type { IconName } from '../components/Icon'
 import { UserEditModal } from '../components/UserEditModal'
 import { LoadingBlock, Spinner } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
-import { copyText, inviteUser, regenerateInvitation, revokeInvitation, syncGhlCommercialUsers, updateUser, useGhlUsers, useInvitations, useUsers } from '../lib/hooks'
+import { copyText, inviteUser, regenerateInvitation, revokeInvitation, syncGhlCommercialUsers, updateUser, useGhlCalendarConfig, useGhlUsers, useInvitations, useUsers } from '../lib/hooks'
 import { notifyClipboardCopied } from '../lib/clipboardToast'
 import { useTheme } from '../lib/theme'
 import type { InvitationResponse, Role, Team, UserResponse } from '../lib/types'
@@ -162,6 +162,20 @@ function SettingsCommercial() {
   )
 }
 
+function SectorChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full border px-3 py-1 text-[12px] font-bold transition ${
+        active ? 'border-or bg-or-tint text-or-dark shadow-sm' : 'border-line bg-white text-muted hover:border-or/50'
+      }`}
+    >
+      {label}
+    </button>
+  )
+}
+
 function SettingsAdmin({ restricted = false }: { restricted?: boolean }) {
   const { data: users, loading, error, refetch: refetchUsers } = useUsers()
   const [inviteOpen, setInviteOpen] = useState(false)
@@ -169,6 +183,21 @@ function SettingsAdmin({ restricted = false }: { restricted?: boolean }) {
   const [editingUser, setEditingUser] = useState<UserResponse | null>(null)
   const { data: invitations, refetch: refetchInvitations } = useInvitations()
   const { data: ghlUsers, error: ghlUsersError } = useGhlUsers()
+  const { data: ghlConfig } = useGhlCalendarConfig()
+  // Secteur d'un commercial = mapping de son ghlCalendarId via les calendriers
+  // sectoriels GHL (Ouest/Est/Sud/Nord). Filtre dispo quand on liste les commerciaux.
+  const [sectorFilter, setSectorFilter] = useState<string>('all')
+  const sectorByCalendar = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const s of ghlConfig?.sectors ?? []) if (s.calendarId) m.set(s.calendarId, s.sector)
+    return m
+  }, [ghlConfig])
+  const sectorOptions = useMemo(
+    () => (ghlConfig?.sectors ?? []).map((s) => s.sector).filter((s, i, a) => a.indexOf(s) === i),
+    [ghlConfig],
+  )
+  const userSector = (u: UserResponse): string | null =>
+    u.ghlCalendarId ? sectorByCalendar.get(u.ghlCalendarId) ?? null : null
   const [ghlSyncing, setGhlSyncing] = useState(false)
   const [ghlSyncMsg, setGhlSyncMsg] = useState<string | null>(null)
   // Commerciaux non reliés à un user GHL (email SaaS ≠ email GHL) : listés pour
@@ -226,7 +255,15 @@ function SettingsAdmin({ restricted = false }: { restricted?: boolean }) {
     admins: team.filter((m) => m.role === 'admin' || m.role === 'finances').length,
   }), [team])
 
-  const visibleTeam = useMemo(() => team.filter((m) => matchesFilter(m.role, filter)), [team, filter])
+  const visibleTeam = useMemo(() => {
+    let list = team.filter((m) => matchesFilter(m.role, filter))
+    if (filter === 'commerciaux' && sectorFilter !== 'all') {
+      list = list.filter((m) =>
+        sectorFilter === 'none' ? userSector(m) === null : userSector(m) === sectorFilter,
+      )
+    }
+    return list
+  }, [team, filter, sectorFilter, sectorByCalendar])
   const selectFilter = (next: TeamFilter) => setFilter((prev) => (prev === next && next !== 'all' ? 'all' : next))
 
   return (
@@ -290,6 +327,16 @@ function SettingsAdmin({ restricted = false }: { restricted?: boolean }) {
               ? <span><Icon name="users" size={16} /></span>
               : <button type="button" onClick={() => setFilter('all')} className="settings-filter-reset"><Icon name="x" size={12} /> Tout afficher</button>}
           </div>
+          {filter === 'commerciaux' && sectorOptions.length > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-[11px] font-black uppercase tracking-[0.12em] text-faint">Secteur</span>
+              <SectorChip label="Tous" active={sectorFilter === 'all'} onClick={() => setSectorFilter('all')} />
+              {sectorOptions.map((s) => (
+                <SectorChip key={s} label={s.charAt(0).toUpperCase() + s.slice(1)} active={sectorFilter === s} onClick={() => setSectorFilter(s)} />
+              ))}
+              <SectorChip label="Sans secteur" active={sectorFilter === 'none'} onClick={() => setSectorFilter('none')} />
+            </div>
+          )}
           {loading ? (
             <LoadingBlock label="Chargement des membres…" />
           ) : error ? (
