@@ -5212,7 +5212,7 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
 .wf-substep.is-done .wf-cta:hover:not(:disabled) { background: var(--color-cream); opacity: 1; }
 .wf-saving { color: var(--color-muted); font-size: 12px; }
 
-/* === Nœud cliquable du workflow (rond + titre, détail au survol) ======== */
+/* === Nœud cliquable du workflow (rond + titre) ========================== */
 .wf-node-btn {
   position: relative; display: flex; align-items: center; gap: 10px;
   width: 100%; text-align: left; border: none; background: transparent;
@@ -5227,33 +5227,6 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
 }
 .wf-substep.is-done .wf-node-title { color: var(--color-muted); }
 
-/* Info-bulle rendue en portail (position: fixed) → jamais rognée par le
-   scroll du drawer. Positionnée en JS sous (ou au-dessus) du cercle. */
-.wf-node-tip {
-  position: fixed; z-index: 400;
-  width: 240px; max-width: calc(100vw - 24px);
-  display: flex; flex-direction: column; gap: 7px;
-  padding: 10px 12px; text-align: left;
-  background: var(--color-card); border: 1px solid var(--color-line); border-radius: 12px;
-  box-shadow: 0 16px 38px rgba(20, 35, 28, .22);
-  pointer-events: none;
-  animation: wf-tip-in .14s ease;
-}
-.wf-node-tip-above { transform: translateY(-100%); }
-@keyframes wf-tip-in { from { opacity: 0; } to { opacity: 1; } }
-.wf-node-tip-title { font-size: 12.5px; font-weight: 700; color: var(--color-text); }
-.wf-node-summary { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.wf-node-chip {
-  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
-  font-size: 10.5px; font-weight: 700; letter-spacing: .02em;
-  background: var(--color-cream-darker); color: var(--color-muted);
-  border: 1px solid var(--color-line-soft);
-}
-.wf-node-chip.is-missing { background: var(--color-rouille-tint); color: var(--color-rouille); border-color: transparent; }
-.wf-node-tip-cta {
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: 11px; font-weight: 700; letter-spacing: .02em; color: var(--color-cuivre);
-}
 /* Marqueur réactif au survol du nœud. */
 .wf-node-btn:hover:not(:disabled) .wf-substep-marker { box-shadow: 0 0 0 4px var(--color-cream-darker); }
 .wf-substep-node.is-active .wf-node-btn:hover:not(:disabled) .wf-substep-marker { box-shadow: 0 0 0 4px var(--color-cuivre-tint); }
