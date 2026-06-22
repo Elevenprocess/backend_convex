@@ -357,7 +357,7 @@ function SettingsAdmin({ restricted = false }: { restricted?: boolean }) {
                     <Th right>Actions</Th>
                   </tr>
                 </thead>
-                <tbody>{visibleTeam.map((m) => <UserRow key={m.id} user={m} ghlUsers={ghlUsers ?? []} onMapped={refetchUsers} onEdit={setEditingUser} />)}</tbody>
+                <tbody>{visibleTeam.map((m) => <UserRow key={m.id} user={m} ghlUsers={ghlUsers ?? []} onMapped={refetchUsers} onEdit={setEditingUser} sector={userSector(m)} />)}</tbody>
               </table>
             </div>
           )}
@@ -569,7 +569,7 @@ function Field({ label, value, onChange, type = 'text', required = false }: { la
   )
 }
 
-function UserRow({ user, ghlUsers, onMapped, onEdit, compact = false }: { user: UserResponse; ghlUsers: Array<{ id: string; name: string; email: string | null }>; onMapped: () => void; onEdit: (user: UserResponse) => void; compact?: boolean }) {
+function UserRow({ user, ghlUsers, onMapped, onEdit, compact = false, sector = null }: { user: UserResponse; ghlUsers: Array<{ id: string; name: string; email: string | null }>; onMapped: () => void; onEdit: (user: UserResponse) => void; compact?: boolean; sector?: string | null }) {
   const inits = userInitials(user.name)
   const [savingGhl, setSavingGhl] = useState(false)
   const navigate = useNavigate()
@@ -631,7 +631,7 @@ function UserRow({ user, ghlUsers, onMapped, onEdit, compact = false }: { user: 
       </td>
       {compact
         ? <td className="px-3 py-3 text-muted">{user.email}</td>
-        : <td className="px-3 py-3"><span className={`status-badge ${ROLE_BADGE[user.role]}`}>{ROLE_LABEL[user.role]}</span></td>}
+        : <td className="px-3 py-3"><span className={`status-badge ${ROLE_BADGE[user.role]}`}>{ROLE_LABEL[user.role]}</span>{sector && <span className="status-badge bg-or-tint text-or-dark" style={{ marginLeft: 6 }}>{sector.charAt(0).toUpperCase() + sector.slice(1)}</span>}</td>}
       <td className="px-3 py-3"><span className={`status-badge ${user.active ? 'bg-success-tint text-success' : 'bg-rouille-tint text-rouille'}`}>{user.active ? 'Actif' : 'Inactif'}</span></td>
       {!compact && (
         <td className="px-3 py-3" onClick={stop}>
