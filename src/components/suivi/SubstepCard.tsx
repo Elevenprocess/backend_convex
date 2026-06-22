@@ -1,3 +1,5 @@
+import { useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Icon } from '../Icon'
 import type { SubstepResponse, UserResponse } from '../../lib/types'
 import { slaGaugeInfo } from '../../lib/suivi-board'
@@ -9,10 +11,13 @@ type Props = {
   onOpen: () => void
 }
 
+type TipPos = { left: number; top: number; placement: 'below' | 'above' }
+
 /**
- * « Nœud » d'un module du workflow façon N8N : cliquable, n'affiche qu'un
- * résumé (statut, échéance, technicien, pièces). Toute la saisie se fait dans
- * le pop-up ouvert au clic (SubstepModal).
+ * « Nœud » d'un module du workflow façon N8N : juste un rond + un titre. Le
+ * détail (échéance, technicien, pièces) n'apparaît qu'au survol dans une
+ * info-bulle rendue en portail (position fixe → jamais rognée par le scroll du
+ * drawer). Le clic ouvre le pop-up (SubstepModal) via onOpen.
  */
 export function SubstepCard({ substep, users, today, onOpen }: Props) {
   const done = substep.status === 'fait'
@@ -30,23 +35,53 @@ export function SubstepCard({ substep, users, today, onOpen }: Props) {
   const docsPresent = substep.expectedDocs.filter((t) => presentTypes.has(t)).length
   const docsMissing = expectedTotal - docsPresent
 
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const [tip, setTip] = useState<TipPos | null>(null)
+
+  const showTip = () => {
+    const el = btnRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    // Bascule au-dessus si le nœud est dans le tiers bas de l'écran.
+    const below = r.bottom < window.innerHeight * 0.62
+    setTip({
+      left: r.left,
+      top: below ? r.bottom + 6 : r.top - 6,
+      placement: below ? 'below' : 'above',
+    })
+  }
+  const hideTip = () => setTip(null)
+
   return (
     <article className={`wf-substep wf-substep-node ${stateClass}`}>
-      {/* Nœud compact : juste le rond + le titre. Tout le détail (échéance,
-          technicien, pièces) n'apparaît qu'au survol dans l'info-bulle sous le
-          cercle ; le clic ouvre le pop-up (SubstepModal) via onOpen. */}
-      <button type="button" className="wf-node-btn" onClick={onOpen} disabled={locked}>
+      <button
+        ref={btnRef}
+        type="button"
+        className="wf-node-btn"
+        onClick={onOpen}
+        disabled={locked}
+        onMouseEnter={showTip}
+        onMouseLeave={hideTip}
+        onFocus={showTip}
+        onBlur={hideTip}
+      >
         <span className="wf-substep-marker" aria-hidden>
           {done ? <Icon name="check" size={15} strokeWidth={2.6} /> : blocked ? <span>!</span> : <span>{substep.position}</span>}
         </span>
         <span className="wf-node-title">{substep.label}{substep.optional ? ' (option.)' : ''}</span>
+      </button>
 
-        <span className="wf-node-tip" role="tooltip">
+      {tip && createPortal(
+        <div
+          className={`wf-node-tip wf-node-tip-${tip.placement}`}
+          role="tooltip"
+          style={{ left: tip.left, top: tip.top }}
+        >
           <span className="wf-node-tip-title">{substep.label}{substep.optional ? ' (option.)' : ''}</span>
           {locked ? (
             <span className="wf-locked-note"><Icon name="shield" size={13} /> En attente d'une étape précédente</span>
           ) : (
-            <span className="wf-node-summary">
+            <div className="wf-node-summary">
               {gauge && <span className={`wf-gauge wf-gauge-${gauge.tone}`}><Icon name="clock" size={12} /> {gauge.label}</span>}
               {substep.missingDocument && <span className="wf-badge-missing"><Icon name="tag" size={12} /> pièce manquante</span>}
               {substep.dateRealisee && <span className="wf-node-chip"><Icon name="calendar" size={12} /> {substep.dateRealisee}</span>}
@@ -56,11 +91,12 @@ export function SubstepCard({ substep, users, today, onOpen }: Props) {
                   <Icon name="tag" size={12} /> {docsPresent}/{expectedTotal} pièces
                 </span>
               )}
-              <span className="wf-node-tip-cta"><Icon name="chevron-right" size={13} /> Ouvrir</span>
-            </span>
+              <span className="wf-node-tip-cta"><Icon name="chevron-right" size={13} /> Cliquer pour ouvrir</span>
+            </div>
           )}
-        </span>
-      </button>
+        </div>,
+        document.body,
+      )}
     </article>
   )
 }

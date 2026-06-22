@@ -4211,7 +4211,7 @@ button.suivi-side-cta { font-family: inherit; cursor: pointer; width: 100%; }
   animation: fiche-wf-fade .18s ease;
 }
 .fiche-wf-drawer {
-  width: clamp(360px, 32vw, 540px); height: 100%; background: var(--color-cream-darker);
+  width: clamp(440px, 40vw, 720px); height: 100%; background: var(--color-cream-darker);
   border-left: 1px solid var(--color-line); box-shadow: -28px 0 60px rgba(20, 35, 28, .22);
   display: flex; flex-direction: column; animation: fiche-wf-slide .24s cubic-bezier(.22, 1, .36, 1);
 }
@@ -5155,17 +5155,20 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
 .wf-section-amont .wf-section-badge,
 .wf-section-aval .wf-section-badge { background: var(--color-or-tint); color: var(--color-or-dark); }
 
-.wf-parallel { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.wf-parallel { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 /* Chaque démarche = un rail parallèle clairement délimité. */
-.wf-col { padding: 14px 14px 8px; border: 1px solid var(--color-line-soft); border-radius: 14px; background: linear-gradient(180deg, var(--color-card), var(--color-cream)); }
-.wf-col-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
-.wf-col-title { display: inline-flex; align-items: center; gap: 7px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-muted); }
+.wf-col { min-width: 0; padding: 12px 10px 8px; border: 1px solid var(--color-line-soft); border-radius: 14px; background: linear-gradient(180deg, var(--color-card), var(--color-cream)); }
+.wf-col-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.wf-col-title { display: inline-flex; align-items: center; gap: 7px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-muted); }
 .wf-col-title::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--color-cuivre); flex-shrink: 0; }
-@media (max-width: 720px) {
-  .wf-parallel { grid-template-columns: 1fr; }
+/* En dessous, on empile les deux rails plutôt que de les écraser. */
+@media (max-width: 1180px) {
+  .wf-parallel { grid-template-columns: 1fr; gap: 8px; }
 }
 
-.wf-list { display: flex; flex-direction: column; gap: 2px; max-width: 320px; }
+.wf-list { display: flex; flex-direction: column; gap: 2px; max-width: 340px; }
+/* Dans les rails parallèles, la liste remplit toute la colonne. */
+.wf-col .wf-list { max-width: none; }
 
 /* Une sous-étape = un nœud compact (rond + titre) relié au suivant par un
    filet vertical. Le détail apparaît au survol dans l'info-bulle. */
@@ -5224,22 +5227,20 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
 }
 .wf-substep.is-done .wf-node-title { color: var(--color-muted); }
 
-/* Info-bulle ouverte au survol (ou focus clavier), ancrée sous le cercle. */
+/* Info-bulle rendue en portail (position: fixed) → jamais rognée par le
+   scroll du drawer. Positionnée en JS sous (ou au-dessus) du cercle. */
 .wf-node-tip {
-  position: absolute; top: 34px; left: 0; z-index: 30;
-  min-width: 210px; max-width: 280px;
+  position: fixed; z-index: 400;
+  width: 240px; max-width: calc(100vw - 24px);
   display: flex; flex-direction: column; gap: 7px;
   padding: 10px 12px; text-align: left;
   background: var(--color-card); border: 1px solid var(--color-line); border-radius: 12px;
-  box-shadow: 0 14px 34px rgba(20, 35, 28, .18);
-  opacity: 0; visibility: hidden; transform: translateY(-4px);
-  transition: opacity .15s ease, transform .15s ease, visibility .15s;
+  box-shadow: 0 16px 38px rgba(20, 35, 28, .22);
   pointer-events: none;
+  animation: wf-tip-in .14s ease;
 }
-.wf-node-btn:hover:not(:disabled) .wf-node-tip,
-.wf-node-btn:focus-visible .wf-node-tip {
-  opacity: 1; visibility: visible; transform: translateY(0);
-}
+.wf-node-tip-above { transform: translateY(-100%); }
+@keyframes wf-tip-in { from { opacity: 0; } to { opacity: 1; } }
 .wf-node-tip-title { font-size: 12.5px; font-weight: 700; color: var(--color-text); }
 .wf-node-summary { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .wf-node-chip {
