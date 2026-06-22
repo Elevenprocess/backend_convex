@@ -28,6 +28,7 @@ import { ProfilCommercial } from './pages/profils/ProfilCommercial'
 import { Settings } from './pages/Settings'
 import { MyProfile } from './pages/MyProfile'
 import { AcceptInvitation } from './pages/AcceptInvitation'
+import { DebriefMagicPage } from './pages/DebriefMagicPage'
 import { Notifications } from './pages/Notifications'
 import { CallFullScreen } from './pages/call/CallFullScreen'
 import { CallSplit } from './pages/call/CallSplit'
@@ -71,6 +72,7 @@ const router = createHashRouter([
       { path: '/', element: <Landing /> },
       { path: '/login', element: <Login /> },
       { path: '/accept-invitation', element: <AcceptInvitation /> },
+      { path: '/debrief/:token', element: <DebriefMagicPage /> },
       {
         element: <RequireAuth />,
         children: [
