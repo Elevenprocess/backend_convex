@@ -66,6 +66,9 @@ export function LeadDetail() {
   const [debriefs, setDebriefs] = useState<DebriefResponse[]>([])
   const [debriefRefreshKey, setDebriefRefreshKey] = useState(0)
   const [debriefOpen, setDebriefOpen] = useState(false)
+  // Modale « Historique des débriefs » (lecture des débriefs déjà enregistrés
+  // pour ce client — permet de vérifier d'un coup d'œil qu'ils sont bien sauvés).
+  const [historyOpen, setHistoryOpen] = useState(false)
   // RDV ciblé par ?debrief=<rdvId> (ou null = laisser le sidebar choisir le plus pertinent).
   const [debriefRdvId, setDebriefRdvId] = useState<string | null>(null)
   const [assignOpen, setAssignOpen] = useState(false)
@@ -230,6 +233,19 @@ export function LeadDetail() {
           >
             <Icon name="phone" size={12} />
             Débrief RDV
+          </button>
+          <button
+            onClick={() => setHistoryOpen(true)}
+            title="Voir les débriefs déjà enregistrés pour ce client"
+            className="px-3 sm:px-4 py-2 rounded-[14px] text-xs sm:text-sm font-semibold border border-line bg-white hover:bg-sable/40 flex items-center gap-2 whitespace-nowrap"
+          >
+            <Icon name="clock" size={12} />
+            <span className="hidden sm:inline">Historique</span> débriefs
+            {debriefs.length > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-or/20 text-or-dark text-[11px] font-bold">
+                {debriefs.length}
+              </span>
+            )}
           </button>
           <button
             onClick={() => {
@@ -427,6 +443,45 @@ export function LeadDetail() {
           commerciaux={teamCommerciaux}
           onClose={() => setAssignOpen(false)}
         />
+      )}
+
+      {historyOpen && (
+        <div
+          className="fixed inset-0 z-[160] flex items-center justify-center bg-noir/50 backdrop-blur-sm px-4"
+          onClick={(e) => e.target === e.currentTarget && setHistoryOpen(false)}
+        >
+          <div className="glass-card w-full max-w-lg max-h-[92vh] flex flex-col p-0 shadow-2xl">
+            <header className="flex items-center justify-between border-b border-line px-5 py-4">
+              <div className="flex items-center gap-2">
+                <Icon name="clock" size={18} className="text-or-dark" />
+                <h3 className="text-base font-bold text-text">
+                  Historique des débriefs
+                  <span className="ml-2 text-sm font-medium text-text/50">{debriefs.length}</span>
+                </h3>
+              </div>
+              <button
+                onClick={() => setHistoryOpen(false)}
+                aria-label="Fermer"
+                className="p-1.5 rounded-lg hover:bg-sable/50 text-text/60"
+              >
+                <Icon name="x" size={18} />
+              </button>
+            </header>
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              {debriefs.length === 0 ? (
+                <p className="text-sm text-text/50 text-center py-8">
+                  Aucun débrief enregistré pour ce client.
+                </p>
+              ) : (
+                <ul className="flex flex-col gap-3">
+                  {debriefs.map((d) => (
+                    <DebriefRow key={d.id} debrief={d} onDelete={() => handleDeleteDebrief(d.id)} />
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
     </AppShell>

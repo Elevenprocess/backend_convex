@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -295,6 +296,44 @@ function rdvAtToReunionIso(date: string, time: string): string {
   return `${date}T${time}:00+04:00`
 }
 
+// ─── Persistance locale du brouillon (anti-perte au refresh) ────────
+// Les sélections du commercial sont sauvegardées dans le localStorage,
+// indexées par RDV. Un rafraîchissement / une fermeture d'onglet ne perd
+// donc plus la saisie en cours. Le brouillon est purgé après envoi.
+
+const DRAFT_PREFIX = 'ecoi.debriefDraft:'
+const draftKey = (rdvId: string) => `${DRAFT_PREFIX}${rdvId}`
+
+type DraftShape = { form: Partial<FormState>; step: number }
+
+function loadDraft(rdvId: string): DraftShape | null {
+  try {
+    const raw = localStorage.getItem(draftKey(rdvId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as DraftShape
+    if (!parsed || typeof parsed !== 'object' || !parsed.form) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function saveDraft(rdvId: string, form: FormState, step: number) {
+  try {
+    localStorage.setItem(draftKey(rdvId), JSON.stringify({ form, step }))
+  } catch {
+    /* quota / mode privé : on ignore silencieusement */
+  }
+}
+
+function clearDraft(rdvId: string) {
+  try {
+    localStorage.removeItem(draftKey(rdvId))
+  } catch {
+    /* ignore */
+  }
+}
+
 // ─── Composant principal ────────────────────────────────────────────
 
 type Props = {
@@ -307,11 +346,20 @@ type Props = {
 }
 
 export function PublicDebriefWizard({ client, commercialName, rdv, initialForm, onSubmit, onReschedule }: Props) {
-  const [form, setForm] = useState<FormState>({ ...EMPTY_FORM, ...initialForm })
-  const [currentStep, setCurrentStep] = useState(0)
+  // Restaure un éventuel brouillon local (saisie non envoyée avant un refresh).
+  // Priorité : brouillon local > débrief déjà enregistré (initialForm) > vide.
+  const draft = useMemo(() => loadDraft(rdv.id), [rdv.id])
+  const [form, setForm] = useState<FormState>({ ...EMPTY_FORM, ...initialForm, ...draft?.form })
+  const [currentStep, setCurrentStep] = useState(draft?.step ?? 0)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
+
+  // Sauvegarde le brouillon à chaque changement, tant que rien n'est envoyé.
+  useEffect(() => {
+    if (done) return
+    saveDraft(rdv.id, form, currentStep)
+  }, [rdv.id, form, currentStep, done])
 
   const slot = dateTimeInputsFromIso(rdv.scheduledAt)
   const [rescheduleDate, setRescheduleDate] = useState(slot.date)
@@ -366,6 +414,7 @@ export function PublicDebriefWizard({ client, commercialName, rdv, initialForm, 
     setError(null)
     try {
       await onReschedule(rdvAtToReunionIso(rescheduleDate, rescheduleTime))
+      clearDraft(rdv.id)
       setRescheduleDone(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur lors du report du RDV')
@@ -384,6 +433,7 @@ export function PublicDebriefWizard({ client, commercialName, rdv, initialForm, 
         if (amount == null || Number.isNaN(amount)) throw new Error('Valeur du devis invalide')
       }
       await onSubmit(formToPayload(form))
+      clearDraft(rdv.id)
       setDone(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur à l\'enregistrement')
