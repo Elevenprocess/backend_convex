@@ -1618,6 +1618,19 @@ body {
 [data-theme="dark"] .task-check { background: rgba(255, 255, 255, 0.06); color: rgba(255, 255, 255, 0.4); }
 [data-theme="dark"] .task-check.done { background: rgba(61, 168, 106, 0.18); color: #5fc888; }
 [data-theme="dark"] .shot-task-line { border-bottom-color: rgba(255, 255, 255, 0.06); }
+/* Délivrabilité — tunnel des phases (dark) */
+[data-theme="dark"] .overview-delivery-phase {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+[data-theme="dark"] .overview-delivery-phase:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(111, 182, 137, 0.5);
+}
+[data-theme="dark"] .overview-delivery-phase strong { color: rgba(255, 255, 255, 0.95); }
+[data-theme="dark"] .overview-delivery-arrow { color: rgba(255, 255, 255, 0.18); }
+/* Sélecteur de période actif : pilule claire + texte sombre en dark */
+[data-theme="dark"] .overview-air-header button.bg-text { color: #08110C; }
 @media (max-width: 1280px) {
   .overview-commercial-hero { grid-template-columns: 1fr; }
   .overview-commercial-toolbar { justify-content: flex-start; }
