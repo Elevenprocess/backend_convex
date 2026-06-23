@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { LoadingBlock } from '../../components/Spinner'
-import { useClients, useUsers } from '../../lib/hooks'
+import { useUsers, useVtCalendar } from '../../lib/hooks'
 import { useAuth } from '../../lib/auth'
-import { buildTechnicienEvents, type TechCalendarEvent } from '../../lib/technicienCalendar'
+import type { VtCalendarEntry } from '../../lib/types'
 
 const WEEKDAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
 const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
@@ -30,12 +30,21 @@ function monthCells(cursor: Date): Date[] {
 
 export function TechnicienPlanning() {
   const navigate = useNavigate()
-  const { data: clients, loading } = useClients({})
   const [cursor, setCursor] = useState(() => new Date())
 
+  const cells = useMemo(() => monthCells(cursor), [cursor])
+  const todayKey = ymd(new Date())
+
+  // Source de vérité des interventions = /clients/vt-calendar (la date VT est
+  // calculée depuis les sous-étapes vt_planifie/vt_attribuee, ce que la dérivation
+  // côté clients ne voyait pas → une VT planifiée n'apparaissait pas au planning).
+  const from = ymd(cells[0])
+  const to = ymd(cells[cells.length - 1])
+  const { data: entries, loading } = useVtCalendar({ from, to })
+
   // Un technicien voit déjà son propre planning (scope serveur). Les rôles
-  // delivery/ops voient tous les dossiers → on leur offre un sélecteur pour
-  // afficher le programme d'UN technicien (ses VT + ses installations).
+  // delivery/ops voient tous les dossiers → sélecteur pour afficher le programme
+  // d'UN technicien (ses VT + ses installations).
   const role = useAuth((s) => s.user?.role)
   const isTech = role === 'technicien'
   const { data: users } = useUsers()
@@ -45,14 +54,13 @@ export function TechnicienPlanning() {
   )
   const [selectedTechId, setSelectedTechId] = useState('')
 
-  const allEvents = useMemo(() => buildTechnicienEvents(clients ?? []), [clients])
   const events = useMemo(
-    () => (selectedTechId ? allEvents.filter((e) => e.technicienId === selectedTechId) : allEvents),
-    [allEvents, selectedTechId],
+    () => (selectedTechId ? (entries ?? []).filter((e) => e.technicienId === selectedTechId) : (entries ?? [])),
+    [entries, selectedTechId],
   )
 
   const eventsByDay = useMemo(() => {
-    const map = new Map<string, TechCalendarEvent[]>()
+    const map = new Map<string, VtCalendarEntry[]>()
     for (const e of events) {
       const list = map.get(e.date) ?? []
       list.push(e)
@@ -61,11 +69,8 @@ export function TechnicienPlanning() {
     return map
   }, [events])
 
-  const cells = useMemo(() => monthCells(cursor), [cursor])
-  const todayKey = ymd(new Date())
-
   const upcoming = useMemo(
-    () => events.filter((e) => e.date >= todayKey).slice(0, 8),
+    () => [...events].filter((e) => e.date >= todayKey).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 8),
     [events, todayKey],
   )
 
@@ -73,7 +78,7 @@ export function TechnicienPlanning() {
     <AppShell>
       <Topbar eyebrow="PLANNING" title={isTech ? 'Mes interventions' : 'Planning techniciens'} />
       <main className="p-4 sm:p-6 md:p-8 flex-grow overflow-y-auto">
-        <div className="flex items-center gap-3 mb-4">
+        <div className="flex items-center gap-3 mb-4 flex-wrap">
           <button className="btn-secondary p-2 rounded-xl" aria-label="Mois précédent"
             onClick={() => setCursor((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}>‹</button>
           <h2 className="font-black text-lg">{MONTHS[cursor.getMonth()]} {cursor.getFullYear()}</h2>
@@ -100,7 +105,7 @@ export function TechnicienPlanning() {
           </div>
         </div>
 
-        {loading && !clients ? (
+        {loading && !entries ? (
           <LoadingBlock label="Chargement du planning…" />
         ) : (
           <div className="glass-card !p-0 overflow-hidden">
@@ -119,10 +124,10 @@ export function TechnicienPlanning() {
                   <div key={key} className={`min-h-[88px] border-l border-t border-line-soft p-1.5 flex flex-col gap-1 ${muted ? 'bg-white/30 text-faint' : 'bg-white/55'} ${isToday ? 'ring-2 ring-cuivre ring-inset' : ''}`}>
                     <span className="text-xs font-bold">{d.getDate()}</span>
                     {list.map((e) => (
-                      <button key={`${e.clientId}-${e.type}`} onClick={() => navigate(`/suivi/${e.leadId}`)}
-                        title={`${e.type === 'vt' ? 'VT' : 'Installation'} — ${e.clientName}${e.city ? ` · ${e.city}` : ''}`}
-                        className={`text-left text-[10px] font-semibold rounded px-1.5 py-1 truncate text-white ${e.type === 'vt' ? 'bg-sky-500' : 'bg-emerald-500'}`}>
-                        {e.clientName}
+                      <button key={`${e.clientId}-${e.kind}`} onClick={() => navigate(`/suivi/${e.leadId}`)}
+                        title={`${e.kind === 'vt' ? 'VT' : 'Installation'} — ${e.leadName}${e.city ? ` · ${e.city}` : ''}`}
+                        className={`text-left text-[10px] font-semibold rounded px-1.5 py-1 truncate text-white ${e.kind === 'vt' ? 'bg-sky-500' : 'bg-emerald-500'}`}>
+                        {e.leadName}
                       </button>
                     ))}
                   </div>
@@ -139,12 +144,12 @@ export function TechnicienPlanning() {
           ) : (
             <ul className="divide-y divide-line-soft glass-card !p-0 overflow-hidden">
               {upcoming.map((e) => (
-                <li key={`${e.clientId}-${e.type}-${e.date}`}>
+                <li key={`${e.clientId}-${e.kind}-${e.date}`}>
                   <button onClick={() => navigate(`/suivi/${e.leadId}`)}
                     className="w-full text-left px-4 py-3 hover:bg-cream/60 flex items-center gap-3">
-                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${e.type === 'vt' ? 'bg-sky-500' : 'bg-emerald-500'}`} />
-                    <span className="font-bold">{e.clientName}</span>
-                    <span className="text-xs text-muted">{e.type === 'vt' ? 'VT' : 'Installation'}{e.city ? ` · ${e.city}` : ''}</span>
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${e.kind === 'vt' ? 'bg-sky-500' : 'bg-emerald-500'}`} />
+                    <span className="font-bold">{e.leadName}</span>
+                    <span className="text-xs text-muted">{e.kind === 'vt' ? 'VT' : 'Installation'}{e.city ? ` · ${e.city}` : ''}</span>
                     <span className="ml-auto text-xs tabular-nums text-muted">{e.date}</span>
                   </button>
                 </li>

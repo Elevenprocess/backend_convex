@@ -10,9 +10,6 @@ export type TechCalendarEvent = {
   clientName: string
   city: string | null
   status: string
-  // Technicien responsable de CETTE intervention : la VT est portée par
-  // clients.technicienVtId, l'installation par le responsable de l'étape.
-  technicienId: string | null
 }
 
 /** Dérive les interventions terrain (VT + installation planifiées) à afficher au planning. */
@@ -32,7 +29,6 @@ export function buildTechnicienEvents(clients: ClientResponse[]): TechCalendarEv
           clientName: name,
           city: c.lead.city,
           status: step.status,
-          technicienId: type === 'vt' ? c.technicienVtId : step.responsableId,
         })
       }
     }

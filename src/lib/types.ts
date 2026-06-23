@@ -1072,5 +1072,8 @@ export type VtCalendarEntry = {
   date: string // YYYY-MM-DD
   status: string
   technicienVtId: string | null
+  // Technicien responsable de cette intervention (VT → technicienVtId du
+  // dossier ; installation → responsable de l'étape / chef d'équipe pose).
+  technicienId: string | null
   notes: string | null
 }
