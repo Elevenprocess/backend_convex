@@ -1064,6 +1064,19 @@ body {
 .overview-role-side { grid-column: span 4; min-height: 248px; }
 .overview-role-chart { height: 182px; }
 
+/* ===== Délivrabilité / back-office : 5 KPIs en rangée pleine et alignée ===== */
+.overview-delivery-kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.overview-delivery-kpis > .overview-air-kpi { grid-column: auto; }
+@media (max-width: 1080px) { .overview-delivery-kpis { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); } }
+@media (max-width: 560px) { .overview-delivery-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ===== Responsable technique : 4 KPIs alignés (span 3) + dernière carte pleine largeur ===== */
+.overview-tech-grid > .overview-air-kpi { grid-column: span 3; }
+.overview-tech-grid > .overview-role-wide:last-child { grid-column: 1 / -1; }
+@media (max-width: 860px) { .overview-tech-grid > .overview-air-kpi { grid-column: span 6; } }
+/* Cartes internes (techniciens / pipeline terrain) lisibles en mode sombre */
+[data-theme="dark"] .overview-tech-grid .bg-white\/70 { background: rgba(255, 255, 255, 0.04); }
+
 /* ===== Setter overview : grille compactée + chart en barres ===== */
 .overview-setter-grid { gap: 10px; }
 

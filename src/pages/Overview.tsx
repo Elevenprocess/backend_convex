@@ -76,12 +76,12 @@ export function Overview() {
 
 function OverviewSuivi() {
   const navigate = useNavigate()
-  const [period, setPeriod] = useState<SuiviPeriodState>({
-    mode: 'this_year',
-    customFrom: '',
-    customTo: '',
-  })
-  const range = useMemo(() => buildSuiviPeriodRange(period), [period])
+  const [period, setPeriod] = useState<FunnelPeriodState>({ ...DEFAULT_FUNNEL_PERIOD, mode: 'this_year' })
+  const funnelRange = useMemo(() => buildFunnelPeriodRange(period), [period])
+  const range = useMemo(
+    () => ({ from: new Date(funnelRange.from), to: new Date(funnelRange.to) }),
+    [funnelRange.from, funnelRange.to],
+  )
   const now = useMemo(() => new Date(), [])
 
   // data est typé `T | null` (cf. Async<>), donc le défaut de déstructuration ne suffit pas :
@@ -126,19 +126,9 @@ function OverviewSuivi() {
           <div>
             <span className="shot-eyebrow">Post-signature · pilotage</span>
             <h1>Pipeline de livraison des dossiers</h1>
+            <p className="text-sm text-muted mt-2">{funnelRange.label}</p>
           </div>
-          <div className="flex gap-2 flex-wrap">
-            {SUIVI_PERIOD_OPTIONS.map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => setPeriod((p) => ({ ...p, mode: opt.id }))}
-                className={`rounded-full px-3 py-1.5 text-xs font-black border transition ${period.mode === opt.id ? 'bg-text text-white border-text' : 'border-line-soft text-muted'}`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+          <DateRangePicker value={period} onChange={setPeriod} align="right" />
         </div>
 
         {/* Zone 1 — Tunnel des 6 phases (cliquable) */}
@@ -163,7 +153,7 @@ function OverviewSuivi() {
         </section>
 
         {/* Zone 2 — KPIs de santé */}
-        <section className="overview-air-grid">
+        <section className="overview-air-grid overview-delivery-kpis">
           <AirKpi icon="grid" label="Dossiers actifs" value={fmtCompact(pipeline.activeCount)} sub="en livraison" />
           <AirKpi icon="shield" label="Retards SLA" value={fmtCompact(pipeline.lateCount)} sub="à débloquer" />
           <AirKpi icon="inbox" label="Docs manquants" value={fmtCompact(pipeline.missingDocsCount)} sub="à compléter" />
@@ -265,7 +255,7 @@ function OverviewResponsableTechnique() {
           </div>
         </div>
 
-        <section className="overview-air-grid">
+        <section className="overview-air-grid overview-tech-grid">
           <AirKpi icon="inbox" label="VT à attribuer" value={fmtCompact(unassigned.length)} sub="sans technicien" />
           <AirKpi icon="settings" label="VT en cours" value={fmtCompact(totalCharge)} sub="charge active" />
           <AirKpi icon="shield" label="VT en retard / problème" value={fmtCompact(totalRetard)} sub="à débloquer" />
