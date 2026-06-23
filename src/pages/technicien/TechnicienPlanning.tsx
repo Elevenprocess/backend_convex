@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { LoadingBlock } from '../../components/Spinner'
-import { useClients } from '../../lib/hooks'
+import { useClients, useUsers } from '../../lib/hooks'
+import { useAuth } from '../../lib/auth'
 import { buildTechnicienEvents, type TechCalendarEvent } from '../../lib/technicienCalendar'
 
 const WEEKDAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
@@ -32,27 +33,45 @@ export function TechnicienPlanning() {
   const { data: clients, loading } = useClients({})
   const [cursor, setCursor] = useState(() => new Date())
 
+  // Un technicien voit déjà son propre planning (scope serveur). Les rôles
+  // delivery/ops voient tous les dossiers → on leur offre un sélecteur pour
+  // afficher le programme d'UN technicien (ses VT + ses installations).
+  const role = useAuth((s) => s.user?.role)
+  const isTech = role === 'technicien'
+  const { data: users } = useUsers()
+  const technicians = useMemo(
+    () => (users ?? []).filter((u) => u.role === 'technicien').sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '')),
+    [users],
+  )
+  const [selectedTechId, setSelectedTechId] = useState('')
+
+  const allEvents = useMemo(() => buildTechnicienEvents(clients ?? []), [clients])
+  const events = useMemo(
+    () => (selectedTechId ? allEvents.filter((e) => e.technicienId === selectedTechId) : allEvents),
+    [allEvents, selectedTechId],
+  )
+
   const eventsByDay = useMemo(() => {
     const map = new Map<string, TechCalendarEvent[]>()
-    for (const e of buildTechnicienEvents(clients ?? [])) {
+    for (const e of events) {
       const list = map.get(e.date) ?? []
       list.push(e)
       map.set(e.date, list)
     }
     return map
-  }, [clients])
+  }, [events])
 
   const cells = useMemo(() => monthCells(cursor), [cursor])
   const todayKey = ymd(new Date())
 
   const upcoming = useMemo(
-    () => buildTechnicienEvents(clients ?? []).filter((e) => e.date >= todayKey).slice(0, 8),
-    [clients, todayKey],
+    () => events.filter((e) => e.date >= todayKey).slice(0, 8),
+    [events, todayKey],
   )
 
   return (
     <AppShell>
-      <Topbar eyebrow="PLANNING" title="Mes interventions" />
+      <Topbar eyebrow="PLANNING" title={isTech ? 'Mes interventions' : 'Planning techniciens'} />
       <main className="p-4 sm:p-6 md:p-8 flex-grow overflow-y-auto">
         <div className="flex items-center gap-3 mb-4">
           <button className="btn-secondary p-2 rounded-xl" aria-label="Mois précédent"
@@ -62,7 +81,20 @@ export function TechnicienPlanning() {
             onClick={() => setCursor((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}>›</button>
           <button className="btn-secondary px-3 py-2 rounded-xl text-xs ml-2"
             onClick={() => setCursor(new Date())}>Aujourd'hui</button>
-          <div className="ml-auto flex items-center gap-3 text-[11px] font-bold text-muted">
+          {!isTech && (
+            <select
+              value={selectedTechId}
+              onChange={(e) => setSelectedTechId(e.target.value)}
+              aria-label="Filtrer par technicien"
+              className="ml-auto px-3 py-2 rounded-xl text-xs font-semibold border border-line bg-white max-w-[220px]"
+            >
+              <option value="">Tous les techniciens</option>
+              {technicians.map((t) => (
+                <option key={t.id} value={t.id}>{t.name ?? t.email}</option>
+              ))}
+            </select>
+          )}
+          <div className={`${isTech ? 'ml-auto' : ''} flex items-center gap-3 text-[11px] font-bold text-muted`}>
             <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-sky-500" /> VT</span>
             <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Installation</span>
           </div>
