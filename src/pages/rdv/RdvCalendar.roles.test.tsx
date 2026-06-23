@@ -7,7 +7,7 @@ vi.mock('../../components/shell/AppShell', () => ({ AppShell: ({ children }: { c
 vi.mock('../../components/shell/Topbar', () => ({ Topbar: () => null }))
 
 const vt: VtCalendarEntry = {
-  kind: 'vt', clientId: 'c-1', leadId: 'l-1', leadName: 'Jean Dupont', city: 'Saint-Denis',
+  kind: 'vt', clientId: 'c-1', leadId: 'l-1', leadName: 'Jean Dupont', projectName: 'Projet Dupont', city: 'Saint-Denis',
   phone: '0600000000', date: '2026-06-08', status: 'planifie', technicienVtId: 't-1', technicienId: 't-1', notes: null,
 }
 

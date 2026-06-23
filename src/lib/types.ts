@@ -1067,6 +1067,8 @@ export type VtCalendarEntry = {
   clientId: string
   leadId: string
   leadName: string
+  // Nom du projet (dossier) rattaché au client, si présent.
+  projectName: string | null
   city: string | null
   phone: string | null
   date: string // YYYY-MM-DD
