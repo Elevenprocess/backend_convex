@@ -1214,6 +1214,9 @@ body {
   border-color: rgba(42, 37, 32, 0.14);
   background: rgba(248, 244, 235, 0.4);
 }
+/* Lignes sans avatar (ex. VT à attribuer) : texte large + bouton compact à droite */
+.overview-role-row--no-avatar { grid-template-columns: 1fr auto; }
+.overview-role-row--no-avatar > button { justify-self: end; }
 .overview-role-row strong {
   display: block;
   font-size: 12px;

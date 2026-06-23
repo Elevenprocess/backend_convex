@@ -12,7 +12,6 @@ import { STATUS_LABEL, DEBRIEF_ACCEPTANCE_FACTOR_LABEL, DEBRIEF_NON_SALE_REASON_
 import { CommercialLeaderboard, type LeaderboardRow } from '../components/overview/CommercialLeaderboard'
 import { ObjectivesEditorModal } from '../components/overview/ObjectivesEditorModal'
 import { computeTechnicienStats, computeTerrainPipeline, selectUnassignedVt, type TechnicienStat } from '../lib/technicienStats'
-import { buildSuiviPeriodRange, getDefaultSuiviPeriod, SUIVI_PERIOD_OPTIONS, type SuiviPeriodState } from '../lib/suivi'
 import { PHASE_LABEL, PHASE_ICON } from '../lib/suivi-board'
 import { buildDeliveryPipeline, selectDeliveryPriorities, selectRecentDeliveries, DELIVERY_PHASES } from '../lib/deliveryOverview'
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
@@ -211,7 +210,7 @@ function OverviewSuivi() {
 
 function OverviewResponsableTechnique() {
   const navigate = useNavigate()
-  const [period, setPeriod] = useState<SuiviPeriodState>(getDefaultSuiviPeriod())
+  const [period, setPeriod] = useState<FunnelPeriodState>({ ...DEFAULT_FUNNEL_PERIOD, mode: 'this_year' })
   const { data: clients = [] } = useClients()
   const { data: users = [] } = useUsers()
 
@@ -219,7 +218,11 @@ function OverviewResponsableTechnique() {
     () => (users ?? []).filter((u) => u.role === 'technicien'),
     [users],
   )
-  const range = useMemo(() => buildSuiviPeriodRange(period), [period])
+  const funnelRange = useMemo(() => buildFunnelPeriodRange(period), [period])
+  const range = useMemo(
+    () => ({ from: new Date(funnelRange.from), to: new Date(funnelRange.to) }),
+    [funnelRange.from, funnelRange.to],
+  )
 
   const stats = useMemo<TechnicienStat[]>(
     () => computeTechnicienStats(clients ?? [], techniciens, { from: range.from, to: range.to }),
@@ -240,19 +243,9 @@ function OverviewResponsableTechnique() {
           <div>
             <span className="shot-eyebrow">Terrain · VT & Installation</span>
             <h1>Suivi des techniciens</h1>
+            <p className="text-sm text-muted mt-2">{funnelRange.label}</p>
           </div>
-          <div className="flex gap-2 flex-wrap">
-            {SUIVI_PERIOD_OPTIONS.map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => setPeriod((p) => ({ ...p, mode: opt.id }))}
-                className={`rounded-full px-3 py-1.5 text-xs font-black border transition ${period.mode === opt.id ? 'bg-text text-white border-text' : 'border-line-soft text-muted'}`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+          <DateRangePicker value={period} onChange={setPeriod} align="right" />
         </div>
 
         <section className="overview-air-grid overview-tech-grid">
@@ -285,7 +278,7 @@ function OverviewResponsableTechnique() {
             <CardHead title="VT à attribuer" icon="bell" />
             <div className="overview-role-list">
               {unassigned.slice(0, 6).map((c) => (
-                <div key={c.id} className="overview-role-row">
+                <div key={c.id} className="overview-role-row overview-role-row--no-avatar">
                   <div><strong>{c.lead.fullName ?? c.lead.phone ?? 'Dossier'}</strong><small>{c.lead.city ?? '—'}</small></div>
                   <button onClick={() => navigate(`/suivi/${c.leadId}`)}>Attribuer</button>
                 </div>
