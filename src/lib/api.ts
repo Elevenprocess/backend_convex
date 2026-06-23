@@ -56,10 +56,15 @@ type FetchOpts = {
   body?: unknown
   query?: Record<string, string | number | undefined | null>
   signal?: AbortSignal
+  // Quand true, on n'ajoute PAS le header X-View-As-User-Id même si une
+  // impersonation est mémorisée. Utilisé par hydrate() pour résoudre le VRAI
+  // user (et la cible) sans muter localStorage en plein vol (cf. race condition
+  // entre deux hydrate() concurrents qui faisait sauter le bandeau « voir en tant que »).
+  skipViewAs?: boolean
 }
 
 export async function api<T>(path: string, opts: FetchOpts = {}): Promise<T> {
-  const { method = 'GET', body, query, signal } = opts
+  const { method = 'GET', body, query, signal, skipViewAs = false } = opts
 
   const url = new URL(buildApiUrl(path))
   if (query) {
@@ -81,7 +86,7 @@ export async function api<T>(path: string, opts: FetchOpts = {}): Promise<T> {
   // Impersonation : si un viewAsUserId est mémorisé (admin → quiconque,
   // commercial → setter en lecture seule), on l'envoie en header pour que
   // le back applique les permissions de l'overlay sur les GET.
-  if (typeof window !== 'undefined') {
+  if (typeof window !== 'undefined' && !skipViewAs) {
     const viewAsId = window.localStorage.getItem('ecoi.viewAsUserId')
     if (viewAsId) {
       ;(init.headers as Record<string, string>)['X-View-As-User-Id'] = viewAsId

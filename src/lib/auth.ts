@@ -4,6 +4,30 @@ import type { UserResponse, Role } from './types'
 
 const VIEW_AS_KEY = 'ecoi.viewAsUserId'
 
+// Promesse du hydrate() en cours, pour sérialiser les appels concurrents
+// (focus + visibilitychange + interval déclenchés quasi simultanément).
+let hydrateInFlight: Promise<void> | null = null
+
+// Règles d'impersonation, centralisées pour rester alignées avec le backend
+// (auth.guard.ts) :
+//   - admin → n'importe qui (ÉCRITURE)
+//   - commercial_lead → commercial (LECTURE SEULE)
+//   - commercial → setter (LECTURE SEULE)
+export function impersonationAllowed(realRole: Role, targetRole: Role): boolean {
+  return (
+    realRole === 'admin' ||
+    (realRole === 'commercial_lead' && targetRole === 'commercial') ||
+    (realRole === 'commercial' && targetRole === 'setter')
+  )
+}
+
+export function impersonationIsReadOnly(realRole: Role, targetRole: Role): boolean {
+  return (
+    (realRole === 'commercial_lead' && targetRole === 'commercial') ||
+    (realRole === 'commercial' && targetRole === 'setter')
+  )
+}
+
 type AuthState = {
   // user = perceived user (viewAsUser ?? realUser). Tout le code app lit s.user.
   user: UserResponse | null
@@ -29,31 +53,24 @@ export const useAuth = create<AuthState>((set, get) => ({
   error: null,
 
   hydrate: async () => {
+    // Garde anti-concurrence : useAuthSessionKeeper appelle hydrate() sur focus,
+    // visibilitychange ET un interval — deux runs concurrents pouvaient se
+    // chevaucher et faire sauter le bandeau « voir en tant que ». On sérialise.
+    if (hydrateInFlight) return hydrateInFlight
+    hydrateInFlight = (async () => {
     try {
       await api<unknown>('/api/auth/get-session').catch(() => undefined)
-      // Avant de fetch /users/me, on retire temporairement le header viewAs
-      // pour récupérer le VRAI user (sinon la requête revient avec l'overlay).
+      // On lit l'id mémorisé UNE fois et on bypasse le header via skipViewAs
+      // (au lieu de muter localStorage en plein vol — source d'une race).
       const persistedViewAsId = typeof window !== 'undefined' ? window.localStorage.getItem(VIEW_AS_KEY) : null
-      if (persistedViewAsId && typeof window !== 'undefined') window.localStorage.removeItem(VIEW_AS_KEY)
-      const me = await api<UserResponse>('/users/me')
-      if (persistedViewAsId && typeof window !== 'undefined') window.localStorage.setItem(VIEW_AS_KEY, persistedViewAsId)
+      const me = await api<UserResponse>('/users/me', { skipViewAs: true })
 
       let overlay: UserResponse | null = null
       if (persistedViewAsId && persistedViewAsId !== me.id) {
         try {
-          // Re-retire le header le temps de récupérer la cible (sinon le back
-          // résoudrait /users/<id> avec l'overlay = boucle infinie).
-          if (typeof window !== 'undefined') window.localStorage.removeItem(VIEW_AS_KEY)
-          const target = await api<UserResponse>(`/users/${persistedViewAsId}`)
-          if (typeof window !== 'undefined') window.localStorage.setItem(VIEW_AS_KEY, persistedViewAsId)
+          const target = await api<UserResponse>(`/users/${persistedViewAsId}`, { skipViewAs: true })
 
-          // Règles : admin → n'importe qui ; commercial_lead → équipe commercial/setter ;
-          // commercial → setter (read-only).
-          const allowed =
-            me.role === 'admin' ||
-            (me.role === 'commercial_lead' && (target.role === 'commercial' || target.role === 'commercial_lead' || target.role === 'setter' || target.role === 'setter_lead')) ||
-            (me.role === 'commercial' && target.role === 'setter')
-          if (allowed) {
+          if (impersonationAllowed(me.role, target.role)) {
             overlay = target
           } else if (typeof window !== 'undefined') {
             window.localStorage.removeItem(VIEW_AS_KEY)
@@ -61,7 +78,8 @@ export const useAuth = create<AuthState>((set, get) => ({
         } catch {
           if (typeof window !== 'undefined') window.localStorage.removeItem(VIEW_AS_KEY)
         }
-      } else if (typeof window !== 'undefined') {
+      } else if (persistedViewAsId && typeof window !== 'undefined') {
+        // persistedViewAsId === me.id : overlay inutile, on nettoie.
         window.localStorage.removeItem(VIEW_AS_KEY)
       }
 
@@ -84,7 +102,11 @@ export const useAuth = create<AuthState>((set, get) => ({
           set({ user: null, realUser: null, viewAsUser: null, status: 'guest', error: message })
         }
       }
+    } finally {
+      hydrateInFlight = null
     }
+    })()
+    return hydrateInFlight
   },
 
   signIn: async (email, password) => {
@@ -112,12 +134,7 @@ export const useAuth = create<AuthState>((set, get) => ({
   viewAs: (target) => {
     const me = get().realUser
     if (!me || target.id === me.id) return
-    // admin = tout user ; commercial_lead = équipe commercial/setter ; commercial = setter (lecture seule garantie back-side).
-    const allowed =
-      me.role === 'admin' ||
-      (me.role === 'commercial_lead' && (target.role === 'commercial' || target.role === 'commercial_lead' || target.role === 'setter' || target.role === 'setter_lead')) ||
-      (me.role === 'commercial' && target.role === 'setter')
-    if (!allowed) return
+    if (!impersonationAllowed(me.role, target.role)) return
     if (typeof window !== 'undefined') window.localStorage.setItem(VIEW_AS_KEY, target.id)
     set({ viewAsUser: target, user: target })
   },
@@ -165,13 +182,14 @@ export function useRealUser(): UserResponse | null {
   return useAuth((s) => s.realUser)
 }
 
-// True si l'utilisateur est en mode "impersonation lecture seule" (commercial
-// regardant un setter). En admin viewAs n'importe quel autre rôle reste WRITE.
+// True si l'utilisateur est en mode "impersonation lecture seule"
+// (commercial_lead → commercial, ou commercial → setter). En admin, viewAs
+// n'importe quel rôle reste en ÉCRITURE.
 export function useIsReadOnlyImpersonation(): boolean {
   return useAuth((s) => {
     const real = s.realUser
     const overlay = s.viewAsUser
     if (!real || !overlay || real.id === overlay.id) return false
-    return real.role === 'commercial' && overlay.role === 'setter'
+    return impersonationIsReadOnly(real.role, overlay.role)
   })
 }

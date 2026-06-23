@@ -7,7 +7,7 @@ import { Icon } from '../components/Icon'
 import type { IconName } from '../components/Icon'
 import { UserEditModal } from '../components/UserEditModal'
 import { LoadingBlock, Spinner } from '../components/Spinner'
-import { useAuth } from '../lib/auth'
+import { useAuth, impersonationAllowed } from '../lib/auth'
 import { copyText, inviteUser, regenerateInvitation, revokeInvitation, syncGhlCommercialUsers, updateUser, useGhlCalendarConfig, useGhlUsers, useInvitations, useUsers } from '../lib/hooks'
 import { notifyClipboardCopied } from '../lib/clipboardToast'
 import { useTheme } from '../lib/theme'
@@ -582,19 +582,14 @@ function UserRow({ user, ghlUsers, onMapped, onEdit, compact = false, sector = n
       ? `/team/setters/${user.id}`
       : null
 
-  // Impersonation : admin → tout user ; commercial_lead → équipe commercial/setter ;
-  // commercial → setter (en lecture seule).
-  // Le back rejette les écritures (POST/PATCH/DELETE) en mode commercial→setter
-  // via l'AuthGuard, donc même si l'UI affichait un bouton edit par erreur,
-  // l'écriture serait bloquée 403 côté serveur.
+  // Impersonation : admin → tout user (écriture) ; commercial_lead → commercial
+  // (lecture seule) ; commercial → setter (lecture seule). Règle partagée avec
+  // le backend via impersonationAllowed (cf. auth.guard.ts). Les écritures en
+  // mode lecture seule sont rejetées en 403 côté serveur.
   const canImpersonate = !!realUser
     && realUser.id !== user.id
     && user.active
-    && (
-      realUser.role === 'admin'
-      || (realUser.role === 'commercial_lead' && (user.role === 'commercial' || user.role === 'commercial_lead' || user.role === 'setter' || user.role === 'setter_lead'))
-      || (realUser.role === 'commercial' && user.role === 'setter')
-    )
+    && impersonationAllowed(realUser.role, user.role)
 
   async function saveGhlUser(ghlUserId: string) {
     setSavingGhl(true)

@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Outlet, useLocation } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { CallBubble } from './components/call/CallBubble'
 import { ChatPanel } from './components/assistant/ChatPanel'
 import { PersistentCallSidebar } from './components/call/PersistentCallSidebar'
 import { SidebarRevealPill } from './components/call/SidebarRevealPill'
 import { PersistentLeadSidebar } from './components/leads/PersistentLeadSidebar'
 import { ClipboardToast } from './components/ClipboardToast'
-import { useAuth } from './lib/auth'
+import { useAuth, impersonationIsReadOnly } from './lib/auth'
 import { useLeads, useRdvList } from './lib/hooks'
 import { useRealtimeSocket } from './lib/realtime'
 import { useTheme } from './lib/theme'
@@ -41,8 +41,15 @@ function ViewAsBanner() {
   const viewAsUser = useAuth((s) => s.viewAsUser)
   const realUser = useAuth((s) => s.realUser)
   const exitViewAs = useAuth((s) => s.exitViewAs)
+  const navigate = useNavigate()
+  // En quittant la vue impersonnée, on revient sur la page Paramètres (point
+  // d'entrée du bouton « Explorer ») plutôt que sur la dernière page consultée.
+  const handleExit = () => {
+    exitViewAs()
+    navigate('/settings')
+  }
   if (!viewAsUser || !realUser) return null
-  const readOnly = realUser.role === 'commercial' && viewAsUser.role === 'setter'
+  const readOnly = impersonationIsReadOnly(realUser.role, viewAsUser.role)
 
   const initials = viewAsUser.name
     .split(' ')
@@ -78,7 +85,7 @@ function ViewAsBanner() {
           <span className="viewas-admin-note">
             Connecté en tant que <strong>{realUser.name.split(' ')[0]}</strong>
           </span>
-          <button onClick={exitViewAs} className="viewas-exit" type="button">
+          <button onClick={handleExit} className="viewas-exit" type="button">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <line x1="6" y1="6" x2="18" y2="18" />
               <line x1="18" y1="6" x2="6" y2="18" />
