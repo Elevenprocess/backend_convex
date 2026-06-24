@@ -265,23 +265,11 @@ export function LeadDetail() {
       </div>
 
       <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 flex flex-col gap-4 lg:gap-6 overflow-y-auto flex-grow">
-        {/* Haut : création/projets (large) à gauche, client + attribution + historique à droite */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6 items-start">
-          {/* Colonne principale — Créer un projet + Projets existants */}
-          <div className="lg:col-span-2 space-y-4 lg:space-y-6">
-            <div className="glass-card p-6">
-              <CreateProjectInline
-                lead={lead}
-                projects={projects}
-                onCreated={(p) => { setProjects((prev) => [p, ...prev]); navigate(`/projects/${p.id}`) }}
-                onOpenProject={(p) => navigate(`/projects/${p.id}`)}
-              />
-            </div>
-          </div>
-
-          {/* Colonne droite — client, attribution, données, historique */}
-          <div className="lg:col-span-1 space-y-4 lg:space-y-6">
-            <div className="glass-card p-6 text-center">
+        {/* Haut : Infos (gauche) + Projets (droite), cartes de MÊME hauteur */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 items-stretch">
+          {/* Infos client + attribution + données */}
+          <div className="glass-card p-6 h-full flex flex-col">
+            <div className="text-center">
               <div className="w-24 h-24 rounded-full bg-cuivre-tint flex items-center justify-center text-3xl font-bold mx-auto mb-4">{leadInitials(lead)}</div>
               <h3 className="text-xl font-bold">{fullName(lead)}</h3>
               <span className={`status-badge ${statusBadge.className} mt-2 inline-block`}>{statusBadge.label}</span>
@@ -297,7 +285,7 @@ export function LeadDetail() {
               </div>
             </div>
 
-            <div className="glass-card p-6">
+            <div className="mt-6 border-t border-line pt-6">
               <span className="eyebrow block mb-3">ATTRIBUTION</span>
               <div className="space-y-3 text-sm">
                 <Row label="Setter">
@@ -331,7 +319,7 @@ export function LeadDetail() {
             </div>
 
             {lead.customFields && lead.customFields.length > 0 && (
-              <div className="glass-card p-6">
+              <div className="mt-6 border-t border-line pt-6">
                 <span className="eyebrow block mb-3">DONNÉES FORMULAIRE / SETTER</span>
                 <div className="space-y-3 text-sm">
                   {lead.customFields.map((field) => (
@@ -343,13 +331,28 @@ export function LeadDetail() {
                 </div>
               </div>
             )}
+          </div>
 
-            <div className="glass-card p-6">
-              <span className="eyebrow block mb-3">Historique</span>
+          {/* Projets : créer + existants */}
+          <div className="glass-card p-6 h-full">
+            <CreateProjectInline
+              lead={lead}
+              projects={projects}
+              onCreated={(p) => { setProjects((prev) => [p, ...prev]); navigate(`/projects/${p.id}`) }}
+              onOpenProject={(p) => navigate(`/projects/${p.id}`)}
+            />
+          </div>
+        </div>
+
+        {/* Bas : Historique + Débriefs côte à côte, hauteur fixe + scroll */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 items-stretch">
+          <div className="glass-card p-6 flex flex-col">
+            <span className="eyebrow block mb-3">Historique</span>
+            <div className="h-[340px] overflow-y-auto pr-1">
               {timeline.length === 0 ? (
                 <p className="text-sm text-faint">Aucun événement enregistré pour ce lead.</p>
               ) : (
-                <div className="space-y-4 max-h-[420px] overflow-y-auto pr-1">
+                <div className="space-y-4">
                   {timeline.map((t, i) => (
                     <div key={i} className="flex gap-3">
                       <div className={`w-8 h-8 rounded-full ${t.iconBg} flex items-center justify-center shrink-0`}>
@@ -368,32 +371,31 @@ export function LeadDetail() {
               )}
             </div>
           </div>
-        </div>
 
-        {/* Bas pleine largeur — Débriefs côte à côte, hauteur fixe + scroll */}
-        <div className="glass-card p-6">
-          <div className="flex items-center justify-between mb-3">
-            <span className="eyebrow">Débriefs</span>
-            {debriefs.length > 0 && (
-              <span className="text-[10px] font-black uppercase tracking-wider text-faint">{debriefs.length} débrief{debriefs.length > 1 ? 's' : ''}</span>
-            )}
-          </div>
-          {debriefs.length === 0 ? (
-            <p className="text-sm text-faint">Aucun débrief enregistré pour ce client.</p>
-          ) : (
-            <div className="max-h-[360px] overflow-y-auto pr-1">
-              <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {debriefs.map((d) => (
-                  <DebriefRow
-                    key={d.id}
-                    debrief={d}
-                    projectName={d.projectId ? (projects.find((p) => p.id === d.projectId)?.name ?? 'Projet') : 'Débrief libre'}
-                    onDelete={() => void handleDeleteDebrief(d.id)}
-                  />
-                ))}
-              </ul>
+          <div className="glass-card p-6 flex flex-col">
+            <div className="flex items-center justify-between mb-3">
+              <span className="eyebrow">Débriefs</span>
+              {debriefs.length > 0 && (
+                <span className="text-[10px] font-black uppercase tracking-wider text-faint">{debriefs.length} débrief{debriefs.length > 1 ? 's' : ''}</span>
+              )}
             </div>
-          )}
+            <div className="h-[340px] overflow-y-auto pr-1">
+              {debriefs.length === 0 ? (
+                <p className="text-sm text-faint">Aucun débrief enregistré pour ce client.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {debriefs.map((d) => (
+                    <DebriefRow
+                      key={d.id}
+                      debrief={d}
+                      projectName={d.projectId ? (projects.find((p) => p.id === d.projectId)?.name ?? 'Projet') : 'Débrief libre'}
+                      onDelete={() => void handleDeleteDebrief(d.id)}
+                    />
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
         </div>
       </main>
 
