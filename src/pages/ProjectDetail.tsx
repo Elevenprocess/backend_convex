@@ -32,6 +32,8 @@ export function ProjectDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('devis')
   const [wfOpen, setWfOpen] = useState(true)
+  // Mobile : le workflow s'ouvre en plein écran (la sidebar 42vw l'écrasait).
+  const [wfMobileOpen, setWfMobileOpen] = useState(false)
 
   // Dossier délivrabilité du projet : `annule` = VT non validée → vente annulée.
   const { data: projectClients } = useClients(projectId ? { projectId } : null)
@@ -53,6 +55,13 @@ export function ProjectDetailPage() {
     if (!projectId) return
     void getProjectDetail(projectId).then((p) => setProject(p)).catch(() => undefined)
   }
+
+  useEffect(() => {
+    if (!wfMobileOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setWfMobileOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [wfMobileOpen])
 
   const counts = useMemo(() => {
     if (!project) return { devis: 0, documents: 0, notes: 0, debrief: 0 }
@@ -116,6 +125,19 @@ export function ProjectDetailPage() {
               {project.city && <span className="text-sm text-muted">· {project.city}</span>}
             </header>
 
+            {/* Mobile : ouvre le workflow en plein écran (la sidebar est masquée < lg) */}
+            <button
+              type="button"
+              onClick={() => setWfMobileOpen(true)}
+              className="mb-4 flex w-full items-center justify-between gap-2 rounded-2xl border border-line bg-card px-4 py-3 text-sm font-semibold text-text lg:hidden"
+            >
+              <span className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-or-tint text-or-dark"><Icon name="settings" size={16} /></span>
+                Workflow délivrabilité
+              </span>
+              <Icon name="chevron-right" size={18} className="text-muted" />
+            </button>
+
             <div className="flex items-start gap-4">
               {/* Colonne onglets (façon Solteo) */}
               <div className="min-w-0 flex-1">
@@ -144,8 +166,8 @@ export function ProjectDetailPage() {
                 )}
               </div>
 
-              {/* Sidebar workflow repliable */}
-              <aside className={`shrink-0 lg:sticky lg:top-4 ${wfOpen ? 'w-[min(440px,42vw)]' : 'w-11'}`}>
+              {/* Sidebar workflow repliable — desktop uniquement (sur mobile : plein écran) */}
+              <aside className={`hidden shrink-0 lg:sticky lg:top-4 lg:block ${wfOpen ? 'lg:w-[min(440px,42vw)]' : 'lg:w-11'}`}>
                 <div className="rounded-2xl border border-line bg-card p-2">
                   <button
                     type="button"
@@ -173,6 +195,49 @@ export function ProjectDetailPage() {
                 </div>
               </aside>
             </div>
+
+            {/* Workflow en plein écran sur mobile */}
+            {wfMobileOpen && (
+              <div
+                className="fixed inset-0 z-[210] flex items-stretch justify-center bg-[rgba(15,30,22,0.58)] backdrop-blur-sm lg:hidden"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Workflow délivrabilité"
+                onClick={() => setWfMobileOpen(false)}
+              >
+                <div
+                  className="flex h-full w-full flex-col overflow-hidden bg-cream-darker"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ animation: 'fiche-wf-fade .16s ease' }}
+                >
+                  <header className="flex items-center justify-between gap-3 border-b border-line bg-card px-4 py-3.5">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-or-tint text-or-dark">
+                        <Icon name="settings" size={16} />
+                      </span>
+                      <div className="min-w-0">
+                        <h2 className="truncate text-sm font-black leading-tight text-text">Workflow délivrabilité</h2>
+                        <p className="truncate text-[11px] leading-tight text-muted">{project.name || 'Projet'}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setWfMobileOpen(false)}
+                      aria-label="Fermer"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-card text-muted transition hover:border-rouille/40 hover:bg-rouille-tint hover:text-rouille"
+                    >
+                      <Icon name="x" size={15} />
+                    </button>
+                  </header>
+                  <div
+                    className="min-h-0 flex-1 overflow-auto p-4"
+                    style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+                  >
+                    <DossierWorkflowPanel dossier={dossier} projectId={project.id} />
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
       </main>
