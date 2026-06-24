@@ -1052,13 +1052,17 @@ export type AcompteResponse = {
   echeances: EcheanceLine[]
 }
 
-// Une tranche d'un échéancier personnalisé (édition back-office).
+// Une tranche d'un échéancier personnalisé (édition back-office). statut/
+// montantReel/dateEncaissement permettent de définir le plan ET le payé d'un coup.
 export type EcheancierTranchePatch = {
   label?: string | null
   percent?: number | null
   montantPrevu?: string | null
   jalonKey?: string | null
   dateEcheance?: string | null
+  statut?: AcompteStatut
+  montantReel?: string | null
+  dateEncaissement?: string | null
 }
 
 // Édition des données financières d'une vente par le back-office finances.

@@ -261,6 +261,11 @@ export function listAcomptes(): Promise<AcompteResponse[]> {
   return api<AcompteResponse[]>('/payments/acomptes')
 }
 
+// L'échéancier d'UNE vente (par débrief) — onglet « Mode de paiement ».
+export function getAcompte(debriefId: string): Promise<AcompteResponse> {
+  return api<AcompteResponse>(`/payments/acomptes/${debriefId}`)
+}
+
 // Enregistre l'encaissement d'une tranche de l'échéancier (ordre dans le body).
 export function recordEcheance(
   debriefId: string,

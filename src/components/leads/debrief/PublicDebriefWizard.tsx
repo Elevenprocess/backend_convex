@@ -535,21 +535,15 @@ export function PublicDebriefWizard({ client, commercialName, rdv, initialForm, 
 
       {/* Barre d'action fixe en bas */}
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/95 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-lg items-center gap-2 px-4 py-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
-          <button
-            type="button"
-            onClick={() => setCurrentStep((s) => Math.max(0, s - 1))}
-            disabled={isFirstStep || saving}
-            className={`rounded-2xl border px-4 py-3 text-sm font-bold transition ${isFirstStep || saving ? 'border-line bg-cream-darker text-faint cursor-not-allowed' : 'border-line bg-white text-text hover:bg-cream'}`}
-          >
-            ← Retour
-          </button>
+        <div className="mx-auto flex max-w-lg flex-col gap-2 px-4 py-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+          {/* Bouton primaire : pleine largeur. Au 1er écran (choix vente/pas), c'est
+              le seul bouton — pas de « Retour ». */}
           {!isLastStep ? (
             <button
               type="button"
               onClick={() => { if (canAdvanceStep(currentStepId, form)) setCurrentStep((s) => s + 1) }}
               disabled={!canAdvanceStep(currentStepId, form) || saving}
-              className={`flex-1 rounded-2xl px-4 py-3 text-sm font-black tracking-wide transition ${canAdvanceStep(currentStepId, form) && !saving ? 'bg-text text-white hover:bg-text/90 shadow-sm' : 'bg-cream-darker text-faint cursor-not-allowed'}`}
+              className={`w-full rounded-2xl px-4 py-3 text-sm font-black tracking-wide transition ${canAdvanceStep(currentStepId, form) && !saving ? 'bg-text text-white hover:bg-text/90 shadow-sm' : 'bg-cream-darker text-faint cursor-not-allowed'}`}
             >
               Continuer →
             </button>
@@ -558,9 +552,20 @@ export function PublicDebriefWizard({ client, commercialName, rdv, initialForm, 
               type="button"
               onClick={handleSubmit}
               disabled={!canSubmit || saving}
-              className={`flex-1 rounded-2xl px-4 py-3 text-sm font-black tracking-wide transition ${canSubmit && !saving ? 'bg-success text-white hover:bg-success/90 shadow-sm' : 'bg-cream-darker text-faint cursor-not-allowed'}`}
+              className={`w-full rounded-2xl px-4 py-3 text-sm font-black tracking-wide transition ${canSubmit && !saving ? 'bg-success text-white hover:bg-success/90 shadow-sm' : 'bg-cream-darker text-faint cursor-not-allowed'}`}
             >
               {saving ? 'Enregistrement…' : 'Enregistrer le débrief'}
+            </button>
+          )}
+          {/* « Retour » : seulement après le 1er écran, pleine largeur en bas. */}
+          {!isFirstStep && (
+            <button
+              type="button"
+              onClick={() => setCurrentStep((s) => Math.max(0, s - 1))}
+              disabled={saving}
+              className={`w-full rounded-2xl border px-4 py-3 text-sm font-bold transition ${saving ? 'border-line bg-cream-darker text-faint cursor-not-allowed' : 'border-line bg-white text-text hover:bg-cream'}`}
+            >
+              ← Retour
             </button>
           )}
         </div>

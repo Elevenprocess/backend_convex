@@ -7,13 +7,13 @@ import { Icon } from '../components/Icon'
 import { useAuth } from '../lib/auth'
 import { useDossier } from '../lib/useDossier'
 import { useClients } from '../lib/hooks'
-import { getProjectDetail, updateFinancing } from '../lib/api'
+import { getProjectDetail, updateFinancing, getAcompte, setEcheancier } from '../lib/api'
 import { parseNotesJournal } from '../lib/notesJournal'
-import { formatCurrency } from '../lib/suivi'
-import { fullName, PROJECT_STATUS_LABEL, type DebriefResponse, type ProjectDetailResponse, type UpdateFinancingPatch } from '../lib/types'
+import { todayIso } from '../lib/suivi-board'
+import { fullName, PROJECT_STATUS_LABEL, type ProjectDetailResponse, type AcompteResponse, type EcheancierTranchePatch } from '../lib/types'
 import { DossierWorkflowPanel } from '../components/suivi/DossierWorkflowPanel'
 import { ProjectDossierSection, type ProjectTab } from '../components/suivi/ProjectDossierSection'
-import { Section, Field, formatDebriefFinancingType, formatDebriefPaymentMethod } from '../components/suivi/fiche-parts'
+import { Section } from '../components/suivi/fiche-parts'
 
 type Tab = ProjectTab | 'paiement'
 
@@ -160,7 +160,7 @@ export function ProjectDetailPage() {
                 </div>
 
                 {tab === 'paiement' ? (
-                  <PaymentPanel project={project} onSaved={refresh} />
+                  <PaymentTab project={project} onSaved={refresh} />
                 ) : (
                   <ProjectDossierSection project={project} dossier={dossier} pageMode activeTab={tab} onChanged={refresh} />
                 )}
@@ -252,19 +252,68 @@ const FINANCING_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'paiement_12x', label: 'Paiement x12' },
 ]
 
+const ORG_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'cmoi', label: 'CMOI' },
+  { value: 'sofider', label: 'Sofider' },
+]
+
+type PayLine = { label: string; montant: string; paid: boolean; date: string }
+
+const money = (v: string | number | null | undefined): string => {
+  const n = Number(v ?? 0)
+  return Number.isNaN(n) ? '—' : `${n.toLocaleString('fr-FR')} €`
+}
+
 /**
- * Onglet « Mode de paiement » : financement/comptant dérivé du débrief de vente.
- * Le responsable technique / back-office (et l'admin) peut le MODIFIER — les
- * données sont sur le débrief, mises à jour via l'endpoint financing.
+ * Onglet « Mode de paiement », lié à l'échéancier Finances (acompte_echeances).
+ * Comportement par TYPE :
+ *  - comptant : pas d'organisme. Liste de paiements libres, total/reste à payer,
+ *    ajout de paiement + recalcul.
+ *  - financement : organisme (CMOI/Sofider) + acompte comptant + solde financé.
+ *  - x10 / x12 : 10/12 échéances générées, on coche celles payées.
+ * Éditable par admin / responsable_technique / back_office.
  */
-function PaymentPanel({ project, onSaved }: { project: ProjectDetailResponse; onSaved: () => void }) {
+function PaymentTab({ project, onSaved }: { project: ProjectDetailResponse; onSaved: () => void }) {
   const role = useAuth((s) => s.user?.role)
   const canEdit = role === 'admin' || role === 'responsable_technique' || role === 'back_office'
-  const [editing, setEditing] = useState(false)
 
-  const debrief: DebriefResponse | null = [...project.debriefs]
+  const debrief = useMemo(() => [...project.debriefs]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .find((d) => d.financingType || d.paymentSubMethod || d.financingOrg || d.montantTotal) ?? null
+    .find((d) => d.financingType || d.paymentSubMethod || d.financingOrg || d.montantTotal) ?? null, [project.debriefs])
+
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const [financingType, setFinancingType] = useState('')
+  const [montantTotal, setMontantTotal] = useState('')
+  const [financingOrg, setFinancingOrg] = useState('')
+  const [lines, setLines] = useState<PayLine[]>([])
+
+  const hydrate = (a: AcompteResponse) => {
+    setFinancingType(a.financingType ?? '')
+    setMontantTotal(a.montantTotal ?? '')
+    setFinancingOrg(a.financingOrg ?? '')
+    setLines(a.echeances.map((e) => ({
+      label: e.label ?? (e.percent != null ? `${e.percent}%` : 'Paiement'),
+      montant: e.montantReel ?? e.montantPrevu ?? '',
+      paid: e.statut === 'encaisse',
+      date: e.dateEncaissement ?? e.dateEcheance ?? '',
+    })))
+  }
+
+  useEffect(() => {
+    if (!debrief) { setLoading(false); return }
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    getAcompte(debrief.id)
+      .then((a) => { if (!cancelled) hydrate(a) })
+      .catch(() => { if (!cancelled) setError('Impossible de charger le suivi de paiement.') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debrief?.id])
 
   if (!debrief) {
     return (
@@ -273,72 +322,50 @@ function PaymentPanel({ project, onSaved }: { project: ProjectDetailResponse; on
       </div>
     )
   }
+  if (loading) return <LoadingBlock label="Chargement du paiement…" />
 
-  if (editing) {
-    return (
-      <PaymentEditForm
-        debrief={debrief}
-        onCancel={() => setEditing(false)}
-        onSaved={() => { setEditing(false); onSaved() }}
-      />
-    )
+  const total = Number(montantTotal) || 0
+  const paidSum = lines.filter((l) => l.paid).reduce((s, l) => s + (Number(l.montant) || 0), 0)
+  const reste = total - paidSum
+  const isFinancement = financingType === 'financement' || financingType === 'financement_sans_apport' || financingType === 'apport_financement'
+  const isEchelonne = financingType === 'paiement_10x' || financingType === 'paiement_12x'
+  const nbEcheances = financingType === 'paiement_10x' ? 10 : financingType === 'paiement_12x' ? 12 : 0
+
+  const setLine = (i: number, patch: Partial<PayLine>) => setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)))
+  const addLine = () => setLines((ls) => [...ls, { label: `Paiement ${ls.length + 1}`, montant: '', paid: false, date: '' }])
+  const removeLine = (i: number) => setLines((ls) => ls.filter((_, idx) => idx !== i))
+  const generateEcheances = (n: number) => {
+    const each = total ? (total / n).toFixed(2) : ''
+    setLines(Array.from({ length: n }, (_, i) => ({ label: `Échéance ${i + 1}/${n}`, montant: each, paid: false, date: '' })))
   }
-
-  const financing = formatDebriefFinancingType(debrief)
-  const method = formatDebriefPaymentMethod(debrief)
-  const acompte = debrief.acompteAmount
-    ? `${Number(debrief.acompteAmount).toLocaleString('fr-FR')} €${debrief.acomptePercent != null ? ` (${debrief.acomptePercent} %)` : ''}`
-    : (debrief.acomptePercent != null ? `${debrief.acomptePercent} %` : null)
-
-  return (
-    <Section
-      title="Mode de paiement"
-      action={canEdit ? (
-        <button type="button" className="text-xs font-semibold text-or hover:underline" onClick={() => setEditing(true)}>
-          ✎ Modifier
-        </button>
-      ) : undefined}
-    >
-      <dl className="grid grid-cols-2 gap-x-5 gap-y-3">
-        <Field label="Montant total" value={debrief.montantTotal ? formatCurrency(Number(debrief.montantTotal)) : null} />
-        <Field label="Type de financement" value={financing} />
-        <Field label="Méthode" value={method} />
-        <Field label="Organisme" value={debrief.financingOrg} />
-        <Field label="Acompte" value={acompte} wide />
-        {debrief.kits && <Field label="Kit installé" value={debrief.kits} wide />}
-      </dl>
-    </Section>
-  )
-}
-
-/** Formulaire d'édition du mode de paiement (patch par diff vers le débrief). */
-function PaymentEditForm({
-  debrief, onCancel, onSaved,
-}: { debrief: DebriefResponse; onCancel: () => void; onSaved: () => void }) {
-  const [montantTotal, setMontantTotal] = useState(debrief.montantTotal ?? '')
-  const [financingType, setFinancingType] = useState(debrief.financingType ?? '')
-  const [paymentSubMethod, setPaymentSubMethod] = useState(debrief.paymentSubMethod ?? '')
-  const [financingOrg, setFinancingOrg] = useState(debrief.financingOrg ?? '')
-  const [acomptePercent, setAcomptePercent] = useState(debrief.acomptePercent != null ? String(debrief.acomptePercent) : '')
-  const [acompteAmount, setAcompteAmount] = useState(debrief.acompteAmount ?? '')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const initFinancement = () => setLines([
+    { label: 'Acompte (comptant)', montant: '', paid: false, date: '' },
+    { label: 'Solde financé', montant: montantTotal, paid: false, date: '' },
+  ])
 
   const save = async () => {
     setSaving(true)
     setError(null)
     try {
-      const patch: UpdateFinancingPatch = {}
-      const t = (v: string) => v.trim()
-      if (t(montantTotal) !== (debrief.montantTotal ?? '')) patch.montantTotal = t(montantTotal) || null
-      if (t(financingType) !== (debrief.financingType ?? '')) patch.financingType = t(financingType) || null
-      if (t(paymentSubMethod) !== (debrief.paymentSubMethod ?? '')) patch.paymentSubMethod = t(paymentSubMethod) || null
-      if (t(financingOrg) !== (debrief.financingOrg ?? '')) patch.financingOrg = t(financingOrg) || null
-      const pctInit = debrief.acomptePercent != null ? String(debrief.acomptePercent) : ''
-      if (t(acomptePercent) !== pctInit) patch.acomptePercent = t(acomptePercent) ? Number(t(acomptePercent)) : null
-      if (t(acompteAmount) !== (debrief.acompteAmount ?? '')) patch.acompteAmount = t(acompteAmount) || null
-      if (Object.keys(patch).length === 0) { onCancel(); return }
-      await updateFinancing(debrief.id, patch)
+      await updateFinancing(debrief.id, {
+        financingType: financingType || null,
+        montantTotal: montantTotal.trim() || null,
+        financingOrg: isFinancement ? (financingOrg || null) : null,
+      })
+      const src = lines.length ? lines : [{ label: 'À définir', montant: montantTotal, paid: false, date: '' }]
+      const tranches: EcheancierTranchePatch[] = src.map((l) => ({
+        label: l.label || null,
+        percent: null,
+        montantPrevu: l.montant.trim() || null,
+        jalonKey: null,
+        statut: l.paid ? 'encaisse' : 'a_encaisser',
+        montantReel: l.paid ? (l.montant.trim() || null) : null,
+        dateEncaissement: l.paid ? (l.date || null) : null,
+        dateEcheance: !l.paid ? (l.date || null) : null,
+      }))
+      await setEcheancier(debrief.id, tranches)
+      const fresh = await getAcompte(debrief.id)
+      hydrate(fresh)
       onSaved()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Échec de l'enregistrement")
@@ -350,46 +377,112 @@ function PaymentEditForm({
   return (
     <Section
       title="Mode de paiement"
-      action={(
-        <div className="flex items-center gap-2">
-          <button type="button" className="text-xs font-semibold text-or hover:underline disabled:opacity-50" onClick={() => void save()} disabled={saving}>
-            {saving ? 'Enregistrement…' : 'Enregistrer'}
-          </button>
-          <button type="button" className="text-xs font-medium text-muted hover:underline disabled:opacity-50" onClick={onCancel} disabled={saving}>
-            Annuler
-          </button>
-        </div>
-      )}
+      action={canEdit ? (
+        <button type="button" className="text-xs font-semibold text-or hover:underline disabled:opacity-50" onClick={() => void save()} disabled={saving}>
+          {saving ? 'Enregistrement…' : 'Enregistrer'}
+        </button>
+      ) : undefined}
     >
+      {/* En-tête : type + montant + organisme (financement) */}
       <div className="grid grid-cols-2 gap-3">
+        <PayField label="Type de paiement">
+          {canEdit ? (
+            <select className="wf-modal-input w-full" value={financingType} onChange={(e) => setFinancingType(e.target.value)}>
+              <option value="">— Non renseigné —</option>
+              {FINANCING_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          ) : (
+            <div className="text-sm font-semibold text-text">{FINANCING_TYPE_OPTIONS.find((o) => o.value === financingType)?.label ?? financingType ?? '—'}</div>
+          )}
+        </PayField>
         <PayField label="Montant total (€)">
-          <input className="wf-modal-input w-full" inputMode="decimal" value={montantTotal} onChange={(e) => setMontantTotal(e.target.value)} placeholder="ex : 12000" />
+          {canEdit ? (
+            <input className="wf-modal-input w-full" inputMode="decimal" value={montantTotal} onChange={(e) => setMontantTotal(e.target.value)} placeholder="ex : 12000" />
+          ) : (
+            <div className="text-sm font-semibold text-text">{money(montantTotal)}</div>
+          )}
         </PayField>
-        <PayField label="Type de financement">
-          <select className="wf-modal-input w-full" value={financingType} onChange={(e) => setFinancingType(e.target.value)}>
-            <option value="">— Non renseigné —</option>
-            {FINANCING_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </PayField>
-        <PayField label="Méthode (comptant)">
-          <select className="wf-modal-input w-full" value={paymentSubMethod} onChange={(e) => setPaymentSubMethod(e.target.value)}>
-            <option value="">—</option>
-            <option value="cheque">Chèque</option>
-            <option value="especes">Espèces</option>
-            <option value="virement">Virement</option>
-          </select>
-        </PayField>
-        <PayField label="Organisme de financement">
-          <input className="wf-modal-input w-full" value={financingOrg} onChange={(e) => setFinancingOrg(e.target.value)} placeholder="ex : cmoi, sofider" />
-        </PayField>
-        <PayField label="Acompte — %">
-          <input className="wf-modal-input w-full" inputMode="numeric" value={acomptePercent} onChange={(e) => setAcomptePercent(e.target.value)} placeholder="ex : 40" />
-        </PayField>
-        <PayField label="Acompte — montant (€)">
-          <input className="wf-modal-input w-full" inputMode="decimal" value={acompteAmount} onChange={(e) => setAcompteAmount(e.target.value)} placeholder="ex : 6000" />
-        </PayField>
+        {isFinancement && (
+          <PayField label="Organisme de financement">
+            {canEdit ? (
+              <select className="wf-modal-input w-full" value={financingOrg} onChange={(e) => setFinancingOrg(e.target.value)}>
+                <option value="">— Choisir —</option>
+                {ORG_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            ) : (
+              <div className="text-sm font-semibold text-text">{ORG_OPTIONS.find((o) => o.value === financingOrg)?.label ?? financingOrg ?? '—'}</div>
+            )}
+          </PayField>
+        )}
       </div>
-      {error && <p className="wf-modal-error mt-2">{error}</p>}
+
+      {/* Récap total / reste à payer */}
+      <div className="mt-4 flex flex-wrap gap-3">
+        <div className="flex-1 rounded-xl border border-line bg-cream px-3 py-2">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-faint">Total à payer</div>
+          <div className="text-lg font-black text-text">{money(total)}</div>
+        </div>
+        <div className="flex-1 rounded-xl border border-line bg-cream px-3 py-2">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-faint">Reste à payer</div>
+          <div className={`text-lg font-black ${reste > 0 ? 'text-rouille' : 'text-or-dark'}`}>{money(reste)}</div>
+        </div>
+      </div>
+
+      {/* Actions de génération selon le type */}
+      {canEdit && isEchelonne && lines.length !== nbEcheances && (
+        <button type="button" className="fin-action mt-3" onClick={() => generateEcheances(nbEcheances)}>
+          Générer {nbEcheances} échéances égales
+        </button>
+      )}
+      {canEdit && isFinancement && lines.length === 0 && (
+        <button type="button" className="fin-action mt-3" onClick={initFinancement}>
+          Initialiser (acompte comptant + solde financé)
+        </button>
+      )}
+
+      {/* Liste des paiements */}
+      <div className="mt-4 space-y-2">
+        {lines.length === 0 ? (
+          <p className="text-xs text-faint">Aucun paiement enregistré.</p>
+        ) : lines.map((l, i) => (
+          <div key={i} className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 ${l.paid ? 'border-or/40 bg-or-tint/30' : 'border-line bg-card'}`}>
+            <button
+              type="button"
+              onClick={() => canEdit && setLine(i, { paid: !l.paid, date: !l.paid && !l.date ? todayIso() : l.date })}
+              disabled={!canEdit}
+              className={`grid size-6 shrink-0 place-items-center rounded-md border ${l.paid ? 'border-or bg-or text-white' : 'border-line bg-white text-transparent'} ${canEdit ? '' : 'cursor-default'}`}
+              title={l.paid ? 'Payé' : 'À payer'}
+              aria-label="Payé"
+            >
+              ✓
+            </button>
+            {canEdit && !isEchelonne ? (
+              <input className="wf-modal-input min-w-0 flex-1" value={l.label} onChange={(e) => setLine(i, { label: e.target.value })} placeholder={`Paiement ${i + 1}`} />
+            ) : (
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-text">{l.label || `Paiement ${i + 1}`}</span>
+            )}
+            {canEdit ? (
+              <input className="wf-modal-input" style={{ width: 96 }} inputMode="decimal" value={l.montant} onChange={(e) => setLine(i, { montant: e.target.value })} placeholder="€" />
+            ) : (
+              <span className="w-[90px] text-right text-sm font-semibold text-text">{money(l.montant)}</span>
+            )}
+            {canEdit ? (
+              <input className="wf-modal-input" style={{ width: 140 }} type="date" value={l.date} onChange={(e) => setLine(i, { date: e.target.value })} />
+            ) : (
+              l.date && <span className="text-xs text-faint">{l.date}</span>
+            )}
+            {canEdit && !isEchelonne && (
+              <button type="button" className="fin-action text-rouille" title="Supprimer" onClick={() => removeLine(i)}>✕</button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {canEdit && !isEchelonne && (
+        <button type="button" className="fin-action mt-2" onClick={addLine}>+ Ajouter un paiement</button>
+      )}
+
+      {error && <p className="wf-modal-error mt-3">{error}</p>}
     </Section>
   )
 }
