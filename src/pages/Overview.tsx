@@ -90,7 +90,7 @@ function OverviewSuivi() {
   const clients = clientsData ?? []
   const rdvs = rdvsData ?? []
 
-  const pipeline = useMemo(() => buildDeliveryPipeline(clients, range, now), [clients, range, now])
+  const pipeline = useMemo(() => buildDeliveryPipeline(clients, now), [clients, now])
   const priorities = useMemo(() => selectDeliveryPriorities(clients, now).slice(0, 6), [clients, now])
   const recent = useMemo(() => selectRecentDeliveries(clients, range).slice(0, 5), [clients, range])
 
@@ -125,7 +125,7 @@ function OverviewSuivi() {
           <div>
             <span className="shot-eyebrow">Post-signature · pilotage</span>
             <h1>Pipeline de livraison des dossiers</h1>
-            <p className="text-sm text-muted mt-2">{funnelRange.label}</p>
+            <p className="text-sm text-muted mt-2">Tous les dossiers actifs · CA &amp; livraisons : {funnelRange.label}</p>
           </div>
           <DateRangePicker value={period} onChange={setPeriod} align="right" />
         </div>

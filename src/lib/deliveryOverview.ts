@@ -27,16 +27,21 @@ export type DeliveryPipeline = {
 
 type DateRange = { from: Date; to: Date }
 
-function inRange(signedAt: string | null, range: DateRange): boolean {
-  const d = parseDate(signedAt)
-  return d != null && d.getTime() >= range.from.getTime() && d.getTime() <= range.to.getTime()
-}
+// Dossiers HORS pipeline de livraison : annulés (VT non validée → vente annulée)
+// et clôturés (déjà livrés). Ils ne comptent ni en « actifs » ni dans le tunnel.
+const TERMINAL_STATUSES = new Set(['annule', 'cloture'])
 
 function clientIsLate(c: ClientResponse, now: Date): boolean {
   return Object.values(c.steps).some((s) => s != null && isStepLate(s, now))
 }
 
-export function buildDeliveryPipeline(clients: ClientResponse[], range: DateRange, now: Date): DeliveryPipeline {
+/**
+ * Pipeline de livraison à partir de TOUS les dossiers délivrabilité actifs
+ * (annulés/clôturés exclus, pas de filtre par date de signature). Le tunnel est
+ * CUMULATIF : un dossier compte dans chaque phase qu'il a atteinte ou franchie
+ * (jusqu'à sa phase courante incluse), pour un véritable entonnoir.
+ */
+export function buildDeliveryPipeline(clients: ClientResponse[], now: Date): DeliveryPipeline {
   const phases = Object.fromEntries(
     DELIVERY_PHASES.map((p) => [p, { count: 0, late: 0, missingDocs: 0 }]),
   ) as Record<WorkflowPhase, PhaseCounts>
@@ -47,11 +52,15 @@ export function buildDeliveryPipeline(clients: ClientResponse[], range: DateRang
   let toDeliverCount = 0
 
   for (const c of clients) {
-    if (!inRange(c.signedAt, range)) continue
+    if (TERMINAL_STATUSES.has(c.statusGlobal)) continue
     activeCount += 1
-    const bucket = phases[c.currentPhase]
-    if (bucket) bucket.count += 1
 
+    // Tunnel cumulatif : +1 sur chaque phase jusqu'à la phase courante incluse.
+    const curIdx = DELIVERY_PHASES.indexOf(c.currentPhase)
+    for (let i = 0; i <= curIdx; i++) phases[DELIVERY_PHASES[i]].count += 1
+
+    // Alertes (retard / docs) rattachées à la phase COURANTE (où le dossier est).
+    const bucket = phases[c.currentPhase]
     const late = clientIsLate(c, now)
     if (late) { lateCount += 1; if (bucket) bucket.late += 1 }
     if (c.missingDocsCount > 0) { missingDocsCount += 1; if (bucket) bucket.missingDocs += 1 }
@@ -82,6 +91,7 @@ function earliestLateTime(c: ClientResponse, now: Date): number | null {
 export function selectDeliveryPriorities(clients: ClientResponse[], now: Date): PriorityRow[] {
   const rows: PriorityRow[] = []
   for (const c of clients) {
+    if (TERMINAL_STATUSES.has(c.statusGlobal)) continue
     const lateSince = earliestLateTime(c, now)
     if (c.blocked) rows.push({ client: c, reason: 'blocked', lateSince })
     else if (lateSince != null) rows.push({ client: c, reason: 'late', lateSince })

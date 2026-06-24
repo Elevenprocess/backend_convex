@@ -42,47 +42,58 @@ function client(partial: Partial<ClientResponse> & { currentPhase: WorkflowPhase
 }
 
 describe('buildDeliveryPipeline', () => {
-  const range = { from: new Date('2026-01-01T00:00:00Z'), to: new Date('2026-12-31T23:59:59Z'), label: 'Année' }
-
-  it('compte les dossiers par currentPhase', () => {
+  it('tunnel cumulatif : un dossier compte dans chaque phase atteinte/franchie', () => {
     const clients = [client({ currentPhase: 'vt' }), client({ currentPhase: 'vt' }), client({ currentPhase: 'installation' })]
-    const p = buildDeliveryPipeline(clients, range, NOW)
-    expect(p.phases.vt.count).toBe(2)
+    const p = buildDeliveryPipeline(clients, NOW)
+    expect(p.phases.vt.count).toBe(3) // 2 en vt + 1 (installation a franchi vt)
+    expect(p.phases.dp.count).toBe(1) // seul le dossier installation
     expect(p.phases.installation.count).toBe(1)
-    expect(p.phases.dp.count).toBe(0)
+    expect(p.phases.mes.count).toBe(0)
+    expect(p.activeCount).toBe(3)
   })
 
-  it('exclut les dossiers signés hors période (cohorte par signedAt)', () => {
+  it('compte TOUS les dossiers, sans filtre par date de signature', () => {
     const clients = [
       client({ currentPhase: 'vt', signedAt: '2026-06-05' }),
       client({ currentPhase: 'vt', signedAt: '2020-01-01' }),
       client({ currentPhase: 'vt', signedAt: null }),
     ]
-    const p = buildDeliveryPipeline(clients, range, NOW)
-    expect(p.phases.vt.count).toBe(1)
-    expect(p.activeCount).toBe(1)
+    const p = buildDeliveryPipeline(clients, NOW)
+    expect(p.activeCount).toBe(3)
+    expect(p.phases.vt.count).toBe(3)
   })
 
-  it('compte retards et docs manquants par phase et au global', () => {
+  it('exclut les dossiers annulés (VT non validée) et clôturés (livrés)', () => {
+    const clients = [
+      client({ currentPhase: 'vt', statusGlobal: 'en_cours' }),
+      client({ currentPhase: 'vt', statusGlobal: 'annule' }),
+      client({ currentPhase: 'mes', statusGlobal: 'cloture' }),
+    ]
+    const p = buildDeliveryPipeline(clients, NOW)
+    expect(p.activeCount).toBe(1)
+    expect(p.phases.vt.count).toBe(1)
+    expect(p.phases.mes.count).toBe(0)
+  })
+
+  it('compte retards et docs manquants par phase courante et au global', () => {
     const clients = [
       client({ currentPhase: 'vt', steps: { vt: { status: 'probleme', datePlanifiee: null, dateRealisee: null, problemReason: null, responsableId: null } } }),
       client({ currentPhase: 'consuel', missingDocsCount: 2 }),
     ]
-    const p = buildDeliveryPipeline(clients, range, NOW)
+    const p = buildDeliveryPipeline(clients, NOW)
     expect(p.phases.vt.late).toBe(1)
     expect(p.phases.consuel.missingDocs).toBe(1)
     expect(p.lateCount).toBe(1)
     expect(p.missingDocsCount).toBe(1)
   })
 
-  it('compte les dossiers à livrer cette semaine (installation/mes non livrés)', () => {
+  it('compte les dossiers à livrer (installation/mes non livrés)', () => {
     const clients = [
       client({ currentPhase: 'installation' }),
       client({ currentPhase: 'mes', steps: { mes: { status: 'en_cours', datePlanifiee: null, dateRealisee: null, problemReason: null, responsableId: null } } }),
-      client({ currentPhase: 'mes', steps: { mes: { status: 'fait', datePlanifiee: null, dateRealisee: '2026-06-08', problemReason: null, responsableId: null } } }),
       client({ currentPhase: 'vt' }),
     ]
-    const p = buildDeliveryPipeline(clients, range, NOW)
+    const p = buildDeliveryPipeline(clients, NOW)
     expect(p.toDeliverCount).toBe(2)
   })
 })
