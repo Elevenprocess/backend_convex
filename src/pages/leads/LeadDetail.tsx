@@ -264,96 +264,98 @@ export function LeadDetail() {
         </div>
       </div>
 
-      <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6 overflow-y-auto flex-grow">
-        {/* Left col */}
-        <div className="lg:col-span-1 space-y-4 lg:space-y-6">
-          <div className="glass-card p-6 text-center">
-            <div className="w-24 h-24 rounded-full bg-cuivre-tint flex items-center justify-center text-3xl font-bold mx-auto mb-4">{leadInitials(lead)}</div>
-            <h3 className="text-xl font-bold">{fullName(lead)}</h3>
-            <span className={`status-badge ${statusBadge.className} mt-2 inline-block`}>{statusBadge.label}</span>
-            <div className="mt-4 space-y-2 text-sm text-muted">
-              {lead.phone && <div className="flex items-center justify-center gap-2"><Icon name="phone" size={14} /> {lead.phone}</div>}
-              {lead.email && <div className="flex items-center justify-center gap-2"><Icon name="mail" size={14} /> {lead.email}</div>}
-              {fullAddress(lead) && (
-                <div className="flex items-start justify-center gap-2">
-                  <Icon name="map-pin" size={14} className="mt-0.5 shrink-0" />
-                  <span>{fullAddress(lead)}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="glass-card p-6">
-            <span className="eyebrow block mb-3">ATTRIBUTION</span>
-            <div className="space-y-3 text-sm">
-              <Row label="Setter">
-                {setter
-                  ? <PersonChip name={setter.name} tint="bg-cuivre-tint" />
-                  : <span className="text-faint">Non assigné</span>}
-              </Row>
-              <Row label="Commercial">
-                <div className="flex items-center justify-end gap-2">
-                  {commercial
-                    ? <PersonChip name={commercial.name} tint="bg-or-tint" />
-                    : <span className="text-faint">Non assigné</span>}
-                  {isManager && (
-                    <button
-                      type="button"
-                      onClick={() => setAssignOpen(true)}
-                      title="Donner ce client à un commercial"
-                      className="inline-flex items-center gap-1 rounded-full border border-line bg-white px-2.5 py-1 text-[10px] font-bold text-muted hover:border-or hover:text-or-dark"
-                    >
-                      <Icon name="users" size={12} />
-                      {commercial ? 'Réattribuer' : 'Donner à…'}
-                    </button>
-                  )}
-                </div>
-              </Row>
-              <Row label="Source"><span className="font-semibold">{prettySource(lead)}</span></Row>
-              {lead.utmSource && <Row label="UTM"><span className="font-mono text-xs">{lead.utmSource}</span></Row>}
-              <Row label="Créé le"><span className="font-semibold">{formatDate(lead.createdAt)}</span></Row>
-              <Row label="Dernier contact"><span className="font-semibold">{lastContactLabel(lead.joursSansContact)}</span></Row>
-            </div>
-          </div>
-
-          {lead.customFields && lead.customFields.length > 0 && (
+      <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 flex flex-col gap-4 lg:gap-6 overflow-y-auto flex-grow">
+        {/* Haut : création/projets (large) à gauche, client + attribution + historique à droite */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6 items-start">
+          {/* Colonne principale — Créer un projet + Projets existants */}
+          <div className="lg:col-span-2 space-y-4 lg:space-y-6">
             <div className="glass-card p-6">
-              <span className="eyebrow block mb-3">DONNÉES FORMULAIRE / SETTER</span>
-              <div className="space-y-3 text-sm">
-                {lead.customFields.map((field) => (
-                  <div key={`${field.fieldKey}-${field.fieldName}`} className="flex flex-col gap-0.5">
-                    <span className="text-faint text-xs">{field.fieldName || field.fieldKey}</span>
-                    <span className="font-semibold break-words">{field.value?.trim() ? field.value : '—'}</span>
+              <CreateProjectInline
+                lead={lead}
+                projects={projects}
+                onCreated={(p) => { setProjects((prev) => [p, ...prev]); navigate(`/projects/${p.id}`) }}
+                onOpenProject={(p) => navigate(`/projects/${p.id}`)}
+              />
+            </div>
+          </div>
+
+          {/* Colonne droite — client, attribution, données, historique */}
+          <div className="lg:col-span-1 space-y-4 lg:space-y-6">
+            <div className="glass-card p-6 text-center">
+              <div className="w-24 h-24 rounded-full bg-cuivre-tint flex items-center justify-center text-3xl font-bold mx-auto mb-4">{leadInitials(lead)}</div>
+              <h3 className="text-xl font-bold">{fullName(lead)}</h3>
+              <span className={`status-badge ${statusBadge.className} mt-2 inline-block`}>{statusBadge.label}</span>
+              <div className="mt-4 space-y-2 text-sm text-muted">
+                {lead.phone && <div className="flex items-center justify-center gap-2"><Icon name="phone" size={14} /> {lead.phone}</div>}
+                {lead.email && <div className="flex items-center justify-center gap-2"><Icon name="mail" size={14} /> {lead.email}</div>}
+                {fullAddress(lead) && (
+                  <div className="flex items-start justify-center gap-2">
+                    <Icon name="map-pin" size={14} className="mt-0.5 shrink-0" />
+                    <span>{fullAddress(lead)}</span>
                   </div>
-                ))}
+                )}
               </div>
             </div>
-          )}
 
-          <div className="glass-card p-6">
-            <CreateProjectInline
-              lead={lead}
-              projects={projects}
-              onCreated={(p) => { setProjects((prev) => [p, ...prev]); navigate(`/projects/${p.id}`) }}
-              onOpenProject={(p) => navigate(`/projects/${p.id}`)}
-            />
-          </div>
-        </div>
+            <div className="glass-card p-6">
+              <span className="eyebrow block mb-3">ATTRIBUTION</span>
+              <div className="space-y-3 text-sm">
+                <Row label="Setter">
+                  {setter
+                    ? <PersonChip name={setter.name} tint="bg-cuivre-tint" />
+                    : <span className="text-faint">Non assigné</span>}
+                </Row>
+                <Row label="Commercial">
+                  <div className="flex items-center justify-end gap-2">
+                    {commercial
+                      ? <PersonChip name={commercial.name} tint="bg-or-tint" />
+                      : <span className="text-faint">Non assigné</span>}
+                    {isManager && (
+                      <button
+                        type="button"
+                        onClick={() => setAssignOpen(true)}
+                        title="Donner ce client à un commercial"
+                        className="inline-flex items-center gap-1 rounded-full border border-line bg-white px-2.5 py-1 text-[10px] font-bold text-muted hover:border-or hover:text-or-dark"
+                      >
+                        <Icon name="users" size={12} />
+                        {commercial ? 'Réattribuer' : 'Donner à…'}
+                      </button>
+                    )}
+                  </div>
+                </Row>
+                <Row label="Source"><span className="font-semibold">{prettySource(lead)}</span></Row>
+                {lead.utmSource && <Row label="UTM"><span className="font-mono text-xs">{lead.utmSource}</span></Row>}
+                <Row label="Créé le"><span className="font-semibold">{formatDate(lead.createdAt)}</span></Row>
+                <Row label="Dernier contact"><span className="font-semibold">{lastContactLabel(lead.joursSansContact)}</span></Row>
+              </div>
+            </div>
 
-        {/* Right col */}
-        <div className="lg:col-span-2 space-y-4 lg:space-y-6">
-          <div className="glass-card p-6">
-            <CollapsibleSection title="Historique" storageKey="lead.historique" defaultCollapsed>
+            {lead.customFields && lead.customFields.length > 0 && (
+              <div className="glass-card p-6">
+                <span className="eyebrow block mb-3">DONNÉES FORMULAIRE / SETTER</span>
+                <div className="space-y-3 text-sm">
+                  {lead.customFields.map((field) => (
+                    <div key={`${field.fieldKey}-${field.fieldName}`} className="flex flex-col gap-0.5">
+                      <span className="text-faint text-xs">{field.fieldName || field.fieldKey}</span>
+                      <span className="font-semibold break-words">{field.value?.trim() ? field.value : '—'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="glass-card p-6">
+              <span className="eyebrow block mb-3">Historique</span>
               {timeline.length === 0 ? (
                 <p className="text-sm text-faint">Aucun événement enregistré pour ce lead.</p>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-4 max-h-[420px] overflow-y-auto pr-1">
                   {timeline.map((t, i) => (
                     <div key={i} className="flex gap-3">
                       <div className={`w-8 h-8 rounded-full ${t.iconBg} flex items-center justify-center shrink-0`}>
                         <Icon name={t.icon} size={14} className={t.iconColor} />
                       </div>
-                      <div className="flex-grow">
+                      <div className="flex-grow min-w-0">
                         <div className="flex justify-between gap-3">
                           <span className="font-semibold text-sm">{t.title}</span>
                           <span className="text-xs text-faint shrink-0">{t.date}</span>
@@ -364,34 +366,34 @@ export function LeadDetail() {
                   ))}
                 </div>
               )}
-            </CollapsibleSection>
+            </div>
           </div>
+        </div>
 
-          <div className="glass-card p-6">
-            <CollapsibleSection
-              title="Débriefs"
-              storageKey="lead.debriefs"
-              defaultCollapsed
-              right={debriefs.length > 0 ? (
-                <span className="text-[10px] font-black uppercase tracking-wider text-faint">{debriefs.length} débrief{debriefs.length > 1 ? 's' : ''}</span>
-              ) : undefined}
-            >
-              {debriefs.length === 0 ? (
-                <p className="text-sm text-faint">Aucun débrief enregistré pour ce client.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {debriefs.map((d) => (
-                    <DebriefRow
-                      key={d.id}
-                      debrief={d}
-                      projectName={d.projectId ? (projects.find((p) => p.id === d.projectId)?.name ?? 'Projet') : 'Débrief libre'}
-                      onDelete={() => void handleDeleteDebrief(d.id)}
-                    />
-                  ))}
-                </ul>
-              )}
-            </CollapsibleSection>
+        {/* Bas pleine largeur — Débriefs côte à côte, hauteur fixe + scroll */}
+        <div className="glass-card p-6">
+          <div className="flex items-center justify-between mb-3">
+            <span className="eyebrow">Débriefs</span>
+            {debriefs.length > 0 && (
+              <span className="text-[10px] font-black uppercase tracking-wider text-faint">{debriefs.length} débrief{debriefs.length > 1 ? 's' : ''}</span>
+            )}
           </div>
+          {debriefs.length === 0 ? (
+            <p className="text-sm text-faint">Aucun débrief enregistré pour ce client.</p>
+          ) : (
+            <div className="max-h-[360px] overflow-y-auto pr-1">
+              <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {debriefs.map((d) => (
+                  <DebriefRow
+                    key={d.id}
+                    debrief={d}
+                    projectName={d.projectId ? (projects.find((p) => p.id === d.projectId)?.name ?? 'Projet') : 'Débrief libre'}
+                    onDelete={() => void handleDeleteDebrief(d.id)}
+                  />
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </main>
 
@@ -609,6 +611,7 @@ function CreateProjectInline(props: {
       <CollapsibleSection
         title="Créer un projet sur ce client"
         storageKey="lead.createProject"
+        defaultCollapsed={false}
         right={projects.length > 0 ? (
           <span className="text-[10px] font-black uppercase tracking-wider text-faint">{projects.length} projet{projects.length > 1 ? 's' : ''}</span>
         ) : undefined}
@@ -672,6 +675,7 @@ function CreateProjectInline(props: {
         <CollapsibleSection
           title="Projets existants"
           storageKey="lead.existingProjects"
+          defaultCollapsed={false}
           right={<span className="text-[10px] font-black uppercase tracking-wider text-faint">{projects.length}</span>}
         >
           <ul className="space-y-2">
