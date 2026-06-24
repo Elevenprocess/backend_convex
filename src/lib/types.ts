@@ -943,6 +943,7 @@ export type ClientPhaseStep = {
 export type ClientResponse = {
   id: string
   leadId: string
+  projectId: string | null
   rdvId: string | null
   lead: { fullName: string | null; city: string | null; phone: string | null }
   technicienVtId: string | null

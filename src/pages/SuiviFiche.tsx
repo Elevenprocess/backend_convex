@@ -4,7 +4,7 @@ import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { LoadingBlock } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
-import { useLead, useRdvList, useUsers, useLeadDebriefs } from '../lib/hooks'
+import { useLead, useRdvList, useUsers, useLeadDebriefs, useClients } from '../lib/hooks'
 import { buildDossier, readWorkflowState } from '../lib/suivi'
 import { listProjectsByLead, getProjectDetail } from '../lib/api'
 import { fullName, type ProjectDetailResponse, type ProjectStatus } from '../lib/types'
@@ -85,6 +85,18 @@ export function FicheCompletePage() {
     return m
   }, [users])
 
+  // Dossiers délivrabilité du lead → statut par projet. Un projet dont le
+  // dossier est `annule` (VT non validée) est « non validé », même si le projet
+  // lui-même reste `signe` côté commercial.
+  const { data: clients } = useClients(leadId ? { leadId } : null)
+  const cancelledProjectIds = useMemo(() => {
+    const s = new Set<string>()
+    for (const c of clients ?? []) {
+      if (c.projectId && c.statusGlobal === 'annule') s.add(c.projectId)
+    }
+    return s
+  }, [clients])
+
   // TOUS les projets du client (quel que soit le statut), triés actifs d'abord.
   // Le détail (workflow + pièces) s'ouvre dans la page projet dédiée au clic.
   const sortedProjects = useMemo(
@@ -93,6 +105,14 @@ export function FicheCompletePage() {
         || (new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     ),
     [details],
+  )
+  const activeProjects = useMemo(
+    () => sortedProjects.filter((p) => !cancelledProjectIds.has(p.id)),
+    [sortedProjects, cancelledProjectIds],
+  )
+  const cancelledProjects = useMemo(
+    () => sortedProjects.filter((p) => cancelledProjectIds.has(p.id)),
+    [sortedProjects, cancelledProjectIds],
   )
 
   if (
@@ -149,16 +169,42 @@ export function FicheCompletePage() {
               {loadingProjects ? (
                 <LoadingBlock label="Chargement des dossiers…" />
               ) : sortedProjects.length > 0 ? (
-                <div className="space-y-3">
-                  {sortedProjects.map((p) => (
-                    <ProjectCard
-                      key={p.id}
-                      project={p}
-                      commercialName={usersById.get(p.commercialId)}
-                      to={`/suivi/${id}/projet/${p.id}`}
-                    />
-                  ))}
-                </div>
+                <>
+                  <div className="space-y-3">
+                    {activeProjects.map((p) => (
+                      <ProjectCard
+                        key={p.id}
+                        project={p}
+                        commercialName={usersById.get(p.commercialId)}
+                        to={`/suivi/${id}/projet/${p.id}`}
+                      />
+                    ))}
+                    {activeProjects.length === 0 && (
+                      <div className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-sm text-faint">
+                        Aucun projet actif.
+                      </div>
+                    )}
+                  </div>
+
+                  {cancelledProjects.length > 0 && (
+                    <section className="mt-7">
+                      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-rouille">
+                        Projets non validés (vente annulée) · {cancelledProjects.length}
+                      </h3>
+                      <div className="space-y-3">
+                        {cancelledProjects.map((p) => (
+                          <ProjectCard
+                            key={p.id}
+                            project={p}
+                            commercialName={usersById.get(p.commercialId)}
+                            to={`/suivi/${id}/projet/${p.id}`}
+                            cancelled
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                </>
               ) : (
                 <div className="rounded-xl border border-dashed border-line px-4 py-8 text-center text-sm text-faint">
                   Aucun projet pour ce client.

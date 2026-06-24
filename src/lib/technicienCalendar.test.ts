@@ -4,7 +4,7 @@ import type { ClientResponse } from './types'
 
 function client(over: Partial<ClientResponse>): ClientResponse {
   return {
-    id: 'c1', leadId: 'l1', rdvId: null,
+    id: 'c1', leadId: 'l1', projectId: null, rdvId: null,
     lead: { fullName: 'Aline Bee', city: 'Saint-Denis', phone: null },
     technicienVtId: 't1', poseTeamLeadId: null, adminReferentId: null,
     statusGlobal: 'vt_a_faire', currentPhase: 'vt', blocked: false, signedAt: null,

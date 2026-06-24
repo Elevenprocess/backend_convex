@@ -18,18 +18,22 @@ const STATUS_TONE: Record<ProjectStatus, string> = {
  * résumé des pièces. Cliquer ouvre la page dédiée du projet (workflow + dépôts).
  */
 export function ProjectCard({
-  project, commercialName, to,
-}: { project: ProjectDetailResponse; commercialName?: string; to: string }) {
+  project, commercialName, to, cancelled = false,
+}: { project: ProjectDetailResponse; commercialName?: string; to: string; cancelled?: boolean }) {
   const photos = project.attachments.filter((a) => a.kind === 'photo').length
   const documents = project.attachments.filter((a) => a.kind !== 'photo').length
   return (
-    <Link to={to} className="fiche-project-card group flex items-center gap-4 rounded-2xl border border-line bg-cream p-4 transition-colors hover:border-cuivre">
+    <Link to={to} className={`fiche-project-card group flex items-center gap-4 rounded-2xl border p-4 transition-colors hover:border-cuivre ${cancelled ? 'border-rouille/40 bg-rouille-tint/30' : 'border-line bg-cream'}`}>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-2">
-          <h3 className="text-base font-semibold text-text">{project.name || 'Projet'}</h3>
-          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_TONE[project.status] ?? 'bg-line text-muted'}`}>
-            {PROJECT_STATUS_LABEL[project.status] ?? project.status}
-          </span>
+          <h3 className={`text-base font-semibold ${cancelled ? 'text-muted line-through' : 'text-text'}`}>{project.name || 'Projet'}</h3>
+          {cancelled ? (
+            <span className="rounded-full bg-rouille-tint px-2 py-0.5 text-[11px] font-semibold text-rouille">VT non validée · vente annulée</span>
+          ) : (
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_TONE[project.status] ?? 'bg-line text-muted'}`}>
+              {PROJECT_STATUS_LABEL[project.status] ?? project.status}
+            </span>
+          )}
         </div>
         <p className="mt-1 text-xs text-muted">
           {[project.city, commercialName].filter(Boolean).join(' · ') || '—'}

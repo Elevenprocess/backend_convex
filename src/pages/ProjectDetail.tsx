@@ -6,6 +6,7 @@ import { LoadingBlock } from '../components/Spinner'
 import { Icon } from '../components/Icon'
 import { useAuth } from '../lib/auth'
 import { useDossier } from '../lib/useDossier'
+import { useClients } from '../lib/hooks'
 import { getProjectDetail, updateFinancing } from '../lib/api'
 import { parseNotesJournal } from '../lib/notesJournal'
 import { formatCurrency } from '../lib/suivi'
@@ -31,6 +32,10 @@ export function ProjectDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('devis')
   const [wfOpen, setWfOpen] = useState(true)
+
+  // Dossier délivrabilité du projet : `annule` = VT non validée → vente annulée.
+  const { data: projectClients } = useClients(projectId ? { projectId } : null)
+  const cancelled = (projectClients ?? []).some((c) => c.statusGlobal === 'annule')
 
   useEffect(() => {
     if (!projectId) return
@@ -100,10 +105,14 @@ export function ProjectDetailPage() {
         ) : (
           <>
             <header className="mb-4 flex flex-wrap items-baseline gap-2">
-              <h1 className="text-xl font-semibold text-text">{project.name || 'Projet'}</h1>
-              <span className="rounded-full bg-or-tint px-2 py-0.5 text-xs font-semibold text-or-dark">
-                {PROJECT_STATUS_LABEL[project.status] ?? project.status}
-              </span>
+              <h1 className={`text-xl font-semibold ${cancelled ? 'text-muted line-through' : 'text-text'}`}>{project.name || 'Projet'}</h1>
+              {cancelled ? (
+                <span className="rounded-full bg-rouille-tint px-2 py-0.5 text-xs font-semibold text-rouille">VT non validée · vente annulée</span>
+              ) : (
+                <span className="rounded-full bg-or-tint px-2 py-0.5 text-xs font-semibold text-or-dark">
+                  {PROJECT_STATUS_LABEL[project.status] ?? project.status}
+                </span>
+              )}
               {project.city && <span className="text-sm text-muted">· {project.city}</span>}
             </header>
 
