@@ -24,8 +24,17 @@ import type {
   UpdateSubstepPatch,
   UpsertCommercialObjectivePayload,
 } from './types'
+import { notifyRealtimeRefresh } from './realtime'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
+
+// Un débrief (vente/non-vente) impacte les analytics (ventes, facteurs, funnel),
+// le statut/RDV du lead et les projets. On invalide ces caches front après
+// création/suppression pour que le dashboard reflète immédiatement la vente.
+const DEBRIEF_REFRESH_PATHS = ['/analytics/summary', '/analytics/funnel', '/analytics/debriefs', '/leads', '/rdv']
+function bustDebriefCaches() {
+  notifyRealtimeRefresh({ event: 'debrief:changed', paths: DEBRIEF_REFRESH_PATHS })
+}
 
 export function buildApiUrl(path: string): string {
   if (path.startsWith('http')) return path
@@ -425,18 +434,22 @@ export function deleteProject(projectId: string): Promise<{ ok: true }> {
 }
 
 // ─── Debriefs ─────────────────────────────────────────────
-export function createDebrief(
+export async function createDebrief(
   projectId: string,
   input: Partial<Omit<DebriefResponse, 'id' | 'projectId' | 'commercialId' | 'createdAt' | 'updatedAt'>> & { outcome: DebriefResponse['outcome'] },
 ): Promise<DebriefResponse> {
-  return api<DebriefResponse>(`/projects/${projectId}/debriefs`, { method: 'POST', body: input })
+  const res = await api<DebriefResponse>(`/projects/${projectId}/debriefs`, { method: 'POST', body: input })
+  bustDebriefCaches()
+  return res
 }
 
-export function createLeadDebrief(
+export async function createLeadDebrief(
   leadId: string,
   input: Partial<Omit<DebriefResponse, 'id' | 'commercialId' | 'createdAt' | 'updatedAt'>> & { outcome: DebriefResponse['outcome'] },
 ): Promise<DebriefResponse> {
-  return api<DebriefResponse>(`/leads/${leadId}/debriefs`, { method: 'POST', body: input })
+  const res = await api<DebriefResponse>(`/leads/${leadId}/debriefs`, { method: 'POST', body: input })
+  bustDebriefCaches()
+  return res
 }
 
 export function listDebriefsByProject(projectId: string): Promise<DebriefResponse[]> {
@@ -447,8 +460,10 @@ export function listDebriefsByLead(leadId: string): Promise<DebriefResponse[]> {
   return api<DebriefResponse[]>(`/leads/${leadId}/debriefs`)
 }
 
-export function deleteDebrief(debriefId: string): Promise<{ ok: true }> {
-  return api<{ ok: true }>(`/debriefs/${debriefId}`, { method: 'DELETE' })
+export async function deleteDebrief(debriefId: string): Promise<{ ok: true }> {
+  const res = await api<{ ok: true }>(`/debriefs/${debriefId}`, { method: 'DELETE' })
+  bustDebriefCaches()
+  return res
 }
 
 // ─── Project attachments ──────────────────────────────────
