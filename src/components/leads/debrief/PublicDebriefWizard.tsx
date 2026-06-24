@@ -446,7 +446,7 @@ export function PublicDebriefWizard({ client, commercialName, rdv, initialForm, 
 
   if (done) {
     return (
-      <div className="rounded-3xl border border-line bg-white p-8 text-center shadow-sm">
+      <div className="rounded-2xl border border-line bg-white p-8 text-center shadow-sm">
         <div className="relative mx-auto mb-4 h-20 w-20">
           <span className="absolute inset-0 rounded-full bg-success/25 debrief-success-ring" />
           <span className="relative flex h-20 w-20 items-center justify-center rounded-full bg-success text-white shadow-lg debrief-success-pop">
@@ -454,7 +454,7 @@ export function PublicDebriefWizard({ client, commercialName, rdv, initialForm, 
           </span>
         </div>
         <h2 className="text-xl font-black text-text">
-          {form.outcome === 'vente' ? 'Vente enregistrée' : 'Débrief enregistré'} ✅
+          {form.outcome === 'vente' ? 'Vente enregistrée' : 'Débrief enregistré'}
         </h2>
         <p className="mt-2 text-sm text-muted">Merci, ton débrief a bien été sauvegardé.</p>
       </div>
@@ -466,36 +466,44 @@ export function PublicDebriefWizard({ client, commercialName, rdv, initialForm, 
   return (
     <div className="space-y-5 pb-28">
       {/* Bandeau marque */}
-      <div className="flex items-center justify-between">
-        <div className="eyebrow text-or-dark">VELORA · Débrief</div>
-        <span className="rounded-full border border-line bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-muted">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="eyebrow text-or-dark">VELORA · Débrief</div>
+          {currentStep > 0 && (
+            <div className="mt-0.5 truncate text-xs font-bold text-muted">{clientName}</div>
+          )}
+        </div>
+        <span className="shrink-0 rounded-full border border-line bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-muted">
           Étape {Math.min(currentStep, stepSequence.length - 1) + 1}/{stepSequence.length}
         </span>
       </div>
 
-      {/* Carte client */}
-      <div className="rounded-3xl border border-line bg-white p-5 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-or-tint text-base font-black text-or-dark">
-            {initials}
+      {/* Carte client — visible uniquement à la 1re étape (le choix vente / non-vente).
+          Dès qu'on avance, elle disparaît pour laisser toute la place aux choix à cocher. */}
+      {currentStep === 0 && (
+        <div className="rounded-2xl border border-line bg-white p-5 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-or-tint text-base font-black text-or-dark">
+              {initials}
+            </div>
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-black text-text">{clientName}</h1>
+              <div className="text-xs font-bold uppercase tracking-[0.12em] text-faint">Débrief du rendez-vous</div>
+            </div>
           </div>
-          <div className="min-w-0">
-            <h1 className="truncate text-lg font-black text-text">{clientName}</h1>
-            <div className="text-xs font-bold uppercase tracking-[0.12em] text-faint">Débrief du rendez-vous</div>
+          <div className="mt-4 grid gap-1.5">
+            {client?.email && <InfoRow icon="mail" text={client.email} />}
+            {client?.phone && <InfoRow icon="phone" text={client.phone} />}
+            <InfoRow icon="calendar" text={formatRdvFull(rdv.scheduledAt)} />
+            {commercialName && <InfoRow icon="users" text={`Commercial · ${commercialName}`} />}
           </div>
+          {rdv.alreadyDebriefed && (
+            <div className="mt-3 rounded-xl border border-or/30 bg-or-tint px-3 py-2 text-xs font-bold text-or-dark">
+              Ce RDV a déjà un débrief — tu peux le compléter ou le corriger.
+            </div>
+          )}
         </div>
-        <div className="mt-4 grid gap-1.5">
-          {client?.email && <InfoRow emoji="📧" text={client.email} />}
-          {client?.phone && <InfoRow emoji="📞" text={client.phone} />}
-          <InfoRow emoji="🗓️" text={formatRdvFull(rdv.scheduledAt)} />
-          {commercialName && <InfoRow emoji="👤" text={`Commercial · ${commercialName}`} />}
-        </div>
-        {rdv.alreadyDebriefed && (
-          <div className="mt-3 rounded-xl border border-or/30 bg-or-tint px-3 py-2 text-xs font-bold text-or-dark">
-            Ce RDV a déjà un débrief — tu peux le compléter ou le corriger.
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Report de RDV (cas non-vente avec suivi) */}
       {showReschedule && (
@@ -561,10 +569,10 @@ export function PublicDebriefWizard({ client, commercialName, rdv, initialForm, 
   )
 }
 
-function InfoRow({ emoji, text }: { emoji: string; text: string }) {
+function InfoRow({ icon, text }: { icon: IconName; text: string }) {
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-line bg-cream/50 px-3 py-2 text-sm">
-      <span className="shrink-0">{emoji}</span>
+    <div className="flex items-center gap-2.5 rounded-xl border border-line bg-cream/40 px-3 py-2.5 text-sm">
+      <Icon name={icon} size={15} className="shrink-0 text-faint" />
       <span className="truncate font-medium text-text/80">{text}</span>
     </div>
   )
@@ -584,10 +592,11 @@ type StepProps = { form: FormState; update: (patch: Partial<FormState>) => void 
 function Step1Result({ form, update }: StepProps) {
   return (
     <FieldGroup label="Résultat du rendez-vous" required>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2.5">
         <ChoicePill active={form.outcome === 'vente'} icon="check" label="Vente réalisée" tone="success" onClick={() => update({ outcome: 'vente' })} />
         <ChoicePill active={form.outcome === 'non_vente'} icon="x" label="Vente non réalisée" tone="rouille" onClick={() => update({ outcome: 'non_vente' })} />
       </div>
+      <p className="mt-1 text-[10px] text-faint">Choisis le résultat, puis continue pour renseigner les détails.</p>
     </FieldGroup>
   )
 }
@@ -827,7 +836,11 @@ function RescheduleCard({ date, time, saving, done, disabled, onDateChange, onTi
       <button type="button" onClick={onSubmit} disabled={disabled} className={`mt-3 w-full rounded-2xl px-3 py-2.5 text-xs font-black transition ${disabled ? 'cursor-not-allowed bg-cream-darker text-faint' : 'bg-text text-white hover:bg-text/90'}`}>
         {saving ? 'Report en cours…' : 'Valider le report du RDV'}
       </button>
-      {done && <p className="mt-2 rounded-xl border border-success/30 bg-success-tint px-3 py-2 text-[11px] font-bold text-success">RDV reporté ✅</p>}
+      {done && (
+        <p className="mt-2 flex items-center gap-1.5 rounded-xl border border-success/30 bg-success-tint px-3 py-2 text-[11px] font-bold text-success">
+          <Icon name="check" size={13} /> RDV reporté
+        </p>
+      )}
     </section>
   )
 }
@@ -856,9 +869,21 @@ function FieldGroup({ label, required, children }: { label: string; required?: b
 
 function ChoicePill({ active, icon, label, tone, onClick }: { active: boolean; icon: 'check' | 'x'; label: string; tone: 'success' | 'rouille'; onClick: () => void }) {
   const activeClasses = tone === 'success' ? 'border-success bg-success text-white shadow-md' : 'border-rouille bg-rouille text-white shadow-md'
+  const iconWrap = active
+    ? 'bg-white/20 text-white'
+    : tone === 'success'
+      ? 'bg-success-tint text-success'
+      : 'bg-rouille-tint text-rouille'
   return (
-    <button type="button" onClick={onClick} className={`flex items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-xs font-black transition ${active ? activeClasses : 'border-line bg-white text-muted hover:border-or/50'}`}>
-      <Icon name={icon} size={14} />{label}
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex flex-col items-center justify-center gap-2.5 rounded-2xl border px-3 py-6 text-sm font-black transition ${active ? activeClasses : 'border-line bg-white text-text hover:border-or/50'}`}
+    >
+      <span className={`flex h-11 w-11 items-center justify-center rounded-full ${iconWrap}`}>
+        <Icon name={icon} size={22} />
+      </span>
+      {label}
     </button>
   )
 }

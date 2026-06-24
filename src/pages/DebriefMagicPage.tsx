@@ -72,10 +72,10 @@ export function DebriefMagicPage() {
   if (loadError || !data) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-ivoire px-4">
-        <div className="glass-card w-full max-w-md p-8 text-center">
-          <div className="eyebrow text-or">VELORA</div>
-          <h1 className="text-xl font-bold mt-2">Lien indisponible</h1>
-          <p className="text-sm text-muted mt-3">{loadError ?? 'Lien invalide.'}</p>
+        <div className="w-full max-w-md rounded-2xl border border-line bg-white p-8 text-center shadow-sm">
+          <div className="eyebrow text-or-dark">VELORA</div>
+          <h1 className="mt-2 text-xl font-black text-text">Lien indisponible</h1>
+          <p className="mt-3 text-sm text-muted">{loadError ?? 'Lien invalide.'}</p>
         </div>
       </main>
     )
