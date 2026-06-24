@@ -32,6 +32,12 @@ export function Suivi() {
     for (const c of clients ?? []) map.set(c.leadId, c)
     return map
   }, [clients])
+  // Nombre de projets (clients) par lead — un lead peut avoir plusieurs projets.
+  const projectCountByLead = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const c of clients ?? []) map.set(c.leadId, (map.get(c.leadId) ?? 0) + 1)
+    return map
+  }, [clients])
   const [query, setQuery] = useState('')
   const [states, setStates] = useState<Record<string, SuiviState>>({})
   const [period, setPeriod] = useState<SuiviPeriodState>(getDefaultSuiviPeriod)
@@ -134,7 +140,7 @@ export function Suivi() {
         ) : (
           <section className="suivi-grid">
             {filtered.map((d) => (
-              <DossierCard key={d.id} dossier={d} client={clientByLead.get(d.id)} onClick={() => navigate(`/suivi/${d.id}/fiche`)} />
+              <DossierCard key={d.id} dossier={d} client={clientByLead.get(d.id)} projectCount={projectCountByLead.get(d.id)} onClick={() => navigate(`/suivi/${d.id}/fiche`)} />
             ))}
           </section>
         )}
