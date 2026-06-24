@@ -23,6 +23,7 @@ import { Suivi } from './pages/Suivi'
 import { Finances } from './pages/Finances'
 import { SuiviDetail } from './pages/SuiviDetail'
 import { FicheCompletePage } from './pages/SuiviFiche'
+import { ProjectDetailPage } from './pages/ProjectDetail'
 import { ProfilSetter } from './pages/profils/ProfilSetter'
 import { ProfilCommercial } from './pages/profils/ProfilCommercial'
 import { Settings } from './pages/Settings'
@@ -93,6 +94,7 @@ const router = createHashRouter([
           { path: '/suivi', element: <NoTechnicien><Suivi /></NoTechnicien> },
           { path: '/suivi/:id', element: <SuiviDetail /> },
           { path: '/suivi/:id/fiche', element: <FicheCompletePage /> },
+          { path: '/suivi/:id/projet/:projectId', element: <ProjectDetailPage /> },
           { path: '/finances', element: <NoTechnicien><Finances /></NoTechnicien> },
           { path: '/mes-interventions', element: <MesInterventions /> },
           { path: '/team/setters/:id', element: <ProfilSetter /> },

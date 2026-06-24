@@ -7,9 +7,14 @@ import { useAuth } from '../lib/auth'
 import { useLead, useRdvList, useUsers, useLeadDebriefs } from '../lib/hooks'
 import { buildDossier, readWorkflowState } from '../lib/suivi'
 import { listProjectsByLead, getProjectDetail } from '../lib/api'
-import { fullName, type ProjectDetailResponse } from '../lib/types'
+import { fullName, type ProjectDetailResponse, type ProjectStatus } from '../lib/types'
 import { FicheClientPanel } from '../components/suivi/FicheClientPanel'
-import { ProjectDossierSection } from '../components/suivi/ProjectDossierSection'
+import { ProjectCard } from '../components/suivi/ProjectCard'
+
+// Ordre d'affichage des projets : actifs d'abord, perdus/abandonnés en dernier.
+const STATUS_ORDER: Record<ProjectStatus, number> = {
+  signe: 0, signature_en_cours: 1, devis_en_cours: 2, qualification: 3, perdu: 4, abandonne: 5,
+}
 
 /**
  * Page « Fiche complète » d'un client : la fiche (coordonnées + historique
@@ -74,24 +79,19 @@ export function FicheCompletePage() {
     }
   }, [leadId])
 
-  // Re-fetch d'un seul projet après un ajout (devis/photo/document/note) depuis
-  // une carte, pour rafraîchir ses pièces sans recharger toute la fiche.
-  const refreshProject = (projectId: string) => {
-    void getProjectDetail(projectId)
-      .then((fresh) => setDetails((prev) => (prev ? prev.map((p) => (p.id === fresh.id ? fresh : p)) : prev)))
-      .catch(() => undefined)
-  }
-
   const usersById = useMemo(() => {
     const m = new Map<string, string>()
     for (const u of users ?? []) m.set(u.id, u.name)
     return m
   }, [users])
 
-  // On n'affiche que les projets signés dans la fiche : les dossiers en
-  // qualification / devis / perdu / abandonné ne sont pas pertinents ici.
-  const signedProjects = useMemo(
-    () => (details ?? []).filter((p) => p.status === 'signe'),
+  // TOUS les projets du client (quel que soit le statut), triés actifs d'abord.
+  // Le détail (workflow + pièces) s'ouvre dans la page projet dédiée au clic.
+  const sortedProjects = useMemo(
+    () => [...(details ?? [])].sort(
+      (a, b) => (STATUS_ORDER[a.status] - STATUS_ORDER[b.status])
+        || (new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    ),
     [details],
   )
 
@@ -138,8 +138,8 @@ export function FicheCompletePage() {
               <header className="fiche-projects-head">
                 <div>
                   <span className="eyebrow text-or-dark">Dossiers commerciaux</span>
-                  <h2>Projets & pièces du client</h2>
-                  <p className="text-xs text-muted">Déployez un projet pour voir ses pièces, ou « Voir workflow » pour son suivi délivrabilité.</p>
+                  <h2>Projets du client</h2>
+                  <p className="text-xs text-muted">Cliquez un projet pour ouvrir son workflow délivrabilité et ses dépôts de documents.</p>
                 </div>
               </header>
 
@@ -148,19 +148,20 @@ export function FicheCompletePage() {
               )}
               {loadingProjects ? (
                 <LoadingBlock label="Chargement des dossiers…" />
-              ) : signedProjects.length > 0 ? (
-                signedProjects.map((p) => (
-                  <ProjectDossierSection
-                    key={p.id}
-                    project={p}
-                    dossier={dossier}
-                    commercialName={usersById.get(p.commercialId)}
-                    onChanged={() => refreshProject(p.id)}
-                  />
-                ))
+              ) : sortedProjects.length > 0 ? (
+                <div className="space-y-3">
+                  {sortedProjects.map((p) => (
+                    <ProjectCard
+                      key={p.id}
+                      project={p}
+                      commercialName={usersById.get(p.commercialId)}
+                      to={`/suivi/${id}/projet/${p.id}`}
+                    />
+                  ))}
+                </div>
               ) : (
                 <div className="rounded-xl border border-dashed border-line px-4 py-8 text-center text-sm text-faint">
-                  Aucun projet signé pour ce client.
+                  Aucun projet pour ce client.
                 </div>
               )}
             </div>

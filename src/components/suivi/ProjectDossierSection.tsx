@@ -22,7 +22,20 @@ type Props = {
   dossier: Dossier
   /** Appelé après un ajout (devis/photo/document/note) pour rafraîchir le projet. */
   onChanged?: () => void
+  /**
+   * Mode « page » : rend UNIQUEMENT les sections de pièces (devis/photos/docs/
+   * notes/débriefs), sans en-tête repliable ni tiroir workflow — utilisé dans la
+   * page projet dédiée où le workflow est affiché en plein, à côté.
+   */
+  pageMode?: boolean
+  /**
+   * En pageMode : ne rend QUE la section de cet onglet ('documents' = photos +
+   * documents). Non fourni → toutes les sections (comportement par défaut).
+   */
+  activeTab?: ProjectTab
 }
+
+export type ProjectTab = 'devis' | 'documents' | 'notes' | 'debrief'
 
 const PREVIEW_LIMIT = 3
 
@@ -43,7 +56,9 @@ function ShowMore({ total, expanded, onToggle, noun }: { total: number; expanded
  * s'ouvre en pop-up (aperçu PDF des devis, lightbox photos, détail note/débrief),
  * jamais de redirection.
  */
-export function ProjectDossierSection({ project, commercialName, dossier, onChanged }: Props) {
+export function ProjectDossierSection({ project, commercialName, dossier, onChanged, pageMode = false, activeTab }: Props) {
+  // En pageMode + onglet actif : on ne rend que la section concernée.
+  const showTab = (k: ProjectTab) => !pageMode || !activeTab || activeTab === k
   const authorName = useAuth((s) => s.user?.name) ?? 'Inconnu'
   // Commercial / commercial_lead : consultation seule de l'avancement de leurs
   // clients signés (« Mes dossiers ») — aucun ajout/suppression/édition de pièce.
@@ -175,7 +190,8 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
   }
 
   return (
-    <article className="space-y-6 rounded-2xl border border-line bg-cream p-5">
+    <article className={pageMode ? 'space-y-6' : 'space-y-6 rounded-2xl border border-line bg-cream p-5'}>
+      {!pageMode && (
       <header className={collapsed ? '' : 'border-b border-line pb-3'}>
         <div className="flex items-center gap-2">
           <button
@@ -210,8 +226,9 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
           </p>
         )}
       </header>
+      )}
 
-      {!collapsed && (
+      {(pageMode || !collapsed) && (
       <>
       {error && (
         <div className="rounded-xl bg-rouille-tint px-3 py-2 text-xs font-semibold text-rouille">{error}</div>
@@ -222,6 +239,7 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
       <input ref={photoInput} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void handleAttachmentFile(f, 'photo') }} />
       <input ref={docInput} type="file" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void handleAttachmentFile(f, 'document') }} />
 
+      {showTab('devis') && (
       <Section title="Devis" count={project.devis.length} action={readOnly ? undefined : <SectionAddButton label="Ajouter un devis" busy={busy === 'devis'} onClick={() => devisInput.current?.click()} />}>
         {project.devis.length === 0 ? (
           <Empty>Aucun devis.</Empty>
@@ -244,7 +262,9 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
           </>
         )}
       </Section>
+      )}
 
+      {showTab('documents') && (
       <Section title="Photos" count={photos.length} action={readOnly ? undefined : <SectionAddButton label="Ajouter une photo" busy={busy === 'photo'} onClick={() => photoInput.current?.click()} />}>
         {photos.length === 0 ? (
           <Empty>Aucune photo.</Empty>
@@ -280,7 +300,9 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
           </>
         )}
       </Section>
+      )}
 
+      {showTab('documents') && (
       <Section title="Documents" count={documents.length} action={readOnly ? undefined : <SectionAddButton label="Ajouter un document" busy={busy === 'document'} onClick={() => docInput.current?.click()} />}>
         {documents.length === 0 ? (
           <Empty>Aucun document.</Empty>
@@ -300,7 +322,9 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
           </>
         )}
       </Section>
+      )}
 
+      {showTab('notes') && (
       <Section title="Notes" count={notes.length} action={readOnly ? undefined : <SectionAddButton label="Ajouter une note" onClick={() => setNoteModalOpen(true)} />}>
         {notes.length === 0 ? (
           <Empty>Aucune note.</Empty>
@@ -315,7 +339,9 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
           </>
         )}
       </Section>
+      )}
 
+      {showTab('debrief') && (
       <Section title="Débriefs" count={debriefs.length}>
         {debriefs.length === 0 ? (
           <Empty>Aucun débrief.</Empty>
@@ -330,10 +356,11 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
           </>
         )}
       </Section>
+      )}
       </>
       )}
 
-      {workflowOpen && (
+      {!pageMode && workflowOpen && (
         <div className="fiche-wf-drawer-backdrop" onClick={() => setWorkflowOpen(false)}>
           <aside
             className="fiche-wf-drawer"
