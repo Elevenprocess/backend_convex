@@ -5,7 +5,7 @@ import { fullName, initials, STATUS_LABEL, type DebriefResponse } from '../../li
 import { useAuth } from '../../lib/auth'
 import { updateLead } from '../../lib/hooks'
 import { type ClientEditForm, leadToClientForm, clientFormToPatch } from '../../lib/clientEditForm'
-import { Section, Field, DebriefCard, formatDebriefFinancingType, formatDebriefPaymentMethod } from './fiche-parts'
+import { Section, Field, DebriefCard, formatDebriefPaymentMethod } from './fiche-parts'
 
 type Props = {
   dossier: Dossier
@@ -71,11 +71,6 @@ export function FicheClientPanel({ dossier, debriefs, onSaved }: Props) {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .find((d) => d.financingType || d.paymentSubMethod || d.financingOrg) ?? null
 
-  const financingValue =
-    (financingDebrief ? formatDebriefFinancingType(financingDebrief) : null)
-    ?? (dossier.rdv?.financingType
-      ? formatDebriefFinancingType({ financingType: dossier.rdv.financingType, paymentSubMethod: null, financingOrg: null })
-      : null)
   const paymentMethodValue = financingDebrief ? formatDebriefPaymentMethod(financingDebrief) : null
 
   const editAction = canEdit
@@ -125,8 +120,6 @@ export function FicheClientPanel({ dossier, debriefs, onSaved }: Props) {
               <EditField label="Code postal" value={form.postalCode} onChange={(v) => setField('postalCode', v)} placeholder="97430" />
               <EditField label="Ville" value={form.city} onChange={(v) => setField('city', v)} placeholder="Le Tampon" />
               <EditField label="Localisation (Maps)" value={form.localisationMap} onChange={(v) => setField('localisationMap', v)} type="url" placeholder="https://maps.google.com/…" wide />
-              <EditField label="Logement" value={form.typeLogement} onChange={(v) => setField('typeLogement', v)} placeholder="ex : maison" />
-              <EditField label="Revenu fiscal" value={form.revenuFiscal} onChange={(v) => setField('revenuFiscal', v)} type="number" placeholder="ex : 25000" />
             </>
           ) : (
             <>
@@ -136,8 +129,6 @@ export function FicheClientPanel({ dossier, debriefs, onSaved }: Props) {
               <Field label="Code postal" value={lead.postalCode} />
               <Field label="Ville" value={lead.city} />
               <Field label="Localisation" value={lead.localisationMap ? 'Ouvrir' : null} href={lead.localisationMap ?? undefined} />
-              <Field label="Logement" value={lead.typeLogement} />
-              <Field label="Revenu fiscal" value={lead.revenuFiscal != null ? `${lead.revenuFiscal.toLocaleString('fr-FR')} €` : null} />
             </>
           )}
           <Field label="Source" value={lead.source} />
@@ -147,7 +138,6 @@ export function FicheClientPanel({ dossier, debriefs, onSaved }: Props) {
           <Field label="Commercial" value={dossier.commercial?.name} />
           <Field label="RDV" value={dossier.rdv?.scheduledAt ? formatDate(dossier.rdv.scheduledAt) : null} />
           <Field label="Montant" value={dossier.amount ? formatCurrency(dossier.amount) : null} />
-          <Field label="Financement" value={financingValue} />
           <Field
             label="Signé le"
             value={dossier.rdv?.signatureAt ? formatDate(dossier.rdv.signatureAt) : (dossier.signedAt ? formatDate(dossier.signedAt) : null)}
