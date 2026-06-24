@@ -72,6 +72,7 @@ function CollapsibleWfSection({
 
 export function WorkflowBoard({ substeps, onMutate, today, users, savingId, onDocsChanged, canEditPhase }: Props) {
   const grouped = groupSubsteps(substeps)
+  const cancelled = substeps.some((s) => s.status === 'annule')
   const overallDone = countDone(substeps)
   const overallTotal = substeps.length
   const overallPct = overallTotal ? Math.round((overallDone / overallTotal) * 100) : 0
@@ -87,7 +88,13 @@ export function WorkflowBoard({ substeps, onMutate, today, users, savingId, onDo
   )
 
   return (
-    <div className="wf-board">
+    <div className={`wf-board${cancelled ? ' wf-board-cancelled' : ''}`}>
+      {cancelled && (
+        <div className="wf-cancel-banner" role="alert">
+          <Icon name="x" size={16} strokeWidth={2.6} />
+          <span><strong>Vente annulée</strong> — VT non validée. Dossier bloqué, finances à zéro (rien à encaisser).</span>
+        </div>
+      )}
       {overallTotal > 0 && (
         <div className={`wf-overall${overallPct === 100 ? ' is-complete' : ''}`}>
           <div

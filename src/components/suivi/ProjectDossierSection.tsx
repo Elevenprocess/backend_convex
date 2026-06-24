@@ -45,6 +45,10 @@ function ShowMore({ total, expanded, onToggle, noun }: { total: number; expanded
  */
 export function ProjectDossierSection({ project, commercialName, dossier, onChanged }: Props) {
   const authorName = useAuth((s) => s.user?.name) ?? 'Inconnu'
+  // Commercial / commercial_lead : consultation seule de l'avancement de leurs
+  // clients signés (« Mes dossiers ») — aucun ajout/suppression/édition de pièce.
+  const role = useAuth((s) => s.user?.role)
+  const readOnly = role === 'commercial' || role === 'commercial_lead'
   // Chaque projet est replié par défaut : on ne déploie ses pièces qu'à la
   // sélection. État mémorisé par projet.
   const [collapsed, toggleCollapsed] = useCollapsibleState(`fiche.project.${project.id}`, true)
@@ -218,7 +222,7 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
       <input ref={photoInput} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void handleAttachmentFile(f, 'photo') }} />
       <input ref={docInput} type="file" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void handleAttachmentFile(f, 'document') }} />
 
-      <Section title="Devis" count={project.devis.length} action={<SectionAddButton label="Ajouter un devis" busy={busy === 'devis'} onClick={() => devisInput.current?.click()} />}>
+      <Section title="Devis" count={project.devis.length} action={readOnly ? undefined : <SectionAddButton label="Ajouter un devis" busy={busy === 'devis'} onClick={() => devisInput.current?.click()} />}>
         {project.devis.length === 0 ? (
           <Empty>Aucun devis.</Empty>
         ) : (
@@ -229,9 +233,10 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
                   key={d.id}
                   devis={d}
                   onPreview={() => setPreviewDevis(d)}
-                  onDelete={() => void handleDeleteDevis(d)}
-                  onUpdated={() => onChanged?.()}
+                  onDelete={readOnly ? undefined : () => void handleDeleteDevis(d)}
+                  onUpdated={readOnly ? undefined : () => onChanged?.()}
                   deleting={deletingDevisId === d.id}
+                  readOnly={readOnly}
                 />
               ))}
             </ul>
@@ -240,7 +245,7 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
         )}
       </Section>
 
-      <Section title="Photos" count={photos.length} action={<SectionAddButton label="Ajouter une photo" busy={busy === 'photo'} onClick={() => photoInput.current?.click()} />}>
+      <Section title="Photos" count={photos.length} action={readOnly ? undefined : <SectionAddButton label="Ajouter une photo" busy={busy === 'photo'} onClick={() => photoInput.current?.click()} />}>
         {photos.length === 0 ? (
           <Empty>Aucune photo.</Empty>
         ) : (
@@ -256,16 +261,18 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
                   >
                     <AuthImage attachmentId={p.id} alt={p.label || p.filename} className="fiche-photo-img" />
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleDeleteAttachment(p.id, 'photo', p.label || p.filename)}
-                    disabled={deletingAttachmentId === p.id}
-                    className="absolute right-1 top-1 grid size-6 place-items-center rounded-full bg-black/55 text-white opacity-0 transition-opacity hover:bg-rouille focus:opacity-100 group-hover:opacity-100 disabled:opacity-60"
-                    title="Supprimer la photo"
-                    aria-label="Supprimer la photo"
-                  >
-                    {deletingAttachmentId === p.id ? '…' : <Icon name="trash" size={12} />}
-                  </button>
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteAttachment(p.id, 'photo', p.label || p.filename)}
+                      disabled={deletingAttachmentId === p.id}
+                      className="absolute right-1 top-1 grid size-6 place-items-center rounded-full bg-black/55 text-white opacity-0 transition-opacity hover:bg-rouille focus:opacity-100 group-hover:opacity-100 disabled:opacity-60"
+                      title="Supprimer la photo"
+                      aria-label="Supprimer la photo"
+                    >
+                      {deletingAttachmentId === p.id ? '…' : <Icon name="trash" size={12} />}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -274,7 +281,7 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
         )}
       </Section>
 
-      <Section title="Documents" count={documents.length} action={<SectionAddButton label="Ajouter un document" busy={busy === 'document'} onClick={() => docInput.current?.click()} />}>
+      <Section title="Documents" count={documents.length} action={readOnly ? undefined : <SectionAddButton label="Ajouter un document" busy={busy === 'document'} onClick={() => docInput.current?.click()} />}>
         {documents.length === 0 ? (
           <Empty>Aucun document.</Empty>
         ) : (
@@ -284,7 +291,7 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
                 <AttachmentRow
                   key={doc.id}
                   attachment={doc}
-                  onDelete={() => void handleDeleteAttachment(doc.id, 'document', doc.label || doc.filename)}
+                  onDelete={readOnly ? undefined : () => void handleDeleteAttachment(doc.id, 'document', doc.label || doc.filename)}
                   deleting={deletingAttachmentId === doc.id}
                 />
               ))}
@@ -294,7 +301,7 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
         )}
       </Section>
 
-      <Section title="Notes" count={notes.length} action={<SectionAddButton label="Ajouter une note" onClick={() => setNoteModalOpen(true)} />}>
+      <Section title="Notes" count={notes.length} action={readOnly ? undefined : <SectionAddButton label="Ajouter une note" onClick={() => setNoteModalOpen(true)} />}>
         {notes.length === 0 ? (
           <Empty>Aucune note.</Empty>
         ) : (

@@ -695,6 +695,7 @@ export function DevisRow({
   onUpdated,
   deleting = false,
   defaultExpanded = false,
+  readOnly = false,
 }: {
   devis: Devis
   onPreview?: () => void
@@ -703,12 +704,14 @@ export function DevisRow({
   onUpdated?: (d: Devis) => void
   deleting?: boolean
   defaultExpanded?: boolean
+  /** Vue consultation (ex : commercial) : pas de modification ni suppression. */
+  readOnly?: boolean
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded)
   const [editing, setEditing] = useState(false)
   const scanning = devis.ocrStatus === 'pending' || devis.ocrStatus === 'processing'
   // Un devis signé est verrouillé (la signature déclenche la livraison) : pas d'édition.
-  const canEdit = !scanning && devis.status !== 'signe'
+  const canEdit = !readOnly && !scanning && devis.status !== 'signe'
   const montant = devis.montantTtc ?? devis.montantNet ?? devis.montantHt
   const status = DEVIS_STATUS_META[devis.status] ?? { label: devis.status, tone: 'is-neutral' }
   const meta = [

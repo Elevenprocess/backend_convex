@@ -4,6 +4,8 @@ import type {
   AdsLevel,
   AdsReport,
   RecordEcheancePatch,
+  UpdateFinancingPatch,
+  EcheancierTranchePatch,
   ClientResponse,
   CommercialObjectiveResponse,
   DebriefResponse,
@@ -265,6 +267,27 @@ export function recordEcheance(
   patch: RecordEcheancePatch,
 ): Promise<AcompteResponse> {
   return api<AcompteResponse>(`/payments/acomptes/${debriefId}/echeances`, { method: 'PATCH', body: patch })
+}
+
+// Édite les données financières d'une vente (back-office finances).
+export function updateFinancing(
+  debriefId: string,
+  patch: UpdateFinancingPatch,
+): Promise<AcompteResponse> {
+  return api<AcompteResponse>(`/payments/acomptes/${debriefId}/financing`, { method: 'PATCH', body: patch })
+}
+
+// Remplace l'échéancier d'une vente par un échéancier personnalisé (tranches/%).
+export function setEcheancier(
+  debriefId: string,
+  tranches: EcheancierTranchePatch[],
+): Promise<AcompteResponse> {
+  return api<AcompteResponse>(`/payments/acomptes/${debriefId}/echeancier`, { method: 'PATCH', body: { tranches } })
+}
+
+// Revient à l'échéancier standard (template dérivé du type de financement).
+export function resetEcheancier(debriefId: string): Promise<AcompteResponse> {
+  return api<AcompteResponse>(`/payments/acomptes/${debriefId}/echeancier`, { method: 'DELETE' })
 }
 
 export function getDevis(devisId: string): Promise<Devis> {

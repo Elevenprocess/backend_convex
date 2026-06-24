@@ -55,6 +55,10 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
 
   const done = substep.status === 'fait'
   const blocked = substep.status === 'probleme'
+  const cancelled = substep.status === 'annule'
+  // L'annulation de vente se déclenche depuis la VT validée : si le technicien
+  // ne valide pas (projet infaisable), la vente tombe et les finances → 0.
+  const canCancelSale = substep.key === 'vt_validee'
   const gauge = slaGaugeInfo(substep.deadline, today)
   const docStatus = substepDocStatus(substep)
   const techniciens = users.filter((u) => u.role === 'technicien')
@@ -72,6 +76,19 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
     if (debounceRef.current) window.clearTimeout(debounceRef.current)
     if (done) onMutate(substep.id, { status: 'a_faire' })
     else onMutate(substep.id, { status: 'fait', dateRealisee: date || today })
+  }
+
+  const onCancelSale = () => {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    if (!window.confirm(
+      'Marquer la VT comme NON validée ?\n\nLa vente sera ANNULÉE : le dossier passe en « annulé » et les finances de ce client sont remises à zéro (rien à encaisser).',
+    )) return
+    onMutate(substep.id, { status: 'annule', problemReason: 'vt_invalide' })
+  }
+
+  const onReactivate = () => {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    onMutate(substep.id, { status: 'a_faire', problemReason: null })
   }
 
   const onUpload = async (files: File[]) => {
@@ -92,8 +109,8 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
     onDocsChanged?.()
   }
 
-  const statusLabel = done ? 'Terminé' : blocked ? 'Blocage' : substep.unlocked ? 'En cours' : 'En attente'
-  const statusTone = done ? 'is-done' : blocked ? 'is-blocked' : substep.unlocked ? 'is-active' : 'is-locked'
+  const statusLabel = cancelled ? 'Vente annulée' : done ? 'Terminé' : blocked ? 'Blocage' : substep.unlocked ? 'En cours' : 'En attente'
+  const statusTone = cancelled || blocked ? 'is-blocked' : done ? 'is-done' : substep.unlocked ? 'is-active' : 'is-locked'
 
   return (
     <div className="fiche-modal-backdrop" role="dialog" aria-modal="true" aria-label={substep.label} onClick={onClose}>
@@ -120,7 +137,11 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
             <p className="fiche-modal-text">{SUBSTEP_DESCRIPTION[substep.key]}</p>
           )}
 
-          {!substep.unlocked && !done && (
+          {cancelled && (
+            <p className="wf-cancel-note"><Icon name="x" size={14} /> Vente annulée — VT non validée. Le dossier est bloqué et les finances de ce client sont à zéro (rien à encaisser).</p>
+          )}
+
+          {!cancelled && !substep.unlocked && !done && (
             <p className="wf-locked-note"><Icon name="shield" size={13} /> Ce module se débloquera une fois l'étape précédente terminée.</p>
           )}
 
@@ -219,15 +240,28 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
         {!readOnly && (
           <footer className="wf-modal-foot">
             <button type="button" className="wf-cta-ghost" onClick={onClose}>Fermer</button>
-            <button
-              type="button"
-              className={done ? 'wf-cta-ghost' : 'wf-cta-primary'}
-              disabled={(!substep.unlocked && !done) || saving}
-              onClick={onToggleDone}
-            >
-              {!done && !saving && <Icon name="check" size={15} strokeWidth={2.6} />}
-              {saving ? 'Enregistrement…' : done ? 'Rouvrir le module' : substep.actionLabel}
-            </button>
+            {cancelled ? (
+              <button type="button" className="wf-cta-primary" disabled={saving} onClick={onReactivate}>
+                {saving ? 'Enregistrement…' : 'Réactiver la vente'}
+              </button>
+            ) : (
+              <>
+                {canCancelSale && (
+                  <button type="button" className="wf-cta-danger" disabled={saving} onClick={onCancelSale}>
+                    <Icon name="x" size={15} strokeWidth={2.6} /> VT non validée
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={done ? 'wf-cta-ghost' : 'wf-cta-primary'}
+                  disabled={(!substep.unlocked && !done) || saving}
+                  onClick={onToggleDone}
+                >
+                  {!done && !saving && <Icon name="check" size={15} strokeWidth={2.6} />}
+                  {saving ? 'Enregistrement…' : done ? 'Rouvrir le module' : substep.actionLabel}
+                </button>
+              </>
+            )}
           </footer>
         )}
 

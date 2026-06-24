@@ -23,7 +23,7 @@ export function FicheCompletePage() {
   // On charge directement le lead ciblé (et ses RDV) au lieu de ratisser des
   // centaines de leads pour en retrouver un : plus rapide, moins de payload, et
   // fiable même si le dossier n'était pas dans la première page de la liste.
-  const { data: lead, loading: leadLoading } = useLead(id)
+  const { data: lead, loading: leadLoading, refetch: refetchLead } = useLead(id)
   const { data: rdvs } = useRdvList(id ? { leadId: id } : null)
   const { data: users } = useUsers()
 
@@ -103,6 +103,8 @@ export function FicheCompletePage() {
     && role !== 'back_office'
     && role !== 'technicien'
     && role !== 'finances'
+    && role !== 'commercial'
+    && role !== 'commercial_lead'
   ) return <Navigate to="/overview" replace />
   if (!id) return <Navigate to="/suivi" replace />
 
@@ -131,7 +133,7 @@ export function FicheCompletePage() {
           </div>
         ) : (
           <div className="suivi-split">
-            <FicheClientPanel dossier={dossier} debriefs={leadDebriefs ?? []} />
+            <FicheClientPanel dossier={dossier} debriefs={leadDebriefs ?? []} onSaved={refetchLead} />
             <div className="suivi-main-col">
               <header className="fiche-projects-head">
                 <div>

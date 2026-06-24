@@ -725,6 +725,7 @@ export type UpdateLeadInput = Partial<Pick<LeadResponse,
   | 'addressLine'
   | 'city'
   | 'postalCode'
+  | 'localisationMap'
   | 'revenuFiscal'
   | 'typeLogement'
   | 'datePassageRelance'

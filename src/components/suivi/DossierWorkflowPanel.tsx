@@ -24,8 +24,10 @@ type Props = {
 export function DossierWorkflowPanel({ dossier, projectId }: Props) {
   const role = useAuth((s) => s.user?.role)
   const FIELD_PHASES: WorkflowPhase[] = ['vt', 'installation']
+  // Commercial / commercial_lead et finances : LECTURE SEULE. Technicien :
+  // terrain uniquement. Délivrabilité / admin : édition complète.
   const canEditPhase = (phase: WorkflowPhase) =>
-    role === 'finances' ? false
+    role === 'finances' || role === 'commercial' || role === 'commercial_lead' ? false
       : role === 'technicien' ? FIELD_PHASES.includes(phase)
         : true
 

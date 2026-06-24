@@ -5250,11 +5250,20 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
 }
 .wf-node-btn:active:not(:disabled) { transform: translateY(1px); }
 .wf-node-btn:disabled { cursor: default; }
+.wf-node-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .wf-node-title {
   font-size: 13px; font-weight: 600; color: var(--color-text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
 }
 .wf-substep.is-done .wf-node-title { color: var(--color-muted); }
+/* Caption discrète sous le titre : date du jalon + technicien attribué. */
+.wf-node-meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 3px 8px;
+  font-size: 10.5px; font-weight: 500; color: var(--color-muted);
+  line-height: 1.2;
+}
+.wf-node-meta-item { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.wf-node-meta-item svg { opacity: .7; flex-shrink: 0; }
 
 /* Marqueur réactif au survol du nœud. */
 .wf-node-btn:hover:not(:disabled) .wf-substep-marker { box-shadow: 0 0 0 4px var(--color-cream-darker); }
@@ -5336,6 +5345,33 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 }
 .wf-cta-ghost:hover:not(:disabled) { background: var(--color-cream); color: var(--color-text); border-color: var(--color-cuivre); }
 .wf-cta-ghost:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Action destructive : VT non validée → annulation de la vente. */
+.wf-cta-danger {
+  display: inline-flex; align-items: center; gap: 7px; margin-right: auto;
+  border: 1px solid var(--color-rouille); background: var(--color-card); color: var(--color-rouille);
+  border-radius: 10px; padding: 9px 16px; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.wf-cta-danger:hover:not(:disabled) { background: var(--color-rouille); color: #fff; }
+.wf-cta-danger:disabled { opacity: .5; cursor: not-allowed; }
+.wf-cta-danger svg { flex-shrink: 0; }
+
+/* Note d'annulation dans la modale + bandeau d'annulation en tête du board. */
+.wf-cancel-note {
+  display: flex; align-items: flex-start; gap: 7px; font-size: 12.5px; font-weight: 500;
+  color: var(--color-rouille); background: var(--color-rouille-tint);
+  border-radius: 10px; padding: 9px 12px;
+}
+.wf-cancel-note svg { flex-shrink: 0; margin-top: 1px; }
+.wf-cancel-banner {
+  display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--color-rouille);
+  background: var(--color-rouille-tint); border: 1px solid var(--color-rouille);
+  border-radius: 12px; padding: 11px 14px; margin-bottom: 14px;
+}
+.wf-cancel-banner svg { flex-shrink: 0; }
+.wf-board-cancelled .wf-overall,
+.wf-board-cancelled .wf-section { opacity: .62; }
 
 /* === Page Finances — table des acomptes =============================== */
 .fin-table-wrap { padding: 0; }

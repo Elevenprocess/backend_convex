@@ -1022,6 +1022,7 @@ export type EcheanceLine = {
   montantPrevu: string | null
   statut: AcompteStatut
   montantReel: string | null
+  dateEcheance: string | null
   dateEncaissement: string | null
   notes: string | null
   recordedById: string | null
@@ -1032,15 +1033,41 @@ export type EcheanceLine = {
 export type AcompteResponse = {
   debriefId: string
   leadId: string | null
+  // Projet rattaché : les finances se suivent PAR PROJET (un client peut avoir
+  // plusieurs projets aux financements distincts). null = vente sans projet.
+  projectId: string | null
+  projectName: string | null
   clientName: string | null
   commercialName: string | null
   montantTotal: string | null
   financingType: string | null
   paymentSubMethod: string | null
   financingOrg: string | null
+  acomptePercent: number | null
+  acompteAmount: string | null
+  customEcheancier: boolean
   signedAt: string | null
   edfRecepisse: boolean
   echeances: EcheanceLine[]
+}
+
+// Une tranche d'un échéancier personnalisé (édition back-office).
+export type EcheancierTranchePatch = {
+  label?: string | null
+  percent?: number | null
+  montantPrevu?: string | null
+  jalonKey?: string | null
+  dateEcheance?: string | null
+}
+
+// Édition des données financières d'une vente par le back-office finances.
+export type UpdateFinancingPatch = {
+  montantTotal?: string | null
+  financingType?: string | null
+  paymentSubMethod?: string | null
+  financingOrg?: string | null
+  acomptePercent?: number | null
+  acompteAmount?: string | null
 }
 
 // Enregistrement de l'encaissement d'UNE tranche (ordre).
@@ -1048,6 +1075,7 @@ export type RecordEcheancePatch = {
   ordre: number
   statut: AcompteStatut
   montantReel?: string | null
+  dateEcheance?: string | null
   dateEncaissement?: string | null
   notes?: string | null
 }

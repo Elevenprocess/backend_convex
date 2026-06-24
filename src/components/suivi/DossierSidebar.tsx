@@ -3,7 +3,8 @@ import { useCallback, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Dossier } from '../../lib/suivi'
 import { formatCurrency, formatDate } from '../../lib/suivi'
-import { updateLead, type UpdateLeadInput } from '../../lib/hooks'
+import { updateLead } from '../../lib/hooks'
+import { type ClientEditForm, leadToClientForm, clientFormToPatch } from '../../lib/clientEditForm'
 import { useAuth } from '../../lib/auth'
 import { STATUS_LABEL, fieldOrDash, fullName, initials } from '../../lib/types'
 
@@ -12,17 +13,7 @@ type Props = {
   onLeadUpdated?: () => void
 }
 
-type EditForm = {
-  firstName: string
-  lastName: string
-  phone: string
-  email: string
-  addressLine: string
-  postalCode: string
-  city: string
-  typeLogement: string
-  revenuFiscal: string
-}
+type EditForm = ClientEditForm
 
 export function DossierSidebar({ dossier, onLeadUpdated }: Props) {
   const tel = dossier.lead.phone
@@ -33,11 +24,11 @@ export function DossierSidebar({ dossier, onLeadUpdated }: Props) {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
-  const [form, setForm] = useState<EditForm>(() => leadToForm(dossier.lead))
+  const [form, setForm] = useState<EditForm>(() => leadToClientForm(dossier.lead))
 
   const startEdit = useCallback(() => {
     setEditError(null)
-    setForm(leadToForm(dossier.lead))
+    setForm(leadToClientForm(dossier.lead))
     setEditing(true)
   }, [dossier.lead])
 
@@ -49,7 +40,12 @@ export function DossierSidebar({ dossier, onLeadUpdated }: Props) {
     setSaving(true)
     setEditError(null)
     try {
-      await updateLead(dossier.lead.id, formToPatch(form))
+      const patch = clientFormToPatch(dossier.lead, form)
+      if (Object.keys(patch).length === 0) {
+        setEditing(false)
+        return
+      }
+      await updateLead(dossier.lead.id, patch)
       setEditing(false)
       onLeadUpdated?.()
     } catch (e) {
@@ -101,6 +97,7 @@ export function DossierSidebar({ dossier, onLeadUpdated }: Props) {
         <EditableInfo label="Adresse" editing={editing} display={fieldOrDash(dossier.lead.addressLine)} value={form.addressLine} onChange={(v) => setField('addressLine', v)} placeholder="N° et rue" />
         <EditableInfo label="Code postal" editing={editing} display={fieldOrDash(dossier.lead.postalCode)} value={form.postalCode} onChange={(v) => setField('postalCode', v)} placeholder="97430" />
         <EditableInfo label="Ville" editing={editing} display={fieldOrDash(dossier.lead.city)} value={form.city} onChange={(v) => setField('city', v)} placeholder="Le Tampon" />
+        <EditableInfo label="Localisation (Maps)" editing={editing} display={dossier.lead.localisationMap ? <a href={dossier.lead.localisationMap} target="_blank" rel="noreferrer">Ouvrir</a> : '—'} value={form.localisationMap} onChange={(v) => setField('localisationMap', v)} type="url" placeholder="https://maps.google.com/..." />
         <EditableInfo label="Logement" editing={editing} display={fieldOrDash(dossier.lead.typeLogement)} value={form.typeLogement} onChange={(v) => setField('typeLogement', v)} placeholder="ex : maison" />
         <EditableInfo label="Revenu fiscal" editing={editing} display={dossier.lead.revenuFiscal ? `${dossier.lead.revenuFiscal.toLocaleString('fr-FR')} €` : '—'} value={form.revenuFiscal} onChange={(v) => setField('revenuFiscal', v)} type="number" placeholder="ex : 25000" />
         <Info label="Source" value={fieldOrDash(dossier.lead.source)} />
@@ -192,38 +189,4 @@ function EditableInfo({
       </dd>
     </>
   )
-}
-
-function leadToForm(lead: Dossier['lead']): EditForm {
-  return {
-    firstName: lead.firstName ?? '',
-    lastName: lead.lastName ?? '',
-    phone: lead.phone ?? '',
-    email: lead.email ?? '',
-    addressLine: lead.addressLine ?? '',
-    postalCode: lead.postalCode ?? '',
-    city: lead.city ?? '',
-    typeLogement: lead.typeLogement ?? '',
-    revenuFiscal: lead.revenuFiscal != null ? String(lead.revenuFiscal) : '',
-  }
-}
-
-/** Ne renvoie que les champs renseignés (on ne pousse pas de valeurs vides). */
-function formToPatch(f: EditForm): UpdateLeadInput {
-  const patch: UpdateLeadInput = {}
-  const t = (v: string) => v.trim()
-  if (t(f.firstName)) patch.firstName = t(f.firstName)
-  if (t(f.lastName)) patch.lastName = t(f.lastName)
-  if (t(f.phone)) patch.phone = t(f.phone)
-  if (t(f.email)) patch.email = t(f.email)
-  if (t(f.addressLine)) patch.addressLine = t(f.addressLine)
-  if (t(f.postalCode)) patch.postalCode = t(f.postalCode)
-  if (t(f.city)) patch.city = t(f.city)
-  if (t(f.typeLogement)) patch.typeLogement = t(f.typeLogement)
-  const rev = t(f.revenuFiscal)
-  if (rev) {
-    const n = Number(rev)
-    if (!Number.isNaN(n)) patch.revenuFiscal = n
-  }
-  return patch
 }

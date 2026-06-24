@@ -72,6 +72,8 @@ const SECTIONS: Section[] = [
     collapsible: true,
     items: [
       { to: '/suivi', icon: 'grid', label: 'Delivery', roles: [...DELIVERY_ROLES, 'finances'] },
+      // Commercial : suivi LECTURE SEULE de l'avancement de ses clients signés.
+      { to: '/suivi', icon: 'grid', label: 'Mes dossiers', roles: ['commercial', 'commercial_lead'] },
       { to: '/client', icon: 'inbox', label: 'Client', roles: OPS_ROLES },
     ],
   },
