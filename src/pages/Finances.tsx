@@ -386,12 +386,10 @@ function RecordEcheanceModal({
 }
 
 const FINANCING_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'comptant', label: 'Comptant' },
   { value: 'financement', label: 'Financement' },
-  { value: 'financement_sans_apport', label: 'Financement sans apport' },
-  { value: 'apport_financement', label: 'Apport + financement' },
-  { value: 'paiement_10x', label: 'Paiement 10×' },
-  { value: 'paiement_12x', label: 'Paiement 12×' },
+  { value: 'comptant', label: 'Au comptant' },
+  { value: 'paiement_10x', label: 'Paiement x10' },
+  { value: 'paiement_12x', label: 'Paiement x12' },
 ]
 
 /**
