@@ -60,6 +60,7 @@ export function SubstepModal({
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [preview, setPreview] = useState<SubstepDocument | null>(null)
   const [techSaving, setTechSaving] = useState(false)
+  const [techError, setTechError] = useState<string | null>(null)
   const notesDebounceRef = useRef<number | null>(null)
 
   // B2 fix: re-sync ALL editable fields (incl. heure) quand le substep change
@@ -166,6 +167,7 @@ export function SubstepModal({
   // B3 – multi-technician toggle
   const onToggleTechnicien = async (techId: string, checked: boolean) => {
     setTechSaving(true)
+    setTechError(null)
     try {
       const current = assignedTechniciens.map((t) => t.id)
       const next = checked
@@ -173,6 +175,9 @@ export function SubstepModal({
         : current.filter((id) => id !== techId)
       await assignTechniciens(clientId, next)
       onTechniciensChanged?.()
+    } catch (e) {
+      console.error('[SubstepModal] assignTechniciens failed', e)
+      setTechError(e instanceof Error ? e.message : "Échec de l'enregistrement")
     } finally {
       setTechSaving(false)
     }
@@ -254,15 +259,15 @@ export function SubstepModal({
               {isFieldPhase && !depositOnly && (
                 <section className="wf-modal-section">
                   <h3><Icon name="users" size={13} /> Techniciens{techSaving ? ' …' : ''}</h3>
-                  <ul className="wf-tech-list">
+                  <ul className="flex flex-col gap-1 mt-1">
                     {techniciens.map((t) => {
                       const checked = assignedTechniciens.some((a) => a.id === t.id)
                       return (
-                        <li key={t.id} className="wf-tech-item">
-                          <label className="wf-tech-label">
+                        <li key={t.id} className="flex items-center">
+                          <label className="flex items-center gap-2 cursor-pointer text-sm py-1 px-2 rounded hover:bg-black/5 w-full">
                             <input
                               type="checkbox"
-                              className="wf-tech-checkbox"
+                              className="accent-[var(--color-cuivre)] w-4 h-4 cursor-pointer"
                               checked={checked}
                               disabled={techSaving || readOnly}
                               onChange={(e) => void onToggleTechnicien(t.id, e.target.checked)}
@@ -273,9 +278,10 @@ export function SubstepModal({
                       )
                     })}
                     {techniciens.length === 0 && (
-                      <li className="wf-tech-empty">Aucun technicien disponible</li>
+                      <li className="text-sm text-gray-400 italic py-1 px-2">Aucun technicien disponible</li>
                     )}
                   </ul>
+                  {techError && <p className="wf-modal-error mt-1">{techError}</p>}
                   {/* Champ responsableId maintenu pour compatibilité (1er technicien sélectionné) */}
                   <input
                     type="hidden"

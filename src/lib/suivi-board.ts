@@ -14,7 +14,7 @@ export type BoardSection = {
 const PHASE_ORDER: WorkflowPhase[] = ['vt', 'dp', 'racco', 'installation', 'consuel', 'mes']
 
 export const SUIVI_SECTIONS: BoardSection[] = [
-  { key: 'amont', eyebrow: 'Technique', title: 'Préparation (VT + mandat)', layout: 'single', phases: ['vt'] },
+  { key: 'amont', eyebrow: 'Technique', title: 'Préparation (VT)', layout: 'single', phases: ['vt'] },
   {
     key: 'backoffice', eyebrow: 'Back-office', title: 'Démarches administratives (en parallèle)', layout: 'parallel',
     columns: [
