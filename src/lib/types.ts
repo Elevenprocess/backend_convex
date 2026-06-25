@@ -1119,6 +1119,8 @@ export type VtCalendarEntry = {
   city: string | null
   phone: string | null
   date: string // YYYY-MM-DD
+  /** Heure de l'intervention au format 'HH:MM' (wall-clock local). Null = toute la journée. */
+  heure: string | null
   status: string
   technicienVtId: string | null
   // Technicien responsable de cette intervention (VT → technicienVtId du
