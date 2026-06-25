@@ -237,6 +237,20 @@ export function assignTechnicienVt(
   })
 }
 
+/**
+ * Assigne une liste de techniciens VT à un client (multi-assign).
+ * Remplace l'intégralité de la liste ; passer [] pour tout retirer.
+ */
+export function assignTechniciens(
+  clientId: string,
+  technicienVtIds: string[],
+): Promise<ClientResponse> {
+  return api<ClientResponse>(`/clients/${clientId}/assign-techniciens`, {
+    method: 'POST',
+    body: { technicienVtIds },
+  })
+}
+
 /** Initialise un dossier (client + workflow) pour un lead signé sans client. */
 export function bootstrapClient(leadId: string): Promise<ClientResponse> {
   return api<ClientResponse>('/clients/bootstrap', {

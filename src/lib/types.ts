@@ -949,6 +949,8 @@ export type ClientResponse = {
   rdvId: string | null
   lead: { fullName: string | null; city: string | null; phone: string | null }
   technicienVtId: string | null
+  /** Liste complète des techniciens assignés (multi-assign). Toujours présent (peut être vide). */
+  techniciens: { id: string; name: string }[]
   poseTeamLeadId: string | null
   adminReferentId: string | null
   statusGlobal: string
@@ -988,6 +990,8 @@ export type SubstepResponse = {
   status: WorkflowStatus
   optional: boolean
   dateRealisee: string | null
+  /** Heure du créneau au format HH:MM (planification VT / installation). */
+  heure: string | null
   deadline: string | null
   responsableId: string | null
   notes: string | null
@@ -1008,6 +1012,8 @@ export type SubstepResponse = {
 export type UpdateSubstepPatch = Partial<{
   status: WorkflowStatus
   dateRealisee: string | null
+  /** Heure du créneau au format HH:MM. */
+  heure: string | null
   responsableId: string | null
   notes: string | null
   problemReason: string | null
@@ -1118,5 +1124,7 @@ export type VtCalendarEntry = {
   // Technicien responsable de cette intervention (VT → technicienVtId du
   // dossier ; installation → responsable de l'étape / chef d'équipe pose).
   technicienId: string | null
+  /** Liste complète des techniciens assignés (multi-assign). Toujours présent (peut être vide). */
+  techniciens: { id: string; name: string }[]
   notes: string | null
 }
