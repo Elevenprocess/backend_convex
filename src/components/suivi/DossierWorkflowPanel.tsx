@@ -87,7 +87,7 @@ export function DossierWorkflowPanel({ dossier, projectId }: Props) {
         ) : (substeps == null && substepsLoading) ? (
           <p className="wf-empty">Chargement du workflow…</p>
         ) : (
-          <WorkflowBoard substeps={substeps ?? []} onMutate={onMutate} today={today} users={users ?? []} savingId={savingId} onDocsChanged={refetch} canEditPhase={canEditPhase} />
+          <WorkflowBoard substeps={substeps ?? []} onMutate={onMutate} today={today} users={users ?? []} client={client} savingId={savingId} onDocsChanged={refetch} onTechniciensChanged={refetchClients} canEditPhase={canEditPhase} />
         )}
       </section>
     </div>

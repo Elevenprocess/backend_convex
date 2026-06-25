@@ -7,9 +7,9 @@ function sub(over: Partial<SubstepResponse>): SubstepResponse {
   return {
     id: over.key ?? 'x', stepId: 's', clientId: 'c', key: 'vt_planifie', position: 1,
     label: over.key ?? 'L', actionLabel: 'A', phase: 'vt', status: 'a_faire', optional: false,
-    dateRealisee: null, deadline: null, responsableId: null, notes: null, problemReason: null,
+    dateRealisee: null, heure: null, deadline: null, responsableId: null, notes: null, problemReason: null,
     problemNotes: null, problemResolvedAt: null, metadata: {}, unlocked: true, missingDocument: false,
-    expectedDocs: [], documents: [],
+    expectedDocs: [], documents: [], depositOnly: false,
     createdAt: '', updatedAt: '', ...over,
   } as SubstepResponse
 }

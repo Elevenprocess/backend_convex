@@ -11,7 +11,7 @@ import {
   substepDocStatus,
   fileKind,
 } from '../../lib/suivi-board'
-import { uploadSubstepDocuments, deleteSubstepDocument } from '../../lib/api'
+import { assignTechniciens, uploadSubstepDocuments, deleteSubstepDocument } from '../../lib/api'
 import type { SubstepDocument, SubstepResponse, UpdateSubstepPatch, UserResponse } from '../../lib/types'
 
 type Props = {
@@ -20,8 +20,14 @@ type Props = {
   today: string
   saving?: boolean
   readOnly?: boolean
+  /** ID du client lié à cette sous-étape (pour le multi-assign techniciens). */
+  clientId: string
+  /** Liste des techniciens déjà assignés au dossier (depuis client.techniciens). */
+  assignedTechniciens: { id: string; name: string }[]
   onMutate: (id: string, patch: UpdateSubstepPatch) => void
   onDocsChanged?: () => void
+  /** Appelé après un changement de liste de techniciens (pour déclencher un refetch client). */
+  onTechniciensChanged?: () => void
   onClose: () => void
 }
 
@@ -29,24 +35,42 @@ const KIND_LABEL: Record<string, string> = { pdf: 'PDF', image: 'IMG', doc: 'DOC
 
 /**
  * Pop-up d'un module du workflow (« nœud » N8N). Toute la saisie d'une
- * sous-étape se fait ici : date, technicien attribué, notes et dépôt de
- * pièces / photos. Le contenu (titre, icône, pièces attendues) est dérivé du
- * module lui-même, donc chaque type de module a son propre pop-up.
+ * sous-étape se fait ici : date, heure, techniciens attribués, notes et dépôt
+ * de pièces / photos. Le contenu (titre, icône, pièces attendues) est dérivé
+ * du module lui-même, donc chaque type de module a son propre pop-up.
  */
-export function SubstepModal({ substep, users, today, saving, readOnly, onMutate, onDocsChanged, onClose }: Props) {
+export function SubstepModal({
+  substep,
+  users,
+  today,
+  saving,
+  readOnly,
+  clientId,
+  assignedTechniciens,
+  onMutate,
+  onDocsChanged,
+  onTechniciensChanged,
+  onClose,
+}: Props) {
   const [date, setDate] = useState(substep.dateRealisee ?? '')
+  const [heure, setHeure] = useState(substep.heure ?? '')
   const [notes, setNotes] = useState(substep.notes ?? '')
   const [responsable, setResponsable] = useState(substep.responsableId ?? '')
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [preview, setPreview] = useState<SubstepDocument | null>(null)
-  const debounceRef = useRef<number | null>(null)
+  const [techSaving, setTechSaving] = useState(false)
+  const notesDebounceRef = useRef<number | null>(null)
 
+  // B2 fix: re-sync ALL editable fields (incl. heure) quand le substep change
+  // (après refetch post-mutation). substep.id en dep garantit la réinitialisation
+  // si on change de sous-étape sans fermer la modale.
   useEffect(() => {
     setDate(substep.dateRealisee ?? '')
+    setHeure(substep.heure ?? '')
     setNotes(substep.notes ?? '')
     setResponsable(substep.responsableId ?? '')
-  }, [substep.id, substep.dateRealisee, substep.notes, substep.responsableId])
+  }, [substep.id, substep.dateRealisee, substep.heure, substep.notes, substep.responsableId])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -73,19 +97,33 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
   // réalisation est posée côté backend au jour de l'upload.
   const depositOnly = substep.depositOnly
 
-  const debounced = (patch: UpdateSubstepPatch) => {
-    if (debounceRef.current) window.clearTimeout(debounceRef.current)
-    debounceRef.current = window.setTimeout(() => onMutate(substep.id, patch), 500)
+  // B2 fix: toutes les sauvegardes sont immédiates (plus de debounce pour date)
+  // pour éviter la race date-debounced vs responsable-immédiat. Seules les notes
+  // (saisie longue) restent debouncées.
+  const onDateChange = (val: string) => {
+    setDate(val)
+    onMutate(substep.id, { dateRealisee: val || null })
+  }
+
+  const onHeureChange = (val: string) => {
+    setHeure(val)
+    onMutate(substep.id, { heure: val || null })
+  }
+
+  const onNotesChange = (val: string) => {
+    setNotes(val)
+    if (notesDebounceRef.current) window.clearTimeout(notesDebounceRef.current)
+    notesDebounceRef.current = window.setTimeout(() => onMutate(substep.id, { notes: val || null }), 500)
   }
 
   const onToggleDone = () => {
-    if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    if (notesDebounceRef.current) window.clearTimeout(notesDebounceRef.current)
     if (done) onMutate(substep.id, { status: 'a_faire' })
     else onMutate(substep.id, { status: 'fait', dateRealisee: date || today })
   }
 
   const onCancelSale = () => {
-    if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    if (notesDebounceRef.current) window.clearTimeout(notesDebounceRef.current)
     if (!window.confirm(
       'Marquer la VT comme NON validée ?\n\nLa vente sera ANNULÉE : le dossier passe en « annulé » et les finances de ce client sont remises à zéro (rien à encaisser).',
     )) return
@@ -93,17 +131,17 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
   }
 
   const onReactivate = () => {
-    if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    if (notesDebounceRef.current) window.clearTimeout(notesDebounceRef.current)
     onMutate(substep.id, { status: 'a_faire', problemReason: null })
   }
 
   const onMarkDpRefusee = () => {
-    if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    if (notesDebounceRef.current) window.clearTimeout(notesDebounceRef.current)
     onMutate(substep.id, { status: 'probleme', problemReason: 'dp_refusee', problemNotes: notes || null })
   }
 
   const onReopenDp = () => {
-    if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    if (notesDebounceRef.current) window.clearTimeout(notesDebounceRef.current)
     onMutate(substep.id, { status: 'a_faire', problemReason: null, problemNotes: null })
   }
 
@@ -123,6 +161,21 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
   const onDeleteDoc = async (docId: string) => {
     await deleteSubstepDocument(docId)
     onDocsChanged?.()
+  }
+
+  // B3 – multi-technician toggle
+  const onToggleTechnicien = async (techId: string, checked: boolean) => {
+    setTechSaving(true)
+    try {
+      const current = assignedTechniciens.map((t) => t.id)
+      const next = checked
+        ? [...current.filter((id) => id !== techId), techId]
+        : current.filter((id) => id !== techId)
+      await assignTechniciens(clientId, next)
+      onTechniciensChanged?.()
+    } finally {
+      setTechSaving(false)
+    }
   }
 
   const statusLabel = cancelled ? 'Vente annulée' : done ? 'Terminé' : blocked ? 'Blocage' : substep.unlocked ? 'En cours' : 'En attente'
@@ -164,8 +217,12 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
           {readOnly ? (
             <dl className="wf-modal-ro">
               {!depositOnly && <div><dt>Date</dt><dd>{substep.dateRealisee || '—'}</dd></div>}
+              {!depositOnly && substep.heure && <div><dt>Heure</dt><dd>{substep.heure}</dd></div>}
               {isFieldPhase && !depositOnly && (
-                <div><dt>Technicien</dt><dd>{techniciens.find((t) => t.id === substep.responsableId)?.name ?? '—'}</dd></div>
+                <div>
+                  <dt>Techniciens</dt>
+                  <dd>{assignedTechniciens.length > 0 ? assignedTechniciens.map((t) => t.name).join(', ') : '—'}</dd>
+                </div>
               )}
               {!depositOnly && <div><dt>Notes</dt><dd>{substep.notes || '—'}</dd></div>}
               {depositOnly && <div><dt>Type</dt><dd>Dépôt de dossier</dd></div>}
@@ -175,28 +232,55 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
               {!depositOnly && (
                 <section className="wf-modal-section">
                   <h3><Icon name="calendar" size={13} /> Date prévue / réalisation</h3>
-                  <input
-                    type="date"
-                    className="wf-modal-input"
-                    value={date}
-                    onChange={(e) => { setDate(e.target.value); debounced({ dateRealisee: e.target.value || null }) }}
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="date"
+                      className="wf-modal-input flex-1"
+                      value={date}
+                      onChange={(e) => onDateChange(e.target.value)}
+                    />
+                    <input
+                      type="time"
+                      className="wf-modal-input w-28"
+                      value={heure}
+                      onChange={(e) => onHeureChange(e.target.value)}
+                      placeholder="HH:MM"
+                      aria-label="Heure du créneau"
+                    />
+                  </div>
                 </section>
               )}
 
               {isFieldPhase && !depositOnly && (
                 <section className="wf-modal-section">
-                  <h3><Icon name="users" size={13} /> Technicien attribué</h3>
-                  <select
-                    className="wf-modal-input"
+                  <h3><Icon name="users" size={13} /> Techniciens{techSaving ? ' …' : ''}</h3>
+                  <ul className="wf-tech-list">
+                    {techniciens.map((t) => {
+                      const checked = assignedTechniciens.some((a) => a.id === t.id)
+                      return (
+                        <li key={t.id} className="wf-tech-item">
+                          <label className="wf-tech-label">
+                            <input
+                              type="checkbox"
+                              className="wf-tech-checkbox"
+                              checked={checked}
+                              disabled={techSaving || readOnly}
+                              onChange={(e) => void onToggleTechnicien(t.id, e.target.checked)}
+                            />
+                            <span>{t.name}</span>
+                          </label>
+                        </li>
+                      )
+                    })}
+                    {techniciens.length === 0 && (
+                      <li className="wf-tech-empty">Aucun technicien disponible</li>
+                    )}
+                  </ul>
+                  {/* Champ responsableId maintenu pour compatibilité (1er technicien sélectionné) */}
+                  <input
+                    type="hidden"
                     value={responsable}
-                    onChange={(e) => { setResponsable(e.target.value); onMutate(substep.id, { responsableId: e.target.value || null }) }}
-                  >
-                    <option value="">Aucun — à attribuer</option>
-                    {techniciens.map((t) => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
+                  />
                 </section>
               )}
 
@@ -208,7 +292,7 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
                     rows={3}
                     value={notes}
                     placeholder="Notes internes, blocages, contact…"
-                    onChange={(e) => { setNotes(e.target.value); debounced({ notes: e.target.value || null }) }}
+                    onChange={(e) => onNotesChange(e.target.value)}
                   />
                 </section>
               )}

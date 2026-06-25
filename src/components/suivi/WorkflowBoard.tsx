@@ -5,6 +5,7 @@ import { groupSubsteps, SUIVI_SECTIONS } from '../../lib/suivi-board'
 import { useCollapsibleState } from '../../lib/useCollapsibleState'
 import { Icon, type IconName } from '../Icon'
 import type { SubstepResponse, UpdateSubstepPatch, UserResponse, WorkflowPhase } from '../../lib/types'
+import type { ClientResponse } from '../../lib/types'
 
 // Pastille-icône en tête de chaque section, pour ancrer visuellement les 3 temps
 // du dossier (préparation terrain → démarches admin → installation).
@@ -19,9 +20,13 @@ type Props = {
   onMutate: (id: string, patch: UpdateSubstepPatch) => void
   today: string
   users?: UserResponse[]
+  /** Client lié au dossier (pour l'assignation multi-techniciens). */
+  client?: ClientResponse | null
   savingId?: string | null
   onDocsChanged?: () => void
   onGoToDocs?: () => void
+  /** Déclenché après un changement de liste techniciens (refetch client). */
+  onTechniciensChanged?: () => void
   canEditPhase?: (phase: WorkflowPhase) => boolean
 }
 
@@ -70,7 +75,7 @@ function CollapsibleWfSection({
   )
 }
 
-export function WorkflowBoard({ substeps, onMutate, today, users, savingId, onDocsChanged, canEditPhase }: Props) {
+export function WorkflowBoard({ substeps, onMutate, today, users, client, savingId, onDocsChanged, onTechniciensChanged, canEditPhase }: Props) {
   const grouped = groupSubsteps(substeps)
   const cancelled = substeps.some((s) => s.status === 'annule')
   const overallDone = countDone(substeps)
@@ -152,8 +157,11 @@ export function WorkflowBoard({ substeps, onMutate, today, users, savingId, onDo
           today={today}
           saving={savingId === openSubstep.id}
           readOnly={canEditPhase ? !canEditPhase(openSubstep.phase) : false}
+          clientId={client?.id ?? openSubstep.clientId}
+          assignedTechniciens={client?.techniciens ?? []}
           onMutate={onMutate}
           onDocsChanged={onDocsChanged}
+          onTechniciensChanged={onTechniciensChanged}
           onClose={() => setOpenId(null)}
         />
       )}
