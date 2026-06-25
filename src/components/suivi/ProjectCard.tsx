@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { formatDate } from '../../lib/suivi'
-import { PROJECT_STATUS_LABEL, type ProjectDetailResponse, type ProjectStatus } from '../../lib/types'
+import { workflowPhaseProgress } from '../../lib/suivi-board'
+import { PROJECT_STATUS_LABEL, type ClientResponse, type ProjectDetailResponse, type ProjectStatus } from '../../lib/types'
 import { Icon } from '../Icon'
 
 // Teinte du badge de statut projet.
@@ -18,10 +19,11 @@ const STATUS_TONE: Record<ProjectStatus, string> = {
  * résumé des pièces. Cliquer ouvre la page dédiée du projet (workflow + dépôts).
  */
 export function ProjectCard({
-  project, commercialName, to, cancelled = false,
-}: { project: ProjectDetailResponse; commercialName?: string; to: string; cancelled?: boolean }) {
+  project, client, commercialName, to, cancelled = false,
+}: { project: ProjectDetailResponse; client?: ClientResponse; commercialName?: string; to: string; cancelled?: boolean }) {
   const photos = project.attachments.filter((a) => a.kind === 'photo').length
   const documents = project.attachments.filter((a) => a.kind !== 'photo').length
+  const progress = workflowPhaseProgress(client)
   return (
     <Link to={to} className={`fiche-project-card group flex items-center gap-4 rounded-2xl border p-4 transition-colors hover:border-cuivre ${cancelled ? 'border-rouille/40 bg-rouille-tint/30' : 'border-line bg-cream'}`}>
       <div className="min-w-0 flex-1">
@@ -42,8 +44,21 @@ export function ProjectCard({
         <p className="mt-1.5 text-[11px] font-medium text-faint">
           {project.devis.length} devis · {photos} photos · {documents} documents · {project.debriefs.length} débriefs
         </p>
+
+        {progress && (
+          <div className="mt-3">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wide text-faint">Workflow · {progress.phaseLabel}</span>
+              <span className={`text-[11px] font-black tabular-nums ${cancelled ? 'text-rouille' : 'text-or-dark'}`}>{progress.pct}%</span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-line">
+              <div className={`h-full rounded-full transition-all ${cancelled ? 'bg-rouille' : 'bg-or'}`} style={{ width: `${progress.pct}%` }} />
+            </div>
+            <div className="mt-1 text-[10px] font-semibold text-faint">{progress.done}/{progress.total} phases terminées</div>
+          </div>
+        )}
       </div>
-      <Icon name="chevron-right" size={20} className="shrink-0 text-muted transition-colors group-hover:text-cuivre" />
+      <Icon name="chevron-right" size={20} className="shrink-0 self-start text-muted transition-colors group-hover:text-cuivre" />
     </Link>
   )
 }

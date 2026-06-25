@@ -128,6 +128,25 @@ export function clientCardSummary(client: ClientResponse | undefined): CardSumma
   }
 }
 
+export type WorkflowProgress = { pct: number; done: number; total: number; phaseLabel: string }
+
+/**
+ * Progression du workflow délivrabilité d'un projet, dérivée du dossier
+ * (ClientResponse). Basée sur les 6 phases : une phase compte comme faite
+ * quand son statut est `fait`. Léger (pas de substeps) — pour les cartes projet.
+ */
+export function workflowPhaseProgress(client: ClientResponse | undefined): WorkflowProgress | null {
+  if (!client) return null
+  const total = PHASE_ORDER.length
+  const done = PHASE_ORDER.reduce((n, ph) => (client.steps?.[ph]?.status === 'fait' ? n + 1 : n), 0)
+  return {
+    pct: total ? Math.round((done / total) * 100) : 0,
+    done,
+    total,
+    phaseLabel: PHASE_LABEL[client.currentPhase],
+  }
+}
+
 export type FileKind = 'pdf' | 'image' | 'doc'
 
 /** Catégorie d'aperçu déduite du mimeType (vignette du hub documentaire). */

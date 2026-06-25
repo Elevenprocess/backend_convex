@@ -7,7 +7,7 @@ import { useAuth } from '../lib/auth'
 import { useLead, useRdvList, useUsers, useLeadDebriefs, useClients } from '../lib/hooks'
 import { buildDossier, readWorkflowState } from '../lib/suivi'
 import { listProjectsByLead, getProjectDetail } from '../lib/api'
-import { fullName, type ProjectDetailResponse, type ProjectStatus } from '../lib/types'
+import { fullName, type ClientResponse, type ProjectDetailResponse, type ProjectStatus } from '../lib/types'
 import { FicheClientPanel } from '../components/suivi/FicheClientPanel'
 import { ProjectCard } from '../components/suivi/ProjectCard'
 
@@ -97,6 +97,13 @@ export function FicheCompletePage() {
     return s
   }, [clients])
 
+  // Dossier délivrabilité par projet → progression du workflow pour la jauge.
+  const clientByProjectId = useMemo(() => {
+    const m = new Map<string, ClientResponse>()
+    for (const c of clients ?? []) if (c.projectId) m.set(c.projectId, c)
+    return m
+  }, [clients])
+
   // TOUS les projets du client (quel que soit le statut), triés actifs d'abord.
   // Le détail (workflow + pièces) s'ouvre dans la page projet dédiée au clic.
   const sortedProjects = useMemo(
@@ -175,6 +182,7 @@ export function FicheCompletePage() {
                       <ProjectCard
                         key={p.id}
                         project={p}
+                        client={clientByProjectId.get(p.id)}
                         commercialName={usersById.get(p.commercialId)}
                         to={`/suivi/${id}/projet/${p.id}`}
                       />
@@ -196,6 +204,7 @@ export function FicheCompletePage() {
                           <ProjectCard
                             key={p.id}
                             project={p}
+                            client={clientByProjectId.get(p.id)}
                             commercialName={usersById.get(p.commercialId)}
                             to={`/suivi/${id}/projet/${p.id}`}
                             cancelled
