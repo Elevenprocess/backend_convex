@@ -11,6 +11,7 @@ import { useCallLogs, useClients, useLeads, useRdvList, useUsers, useStartCall, 
 import { STATUS_LABEL, DEBRIEF_ACCEPTANCE_FACTOR_LABEL, DEBRIEF_NON_SALE_REASON_LABEL, fullName, initials, type AnalyticsAdminSummary, type AnalyticsFunnelResponse, type CallLogResponse, type CommercialObjectiveResponse, type DebriefAcceptanceFactor, type DebriefNonSaleReason, type LeadResponse, type LeadStatus, type RdvResponse, type RdvLeadSummary, type UserResponse } from '../lib/types'
 import { CommercialLeaderboard, type LeaderboardRow } from '../components/overview/CommercialLeaderboard'
 import { ObjectivesEditorModal } from '../components/overview/ObjectivesEditorModal'
+import { TerrainMonthlyChart } from '../components/overview/TerrainMonthlyChart'
 import { computeTechnicienStats, computeTerrainPipeline, selectUnassignedVt, type TechnicienStat } from '../lib/technicienStats'
 import { PHASE_LABEL, PHASE_ICON } from '../lib/suivi-board'
 import { buildDeliveryPipeline, selectDeliveryPriorities, selectRecentDeliveries, DELIVERY_PHASES } from '../lib/deliveryOverview'
@@ -307,6 +308,8 @@ function OverviewResponsableTechnique() {
               ))}
             </div>
           </div>
+
+          <TerrainMonthlyChart clients={clients ?? []} />
         </section>
       </main>
     </AppShell>

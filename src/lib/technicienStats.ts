@@ -88,3 +88,47 @@ export function selectUnassignedVt(clients: ClientResponse[]): ClientResponse[] 
     return vt ? vt.status !== 'fait' && vt.status !== 'annule' : true
   })
 }
+
+export type MonthlyTerrainPoint = {
+  month: string      // 'YYYY-MM'
+  vtCount: number
+  installCount: number
+}
+
+/**
+ * Agrège les VT faites et installations faites par mois calendaire.
+ *
+ * Fenêtre : les 12 derniers mois glissants (mois courant inclus).
+ * Seuls les mois ayant au moins 1 événement (vt ou install fait) sont inclus.
+ * Les étapes `fait` dont `dateRealisee` est null sont ignorées.
+ *
+ * @param clients - liste complète des dossiers
+ * @returns tableau trié chronologiquement (plus ancien → plus récent)
+ */
+export function computeMonthlyTerrain(clients: ClientResponse[]): MonthlyTerrainPoint[] {
+  const vtMap: Record<string, number> = {}
+  const installMap: Record<string, number> = {}
+
+  for (const c of clients) {
+    const vt = c.steps.vt
+    if (vt?.status === 'fait' && vt.dateRealisee) {
+      const m = vt.dateRealisee.slice(0, 7)
+      vtMap[m] = (vtMap[m] ?? 0) + 1
+    }
+    const inst = c.steps.installation
+    if (inst?.status === 'fait' && inst.dateRealisee) {
+      const m = inst.dateRealisee.slice(0, 7)
+      installMap[m] = (installMap[m] ?? 0) + 1
+    }
+  }
+
+  // Union de toutes les clés présentes
+  const allMonths = Array.from(new Set([...Object.keys(vtMap), ...Object.keys(installMap)]))
+  allMonths.sort()
+
+  return allMonths.map((month) => ({
+    month,
+    vtCount: vtMap[month] ?? 0,
+    installCount: installMap[month] ?? 0,
+  }))
+}

@@ -3,6 +3,7 @@ import {
   computeTechnicienStats,
   computeTerrainPipeline,
   selectUnassignedVt,
+  computeMonthlyTerrain,
   REFUS_VT_REASONS,
 } from './technicienStats'
 import type { ClientResponse, UserResponse } from './types'
@@ -87,5 +88,73 @@ describe('selectUnassignedVt', () => {
 describe('REFUS_VT_REASONS', () => {
   it('contient les motifs de refus de VT', () => {
     expect(REFUS_VT_REASONS).toEqual(['vt_a_refaire', 'vt_invalide', 'vt_anomalie_structurelle'])
+  })
+})
+
+describe('computeMonthlyTerrain', () => {
+  it('retourne un tableau vide si aucun dossier', () => {
+    expect(computeMonthlyTerrain([])).toEqual([])
+  })
+
+  it('ignore les VT fait avec dateRealisee null', () => {
+    const clients = [
+      dossier({ steps: { vt: { status: 'fait', datePlanifiee: null, dateRealisee: null, problemReason: null, responsableId: null } } }),
+    ]
+    expect(computeMonthlyTerrain(clients)).toEqual([])
+  })
+
+  it('ignore les installations fait avec dateRealisee null', () => {
+    const clients = [
+      dossier({ steps: { installation: { status: 'fait', datePlanifiee: null, dateRealisee: null, problemReason: null, responsableId: null } } }),
+    ]
+    expect(computeMonthlyTerrain(clients)).toEqual([])
+  })
+
+  it('agrège plusieurs VT du même mois', () => {
+    const clients = [
+      dossier({ steps: { vt: { status: 'fait', datePlanifiee: null, dateRealisee: '2026-04-10', problemReason: null, responsableId: null } } }),
+      dossier({ steps: { vt: { status: 'fait', datePlanifiee: null, dateRealisee: '2026-04-22', problemReason: null, responsableId: null } } }),
+      dossier({ steps: { vt: { status: 'fait', datePlanifiee: null, dateRealisee: '2026-05-03', problemReason: null, responsableId: null } } }),
+    ]
+    const result = computeMonthlyTerrain(clients)
+    expect(result).toHaveLength(2)
+    expect(result[0]).toEqual({ month: '2026-04', vtCount: 2, installCount: 0 })
+    expect(result[1]).toEqual({ month: '2026-05', vtCount: 1, installCount: 0 })
+  })
+
+  it('agrège VT et installations indépendamment sur le même mois', () => {
+    const clients = [
+      dossier({ steps: {
+        vt: { status: 'fait', datePlanifiee: null, dateRealisee: '2026-03-15', problemReason: null, responsableId: null },
+        installation: { status: 'fait', datePlanifiee: null, dateRealisee: '2026-03-20', problemReason: null, responsableId: null },
+      } }),
+    ]
+    const [pt] = computeMonthlyTerrain(clients)
+    expect(pt).toEqual({ month: '2026-03', vtCount: 1, installCount: 1 })
+  })
+
+  it('trie les mois chronologiquement', () => {
+    const clients = [
+      dossier({ steps: { vt: { status: 'fait', datePlanifiee: null, dateRealisee: '2026-06-01', problemReason: null, responsableId: null } } }),
+      dossier({ steps: { installation: { status: 'fait', datePlanifiee: null, dateRealisee: '2026-01-05', problemReason: null, responsableId: null } } }),
+      dossier({ steps: { vt: { status: 'fait', datePlanifiee: null, dateRealisee: '2026-03-20', problemReason: null, responsableId: null } } }),
+    ]
+    const result = computeMonthlyTerrain(clients)
+    expect(result.map((r) => r.month)).toEqual(['2026-01', '2026-03', '2026-06'])
+  })
+
+  it('n\'inclut que les étapes avec status fait (ignore planifie, probleme)', () => {
+    const clients = [
+      dossier({ steps: {
+        vt: { status: 'planifie', datePlanifiee: '2026-05-10', dateRealisee: null, problemReason: null, responsableId: null },
+        installation: { status: 'probleme', datePlanifiee: null, dateRealisee: '2026-05-15', problemReason: 'xxx', responsableId: null },
+      } }),
+      dossier({ steps: {
+        vt: { status: 'fait', datePlanifiee: null, dateRealisee: '2026-05-20', problemReason: null, responsableId: null },
+      } }),
+    ]
+    const result = computeMonthlyTerrain(clients)
+    expect(result).toHaveLength(1)
+    expect(result[0]).toEqual({ month: '2026-05', vtCount: 1, installCount: 0 })
   })
 })
