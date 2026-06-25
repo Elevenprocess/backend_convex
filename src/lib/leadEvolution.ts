@@ -1,4 +1,4 @@
-import { addDays, startOfDay, startOfWeek } from './period'
+import { addDays, startOfDay, startOfWeek, toDateInputValue } from './period'
 import type { EvolutionGranularity } from './evolutionAxis'
 
 // Logique d'entonnoir : Nouveau Lead → RDV planifiés → Ventes. La série du
@@ -53,7 +53,10 @@ export function buildLeadEvolutionPoints(
     // Journée pleine 00h→23h : on génère les 24 buckets du jour (le backend ne
     // fournit les appels que 8h–21h, mais l'arrivée des leads peut tomber à
     // n'importe quelle heure). Poids d'appels repris si dispo, sinon 0.
-    const day = dateKey(range.from)
+    // day = jour LOCAL (toDateInputValue), surtout PAS dateKey (slice ISO UTC) :
+    // pour un fuseau à l'est, minuit local tombe la veille en UTC → mauvais jour
+    // → les buckets ne couvrent plus les arrivées du jour (courbe à 0).
+    const day = toDateInputValue(new Date(range.from))
     const callsByKey = new Map(hourlyCalls.map((p) => [`${p.date}-${p.hour}`, p.calls]))
     const allHours: EvolutionHourlyInput[] = []
     for (let hour = HOUR_WINDOW_START; hour <= HOUR_WINDOW_END; hour++) {
