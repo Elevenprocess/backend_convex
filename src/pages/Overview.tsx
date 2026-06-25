@@ -891,11 +891,21 @@ function OverviewAdmin() {
   // avec qualified/rdvPris : la réconciliation côté front gonflait le compteur.
   const treatedLeadTotal = adminSummary?.classified ?? funnelTreatedLeads(funnelTotals)
   const evolutionGranularity = chooseGranularity(funnelRange)
+  // Dates d'arrivée des nouveaux leads (createdAt dans la période) — même source
+  // que le KPI « Nouveaux aujourd'hui ». La série « leads » du graph compte les
+  // ARRIVÉES réelles par bucket (par heure en vue jour), pas les leads traités.
+  const newLeadMs = useMemo(() => {
+    const from = new Date(funnelRange.from).getTime()
+    const to = new Date(funnelRange.to).getTime()
+    return (allLeads ?? [])
+      .map((l) => new Date(l.createdAt).getTime())
+      .filter((t) => !Number.isNaN(t) && t >= from && t <= to)
+  }, [allLeads, funnelRange.from, funnelRange.to])
   const evolutionPoints = buildLeadEvolutionPoints(adminSummary?.dailyEvolution ?? [], adminSummary?.hourlyCalls ?? [], funnelRange, evolutionGranularity, {
-    leads: adminSummary?.newLeads ?? treatedLeadTotal,
+    leads: newLeadMs.length || (adminSummary?.newLeads ?? treatedLeadTotal),
     qualified: adminSummary?.qualified ?? funnelTotals.qualified,
     signed: adminSummary?.signed ?? 0,
-  })
+  }, newLeadMs)
 
   const prevRange = previousRange(funnelRange)
   const { data: prevFunnel } = useAnalyticsFunnel({ from: prevRange.from, to: prevRange.to })
@@ -1003,7 +1013,7 @@ function OverviewAdmin() {
               range={funnelRange}
               rangeLabel={`Du ${formatShortDate(new Date(funnelRange.from))} au ${formatShortDate(new Date(funnelRange.to))}`}
               compareLabel={`Du ${formatShortDate(new Date(prevRange.from))} au ${formatShortDate(new Date(prevRange.to))}`}
-              totals={{ leads: stats.leads, qualified: stats.qualified, signed: stats.ventes }}
+              totals={{ leads: newLeadMs.length, qualified: stats.qualified, signed: stats.ventes }}
             />
           </div>
 
@@ -1092,10 +1102,10 @@ const LEAD_EVOLUTION_SERIES: { key: LeadEvolutionSeriesKey; label: string; color
 ]
 
 const GRANULARITY_SUBTITLE: Record<EvolutionGranularity, string> = {
-  hour: 'Leads traités par heure',
-  day: 'Leads traités par jour',
-  week: 'Leads traités par semaine',
-  month: 'Leads traités par mois',
+  hour: 'Arrivée des leads par heure',
+  day: 'Arrivée des leads par jour',
+  week: 'Arrivée des leads par semaine',
+  month: 'Arrivée des leads par mois',
 }
 
 // Courbes de Bézier segment par segment (contrôles calculés avec les voisins du tracé COMPLET) :

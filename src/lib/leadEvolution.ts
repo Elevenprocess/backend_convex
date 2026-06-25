@@ -37,11 +37,17 @@ export function buildLeadEvolutionPoints(
   range: EvolutionRange,
   granularity: EvolutionGranularity,
   totals: { leads: number; qualified: number; signed: number },
+  // Dates d'ARRIVÉE des nouveaux leads (createdAt en ms) sur la période. Quand
+  // fournies, la série « leads » est recalculée par comptage RÉEL des arrivées
+  // dans chaque bucket (heure/jour/…) → le graph montre l'arrivée des leads,
+  // y compris par heure, au lieu d'une répartition au prorata des appels.
+  newLeadMs?: number[],
 ): LeadEvolutionPoint[] {
   // Le backend pré-remplit tous les buckets de la plage à 0, y compris ceux PAS ENCORE COMMENCÉS
   // (heures à venir d'aujourd'hui…). On les exclut : sinon ils s'empilent à 0 contre le bord droit
   // de l'axe live et la courbe plonge verticalement au lieu de s'arrêter au dernier point réel.
   const nowMs = Date.now()
+  const withArrival = (points: LeadEvolutionPoint[]) => applyLeadArrival(points, granularity, newLeadMs)
 
   if (granularity === 'hour') {
     const rangeStart = startOfDay(new Date(range.from)).getTime()
@@ -55,7 +61,7 @@ export function buildLeadEvolutionPoints(
       .filter((point) => new Date(`${point.date}T${String(point.hour).padStart(2, '0')}:00:00`).getTime() <= nowMs)
       .sort((a, b) => hourKey(a).localeCompare(hourKey(b)))
     if (activeHours.length > 0) {
-      return distributeTotalsAcrossHours(activeHours, totals)
+      return withArrival(distributeTotalsAcrossHours(activeHours, totals))
     }
     // Pas de données horaires → on retombe sur la vue jour.
   }
@@ -69,11 +75,11 @@ export function buildLeadEvolutionPoints(
     .filter((point) => point.date >= rangeStart && point.date <= rangeEnd)
     .sort((a, b) => a.date.localeCompare(b.date))
 
-  if (granularity === 'week') return bucketEvolution(inRange, weekBucket).filter(hasStarted)
-  if (granularity === 'month') return bucketEvolution(inRange, monthBucket).filter(hasStarted)
+  if (granularity === 'week') return withArrival(bucketEvolution(inRange, weekBucket).filter(hasStarted))
+  if (granularity === 'month') return withArrival(bucketEvolution(inRange, monthBucket).filter(hasStarted))
 
   // day
-  return inRange.filter(hasStarted).map((point) => ({
+  return withArrival(inRange.filter(hasStarted).map((point) => ({
     key: point.date,
     t: new Date(`${point.date}T12:00:00`).getTime(),
     date: point.date,
@@ -81,7 +87,30 @@ export function buildLeadEvolutionPoints(
     leads: point.newLeads ?? point.classified,
     qualified: point.qualified ?? point.rdv,
     signed: point.signed,
-  }))
+  })))
+}
+
+/** Fenêtre temporelle [début, fin) couverte par un point selon la granularité. */
+function bucketRangeMs(point: LeadEvolutionPoint, granularity: EvolutionGranularity): [number, number] {
+  if (granularity === 'hour') return [point.t, point.t + 3_600_000]
+  const start = startOfDay(new Date(`${point.date}T12:00:00`)).getTime()
+  if (granularity === 'week') return [start, start + 7 * 86_400_000]
+  if (granularity === 'month') {
+    const d = new Date(`${point.date}T12:00:00`)
+    return [start, new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime()]
+  }
+  return [start, start + 86_400_000]
+}
+
+/** Recalcule la série « leads » par comptage réel des arrivées dans chaque bucket. */
+function applyLeadArrival(points: LeadEvolutionPoint[], granularity: EvolutionGranularity, newLeadMs?: number[]): LeadEvolutionPoint[] {
+  if (!newLeadMs || newLeadMs.length === 0) return points
+  return points.map((point) => {
+    const [start, end] = bucketRangeMs(point, granularity)
+    let leads = 0
+    for (const t of newLeadMs) if (t >= start && t < end) leads += 1
+    return { ...point, leads }
+  })
 }
 
 type Bucket = { key: string; t: number; date: string; label: string }
