@@ -266,13 +266,22 @@ function FinanceVenteRows({
   onEditFinancing: () => void
   onEditEcheancier: () => void
 }) {
+  const hasEnRetard = a.echeances.some((e) => e.statut === 'en_retard')
+  const hasAEncaisser = a.echeances.some((e) => e.statut === 'a_encaisser')
+  const alerteEncaissement = hasEnRetard || hasAEncaisser
+
   return (
     <>
-      <tr className="cursor-pointer" onClick={onToggle}>
+      <tr className={`cursor-pointer ${alerteEncaissement ? 'bg-cuivre-tint/20' : ''}`} onClick={onToggle}>
         <td className="text-faint text-center">{isOpen ? '▾' : '▸'}</td>
         <td>
           <span className="font-semibold text-text">{a.projectName ?? a.clientName ?? '—'}</span>
           {a.projectName && a.clientName && <span className="block text-xs text-faint">{a.clientName}</span>}
+          {alerteEncaissement && (
+            <span className={`mt-0.5 inline-block fin-pill ${hasEnRetard ? 'bg-rouille-tint text-rouille' : 'bg-cuivre-tint text-cuivre'}`}>
+              {hasEnRetard ? '⚠ En retard' : '⏰ À encaisser'}
+            </span>
+          )}
         </td>
         <td className="text-muted">{a.commercialName ?? '—'}</td>
         <td className="text-muted">

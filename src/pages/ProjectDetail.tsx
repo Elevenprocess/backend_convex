@@ -411,6 +411,29 @@ function PaymentTab({ project, onSaved }: { project: ProjectDetailResponse; onSa
         </div>
       ) : (
         <div className="pay-view">
+          {/* Bandeau acompte à encaisser / en retard */}
+          {a && (() => {
+            const urgent = a.echeances.filter((e) => e.statut === 'a_encaisser' || e.statut === 'en_retard')
+            if (urgent.length === 0) return null
+            const montantTotal = urgent.reduce((s, e) => s + (Number(e.montantPrevu ?? 0) || 0), 0)
+            const enRetard = urgent.some((e) => e.statut === 'en_retard')
+            return (
+              <div className={`mb-4 flex items-start gap-3 rounded-xl px-4 py-3 ${enRetard ? 'bg-rouille-tint' : 'bg-cuivre-tint'}`}>
+                <span className={`mt-0.5 text-sm font-black ${enRetard ? 'text-rouille' : 'text-cuivre'}`}>
+                  {enRetard ? '⚠' : '⏰'}
+                </span>
+                <div className="min-w-0">
+                  <p className={`text-sm font-bold ${enRetard ? 'text-rouille' : 'text-cuivre'}`}>
+                    Acompte à encaisser{enRetard ? ' (en retard)' : ''}
+                  </p>
+                  <p className="text-xs text-muted mt-0.5">
+                    {urgent.map((e) => e.label ?? `Tranche ${e.ordre}`).join(', ')}
+                    {' — '}{montantTotal.toLocaleString('fr-FR')} € à récupérer
+                  </p>
+                </div>
+              </div>
+            )
+          })()}
           {/* Hero : reste à payer + progression — données backend */}
           <div className="pay-hero">
             <div className="pay-hero-figures">
