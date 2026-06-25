@@ -8,15 +8,13 @@ import { useClients, useLeads, useRdvList, useUsers } from '../lib/hooks'
 import { fullName, type ClientResponse } from '../lib/types'
 import {
   buildDossiers,
-  buildSuiviPeriodRange,
-  getDefaultSuiviPeriod,
   isDateInRange,
   readWorkflowState,
-  SUIVI_PERIOD_OPTIONS,
-  type SuiviPeriodState,
   type SuiviState,
   avg,
 } from '../lib/suivi'
+import { buildPeriodRange, defaultPeriod, type PeriodState } from '../lib/period'
+import { DateRangePicker } from '../components/analytics/DateRangePicker'
 import { DossierCard } from '../components/suivi/DossierCard'
 
 export function Suivi() {
@@ -40,16 +38,18 @@ export function Suivi() {
   }, [clients])
   const [query, setQuery] = useState('')
   const [states, setStates] = useState<Record<string, SuiviState>>({})
-  const [period, setPeriod] = useState<SuiviPeriodState>(getDefaultSuiviPeriod)
-  const periodRange = useMemo(() => buildSuiviPeriodRange(period), [period])
+  const [period, setPeriod] = useState<PeriodState>(() => defaultPeriod('this_year'))
+  const periodRange = useMemo(() => buildPeriodRange(period), [period])
+  const periodFrom = useMemo(() => new Date(periodRange.from), [periodRange.from])
+  const periodTo = useMemo(() => new Date(periodRange.to), [periodRange.to])
 
   const allSignedDossiers = useMemo(
     () => buildDossiers(leads ?? [], rdvs ?? [], users ?? [], states),
     [leads, rdvs, users, states],
   )
   const signedDossiers = useMemo(
-    () => allSignedDossiers.filter((d) => isDateInRange(d.signedAt, periodRange.from, periodRange.to)),
-    [allSignedDossiers, periodRange],
+    () => allSignedDossiers.filter((d) => isDateInRange(d.signedAt, periodFrom, periodTo)),
+    [allSignedDossiers, periodFrom, periodTo],
   )
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -101,18 +101,7 @@ export function Suivi() {
             <p>Chaque card ouvre la fiche complète du prospect avec les données setter, commercial et le workflow associé.</p>
           </div>
           <div className="suivi-hero-actions">
-            <div className="suivi-period" role="group" aria-label="Période">
-              {SUIVI_PERIOD_OPTIONS.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  className={period.mode === option.id ? 'active' : ''}
-                  onClick={() => setPeriod((current) => ({ ...current, mode: option.id }))}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+            <DateRangePicker value={period} onChange={setPeriod} align="right" />
             <input
               type="search"
               placeholder="Rechercher un dossier…"
