@@ -169,7 +169,7 @@ function FicheContent({
           <div className="grid grid-cols-3 gap-x-8 gap-y-3 mt-3">
             <Field
               label="Date prévue"
-              value={vtDate ? new Date(vtDate).toLocaleDateString('fr-FR') : ''}
+              value={vtDate ? (() => { const [y, m, d] = vtDate.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('fr-FR') })() : ''}
               placeholder={!vtDate}
             />
             <Field

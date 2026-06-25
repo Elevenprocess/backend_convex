@@ -245,8 +245,8 @@ export function assignTechniciens(
   clientId: string,
   technicienVtIds: string[],
 ): Promise<ClientResponse> {
-  return api<ClientResponse>(`/clients/${clientId}/assign-techniciens`, {
-    method: 'POST',
+  return api<ClientResponse>(`/clients/${clientId}`, {
+    method: 'PATCH',
     body: { technicienVtIds },
   })
 }

@@ -267,7 +267,6 @@ function HourlyGridView({
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const hours = Array.from({ length: GRID_END_HOUR - GRID_START_HOUR + 1 }, (_, i) => GRID_START_HOUR + i)
-  const totalGridMinutes = (GRID_END_HOUR - GRID_START_HOUR) * 60
 
   // Scroll to current time or 08:00 on mount
   useEffect(() => {
@@ -329,7 +328,7 @@ function HourlyGridView({
   // Current time indicator position
   const now = new Date()
   const nowMinutes = now.getHours() * 60 + now.getMinutes()
-  const nowOffset = ((nowMinutes - GRID_START_HOUR * 60) / totalGridMinutes) * (hours.length * HOUR_ROW_PX)
+  const nowOffset = (nowMinutes / 60 - GRID_START_HOUR) * HOUR_ROW_PX
   const showNeedle = nowMinutes >= GRID_START_HOUR * 60 && nowMinutes <= GRID_END_HOUR * 60
 
   const TIME_COL_W = 44 // px
@@ -470,7 +469,7 @@ function HourlyGridView({
                 {/* Timed events */}
                 {timed.map((e) => {
                   const h = parseHeure(e.heure)!
-                  const topPx = ((h - GRID_START_HOUR) / (GRID_END_HOUR - GRID_START_HOUR)) * (hours.length * HOUR_ROW_PX)
+                  const topPx = (h - GRID_START_HOUR) * HOUR_ROW_PX
                   const heightPx = (DEFAULT_DURATION_MIN / 60) * HOUR_ROW_PX - 2
                   const layoutKey = `${e.clientId}-${e.kind}-${e.heure}`
                   const lay = layout.get(layoutKey) ?? { col: 0, total: 1 }
