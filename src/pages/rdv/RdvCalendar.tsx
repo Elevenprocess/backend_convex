@@ -7,7 +7,7 @@ import { LoadingBlock, Spinner } from '../../components/Spinner'
 import { useGhlCalendarEvents, useRdvList, useLeads, useUsers, useVtCalendar, type GhlCalendarEvent } from '../../lib/hooks'
 import { fullName, type LeadResponse, type RdvResponse, type RdvStatus, type VtCalendarEntry } from '../../lib/types'
 import { useAuth } from '../../lib/auth'
-import { leadSearchPath } from '../../lib/leadPaths'
+import { leadSearchPath, leadDetailPath } from '../../lib/leadPaths'
 import { matchesCalendarFilters, type CalendarFilterState } from '../../lib/calendarFilters'
 import { type Sector, SECTORS, sectorFromCity } from '../../lib/sector'
 import { rdvCardCategory, type RdvCardCategory } from './rdvCardCategory'
@@ -187,7 +187,10 @@ export function RdvCalendar() {
       return
     }
     if (item.source === 'local') {
-      navigate(`/rdv/${item.id}`)
+      // Clic sur un RDV client → fiche du lead (historique, débriefs, projets),
+      // pas la page RDV brute. Repli sur la page RDV si le lead manque.
+      if (item.rdv.leadId) navigate(leadDetailPath(role, item.rdv.leadId))
+      else navigate(`/rdv/${item.id}`)
       return
     }
     const lead = item.event.contactId ? leadByExternalId.get(item.event.contactId) : undefined
