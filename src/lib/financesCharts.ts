@@ -13,11 +13,11 @@ export type MonthPoint = {
  * Construit deux séries mensuelles à partir des AcompteResponse :
  * - cumulEncaisse : cumul croissant des montantReel des tranches `encaisse`,
  *   bucketé par mois de dateEncaissement.
- * - resteTotal : Σ resteAPayer de toutes les ventes (global, pas par mois) —
- *   affiché comme ligne plate représentant le restant dû total.
+ * - resteTotal : montant planifié total moins le cumul encaissé jusqu'à ce mois
+ *   (décroît à mesure que les encaissements s'accumulent, visualisant le gap restant).
  *
- * Les mois sont déduits des dateEncaissement existantes + le mois courant.
- * Triés chronologiquement.
+ * totalPlanned = Σ montantPrevu de toutes les tranches (base identique à cumulEncaisse).
+ * Les mois sont déduits des dateEncaissement existantes. Triés chronologiquement.
  */
 export function buildEncaissementSeries(rows: AcompteResponse[]): MonthPoint[] {
   // Accumule les encaissements par mois YYYY-MM
@@ -37,12 +37,18 @@ export function buildEncaissementSeries(rows: AcompteResponse[]): MonthPoint[] {
   // Trier les mois et calculer le cumul
   const months = [...byMonth.keys()].sort()
 
-  // Reste total = Σ resteAPayer de toutes les ventes
-  const resteTotal = rows.reduce((sum, a) => sum + (Number(a.resteAPayer ?? 0) || 0), 0)
+  // totalPlanned = Σ montantPrevu de toutes les tranches (non annulées)
+  // Cohérent avec la base de cumul (montantReel ?? montantPrevu pour les encaissées).
+  const totalPlanned = rows.reduce((sum, a) => {
+    return sum + a.echeances.reduce((s, e) => {
+      if (e.statut === 'annule') return s
+      return s + (Number(e.montantPrevu ?? 0) || 0)
+    }, 0)
+  }, 0)
 
   let cumul = 0
   return months.map((month) => {
     cumul += byMonth.get(month) ?? 0
-    return { month, cumulEncaisse: cumul, resteTotal }
+    return { month, cumulEncaisse: cumul, resteTotal: Math.max(0, totalPlanned - cumul) }
   })
 }
