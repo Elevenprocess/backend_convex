@@ -1,4 +1,4 @@
-import { addDays, endOfDay, startOfDay, startOfWeek } from './period'
+import { addDays, startOfDay, startOfWeek } from './period'
 import type { EvolutionGranularity } from './evolutionAxis'
 
 // Logique d'entonnoir : Nouveau Lead → RDV planifiés → Ventes. La série du
@@ -9,8 +9,8 @@ export type EvolutionDailyInput = { date: string; label: string; calls: number; 
 export type EvolutionHourlyInput = { date: string; hour: number; label: string; calls: number }
 export type EvolutionRange = { from: string; to: string; days: number }
 
-const HOUR_WINDOW_START = 8
-const HOUR_WINDOW_END = 21
+const HOUR_WINDOW_START = 0
+const HOUR_WINDOW_END = 23
 
 // Granularité dérivée du nombre de JOURS CALENDAIRES couverts par la plage (from → to).
 // 'hour' n'est valide que sur UNE journée (le domaine horaire ne couvre qu'un jour 8h–21h) ;
@@ -50,20 +50,23 @@ export function buildLeadEvolutionPoints(
   const withArrival = (points: LeadEvolutionPoint[]) => applyLeadArrival(points, granularity, newLeadMs)
 
   if (granularity === 'hour') {
-    const rangeStart = startOfDay(new Date(range.from)).getTime()
-    const rangeEnd = endOfDay(new Date(range.to)).getTime()
-    const activeHours = hourlyCalls
-      .filter((point) => point.hour >= HOUR_WINDOW_START && point.hour <= HOUR_WINDOW_END)
-      .filter((point) => {
-        const t = new Date(point.date).getTime()
-        return t >= rangeStart && t <= rangeEnd
-      })
+    // Journée pleine 00h→23h : on génère les 24 buckets du jour (le backend ne
+    // fournit les appels que 8h–21h, mais l'arrivée des leads peut tomber à
+    // n'importe quelle heure). Poids d'appels repris si dispo, sinon 0.
+    const day = dateKey(range.from)
+    const callsByKey = new Map(hourlyCalls.map((p) => [`${p.date}-${p.hour}`, p.calls]))
+    const allHours: EvolutionHourlyInput[] = []
+    for (let hour = HOUR_WINDOW_START; hour <= HOUR_WINDOW_END; hour++) {
+      allHours.push({ date: day, hour, label: `${dayLabel(day)} ${hour}h`, calls: callsByKey.get(`${day}-${hour}`) ?? 0 })
+    }
+    // Mode live (aujourd'hui) : on s'arrête à l'heure en cours. Jour passé : 24h pleines.
+    const activeHours = allHours
       .filter((point) => new Date(`${point.date}T${String(point.hour).padStart(2, '0')}:00:00`).getTime() <= nowMs)
       .sort((a, b) => hourKey(a).localeCompare(hourKey(b)))
     if (activeHours.length > 0) {
       return withArrival(distributeTotalsAcrossHours(activeHours, totals))
     }
-    // Pas de données horaires → on retombe sur la vue jour.
+    // Pas d'heures démarrées → on retombe sur la vue jour.
   }
 
   const rangeStart = dateKey(range.from)

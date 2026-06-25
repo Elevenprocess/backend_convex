@@ -5,10 +5,11 @@ export type EvolutionGranularity = 'hour' | 'day' | 'week' | 'month'
 export type EvolutionDomain = { start: number; end: number }
 export type EvolutionTick = { t: number; label: string }
 
-// Fenêtre horaire active du dashboard (cohérent avec le filtre hour 8h–21h côté data).
-const HOUR_WINDOW_START = 8
-const HOUR_WINDOW_END = 21
-const HOUR_TICKS = [8, 11, 14, 17, 20] as const // graduations toutes les 3h ; dernier label avant la fermeture 21h
+// Fenêtre horaire : journée pleine 00h → minuit (24h). En mode live (aujourd'hui)
+// l'axe est tronqué à « maintenant » par computeEvolutionDomain.
+const HOUR_WINDOW_START = 0
+const HOUR_WINDOW_END = 24
+const HOUR_TICKS = [0, 4, 8, 12, 16, 20] as const // graduations toutes les 4h
 
 function dayLabel(date: Date): string {
   return date.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '')
@@ -85,14 +86,12 @@ export function buildEvolutionTicks(domain: EvolutionDomain, granularity: Evolut
       d.setHours(hour, 0, 0, 0)
       return { t: d.getTime(), label: `${hour}h` }
     }).filter((tick) => tick.t >= start && tick.t <= end)
-    // Étiquette du bord droit (= « maintenant ») UNIQUEMENT en mode live (axe tronqué avant 21h).
-    // Hors live, l'axe va jusqu'à 21h et 20h est déjà le dernier label voulu : pas de tick superflu.
-    const naturalEnd = new Date(start)
-    naturalEnd.setHours(HOUR_WINDOW_END, 0, 0, 0)
-    const isLive = end < naturalEnd.getTime()
+    // Étiquette du bord droit : « maintenant » en mode live (axe tronqué avant minuit),
+    // sinon « 24h » (minuit, fin de la journée). Évite un trou entre 20h et le bord.
     const last = ticks[ticks.length - 1]
-    if (isLive && (!last || end - last.t > 45 * 60 * 1000)) {
-      ticks.push({ t: end, label: `${new Date(end).getHours()}h` })
+    if (!last || end - last.t > 45 * 60 * 1000) {
+      const h = new Date(end).getHours()
+      ticks.push({ t: end, label: h === 0 ? '24h' : `${h}h` })
     }
     return ticks
   }
