@@ -186,8 +186,12 @@ function deleteCachesForPrefixes(prefixes: string[]) {
 function useFetch<T>(
   path: string | null,
   query?: Record<string, string | number | undefined | null>,
-  options?: { refreshCachedOnMount?: boolean; silentInitialLoading?: boolean },
+  options?: { refreshCachedOnMount?: boolean; silentInitialLoading?: boolean; noRealtimeRefresh?: boolean },
 ): Async<T> {
+  // Opt-out du rafraîchissement temps réel : la donnée n'est PAS re-fetchée
+  // automatiquement sur les events realtime (utile pour une page qu'on ne veut
+  // pas voir clignoter/recharger en continu, ex. /suivi).
+  const noRealtimeRefresh = options?.noRealtimeRefresh ?? false
   const queryKey = JSON.stringify(query ?? {})
   const cacheKey = buildFetchCacheKey(path, queryKey)
   const cachedData = readCachedData<T>(cacheKey)
@@ -240,7 +244,7 @@ function useFetch<T>(
   }, [path, queryKey, tick])
 
   useEffect(() => {
-    if (path === null) return
+    if (path === null || noRealtimeRefresh) return
     const onRealtimeRefresh = (event: Event) => {
       const detail = (event as CustomEvent<RealtimeRefreshPayload>).detail
       if (!detail?.paths?.some((prefix) => path.startsWith(prefix))) return
@@ -249,7 +253,7 @@ function useFetch<T>(
     }
     window.addEventListener(REALTIME_REFRESH_EVENT, onRealtimeRefresh)
     return () => window.removeEventListener(REALTIME_REFRESH_EVENT, onRealtimeRefresh)
-  }, [path])
+  }, [path, noRealtimeRefresh])
 
   return { data, loading, error, refetch: () => setTick((t) => t + 1) }
 }
@@ -273,7 +277,7 @@ export function useLeads(filters?: {
   offset?: number
   notInAirtable?: boolean
   scope?: 'clients'
-} | null): Async<LeadResponse[]> {
+} | null, opts?: { noRealtimeRefresh?: boolean }): Async<LeadResponse[]> {
   const query = filters === null ? undefined : (() => {
     const { notInAirtable, ...rest } = filters ?? {}
     return {
@@ -282,7 +286,7 @@ export function useLeads(filters?: {
       notInAirtable: notInAirtable ? 'true' : undefined,
     }
   })()
-  return useFetch<LeadResponse[]>(filters === null ? null : '/leads', query)
+  return useFetch<LeadResponse[]>(filters === null ? null : '/leads', query, opts)
 }
 
 // Two-phase fetch (Facebook News-Feed style):
@@ -337,11 +341,11 @@ export function useRdvList(filters?: {
   fromDate?: string
   toDate?: string
   limit?: number
-} | null): Async<RdvResponse[]> {
+} | null, opts?: { noRealtimeRefresh?: boolean }): Async<RdvResponse[]> {
   return useFetch<RdvResponse[]>(
     filters === null ? null : '/rdv',
     filters === null ? undefined : { ...filters, limit: clampLimit(filters?.limit, 200, RDV_LIMIT_MAX) },
-    { refreshCachedOnMount: true, silentInitialLoading: true },
+    { refreshCachedOnMount: true, silentInitialLoading: true, ...opts },
   )
 }
 
@@ -396,8 +400,8 @@ export async function updateRdv(id: string, input: UpdateRdvPayload): Promise<Rd
 }
 
 // ─── Users ─────────────────────────────────────────────────
-export function useUsers(): Async<UserResponse[]> {
-  return useFetch<UserResponse[]>('/users')
+export function useUsers(opts?: { noRealtimeRefresh?: boolean }): Async<UserResponse[]> {
+  return useFetch<UserResponse[]>('/users', undefined, opts)
 }
 
 // ─── Débriefs d'un lead ────────────────────────────────────
@@ -412,7 +416,7 @@ export function useClients(filters?: {
   leadId?: string
   projectId?: string
   unassignedVt?: boolean
-} | null): Async<ClientResponse[]> {
+} | null, opts?: { noRealtimeRefresh?: boolean }): Async<ClientResponse[]> {
   const query = filters === null ? undefined : {
     technicienVtId: filters?.technicienVtId,
     phase: filters?.phase,
@@ -420,7 +424,7 @@ export function useClients(filters?: {
     projectId: filters?.projectId,
     unassignedVt: filters?.unassignedVt ? 'true' : undefined,
   }
-  return useFetch<ClientResponse[]>(filters === null ? null : '/clients', query)
+  return useFetch<ClientResponse[]>(filters === null ? null : '/clients', query, opts)
 }
 
 export function useSubsteps(

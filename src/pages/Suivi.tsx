@@ -21,10 +21,13 @@ export function Suivi() {
   const role = useAuth((s) => s.user?.role)
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const { data: leads, loading: leadsLoading } = useLeads({ limit: 500 })
-  const { data: rdvs, loading: rdvLoading } = useRdvList({ limit: 200 })
-  const { data: users } = useUsers()
-  const { data: clients } = useClients()
+  // Pas de rafraîchissement temps réel sur cette page : elle ne doit pas se
+  // recharger/clignoter en continu au fil des events realtime (lead/rdv/appel).
+  const NO_RT = { noRealtimeRefresh: true }
+  const { data: leads, loading: leadsLoading } = useLeads({ limit: 500 }, NO_RT)
+  const { data: rdvs, loading: rdvLoading } = useRdvList({ limit: 200 }, NO_RT)
+  const { data: users } = useUsers(NO_RT)
+  const { data: clients } = useClients(undefined, NO_RT)
   const clientByLead = useMemo(() => {
     const map = new Map<string, ClientResponse>()
     for (const c of clients ?? []) map.set(c.leadId, c)
