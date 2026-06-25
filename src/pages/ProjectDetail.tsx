@@ -15,6 +15,7 @@ import { DossierWorkflowPanel } from '../components/suivi/DossierWorkflowPanel'
 import { ProjectDossierSection, type ProjectTab } from '../components/suivi/ProjectDossierSection'
 import { Section } from '../components/suivi/fiche-parts'
 import { RecordEcheanceModal } from '../components/finances/RecordEcheanceModal'
+import { EcheancierEditorModal } from '../components/finances/EcheancierEditorModal'
 
 type Tab = ProjectTab | 'paiement'
 
@@ -35,6 +36,8 @@ export function ProjectDetailPage() {
   const [wfOpen, setWfOpen] = useState(true)
   // Mobile : le workflow s'ouvre en plein écran (la sidebar 42vw l'écrasait).
   const [wfMobileOpen, setWfMobileOpen] = useState(false)
+  // Acompte chargé au niveau page pour le bandeau dossier.
+  const [pageAcompte, setPageAcompte] = useState<AcompteResponse | null>(null)
 
   // Dossier délivrabilité du projet : `annule` = VT non validée → vente annulée.
   const { data: projectClients } = useClients(projectId ? { projectId } : null)
@@ -51,6 +54,20 @@ export function ProjectDetailPage() {
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [projectId])
+
+  // Fetch the acompte at the page level so we can show the banner above the tabs.
+  useEffect(() => {
+    if (!project) return
+    const debrief = [...project.debriefs]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .find((d) => d.financingType || d.paymentSubMethod || d.financingOrg || d.montantTotal) ?? null
+    if (!debrief) { setPageAcompte(null); return }
+    let cancelled = false
+    getAcompte(debrief.id)
+      .then((a) => { if (!cancelled) setPageAcompte(a) })
+      .catch(() => { if (!cancelled) setPageAcompte(null) })
+    return () => { cancelled = true }
+  }, [project])
 
   const refresh = () => {
     if (!projectId) return
@@ -141,6 +158,37 @@ export function ProjectDetailPage() {
               </span>
               <Icon name="chevron-right" size={18} className="text-muted" />
             </button>
+
+            {/* Bandeau acompte à encaisser / en retard — visible sur tous les onglets */}
+            {pageAcompte && (() => {
+              const urgent = pageAcompte.echeances.filter((e) => e.statut === 'a_encaisser' || e.statut === 'en_retard')
+              if (urgent.length === 0) return null
+              const montantUrgent = urgent.reduce((s, e) => s + (Number(e.montantPrevu ?? 0) || 0), 0)
+              const enRetard = urgent.some((e) => e.statut === 'en_retard')
+              return (
+                <div
+                  className={`mb-4 flex cursor-pointer items-start gap-3 rounded-xl px-4 py-3 ${enRetard ? 'bg-rouille-tint' : 'bg-cuivre-tint'}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setTab('paiement')}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setTab('paiement') }}
+                  title="Voir le détail des paiements"
+                >
+                  <span className={`mt-0.5 text-sm font-black ${enRetard ? 'text-rouille' : 'text-cuivre'}`}>
+                    {enRetard ? '⚠' : '⏰'}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-sm font-bold ${enRetard ? 'text-rouille' : 'text-cuivre'}`}>
+                      Acompte à encaisser{enRetard ? ' (en retard)' : ''}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted">
+                      {urgent.map((e) => e.label ?? `Tranche ${e.ordre}`).join(', ')}
+                      {' — '}{montantUrgent.toLocaleString('fr-FR')} € à récupérer · Voir l'onglet Paiement
+                    </p>
+                  </div>
+                </div>
+              )
+            })()}
 
             <div className="flex items-start gap-4">
               {/* Colonne onglets (façon Solteo) */}
@@ -294,6 +342,8 @@ function PaymentTab({ project, onSaved }: { project: ProjectDetailResponse; onSa
   const [financingOrg, setFinancingOrg] = useState('')
   // Recording encaissement for a specific tranche
   const [recordingTranche, setRecordingTranche] = useState<EcheanceLine | null>(null)
+  // Editing the échéancier (custom tranche definition)
+  const [editingEcheancier, setEditingEcheancier] = useState(false)
 
   const hydrate = (a: AcompteResponse) => {
     setLoaded(a)
@@ -377,9 +427,16 @@ function PaymentTab({ project, onSaved }: { project: ProjectDetailResponse; onSa
             </button>
           </div>
         ) : (
-          <button type="button" className="inline-flex items-center gap-1.5 text-xs font-bold text-or hover:underline" onClick={() => setEditing(true)}>
-            <Icon name="edit" size={14} /> Modifier
-          </button>
+          <div className="flex items-center gap-3">
+            <button type="button" className="inline-flex items-center gap-1.5 text-xs font-bold text-or hover:underline" onClick={() => setEditing(true)}>
+              <Icon name="edit" size={14} /> Modifier
+            </button>
+            {a && (
+              <button type="button" className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted hover:text-text hover:underline" onClick={() => setEditingEcheancier(true)} title="Personnaliser l'échéancier">
+                <Icon name="settings" size={13} /> Échéancier{a.customEcheancier ? ' *' : ''}
+              </button>
+            )}
+          </div>
         )
       ) : undefined}
     >
@@ -405,9 +462,6 @@ function PaymentTab({ project, onSaved }: { project: ProjectDetailResponse; onSa
               </PayField>
             )}
           </div>
-          <p className="text-xs text-faint">
-            Pour enregistrer ou modifier un encaissement sur une tranche, utilisez le bouton « Enregistrer » sur chaque ligne de l'échéancier en mode lecture.
-          </p>
         </div>
       ) : (
         <div className="pay-view">
@@ -478,6 +532,18 @@ function PaymentTab({ project, onSaved }: { project: ProjectDetailResponse; onSa
           onSaved={() => {
             setRecordingTranche(null)
             // Refresh acompte data
+            getAcompte(debrief.id).then(hydrate).catch(() => undefined)
+            onSaved()
+          }}
+        />
+      )}
+
+      {editingEcheancier && a && (
+        <EcheancierEditorModal
+          acompte={a}
+          onClose={() => setEditingEcheancier(false)}
+          onSaved={() => {
+            setEditingEcheancier(false)
             getAcompte(debrief.id).then(hydrate).catch(() => undefined)
             onSaved()
           }}
