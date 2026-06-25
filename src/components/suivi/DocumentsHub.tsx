@@ -43,7 +43,7 @@ export function DocumentsHub({ substeps, onDocsChanged }: Props) {
   const sectionFor = (key: 'amont' | 'backoffice' | 'aval'): SubstepResponse[] =>
     key === 'amont' ? grouped.amont
       : key === 'aval' ? grouped.aval
-        : [...grouped.backoffice.dp, ...grouped.backoffice.racco_consuel]
+        : [...grouped.backoffice.dp, ...grouped.backoffice.racco]
 
   return (
     <div className="dochub">

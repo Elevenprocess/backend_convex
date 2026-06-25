@@ -120,13 +120,13 @@ export function WorkflowBoard({ substeps, onMutate, today, users, savingId, onDo
             ? grouped.amont
             : section.key === 'aval'
               ? grouped.aval
-              : [...grouped.backoffice.dp, ...grouped.backoffice.racco_consuel]
+              : [...grouped.backoffice.dp, ...grouped.backoffice.racco]
         return (
           <CollapsibleWfSection key={section.key} section={section} sectionList={sectionList}>
             {section.layout === 'parallel' && section.columns ? (
               <div className="wf-parallel">
                 {section.columns.map((col) => {
-                  const colList = col.key === 'dp' ? grouped.backoffice.dp : grouped.backoffice.racco_consuel
+                  const colList = col.key === 'dp' ? grouped.backoffice.dp : grouped.backoffice.racco
                   return (
                     <div key={col.key} className="wf-col">
                       <div className="wf-col-head">

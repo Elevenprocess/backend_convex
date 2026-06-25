@@ -996,6 +996,8 @@ export type SubstepResponse = {
   unlocked: boolean
   missingDocument: boolean
   expectedDocs: string[]
+  /** Module « dépôt seul » : masque Date / Notes / Technicien dans le pop-up. */
+  depositOnly: boolean
   documents: SubstepDocument[]
   createdAt: string
   updatedAt: string

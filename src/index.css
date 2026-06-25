@@ -5273,6 +5273,29 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
 .wf-node-btn:hover:not(:disabled) .wf-substep-marker { box-shadow: 0 0 0 4px var(--color-cream-darker); }
 .wf-substep-node.is-active .wf-node-btn:hover:not(:disabled) .wf-substep-marker { box-shadow: 0 0 0 4px var(--color-cuivre-tint); }
 
+/* Miniature pièces sous le nœud */
+.wf-node-docs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 0 2px 36px; }
+.wf-node-doc-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px 2px 4px;
+  border-radius: 6px; border: 1px solid var(--color-line); background: var(--color-cream);
+  font-size: 10px; cursor: pointer; max-width: 160px; transition: background .15s;
+}
+.wf-node-doc-chip:hover { background: var(--color-cream-darker); }
+.wf-node-doc-chip.kind-pdf { border-color: var(--color-rouille-tint); }
+.wf-node-doc-chip.kind-image { border-color: var(--color-or-tint); }
+.wf-node-doc-chip-kind {
+  flex-shrink: 0; font-size: 8px; font-weight: 800; padding: 1px 4px; border-radius: 3px;
+  background: var(--color-line-soft); color: var(--color-muted);
+}
+.wf-node-doc-chip-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; color: var(--color-text); }
+/* Jauge SLA inline dans le meta du nœud */
+.wf-gauge-inline { font-weight: 600; }
+.wf-gauge-inline.wf-gauge-ok { color: var(--color-vert, #4caf50); }
+.wf-gauge-inline.wf-gauge-soon { color: var(--color-or-dark); }
+.wf-gauge-inline.wf-gauge-late { color: var(--color-rouille); }
+/* Badge pièce manquante */
+.wf-node-missing { color: var(--color-rouille); font-weight: 600; }
+
 /* === Pop-up d'un module du workflow ==================================== */
 .wf-modal { width: min(520px, 96vw); }
 .wf-modal-head-main { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
@@ -5694,6 +5717,7 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 .suivi-tag-blocked { background: var(--color-rouille-tint); color: var(--color-rouille); }
 .suivi-tag-missing { background: var(--color-rouille-tint); color: var(--color-rouille); }
 .suivi-tag-done { background: var(--color-or-tint); color: var(--color-or-dark); }
+.suivi-tag-installed { background: var(--color-vert-tint, #e8f5e9); color: var(--color-vert, #2e7d32); }
 
 /* --- Détail dossier : onglets + en-tête sticky --- */
 .suivi-detail-sticky { position: sticky; top: 0; z-index: 5; background: var(--color-cream-darker); padding-top: 6px; padding-bottom: 10px; }

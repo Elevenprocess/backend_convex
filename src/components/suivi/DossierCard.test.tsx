@@ -35,4 +35,12 @@ describe('DossierCard enrichie', () => {
     render(<DossierCard dossier={dossier} onClick={vi.fn()} />)
     expect(screen.getByText(/Dupont/)).toBeInTheDocument()
   })
+  it('affiche le badge Installé quand installation=fait et pas encore livré', () => {
+    render(<DossierCard dossier={dossier} client={client({ steps: { installation: { status: 'fait', datePlanifiee: null, dateRealisee: null, problemReason: null, responsableId: null } } })} onClick={vi.fn()} />)
+    expect(screen.getByText('Installé')).toBeInTheDocument()
+  })
+  it('masque le badge Installé quand livré', () => {
+    render(<DossierCard dossier={dossier} client={client({ steps: { installation: { status: 'fait', datePlanifiee: null, dateRealisee: null, problemReason: null, responsableId: null }, mes: { status: 'fait', datePlanifiee: null, dateRealisee: null, problemReason: null, responsableId: null } } })} onClick={vi.fn()} />)
+    expect(screen.queryByText('Installé')).not.toBeInTheDocument()
+  })
 })

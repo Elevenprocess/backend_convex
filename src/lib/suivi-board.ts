@@ -11,7 +11,7 @@ export type BoardSection = {
   columns?: BoardColumn[]
 }
 
-const PHASE_ORDER: WorkflowPhase[] = ['vt', 'dp', 'racco', 'consuel', 'installation', 'mes']
+const PHASE_ORDER: WorkflowPhase[] = ['vt', 'dp', 'racco', 'installation', 'consuel', 'mes']
 
 export const SUIVI_SECTIONS: BoardSection[] = [
   { key: 'amont', eyebrow: 'Technique', title: 'Préparation (VT + mandat)', layout: 'single', phases: ['vt'] },
@@ -19,10 +19,10 @@ export const SUIVI_SECTIONS: BoardSection[] = [
     key: 'backoffice', eyebrow: 'Back-office', title: 'Démarches administratives (en parallèle)', layout: 'parallel',
     columns: [
       { key: 'dp', title: 'Déclaration préalable', phases: ['dp'] },
-      { key: 'racco_consuel', title: 'Raccordement → Consuel', phases: ['racco', 'consuel'] },
+      { key: 'racco', title: 'Raccordement EDF', phases: ['racco'] },
     ],
   },
-  { key: 'aval', eyebrow: 'Technique', title: 'Installation & clôture', layout: 'single', phases: ['installation', 'mes'] },
+  { key: 'aval', eyebrow: 'Technique', title: 'Installation & clôture', layout: 'single', phases: ['installation', 'consuel', 'mes'] },
 ]
 
 export const PHASE_ICON: Record<WorkflowPhase, IconName> = {
@@ -41,15 +41,15 @@ function inPhases(subs: SubstepResponse[], phases: WorkflowPhase[]): SubstepResp
 
 export type GroupedSubsteps = {
   amont: SubstepResponse[]
-  backoffice: { dp: SubstepResponse[]; racco_consuel: SubstepResponse[] }
+  backoffice: { dp: SubstepResponse[]; racco: SubstepResponse[] }
   aval: SubstepResponse[]
 }
 
 export function groupSubsteps(subs: SubstepResponse[]): GroupedSubsteps {
   return {
     amont: inPhases(subs, ['vt']),
-    backoffice: { dp: inPhases(subs, ['dp']), racco_consuel: inPhases(subs, ['racco', 'consuel']) },
-    aval: inPhases(subs, ['installation', 'mes']),
+    backoffice: { dp: inPhases(subs, ['dp']), racco: inPhases(subs, ['racco']) },
+    aval: inPhases(subs, ['installation', 'consuel', 'mes']),
   }
 }
 
@@ -92,11 +92,11 @@ export const SUBSTEP_DESCRIPTION: Record<WorkflowSubstepKey, string> = {
   dp_prolongation: "Optionnel : prolongation du délai d'instruction de la DP si la mairie le demande.",
   racco_a_faire: "Demande de raccordement EDF (Enedis) à constituer : prise de notes et dépôt des documents.",
   racco_envoye: "Récépissé de dépôt : déposer ici le récépissé de dépôt de la demande de raccordement.",
-  racco_validee: "Raccordement EDF validé : déposer l'attestation de complétude.",
+  racco_validee: "Raccordement EDF validé : déposer le CRAE (contrat de raccordement, accès exploitation).",
   racco_completude: "Attestation de complétude du raccordement : déposer le document.",
-  consuel_a_faire: "Demande de Consuel envoyée — délai d'environ 4 semaines. Prise de notes en attendant la validation.",
-  consuel_valide: "Consuel validé : déposer l'attestation Consuel et l'attestation CRAE.",
-  install_a_faire: "Planifier l'installation avec l'équipe de pose et confirmer la date au client.",
+  consuel_a_faire: "Consuel envoyé à l'organisme — délai ~4 semaines avant validation.",
+  consuel_valide: "Consuel validé (contrôle de conformité après installation) : déposer l'attestation Consuel.",
+  install_a_faire: "Planifier l'installation avec l'équipe de pose. Planifiable sans attendre DP/Consuel.",
   install_effectuee: "Installation réalisée (début/fin de pose) ; point client effectué.",
   enquete_satisfaction: "Enquête de satisfaction après mise en service et clôture qualité du dossier.",
 }
@@ -115,6 +115,7 @@ export type CardSummary = {
   blocked: boolean
   missingDocsCount: number
   delivered: boolean
+  installed: boolean
 }
 
 /** Résumé pour la carte de la vue d'ensemble, dérivé du ClientResponse backend. */
@@ -125,6 +126,7 @@ export function clientCardSummary(client: ClientResponse | undefined): CardSumma
     blocked: client.blocked,
     missingDocsCount: client.missingDocsCount ?? 0,
     delivered: client.steps?.mes?.status === 'fait',
+    installed: client.steps?.installation?.status === 'fait',
   }
 }
 

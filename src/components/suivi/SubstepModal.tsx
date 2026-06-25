@@ -59,6 +59,7 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
   // L'annulation de vente se déclenche depuis la VT validée : si le technicien
   // ne valide pas (projet infaisable), la vente tombe et les finances → 0.
   const canCancelSale = substep.key === 'vt_validee'
+  const isDpPhase = substep.phase === 'dp'
   const gauge = slaGaugeInfo(substep.deadline, today)
   const docStatus = substepDocStatus(substep)
   const techniciens = users.filter((u) => u.role === 'technicien')
@@ -66,6 +67,10 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
   // consuel) ne sont que des démarches administratives : pas de technicien à y
   // attribuer — uniquement date, notes et dépôt de pièces / photos.
   const isFieldPhase = substep.phase === 'vt' || substep.phase === 'installation' || substep.phase === 'mes'
+  // Module « dépôt seul » : sa seule finalité est de recevoir une pièce. On masque
+  // Date / Notes / Technicien — il ne reste que la zone de dépôt. La date de
+  // réalisation est posée côté backend au jour de l'upload.
+  const depositOnly = substep.depositOnly
 
   const debounced = (patch: UpdateSubstepPatch) => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current)
@@ -89,6 +94,16 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
   const onReactivate = () => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current)
     onMutate(substep.id, { status: 'a_faire', problemReason: null })
+  }
+
+  const onMarkDpRefusee = () => {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    onMutate(substep.id, { status: 'probleme', problemReason: 'dp_refusee', problemNotes: notes || null })
+  }
+
+  const onReopenDp = () => {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    onMutate(substep.id, { status: 'a_faire', problemReason: null, problemNotes: null })
   }
 
   const onUpload = async (files: File[]) => {
@@ -147,25 +162,28 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
 
           {readOnly ? (
             <dl className="wf-modal-ro">
-              <div><dt>Date</dt><dd>{substep.dateRealisee || '—'}</dd></div>
-              {isFieldPhase && (
+              {!depositOnly && <div><dt>Date</dt><dd>{substep.dateRealisee || '—'}</dd></div>}
+              {isFieldPhase && !depositOnly && (
                 <div><dt>Technicien</dt><dd>{techniciens.find((t) => t.id === substep.responsableId)?.name ?? '—'}</dd></div>
               )}
-              <div><dt>Notes</dt><dd>{substep.notes || '—'}</dd></div>
+              {!depositOnly && <div><dt>Notes</dt><dd>{substep.notes || '—'}</dd></div>}
+              {depositOnly && <div><dt>Type</dt><dd>Dépôt de dossier</dd></div>}
             </dl>
           ) : (
             <>
-              <section className="wf-modal-section">
-                <h3><Icon name="calendar" size={13} /> Date prévue / réalisation</h3>
-                <input
-                  type="date"
-                  className="wf-modal-input"
-                  value={date}
-                  onChange={(e) => { setDate(e.target.value); debounced({ dateRealisee: e.target.value || null }) }}
-                />
-              </section>
+              {!depositOnly && (
+                <section className="wf-modal-section">
+                  <h3><Icon name="calendar" size={13} /> Date prévue / réalisation</h3>
+                  <input
+                    type="date"
+                    className="wf-modal-input"
+                    value={date}
+                    onChange={(e) => { setDate(e.target.value); debounced({ dateRealisee: e.target.value || null }) }}
+                  />
+                </section>
+              )}
 
-              {isFieldPhase && (
+              {isFieldPhase && !depositOnly && (
                 <section className="wf-modal-section">
                   <h3><Icon name="users" size={13} /> Technicien attribué</h3>
                   <select
@@ -181,16 +199,18 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
                 </section>
               )}
 
-              <section className="wf-modal-section">
-                <h3><Icon name="edit" size={13} /> Notes</h3>
-                <textarea
-                  className="wf-modal-input"
-                  rows={3}
-                  value={notes}
-                  placeholder="Notes internes, blocages, contact…"
-                  onChange={(e) => { setNotes(e.target.value); debounced({ notes: e.target.value || null }) }}
-                />
-              </section>
+              {!depositOnly && (
+                <section className="wf-modal-section">
+                  <h3><Icon name="edit" size={13} /> Notes</h3>
+                  <textarea
+                    className="wf-modal-input"
+                    rows={3}
+                    value={notes}
+                    placeholder="Notes internes, blocages, contact…"
+                    onChange={(e) => { setNotes(e.target.value); debounced({ notes: e.target.value || null }) }}
+                  />
+                </section>
+              )}
             </>
           )}
 
@@ -244,11 +264,22 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
               <button type="button" className="wf-cta-primary" disabled={saving} onClick={onReactivate}>
                 {saving ? 'Enregistrement…' : 'Réactiver la vente'}
               </button>
+            ) : isDpPhase && blocked ? (
+              <>
+                <button type="button" className="wf-cta-primary" disabled={saving} onClick={onReopenDp}>
+                  {saving ? 'Enregistrement…' : 'DP acceptée — rouvrir'}
+                </button>
+              </>
             ) : (
               <>
                 {canCancelSale && (
                   <button type="button" className="wf-cta-danger" disabled={saving} onClick={onCancelSale}>
                     <Icon name="x" size={15} strokeWidth={2.6} /> VT non validée
+                  </button>
+                )}
+                {isDpPhase && !done && !cancelled && (
+                  <button type="button" className="wf-cta-danger" disabled={saving} onClick={onMarkDpRefusee}>
+                    <Icon name="x" size={15} strokeWidth={2.6} /> Refusée (retour mairie)
                   </button>
                 )}
                 <button

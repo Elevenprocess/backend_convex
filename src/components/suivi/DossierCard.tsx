@@ -55,12 +55,13 @@ export function DossierCard({ dossier, client, projectCount, onClick }: Props) {
         </div>
       </div>
 
-      {summary && (summary.blocked || summary.missingDocsCount > 0 || summary.delivered) && (
+      {summary && (summary.blocked || summary.missingDocsCount > 0 || summary.installed || summary.delivered) && (
         <div className="suivi-card-tags">
           {summary.blocked && <span className="suivi-tag suivi-tag-blocked">bloqué</span>}
           {summary.missingDocsCount > 0 && (
             <span className="suivi-tag suivi-tag-missing">{summary.missingDocsCount} pièces</span>
           )}
+          {summary.installed && !summary.delivered && <span className="suivi-tag suivi-tag-installed">Installé</span>}
           {summary.delivered && <span className="suivi-tag suivi-tag-done">livré</span>}
         </div>
       )}

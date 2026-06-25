@@ -18,7 +18,7 @@ describe('SUIVI_SECTIONS', () => {
     expect(SUIVI_SECTIONS.map((s) => s.key)).toEqual(['amont', 'backoffice', 'aval'])
     const bo = SUIVI_SECTIONS.find((s) => s.key === 'backoffice')!
     expect(bo.layout).toBe('parallel')
-    expect(bo.columns?.map((c) => c.key)).toEqual(['dp', 'racco_consuel'])
+    expect(bo.columns?.map((c) => c.key)).toEqual(['dp', 'racco'])
   })
 })
 
@@ -37,12 +37,12 @@ describe('groupSubsteps', () => {
   it('range la VT dans amont, triée par position', () => {
     expect(g.amont.map((s) => s.key)).toEqual(['vt_planifie', 'vt_mandat'])
   })
-  it('sépare DP et Racco→Consuel en 2 colonnes (racco avant consuel)', () => {
+  it('sépare DP et Racco en 2 colonnes (racco seul, sans consuel)', () => {
     expect(g.backoffice.dp.map((s) => s.key)).toEqual(['dp_a_faire'])
-    expect(g.backoffice.racco_consuel.map((s) => s.key)).toEqual(['racco_a_faire', 'consuel_valide'])
+    expect(g.backoffice.racco.map((s) => s.key)).toEqual(['racco_a_faire'])
   })
-  it('range installation + mes dans aval', () => {
-    expect(g.aval.map((s) => s.key)).toEqual(['install_a_faire', 'enquete_satisfaction'])
+  it('range installation + consuel + mes dans aval (consuel après installation)', () => {
+    expect(g.aval.map((s) => s.key)).toEqual(['install_a_faire', 'consuel_valide', 'enquete_satisfaction'])
   })
 })
 
@@ -91,10 +91,15 @@ describe('clientCardSummary', () => {
     expect(s.blocked).toBe(false)
     expect(s.missingDocsCount).toBe(2)
     expect(s.delivered).toBe(false)
+    expect(s.installed).toBe(false)
   })
   it('delivered=true quand la phase MES est faite', () => {
     const s = clientCardSummary(client({ steps: { mes: { status: 'fait', datePlanifiee: null, dateRealisee: null, problemReason: null, responsableId: null } } }))!
     expect(s.delivered).toBe(true)
+  })
+  it('installed=true quand la phase installation est faite', () => {
+    const s = clientCardSummary(client({ steps: { installation: { status: 'fait', datePlanifiee: null, dateRealisee: null, problemReason: null, responsableId: null } } }))!
+    expect(s.installed).toBe(true)
   })
 })
 
