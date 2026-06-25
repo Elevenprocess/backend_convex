@@ -10,6 +10,7 @@ import { formatDate } from '../lib/suivi'
 import { formatPaymentMethod } from '../lib/types'
 import type { AcompteResponse, AcompteStatut, EcheanceLine, UpdateFinancingPatch, EcheancierTranchePatch } from '../lib/types'
 import { RecordEcheanceModal } from '../components/finances/RecordEcheanceModal'
+import { filterAcomptesByEncaissementDate } from '../lib/financesFilters'
 
 const STATUT_META: Record<AcompteStatut, { label: string; cls: string }> = {
   en_attente: { label: 'En attente', cls: 'bg-line text-faint' },
@@ -39,6 +40,8 @@ export function Finances() {
   const { data: acomptes, loading, refetch } = useAcomptes(role === 'admin' || role === 'finances')
   const [filter, setFilter] = useState<'tous' | AcompteStatut>('tous')
   const [query, setQuery] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState<{ acompte: AcompteResponse; tranche: EcheanceLine } | null>(null)
   const [editingFinancing, setEditingFinancing] = useState<AcompteResponse | null>(null)
@@ -47,15 +50,18 @@ export function Finances() {
   const rows = useMemo(() => {
     const list = acomptes ?? []
     const q = query.trim().toLowerCase()
-    return list.filter((a) => {
+    // Filtre date d'encaissement en premier (scope de base)
+    const dated = filterAcomptesByEncaissementDate(list, dateFrom || null, dateTo || null)
+    return dated.filter((a) => {
       if (filter !== 'tous' && !a.echeances.some((e) => e.statut === filter)) return false
       if (q && ![a.projectName, a.clientName].filter(Boolean).join(' ').toLowerCase().includes(q)) return false
       return true
     })
-  }, [acomptes, filter, query])
+  }, [acomptes, filter, query, dateFrom, dateTo])
 
   const totals = useMemo(() => {
-    const list = acomptes ?? []
+    // KPI calculés sur le jeu filtré par date (mais pas par statut/texte)
+    const list = filterAcomptesByEncaissementDate(acomptes ?? [], dateFrom || null, dateTo || null)
     let aEncaisser = 0
     let encaisse = 0
     let aVenir = 0
@@ -71,7 +77,7 @@ export function Finances() {
       }
     }
     return { aEncaisser, encaisse, aVenir, nbRetard, retardAmount }
-  }, [acomptes])
+  }, [acomptes, dateFrom, dateTo])
 
   const toggle = (id: string) =>
     setExpanded((prev) => {
@@ -122,12 +128,41 @@ export function Finances() {
               </button>
             ))}
           </div>
+          {/* Filtre par date d'encaissement */}
+          <div className="flex items-center gap-1.5 ml-auto">
+            <span className="text-xs text-faint font-semibold whitespace-nowrap">Encaissé du</span>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="rounded-lg border border-line px-2 py-1.5 text-sm bg-white"
+              aria-label="Date d'encaissement — du"
+            />
+            <span className="text-xs text-faint">au</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="rounded-lg border border-line px-2 py-1.5 text-sm bg-white"
+              aria-label="Date d'encaissement — au"
+            />
+            {(dateFrom || dateTo) && (
+              <button
+                type="button"
+                className="text-xs text-muted hover:text-rouille px-1"
+                onClick={() => { setDateFrom(''); setDateTo('') }}
+                title="Effacer le filtre de date"
+              >
+                ✕
+              </button>
+            )}
+          </div>
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Rechercher un client…"
-            className="ml-auto rounded-lg border border-line px-3 py-2 text-sm bg-white min-w-[200px]"
+            className="rounded-lg border border-line px-3 py-2 text-sm bg-white min-w-[200px]"
           />
         </div>
 
