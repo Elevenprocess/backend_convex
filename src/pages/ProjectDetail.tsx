@@ -285,12 +285,15 @@ function PaymentTab({ project, onSaved }: { project: ProjectDetailResponse; onSa
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
+  const [editing, setEditing] = useState(false)
+  const [loaded, setLoaded] = useState<AcompteResponse | null>(null)
   const [financingType, setFinancingType] = useState('')
   const [montantTotal, setMontantTotal] = useState('')
   const [financingOrg, setFinancingOrg] = useState('')
   const [lines, setLines] = useState<PayLine[]>([])
 
   const hydrate = (a: AcompteResponse) => {
+    setLoaded(a)
     setFinancingType(a.financingType ?? '')
     setMontantTotal(a.montantTotal ?? '')
     setFinancingOrg(a.financingOrg ?? '')
@@ -367,6 +370,7 @@ function PaymentTab({ project, onSaved }: { project: ProjectDetailResponse; onSa
       const fresh = await getAcompte(debrief.id)
       hydrate(fresh)
       onSaved()
+      setEditing(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Échec de l'enregistrement")
     } finally {
@@ -374,112 +378,156 @@ function PaymentTab({ project, onSaved }: { project: ProjectDetailResponse; onSa
     }
   }
 
+  const cancel = () => {
+    if (loaded) hydrate(loaded)
+    setError(null)
+    setEditing(false)
+  }
+
+  const typeLabel = FINANCING_TYPE_OPTIONS.find((o) => o.value === financingType)?.label ?? (financingType || '—')
+  const orgLabel = ORG_OPTIONS.find((o) => o.value === financingOrg)?.label ?? (financingOrg || '—')
+  const paidCount = lines.filter((l) => l.paid).length
+  const pct = total > 0 ? Math.min(100, Math.round((paidSum / total) * 100)) : (paidCount > 0 && lines.length > 0 ? Math.round((paidCount / lines.length) * 100) : 0)
+
   return (
     <Section
       title="Mode de paiement"
       action={canEdit ? (
-        <button type="button" className="text-xs font-semibold text-or hover:underline disabled:opacity-50" onClick={() => void save()} disabled={saving}>
-          {saving ? 'Enregistrement…' : 'Enregistrer'}
-        </button>
+        editing ? (
+          <div className="flex items-center gap-3">
+            <button type="button" className="text-xs font-bold text-or hover:underline disabled:opacity-50" onClick={() => void save()} disabled={saving}>
+              {saving ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+            <button type="button" className="text-xs font-medium text-muted hover:underline disabled:opacity-50" onClick={cancel} disabled={saving}>
+              Annuler
+            </button>
+          </div>
+        ) : (
+          <button type="button" className="inline-flex items-center gap-1.5 text-xs font-bold text-or hover:underline" onClick={() => setEditing(true)}>
+            <Icon name="edit" size={14} /> Modifier
+          </button>
+        )
       ) : undefined}
     >
-      {/* En-tête : type + montant + organisme (financement) */}
-      <div className="grid grid-cols-2 gap-3">
-        <PayField label="Type de paiement">
-          {canEdit ? (
-            <select className="wf-modal-input w-full" value={financingType} onChange={(e) => setFinancingType(e.target.value)}>
-              <option value="">— Non renseigné —</option>
-              {FINANCING_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          ) : (
-            <div className="text-sm font-semibold text-text">{FINANCING_TYPE_OPTIONS.find((o) => o.value === financingType)?.label ?? financingType ?? '—'}</div>
-          )}
-        </PayField>
-        <PayField label="Montant total (€)">
-          {canEdit ? (
-            <input className="wf-modal-input w-full" inputMode="decimal" value={montantTotal} onChange={(e) => setMontantTotal(e.target.value)} placeholder="ex : 12000" />
-          ) : (
-            <div className="text-sm font-semibold text-text">{money(montantTotal)}</div>
-          )}
-        </PayField>
-        {isFinancement && (
-          <PayField label="Organisme de financement">
-            {canEdit ? (
-              <select className="wf-modal-input w-full" value={financingOrg} onChange={(e) => setFinancingOrg(e.target.value)}>
-                <option value="">— Choisir —</option>
-                {ORG_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      {editing ? (
+        <div className="space-y-4">
+          {/* Champs en cartes / inputs — uniquement en mode modification */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <PayField label="Type de paiement">
+              <select className="wf-modal-input w-full" value={financingType} onChange={(e) => setFinancingType(e.target.value)}>
+                <option value="">— Non renseigné —</option>
+                {FINANCING_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
-            ) : (
-              <div className="text-sm font-semibold text-text">{ORG_OPTIONS.find((o) => o.value === financingOrg)?.label ?? financingOrg ?? '—'}</div>
-            )}
-          </PayField>
-        )}
-      </div>
-
-      {/* Récap total / reste à payer */}
-      <div className="mt-4 flex flex-wrap gap-3">
-        <div className="flex-1 rounded-xl border border-line bg-cream px-3 py-2">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-faint">Total à payer</div>
-          <div className="text-lg font-black text-text">{money(total)}</div>
-        </div>
-        <div className="flex-1 rounded-xl border border-line bg-cream px-3 py-2">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-faint">Reste à payer</div>
-          <div className={`text-lg font-black ${reste > 0 ? 'text-rouille' : 'text-or-dark'}`}>{money(reste)}</div>
-        </div>
-      </div>
-
-      {/* Actions de génération selon le type */}
-      {canEdit && isEchelonne && lines.length !== nbEcheances && (
-        <button type="button" className="fin-action mt-3" onClick={() => generateEcheances(nbEcheances)}>
-          Générer {nbEcheances} échéances égales
-        </button>
-      )}
-      {canEdit && isFinancement && lines.length === 0 && (
-        <button type="button" className="fin-action mt-3" onClick={initFinancement}>
-          Initialiser (acompte comptant + solde financé)
-        </button>
-      )}
-
-      {/* Liste des paiements */}
-      <div className="mt-4 space-y-2">
-        {lines.length === 0 ? (
-          <p className="text-xs text-faint">Aucun paiement enregistré.</p>
-        ) : lines.map((l, i) => (
-          <div key={i} className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 ${l.paid ? 'border-or/40 bg-or-tint/30' : 'border-line bg-card'}`}>
-            <button
-              type="button"
-              onClick={() => canEdit && setLine(i, { paid: !l.paid, date: !l.paid && !l.date ? todayIso() : l.date })}
-              disabled={!canEdit}
-              className={`grid size-6 shrink-0 place-items-center rounded-md border ${l.paid ? 'border-or bg-or text-white' : 'border-line bg-white text-transparent'} ${canEdit ? '' : 'cursor-default'}`}
-              title={l.paid ? 'Payé' : 'À payer'}
-              aria-label="Payé"
-            >
-              ✓
-            </button>
-            {canEdit && !isEchelonne ? (
-              <input className="wf-modal-input min-w-0 flex-1" value={l.label} onChange={(e) => setLine(i, { label: e.target.value })} placeholder={`Paiement ${i + 1}`} />
-            ) : (
-              <span className="min-w-0 flex-1 truncate text-sm font-medium text-text">{l.label || `Paiement ${i + 1}`}</span>
-            )}
-            {canEdit ? (
-              <input className="wf-modal-input" style={{ width: 96 }} inputMode="decimal" value={l.montant} onChange={(e) => setLine(i, { montant: e.target.value })} placeholder="€" />
-            ) : (
-              <span className="w-[90px] text-right text-sm font-semibold text-text">{money(l.montant)}</span>
-            )}
-            {canEdit ? (
-              <input className="wf-modal-input" style={{ width: 140 }} type="date" value={l.date} onChange={(e) => setLine(i, { date: e.target.value })} />
-            ) : (
-              l.date && <span className="text-xs text-faint">{l.date}</span>
-            )}
-            {canEdit && !isEchelonne && (
-              <button type="button" className="fin-action text-rouille" title="Supprimer" onClick={() => removeLine(i)}>✕</button>
+            </PayField>
+            <PayField label="Montant total (€)">
+              <input className="wf-modal-input w-full" inputMode="decimal" value={montantTotal} onChange={(e) => setMontantTotal(e.target.value)} placeholder="ex : 12000" />
+            </PayField>
+            {isFinancement && (
+              <PayField label="Organisme de financement">
+                <select className="wf-modal-input w-full" value={financingOrg} onChange={(e) => setFinancingOrg(e.target.value)}>
+                  <option value="">— Choisir —</option>
+                  {ORG_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </PayField>
             )}
           </div>
-        ))}
-      </div>
 
-      {canEdit && !isEchelonne && (
-        <button type="button" className="fin-action mt-2" onClick={addLine}>+ Ajouter un paiement</button>
+          <div className="flex flex-wrap gap-3">
+            <div className="flex-1 rounded-xl border border-line bg-cream px-3 py-2">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-faint">Total à payer</div>
+              <div className="text-lg font-black text-text">{money(total)}</div>
+            </div>
+            <div className="flex-1 rounded-xl border border-line bg-cream px-3 py-2">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-faint">Reste à payer</div>
+              <div className={`text-lg font-black ${reste > 0 ? 'text-rouille' : 'text-or-dark'}`}>{money(reste)}</div>
+            </div>
+          </div>
+
+          {isEchelonne && lines.length !== nbEcheances && (
+            <button type="button" className="fin-action" onClick={() => generateEcheances(nbEcheances)}>
+              Générer {nbEcheances} échéances égales
+            </button>
+          )}
+          {isFinancement && lines.length === 0 && (
+            <button type="button" className="fin-action" onClick={initFinancement}>
+              Initialiser (acompte comptant + solde financé)
+            </button>
+          )}
+
+          <div className="space-y-2">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-faint">Échéancier — coche les paiements encaissés</div>
+            {lines.length === 0 ? (
+              <p className="text-xs text-faint">Aucun paiement enregistré.</p>
+            ) : lines.map((l, i) => (
+              <div key={i} className={`pay-edit-row ${l.paid ? 'is-paid' : ''}`}>
+                <button
+                  type="button"
+                  onClick={() => setLine(i, { paid: !l.paid, date: !l.paid && !l.date ? todayIso() : l.date })}
+                  className={`pay-check-btn ${l.paid ? 'is-paid' : ''}`}
+                  title={l.paid ? 'Payé' : 'À payer'}
+                  aria-label="Payé"
+                >
+                  <Icon name="check" size={15} />
+                </button>
+                {!isEchelonne ? (
+                  <input className="wf-modal-input min-w-0 flex-1" value={l.label} onChange={(e) => setLine(i, { label: e.target.value })} placeholder={`Paiement ${i + 1}`} />
+                ) : (
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-text">{l.label || `Paiement ${i + 1}`}</span>
+                )}
+                <input className="wf-modal-input" style={{ width: 96 }} inputMode="decimal" value={l.montant} onChange={(e) => setLine(i, { montant: e.target.value })} placeholder="€" />
+                <input className="wf-modal-input" style={{ width: 150 }} type="date" value={l.date} onChange={(e) => setLine(i, { date: e.target.value })} />
+                {!isEchelonne && (
+                  <button type="button" className="pay-remove-btn" title="Supprimer" onClick={() => removeLine(i)} aria-label="Supprimer"><Icon name="x" size={14} /></button>
+                )}
+              </div>
+            ))}
+            {!isEchelonne && (
+              <button type="button" className="fin-action" onClick={addLine}>+ Ajouter un paiement</button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="pay-view">
+          {/* Hero : reste à payer + progression — sans carte */}
+          <div className="pay-hero">
+            <div className="pay-hero-figures">
+              <div className="pay-hero-main">
+                <span className="pay-hero-label">Reste à payer</span>
+                <strong className={`pay-hero-amount ${reste > 0 ? 'is-due' : 'is-clear'}`}>{money(reste)}</strong>
+              </div>
+              <div className="pay-hero-side">
+                <span>Payé<b>{money(paidSum)}</b></span>
+                <span>Total<b>{money(total)}</b></span>
+              </div>
+            </div>
+            <div className="pay-progress"><div className="pay-progress-fill" style={{ width: `${pct}%` }} /></div>
+            <div className="pay-progress-meta">
+              <span>{pct}% encaissé</span>
+              <span>{paidCount}/{lines.length} paiement{lines.length > 1 ? 's' : ''}</span>
+            </div>
+          </div>
+
+          {/* Type / organisme — flat, sans carte */}
+          <div className="pay-attrs">
+            <div className="pay-attr"><span>Type de paiement</span><strong>{typeLabel}</strong></div>
+            {isFinancement && <div className="pay-attr"><span>Organisme</span><strong>{orgLabel}</strong></div>}
+          </div>
+
+          {/* Échéancier — checklist lisible, sans carte */}
+          <div className="pay-schedule">
+            <div className="pay-schedule-head">Échéancier</div>
+            {lines.length === 0 ? (
+              <p className="pay-empty">Aucun paiement enregistré.</p>
+            ) : lines.map((l, i) => (
+              <div key={i} className={`pay-row ${l.paid ? 'is-paid' : ''}`}>
+                <span className="pay-check" aria-hidden><Icon name="check" size={13} /></span>
+                <span className="pay-row-label">{l.label || `Paiement ${i + 1}`}</span>
+                {l.date && <span className="pay-row-date">{l.date}</span>}
+                <span className="pay-row-amount">{money(l.montant)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {error && <p className="wf-modal-error mt-3">{error}</p>}
