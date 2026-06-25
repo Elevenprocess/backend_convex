@@ -1052,6 +1052,10 @@ export type AcompteResponse = {
   signedAt: string | null
   edfRecepisse: boolean
   echeances: EcheanceLine[]
+  /** Σ des montantReel encaissés (calculé côté backend). */
+  totalEncaisse: string | null
+  /** Montant total - totalEncaisse (calculé côté backend). */
+  resteAPayer: string | null
 }
 
 // Une tranche d'un échéancier personnalisé (édition back-office). statut/

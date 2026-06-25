@@ -6,6 +6,7 @@ import {
   PHASE_ICON,
   PHASE_LABEL,
   SUBSTEP_DESCRIPTION,
+  DOC_TYPE_LABEL,
   slaGaugeInfo,
   substepDocStatus,
   fileKind,
@@ -234,7 +235,7 @@ export function SubstepModal({ substep, users, today, saving, readOnly, onMutate
                 {docStatus.missingTypes.map((t) => (
                   <li key={t} className="wf-modal-doc is-missing">
                     <span className="dochub-thumb kind-missing">—</span>
-                    <span className="wf-modal-doc-name">type « {t} »</span>
+                    <span className="wf-modal-doc-name" title={DOC_TYPE_LABEL[t] ?? t}>{DOC_TYPE_LABEL[t] ?? t}</span>
                     <span className="wf-modal-missing-pill">manquante</span>
                   </li>
                 ))}

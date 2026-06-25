@@ -110,6 +110,22 @@ export const PHASE_LABEL: Record<WorkflowPhase, string> = {
   mes: 'Mise en service',
 }
 
+/** Libellés lisibles des types de pièces (sinon on afficherait la clé technique brute). */
+export const DOC_TYPE_LABEL: Record<string, string> = {
+  rapport_vt: 'Rapport de VT',
+  mandat: 'Mandat de représentation',
+  recepisse_dp: 'Récépissé de DP',
+  cno_dp: 'Certificat de non-opposition',
+  prolongation_dp: 'Prolongation de DP',
+  recepisse_racco: 'Récépissé de raccordement',
+  crae: 'CRAE',
+  attestation_consuel: 'Attestation Consuel',
+  attestation_completude: 'Attestation de complétude',
+  devis_signe: 'Devis signé',
+  facture: 'Facture',
+  autre: 'Autre document',
+}
+
 export type CardSummary = {
   phaseLabel: string
   blocked: boolean

@@ -5339,7 +5339,7 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 .wf-modal-ro div { display: grid; grid-template-columns: 90px 1fr; gap: 10px; align-items: baseline; }
 .wf-modal-ro dt { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--color-faint); }
 .wf-modal-ro dd { margin: 0; font-size: 13px; color: var(--color-text); font-weight: 600; }
-.wf-modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--color-line); background: var(--color-card); }
+.wf-modal-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--color-line); background: var(--color-card); }
 /* CTA principal du pop-up de module (« Marquer envoyée », « Valider »…). */
 .wf-cta-primary {
   display: inline-flex; align-items: center; gap: 8px;
@@ -5383,6 +5383,14 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 .wf-cta-danger:hover:not(:disabled) { background: var(--color-rouille); color: #fff; }
 .wf-cta-danger:disabled { opacity: .5; cursor: not-allowed; }
 .wf-cta-danger svg { flex-shrink: 0; }
+
+/* Mobile : on empile les actions plein-écran pour qu'aucun bouton ne soit coupé
+   (le pop-up est en overflow:hidden). Le CTA principal reste en bas (pouce). */
+@media (max-width: 480px) {
+  .wf-modal-foot { flex-direction: column; align-items: stretch; }
+  .wf-modal-foot > button { width: 100%; justify-content: center; }
+  .wf-cta-danger { margin-right: 0; }
+}
 
 /* Note d'annulation dans la modale + bandeau d'annulation en tête du board. */
 .wf-cancel-note {
