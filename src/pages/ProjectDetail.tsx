@@ -7,13 +7,14 @@ import { Icon } from '../components/Icon'
 import { useAuth } from '../lib/auth'
 import { useDossier } from '../lib/useDossier'
 import { useClients } from '../lib/hooks'
-import { getProjectDetail, updateFinancing, getAcompte, setEcheancier } from '../lib/api'
+import { getProjectDetail, updateFinancing, getAcompte } from '../lib/api'
 import { parseNotesJournal } from '../lib/notesJournal'
-import { todayIso } from '../lib/suivi-board'
-import { fullName, PROJECT_STATUS_LABEL, type ProjectDetailResponse, type AcompteResponse, type EcheancierTranchePatch } from '../lib/types'
+import { formatDate } from '../lib/suivi'
+import { fullName, PROJECT_STATUS_LABEL, type ProjectDetailResponse, type AcompteResponse, type EcheanceLine } from '../lib/types'
 import { DossierWorkflowPanel } from '../components/suivi/DossierWorkflowPanel'
 import { ProjectDossierSection, type ProjectTab } from '../components/suivi/ProjectDossierSection'
 import { Section } from '../components/suivi/fiche-parts'
+import { RecordEcheanceModal } from '../components/finances/RecordEcheanceModal'
 
 type Tab = ProjectTab | 'paiement'
 
@@ -260,8 +261,6 @@ const ORG_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'sofider', label: 'Sofider' },
 ]
 
-type PayLine = { label: string; montant: string; paid: boolean; date: string }
-
 const money = (v: string | number | null | undefined): string => {
   const n = Number(v ?? 0)
   return Number.isNaN(n) ? '—' : `${n.toLocaleString('fr-FR')} €`
@@ -278,7 +277,7 @@ const money = (v: string | number | null | undefined): string => {
  */
 function PaymentTab({ project, onSaved }: { project: ProjectDetailResponse; onSaved: () => void }) {
   const role = useAuth((s) => s.user?.role)
-  const canEdit = role === 'admin' || role === 'responsable_technique' || role === 'back_office'
+  const canEdit = role === 'admin' || role === 'responsable_technique' || role === 'back_office' || role === 'finances'
 
   const debrief = useMemo(() => [...project.debriefs]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -293,19 +292,14 @@ function PaymentTab({ project, onSaved }: { project: ProjectDetailResponse; onSa
   const [financingType, setFinancingType] = useState('')
   const [montantTotal, setMontantTotal] = useState('')
   const [financingOrg, setFinancingOrg] = useState('')
-  const [lines, setLines] = useState<PayLine[]>([])
+  // Recording encaissement for a specific tranche
+  const [recordingTranche, setRecordingTranche] = useState<EcheanceLine | null>(null)
 
   const hydrate = (a: AcompteResponse) => {
     setLoaded(a)
     setFinancingType(a.financingType ?? '')
     setMontantTotal(a.montantTotal ?? '')
     setFinancingOrg(a.financingOrg ?? '')
-    setLines(a.echeances.map((e) => ({
-      label: e.label ?? (e.percent != null ? `${e.percent}%` : 'Paiement'),
-      montant: e.montantReel ?? e.montantPrevu ?? '',
-      paid: e.statut === 'encaisse',
-      date: e.dateEncaissement ?? e.dateEcheance ?? '',
-    })))
   }
 
   useEffect(() => {
@@ -330,26 +324,17 @@ function PaymentTab({ project, onSaved }: { project: ProjectDetailResponse; onSa
   }
   if (loading) return <LoadingBlock label="Chargement du paiement…" />
 
+  const a = loaded
   const total = Number(montantTotal) || 0
-  const paidSum = lines.filter((l) => l.paid).reduce((s, l) => s + (Number(l.montant) || 0), 0)
-  const reste = total - paidSum
   const isFinancement = financingType === 'financement' || financingType === 'financement_sans_apport' || financingType === 'apport_financement'
-  const isEchelonne = financingType === 'paiement_10x' || financingType === 'paiement_12x'
-  const nbEcheances = financingType === 'paiement_10x' ? 10 : financingType === 'paiement_12x' ? 12 : 0
 
-  const setLine = (i: number, patch: Partial<PayLine>) => setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)))
-  const addLine = () => setLines((ls) => [...ls, { label: `Paiement ${ls.length + 1}`, montant: '', paid: false, date: '' }])
-  const removeLine = (i: number) => setLines((ls) => ls.filter((_, idx) => idx !== i))
-  const generateEcheances = (n: number) => {
-    const each = total ? (total / n).toFixed(2) : ''
-    setLines(Array.from({ length: n }, (_, i) => ({ label: `Échéance ${i + 1}/${n}`, montant: each, paid: false, date: '' })))
-  }
-  const initFinancement = () => setLines([
-    { label: 'Acompte (comptant)', montant: '', paid: false, date: '' },
-    { label: 'Solde financé', montant: montantTotal, paid: false, date: '' },
-  ])
+  const totalEncaisse = a ? Number(a.totalEncaisse ?? 0) || 0 : 0
+  const resteAPayer = a ? Number(a.resteAPayer ?? 0) || 0 : 0
+  const pct = total > 0 ? Math.min(100, Math.round((totalEncaisse / total) * 100)) : 0
+  const nbEncaisse = a ? a.echeances.filter((e) => e.statut === 'encaisse').length : 0
 
   const save = async () => {
+    if (!a) return
     setSaving(true)
     setError(null)
     try {
@@ -358,18 +343,6 @@ function PaymentTab({ project, onSaved }: { project: ProjectDetailResponse; onSa
         montantTotal: montantTotal.trim() || null,
         financingOrg: isFinancement ? (financingOrg || null) : null,
       })
-      const src = lines.length ? lines : [{ label: 'À définir', montant: montantTotal, paid: false, date: '' }]
-      const tranches: EcheancierTranchePatch[] = src.map((l) => ({
-        label: l.label || null,
-        percent: null,
-        montantPrevu: l.montant.trim() || null,
-        jalonKey: null,
-        statut: l.paid ? 'encaisse' : 'a_encaisser',
-        montantReel: l.paid ? (l.montant.trim() || null) : null,
-        dateEncaissement: l.paid ? (l.date || null) : null,
-        dateEcheance: !l.paid ? (l.date || null) : null,
-      }))
-      await setEcheancier(debrief.id, tranches)
       const fresh = await getAcompte(debrief.id)
       hydrate(fresh)
       onSaved()
@@ -389,8 +362,6 @@ function PaymentTab({ project, onSaved }: { project: ProjectDetailResponse; onSa
 
   const typeLabel = FINANCING_TYPE_OPTIONS.find((o) => o.value === financingType)?.label ?? (financingType || '—')
   const orgLabel = ORG_OPTIONS.find((o) => o.value === financingOrg)?.label ?? (financingOrg || '—')
-  const paidCount = lines.filter((l) => l.paid).length
-  const pct = total > 0 ? Math.min(100, Math.round((paidSum / total) * 100)) : (paidCount > 0 && lines.length > 0 ? Math.round((paidCount / lines.length) * 100) : 0)
 
   return (
     <Section
@@ -434,79 +405,28 @@ function PaymentTab({ project, onSaved }: { project: ProjectDetailResponse; onSa
               </PayField>
             )}
           </div>
-
-          <div className="flex flex-wrap gap-3">
-            <div className="flex-1 rounded-xl border border-line bg-cream px-3 py-2">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-faint">Total à payer</div>
-              <div className="text-lg font-black text-text">{money(total)}</div>
-            </div>
-            <div className="flex-1 rounded-xl border border-line bg-cream px-3 py-2">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-faint">Reste à payer</div>
-              <div className={`text-lg font-black ${reste > 0 ? 'text-rouille' : 'text-or-dark'}`}>{money(reste)}</div>
-            </div>
-          </div>
-
-          {isEchelonne && lines.length !== nbEcheances && (
-            <button type="button" className="fin-action" onClick={() => generateEcheances(nbEcheances)}>
-              Générer {nbEcheances} échéances égales
-            </button>
-          )}
-          {isFinancement && lines.length === 0 && (
-            <button type="button" className="fin-action" onClick={initFinancement}>
-              Initialiser (acompte comptant + solde financé)
-            </button>
-          )}
-
-          <div className="space-y-2">
-            <div className="text-[11px] font-bold uppercase tracking-wide text-faint">Échéancier — coche les paiements encaissés</div>
-            {lines.length === 0 ? (
-              <p className="text-xs text-faint">Aucun paiement enregistré.</p>
-            ) : lines.map((l, i) => (
-              <div key={i} className={`pay-edit-row ${l.paid ? 'is-paid' : ''}`}>
-                <button
-                  type="button"
-                  onClick={() => setLine(i, { paid: !l.paid, date: !l.paid && !l.date ? todayIso() : l.date })}
-                  className={`pay-check-btn ${l.paid ? 'is-paid' : ''}`}
-                  title={l.paid ? 'Payé' : 'À payer'}
-                  aria-label="Payé"
-                >
-                  <Icon name="check" size={15} />
-                </button>
-                {!isEchelonne ? (
-                  <input className="wf-modal-input min-w-0 flex-1" value={l.label} onChange={(e) => setLine(i, { label: e.target.value })} placeholder={`Paiement ${i + 1}`} />
-                ) : (
-                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-text">{l.label || `Paiement ${i + 1}`}</span>
-                )}
-                <input className="wf-modal-input" style={{ width: 96 }} inputMode="decimal" value={l.montant} onChange={(e) => setLine(i, { montant: e.target.value })} placeholder="€" />
-                <input className="wf-modal-input" style={{ width: 150 }} type="date" value={l.date} onChange={(e) => setLine(i, { date: e.target.value })} />
-                {!isEchelonne && (
-                  <button type="button" className="pay-remove-btn" title="Supprimer" onClick={() => removeLine(i)} aria-label="Supprimer"><Icon name="x" size={14} /></button>
-                )}
-              </div>
-            ))}
-            {!isEchelonne && (
-              <button type="button" className="fin-action" onClick={addLine}>+ Ajouter un paiement</button>
-            )}
-          </div>
+          <p className="text-xs text-faint">
+            Pour enregistrer ou modifier un encaissement sur une tranche, utilisez le bouton « Enregistrer » sur chaque ligne de l'échéancier en mode lecture.
+          </p>
         </div>
       ) : (
         <div className="pay-view">
-          {/* Hero : reste à payer + progression — sans carte */}
+          {/* Hero : reste à payer + progression — données backend */}
           <div className="pay-hero">
             <div className="pay-hero-figures">
               <div className="pay-hero-main">
                 <span className="pay-hero-label">Reste à payer</span>
-                <strong className={`pay-hero-amount ${reste > 0 ? 'is-due' : 'is-clear'}`}>{money(reste)}</strong>
+                <strong className={`pay-hero-amount ${resteAPayer > 0 ? 'is-due' : 'is-clear'}`}>{money(a?.resteAPayer ?? null)}</strong>
               </div>
               <div className="pay-hero-side">
-                <span>Payé<b>{money(paidSum)}</b></span>
-                <span>Total<b>{money(total)}</b></span>
+                <span>Encaissé<b>{money(a?.totalEncaisse ?? null)}</b></span>
+                <span>Total<b>{money(a?.montantTotal ?? null)}</b></span>
               </div>
             </div>
             <div className="pay-progress"><div className="pay-progress-fill" style={{ width: `${pct}%` }} /></div>
             <div className="pay-progress-meta">
               <span>{pct}% encaissé</span>
-              <span>{paidCount}/{lines.length} paiement{lines.length > 1 ? 's' : ''}</span>
+              <span>{nbEncaisse}/{a?.echeances.length ?? 0} tranche{(a?.echeances.length ?? 0) > 1 ? 's' : ''} encaissée{(a?.echeances.length ?? 0) > 1 ? 's' : ''}</span>
             </div>
           </div>
 
@@ -516,24 +436,30 @@ function PaymentTab({ project, onSaved }: { project: ProjectDetailResponse; onSa
             {isFinancement && <div className="pay-attr"><span>Organisme</span><strong>{orgLabel}</strong></div>}
           </div>
 
-          {/* Échéancier — checklist lisible, sans carte */}
-          <div className="pay-schedule">
-            <div className="pay-schedule-head">Échéancier</div>
-            {lines.length === 0 ? (
-              <p className="pay-empty">Aucun paiement enregistré.</p>
-            ) : lines.map((l, i) => (
-              <div key={i} className={`pay-row ${l.paid ? 'is-paid' : ''}`}>
-                <span className="pay-check" aria-hidden><Icon name="check" size={13} /></span>
-                <span className="pay-row-label">{l.label || `Paiement ${i + 1}`}</span>
-                {l.date && <span className="pay-row-date">{l.date}</span>}
-                <span className="pay-row-amount">{money(l.montant)}</span>
-              </div>
-            ))}
-          </div>
+          {/* Échéancier — avec statut pills et boutons d'enregistrement */}
+          <EcheancesTable
+            acompte={a}
+            canEdit={canEdit}
+            onRecord={(tranche) => setRecordingTranche(tranche)}
+          />
         </div>
       )}
 
       {error && <p className="wf-modal-error mt-3">{error}</p>}
+
+      {recordingTranche && a && (
+        <RecordEcheanceModal
+          acompte={a}
+          tranche={recordingTranche}
+          onClose={() => setRecordingTranche(null)}
+          onSaved={() => {
+            setRecordingTranche(null)
+            // Refresh acompte data
+            getAcompte(debrief.id).then(hydrate).catch(() => undefined)
+            onSaved()
+          }}
+        />
+      )}
     </Section>
   )
 }
@@ -544,5 +470,69 @@ function PayField({ label, children }: { label: string; children: ReactNode }) {
       <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">{label}</span>
       <div className="mt-0.5">{children}</div>
     </label>
+  )
+}
+
+const STATUT_META_PD: Record<string, { label: string; cls: string }> = {
+  en_attente: { label: 'En attente', cls: 'bg-line text-faint' },
+  a_encaisser: { label: 'À encaisser', cls: 'bg-cuivre-tint text-cuivre' },
+  encaisse: { label: 'Encaissé', cls: 'bg-or-tint text-or-dark' },
+  en_retard: { label: 'En retard', cls: 'bg-rouille-tint text-rouille' },
+  annule: { label: 'Annulé', cls: 'bg-line text-faint' },
+}
+
+/**
+ * Affiche l'échéancier complet d'une vente : libellé, jalon, montant prévu,
+ * statut pill, dates. Bouton « Enregistrer » par tranche (déclenche RecordEcheanceModal).
+ */
+function EcheancesTable({
+  acompte: a,
+  canEdit,
+  onRecord,
+}: {
+  acompte: AcompteResponse | null
+  canEdit: boolean
+  onRecord: (tranche: EcheanceLine) => void
+}) {
+  if (!a) return null
+  if (a.echeances.length === 0) {
+    return <p className="pay-empty mt-3">Aucune tranche dans l'échéancier.</p>
+  }
+  return (
+    <div className="pay-schedule mt-3">
+      <div className="pay-schedule-head">Échéancier</div>
+      {a.echeances.map((e) => {
+        const meta = STATUT_META_PD[e.statut] ?? { label: e.statut, cls: 'bg-line text-faint' }
+        const montantAffiche = e.statut === 'encaisse' ? (e.montantReel ?? e.montantPrevu) : e.montantPrevu
+        return (
+          <div key={e.ordre} className={`pay-row ${e.statut === 'encaisse' ? 'is-paid' : ''}`}>
+            <span className="pay-check" aria-hidden><Icon name="check" size={13} /></span>
+            <span className="pay-row-label flex-1">
+              <span className="font-semibold">{e.label ?? `Tranche ${e.ordre}`}</span>
+              {e.percent != null && <span className="text-faint text-xs ml-1">({e.percent}%)</span>}
+            </span>
+            <span className="shrink-0">
+              <span className={`fin-pill text-xs ${meta.cls}`}>{meta.label}</span>
+            </span>
+            {e.jalonKey && (
+              <span className="text-xs shrink-0">
+                {e.jalonAtteint
+                  ? <span className="text-or-dark font-semibold">✓</span>
+                  : <span className="text-faint">jalon ⏳</span>}
+              </span>
+            )}
+            {e.dateEncaissement
+              ? <span className="pay-row-date">{formatDate(e.dateEncaissement)}</span>
+              : e.dateEcheance && <span className="pay-row-date text-faint">éch. {formatDate(e.dateEcheance)}</span>}
+            <span className="pay-row-amount">{money(montantAffiche)}</span>
+            {canEdit && (
+              <button type="button" className="fin-action ml-1 shrink-0" onClick={() => onRecord(e)}>
+                {e.statut === 'encaisse' ? 'Modifier' : 'Enregistrer'}
+              </button>
+            )}
+          </div>
+        )
+      })}
+    </div>
   )
 }
