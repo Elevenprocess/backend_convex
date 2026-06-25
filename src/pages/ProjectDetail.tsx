@@ -122,7 +122,10 @@ export function ProjectDetailPage() {
                   {PROJECT_STATUS_LABEL[project.status] ?? project.status}
                 </span>
               )}
-              {project.city && <span className="text-sm text-muted">· {project.city}</span>}
+              {(() => {
+                const addr = [project.addressLine, [project.postalCode, project.city].filter(Boolean).join(' ')].filter(Boolean).join(', ')
+                return addr ? <span className="text-sm text-muted">· {addr}</span> : null
+              })()}
             </header>
 
             {/* Mobile : ouvre le workflow en plein écran (la sidebar est masquée < lg) */}
