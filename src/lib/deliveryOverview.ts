@@ -14,7 +14,7 @@ export function isStepLate(step: ClientPhaseStep, now: Date): boolean {
   return planned != null && planned.getTime() < now.getTime()
 }
 
-export const DELIVERY_PHASES: WorkflowPhase[] = ['vt', 'dp', 'racco', 'consuel', 'installation', 'mes']
+export const DELIVERY_PHASES: WorkflowPhase[] = ['vt', 'dp', 'racco', 'installation', 'consuel', 'mes']
 
 export type PhaseCounts = { count: number; late: number; missingDocs: number }
 export type DeliveryPipeline = {
