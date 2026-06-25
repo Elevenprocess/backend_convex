@@ -479,19 +479,35 @@ function HourlyGridView({
                   const isVt = e.kind === 'vt'
 
                   return (
-                    <button
+                    <div
                       key={layoutKey}
-                      onClick={() => onOpen(e)}
-                      title={`${isVt ? 'VT' : 'Installation'} — ${e.projectName ?? e.leadName}${e.heure ? ` à ${e.heure}` : ''}`}
-                      className="absolute group focus:outline-none"
+                      className="absolute group"
                       style={{
                         top: topPx + 1,
                         height: heightPx,
                         left: `${lay.col * colW}%`,
                         width: `${colW}%`,
-                        paddingLeft: 2,
-                        paddingRight: 2,
                       }}
+                    >
+                      {isVt && (
+                        <button
+                          type="button"
+                          onClick={(ev) => {
+                            ev.stopPropagation()
+                            window.open(`#/fiche-vt/${e.clientId}`, '_blank')
+                          }}
+                          title="Imprimer la fiche VT"
+                          className="absolute top-0.5 right-1 z-10 text-[9px] text-sky-500 hover:text-sky-700 leading-none opacity-0 group-hover:opacity-100 transition-opacity"
+                          aria-label="Imprimer la fiche VT"
+                        >
+                          🖨
+                        </button>
+                      )}
+                    <button
+                      onClick={() => onOpen(e)}
+                      title={`${isVt ? 'VT' : 'Installation'} — ${e.projectName ?? e.leadName}${e.heure ? ` à ${e.heure}` : ''}`}
+                      className="absolute inset-0 focus:outline-none"
+                      style={{ paddingLeft: 2, paddingRight: 2 }}
                     >
                       <div
                         className={`h-full w-full rounded-md overflow-hidden text-left flex flex-col shadow-sm border group-hover:shadow-md transition-shadow ${
@@ -541,6 +557,7 @@ function HourlyGridView({
                         </div>
                       </div>
                     </button>
+                    </div>
                   )
                 })}
 
@@ -579,17 +596,33 @@ function HourlyGridView({
 function AllDayChip({ e, onOpen }: { e: VtCalendarEntry; onOpen: (e: VtCalendarEntry) => void }) {
   const isVt = e.kind === 'vt'
   return (
-    <button
-      onClick={() => onOpen(e)}
-      className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] font-semibold truncate leading-tight ${
-        isVt
-          ? 'bg-sky-100 text-sky-700 hover:bg-sky-200'
-          : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-      }`}
-      title={`${isVt ? 'VT' : 'Installation'} — ${e.projectName ?? e.leadName} (toute la journée)`}
-    >
-      {e.projectName?.trim() || e.leadName}
-    </button>
+    <div className="flex items-center gap-0.5 w-full">
+      <button
+        onClick={() => onOpen(e)}
+        className={`flex-1 text-left rounded px-1.5 py-0.5 text-[10px] font-semibold truncate leading-tight ${
+          isVt
+            ? 'bg-sky-100 text-sky-700 hover:bg-sky-200'
+            : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+        }`}
+        title={`${isVt ? 'VT' : 'Installation'} — ${e.projectName ?? e.leadName} (toute la journée)`}
+      >
+        {e.projectName?.trim() || e.leadName}
+      </button>
+      {isVt && (
+        <button
+          type="button"
+          onClick={(ev) => {
+            ev.stopPropagation()
+            window.open(`#/fiche-vt/${e.clientId}`, '_blank')
+          }}
+          title="Imprimer la fiche VT"
+          className="shrink-0 text-sky-500 hover:text-sky-700 px-0.5 text-[10px] leading-none"
+          aria-label="Imprimer la fiche VT"
+        >
+          🖨
+        </button>
+      )}
+    </div>
   )
 }
 

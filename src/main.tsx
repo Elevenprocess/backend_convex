@@ -35,6 +35,7 @@ import { CallFullScreen } from './pages/call/CallFullScreen'
 import { CallSplit } from './pages/call/CallSplit'
 import { TechnicienPlanning } from './pages/technicien/TechnicienPlanning'
 import { TechnicienDossiers } from './pages/technicien/TechnicienDossiers'
+import { FicheInterventionVT } from './pages/technicien/FicheInterventionVT'
 import { useAuth } from './lib/auth'
 
 function RoleHome() {
@@ -97,6 +98,7 @@ const router = createHashRouter([
           { path: '/suivi/:id/projet/:projectId', element: <ProjectDetailPage /> },
           { path: '/finances', element: <NoTechnicien><Finances /></NoTechnicien> },
           { path: '/mes-interventions', element: <MesInterventions /> },
+          { path: '/fiche-vt/:clientId', element: <FicheInterventionVT /> },
           { path: '/team/setters/:id', element: <ProfilSetter /> },
           { path: '/team/commerciaux/:id', element: <ProfilCommercial /> },
           { path: '/settings', element: <Settings /> },
