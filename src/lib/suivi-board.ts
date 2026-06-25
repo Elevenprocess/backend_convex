@@ -81,11 +81,10 @@ export function todayIso(): string {
  * Permet à l'équipe délivrabilité de savoir précisément ce qu'attend l'étape —
  * chaque sous-étape (notamment back-office DP / racco / consuel) a la sienne.
  */
-export const SUBSTEP_DESCRIPTION: Record<WorkflowSubstepKey, string> = {
+export const SUBSTEP_DESCRIPTION: Partial<Record<WorkflowSubstepKey, string>> = {
   vt_planifie: "Planifier la visite technique (idéalement sous 72h) et prévenir le technicien.",
   vt_attribuee: "Attribuer la VT à un technicien : il appelle le client avant de se déplacer.",
   vt_validee: "Le technicien réalise la VT et confirme la faisabilité. Si non validée → devis perdu.",
-  vt_mandat: "Faire signer le mandat de représentation pour les démarches administratives.",
   dp_a_faire: "Préparer la déclaration préalable de travaux (DP) à déposer en mairie.",
   dp_envoyee_mairie: "DP déposée/envoyée à la mairie ; déposer ici le récépissé de dépôt.",
   dp_validee: "Certificat de non-opposition (CNO) reçu de la mairie. Si refus → devis perdu.",
