@@ -11,6 +11,8 @@ import { formatPaymentMethod } from '../lib/types'
 import type { AcompteResponse, AcompteStatut, EcheanceLine, UpdateFinancingPatch, EcheancierTranchePatch } from '../lib/types'
 import { RecordEcheanceModal } from '../components/finances/RecordEcheanceModal'
 import { filterAcomptesByEncaissementDate } from '../lib/financesFilters'
+import { buildEncaissementSeries } from '../lib/financesCharts'
+import { FinancesCharts } from '../components/finances/FinancesCharts'
 
 const STATUT_META: Record<AcompteStatut, { label: string; cls: string }> = {
   en_attente: { label: 'En attente', cls: 'bg-line text-faint' },
@@ -79,6 +81,11 @@ export function Finances() {
     return { aEncaisser, encaisse, aVenir, nbRetard, retardAmount }
   }, [acomptes, dateFrom, dateTo])
 
+  const chartSeries = useMemo(
+    () => buildEncaissementSeries(filterAcomptesByEncaissementDate(acomptes ?? [], dateFrom || null, dateTo || null)),
+    [acomptes, dateFrom, dateTo],
+  )
+
   const toggle = (id: string) =>
     setExpanded((prev) => {
       const next = new Set(prev)
@@ -114,6 +121,8 @@ export function Finances() {
             <p className="text-xs text-faint mt-0.5">{totals.nbRetard} tranche{totals.nbRetard > 1 ? 's' : ''} en retard</p>
           </div>
         </div>
+
+        <FinancesCharts data={chartSeries} />
 
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <div className="flex flex-wrap gap-1.5">
