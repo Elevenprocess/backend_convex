@@ -1,6 +1,8 @@
 import { addDays, endOfDay, startOfDay, startOfWeek } from './period'
 import type { EvolutionGranularity } from './evolutionAxis'
 
+// Logique d'entonnoir : Nouveau Lead → RDV planifiés → Ventes. La série du
+// milieu est alimentée par la donnée « qualifiés » (clé historique `qualified`).
 export type LeadEvolutionSeriesKey = 'leads' | 'qualified' | 'signed'
 export type LeadEvolutionPoint = { key: string; t: number; date: string; label: string; leads: number; qualified: number; signed: number }
 export type EvolutionDailyInput = { date: string; label: string; calls: number; rdv: number; signed: number; ca: number; classified: number; qualified?: number }
