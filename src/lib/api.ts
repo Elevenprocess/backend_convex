@@ -36,6 +36,15 @@ function bustDebriefCaches() {
   notifyRealtimeRefresh({ event: 'debrief:changed', paths: DEBRIEF_REFRESH_PATHS })
 }
 
+// Une mutation de sous-étape (statut, date, technicien, annulation VT) change le
+// statut global du dossier (clients) et l'échéancier finances. On invalide ces
+// caches front pour que la fiche client (section « non validés ») et les
+// finances reflètent immédiatement le changement.
+const WORKFLOW_REFRESH_PATHS = ['/clients', '/substeps', '/payments/acomptes']
+function bustWorkflowCaches() {
+  notifyRealtimeRefresh({ event: 'workflow:changed', paths: WORKFLOW_REFRESH_PATHS })
+}
+
 export function buildApiUrl(path: string): string {
   if (path.startsWith('http')) return path
 
@@ -251,18 +260,22 @@ export function getSubsteps(clientId: string): Promise<SubstepResponse[]> {
   return api<SubstepResponse[]>('/substeps', { query: { clientId } })
 }
 
-export function updateSubstep(
+export async function updateSubstep(
   substepId: string,
   patch: UpdateSubstepPatch,
 ): Promise<SubstepResponse> {
-  return api<SubstepResponse>(`/substeps/${substepId}`, { method: 'PATCH', body: patch })
+  const res = await api<SubstepResponse>(`/substeps/${substepId}`, { method: 'PATCH', body: patch })
+  bustWorkflowCaches()
+  return res
 }
 
-export function resolveSubstepProblem(
+export async function resolveSubstepProblem(
   substepId: string,
   status: SubstepResponse['status'],
 ): Promise<SubstepResponse> {
-  return api<SubstepResponse>(`/substeps/${substepId}/resolve-problem`, { method: 'POST', body: { status } })
+  const res = await api<SubstepResponse>(`/substeps/${substepId}/resolve-problem`, { method: 'POST', body: { status } })
+  bustWorkflowCaches()
+  return res
 }
 
 // ─── Finances : acomptes ─────────────────────────────────────
