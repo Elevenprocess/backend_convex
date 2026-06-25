@@ -184,6 +184,7 @@ export type AnalyticsDailyPoint = {
   signed: number
   ca: number
   classified: number
+  newLeads: number
 }
 
 export type AnalyticsHourlyCallPoint = {
@@ -283,6 +284,7 @@ export type UpsertCommercialObjectivePayload = {
 export type AnalyticsAdminSummary = {
   calls: number
   loggedCalls: number
+  newLeads: number
   classified: number
   qualified: number
   unclassified: number

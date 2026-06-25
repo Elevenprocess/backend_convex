@@ -5,7 +5,7 @@ import type { EvolutionGranularity } from './evolutionAxis'
 // milieu est alimentée par la donnée « qualifiés » (clé historique `qualified`).
 export type LeadEvolutionSeriesKey = 'leads' | 'qualified' | 'signed'
 export type LeadEvolutionPoint = { key: string; t: number; date: string; label: string; leads: number; qualified: number; signed: number }
-export type EvolutionDailyInput = { date: string; label: string; calls: number; rdv: number; signed: number; ca: number; classified: number; qualified?: number }
+export type EvolutionDailyInput = { date: string; label: string; calls: number; rdv: number; signed: number; ca: number; classified: number; qualified?: number; newLeads?: number }
 export type EvolutionHourlyInput = { date: string; hour: number; label: string; calls: number }
 export type EvolutionRange = { from: string; to: string; days: number }
 
@@ -78,7 +78,7 @@ export function buildLeadEvolutionPoints(
     t: new Date(`${point.date}T12:00:00`).getTime(),
     date: point.date,
     label: point.label || dayLabel(point.date),
-    leads: point.classified,
+    leads: point.newLeads ?? point.classified,
     qualified: point.qualified ?? point.rdv,
     signed: point.signed,
   }))
@@ -110,13 +110,14 @@ function bucketEvolution(inRange: EvolutionDailyInput[], bucketFor: (date: strin
   for (const point of inRange) {
     const bucket = bucketFor(point.date)
     const qualified = point.qualified ?? point.rdv
+    const newLeads = point.newLeads ?? point.classified
     const existing = buckets.get(bucket.key)
     if (existing) {
-      existing.leads += point.classified
+      existing.leads += newLeads
       existing.qualified += qualified
       existing.signed += point.signed
     } else {
-      buckets.set(bucket.key, { ...bucket, leads: point.classified, qualified, signed: point.signed })
+      buckets.set(bucket.key, { ...bucket, leads: newLeads, qualified, signed: point.signed })
     }
   }
   return [...buckets.values()].sort((a, b) => a.date.localeCompare(b.date))

@@ -55,6 +55,7 @@ const EMPTY_COMMERCIAL_STATS: AnalyticsCommercialSummary = {
 const EMPTY_ADMIN_STATS: AnalyticsAdminSummary = {
   calls: 0,
   loggedCalls: 0,
+  newLeads: 0,
   classified: 0,
   qualified: 0,
   unclassified: 0,

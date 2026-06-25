@@ -892,7 +892,7 @@ function OverviewAdmin() {
   const treatedLeadTotal = adminSummary?.classified ?? funnelTreatedLeads(funnelTotals)
   const evolutionGranularity = chooseGranularity(funnelRange)
   const evolutionPoints = buildLeadEvolutionPoints(adminSummary?.dailyEvolution ?? [], adminSummary?.hourlyCalls ?? [], funnelRange, evolutionGranularity, {
-    leads: treatedLeadTotal,
+    leads: adminSummary?.newLeads ?? treatedLeadTotal,
     qualified: adminSummary?.qualified ?? funnelTotals.qualified,
     signed: adminSummary?.signed ?? 0,
   })
@@ -907,7 +907,7 @@ function OverviewAdmin() {
     prevRange,
     evolutionGranularity,
     {
-      leads: prevAdmin?.classified ?? prevFunnel?.totals?.qualified ?? 0,
+      leads: prevAdmin?.newLeads ?? prevAdmin?.classified ?? prevFunnel?.totals?.qualified ?? 0,
       qualified: prevAdmin?.qualified ?? prevFunnel?.totals?.qualified ?? 0,
       signed: prevAdmin?.signed ?? 0,
     },
