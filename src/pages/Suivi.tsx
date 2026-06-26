@@ -16,6 +16,7 @@ import {
 import { buildPeriodRange, defaultPeriod, type PeriodState } from '../lib/period'
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
 import { DossierCard } from '../components/suivi/DossierCard'
+import { workflowPhaseProgress } from '../lib/suivi-board'
 
 export function Suivi() {
   const role = useAuth((s) => s.user?.role)
@@ -90,8 +91,11 @@ export function Suivi() {
   const blockedCount = (clients && clients.length)
     ? signedDossiers.filter((d) => clientByLead.get(d.id)?.blocked).length
     : signedDossiers.filter((d) => d.state.statuses[d.activeStep] === 'blocked').length
-  const progressAvg = Math.round(avg(signedDossiers.map((d) => d.progress)))
-  const deliveredCount = signedDossiers.filter((d) => d.progress >= 100).length
+  const realProgressValues = signedDossiers
+    .map((d) => workflowPhaseProgress(clientByLead.get(d.id))?.pct)
+    .filter((v): v is number => typeof v === 'number')
+  const progressAvg = Math.round(avg(realProgressValues))
+  const deliveredCount = signedDossiers.filter((d) => clientByLead.get(d.id)?.steps?.mes?.status === 'fait').length
 
   return (
     <AppShell flat>
