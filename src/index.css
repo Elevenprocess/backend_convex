@@ -5654,6 +5654,125 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 }
 .fin-action:hover { border-color: var(--color-or); background: var(--color-or-tint); color: var(--color-or-dark); }
 
+@media (max-width: 760px) {
+  .fin-page {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  .fin-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px;
+    margin-bottom: 12px !important;
+  }
+  .fin-kpis .glass-card {
+    padding: 10px 12px !important;
+    border-radius: 14px;
+  }
+  .fin-kpis .text-2xl {
+    font-size: 17px !important;
+    line-height: 1.1;
+  }
+  .fin-kpis p.text-xs {
+    display: none;
+  }
+  .fin-toolbar {
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+  .fin-filters {
+    width: 100%;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .fin-filters button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .fin-date-filter {
+    width: 100%;
+    margin-left: 0 !important;
+    display: grid !important;
+    grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  }
+  .fin-date-input,
+  .fin-search {
+    width: 100%;
+    min-width: 0 !important;
+  }
+  .fin-search {
+    flex-basis: 100%;
+  }
+  .fin-table-wrap {
+    padding: 0 !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+  .fin-table,
+  .fin-table tbody,
+  .fin-table tr,
+  .fin-table td {
+    display: block;
+    width: 100%;
+  }
+  .fin-table thead {
+    display: none;
+  }
+  .fin-table tbody tr {
+    margin-bottom: 10px;
+    border: 1px solid var(--color-line);
+    border-radius: 14px;
+    background: var(--color-card);
+    overflow: hidden;
+  }
+  .fin-table tbody tr.bg-cream-darker\/40 {
+    margin-top: -6px;
+    margin-left: 10px;
+    width: calc(100% - 10px);
+    background: var(--color-cream-darker);
+    border-style: dashed;
+  }
+  .fin-table tbody td {
+    display: grid;
+    grid-template-columns: minmax(92px, 38%) minmax(0, 1fr);
+    gap: 8px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--color-line-soft);
+    text-align: left !important;
+    white-space: normal !important;
+  }
+  .fin-table tbody td:last-child {
+    border-bottom: 0;
+  }
+  .fin-table tbody td::before {
+    content: attr(data-label);
+    color: var(--color-faint);
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .fin-table tbody td.fin-toggle-cell {
+    display: none;
+  }
+  .fin-table tbody td.fin-actions-cell {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+  .fin-table tbody td.fin-actions-cell::before {
+    content: '';
+    display: none;
+  }
+  .fin-action {
+    min-height: 34px;
+    padding: 7px 12px;
+  }
+}
+
 /* === Mode de paiement — vue immersive (lecture, sans cartes) === */
 .pay-view { display: flex; flex-direction: column; gap: 22px; }
 .pay-hero { display: flex; flex-direction: column; gap: 12px; }

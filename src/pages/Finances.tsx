@@ -40,7 +40,8 @@ function money(v: string | null): string {
 
 export function Finances() {
   const role = useAuth((s) => s.user?.role)
-  const { data: acomptes, loading, refetch } = useAcomptes(role === 'admin' || role === 'finances')
+  const canAccessFinances = role === 'admin' || role === 'finances' || role === 'delivrabilite' || role === 'responsable_technique' || role === 'back_office'
+  const { data: acomptes, loading, refetch } = useAcomptes(canAccessFinances)
   const [filter, setFilter] = useState<'tous' | AcompteStatut>('tous')
   const [query, setQuery] = useState('')
   const [dateFrom, setDateFrom] = useState('')
@@ -95,13 +96,13 @@ export function Finances() {
       return next
     })
 
-  if (role && role !== 'admin' && role !== 'finances') return <Navigate to="/overview" replace />
+  if (role && !canAccessFinances) return <Navigate to="/overview" replace />
 
   return (
     <AppShell flat>
       <Topbar eyebrow="FINANCES" title="Suivi des acomptes" />
-      <main className="suivi-page flex-grow overflow-y-auto px-4 sm:px-8 pt-4 pb-8">
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-5">
+      <main className="suivi-page fin-page flex-grow overflow-y-auto px-4 sm:px-8 pt-4 pb-8">
+        <div className="fin-kpis grid grid-cols-1 sm:grid-cols-4 gap-3 mb-5">
           <div className="glass-card p-4">
             <span className="eyebrow text-or-dark">À encaisser</span>
             <p className="text-2xl font-black mt-1">{totals.aEncaisser.toLocaleString('fr-FR')} €</p>
@@ -125,8 +126,8 @@ export function Finances() {
 
         <FinancesCharts data={chartSeries} />
 
-        <div className="flex flex-wrap items-center gap-2 mb-4">
-          <div className="flex flex-wrap gap-1.5">
+        <div className="fin-toolbar flex flex-wrap items-center gap-2 mb-4">
+          <div className="fin-filters flex flex-wrap gap-1.5">
             {FILTERS.map((f) => (
               <button
                 key={f.key}
@@ -139,13 +140,13 @@ export function Finances() {
             ))}
           </div>
           {/* Filtre par date d'encaissement */}
-          <div className="flex items-center gap-1.5 ml-auto">
+          <div className="fin-date-filter flex items-center gap-1.5 ml-auto">
             <span className="text-xs text-faint font-semibold whitespace-nowrap">Encaissé du</span>
             <input
               type="date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="rounded-lg border border-line px-2 py-1.5 text-sm bg-white"
+              className="fin-date-input rounded-lg border border-line px-2 py-1.5 text-sm bg-white"
               aria-label="Date d'encaissement — du"
             />
             <span className="text-xs text-faint">au</span>
@@ -153,7 +154,7 @@ export function Finances() {
               type="date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              className="rounded-lg border border-line px-2 py-1.5 text-sm bg-white"
+              className="fin-date-input rounded-lg border border-line px-2 py-1.5 text-sm bg-white"
               aria-label="Date d'encaissement — au"
             />
             {(dateFrom || dateTo) && (
@@ -172,7 +173,7 @@ export function Finances() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Rechercher un client…"
-            className="rounded-lg border border-line px-3 py-2 text-sm bg-white min-w-[200px]"
+            className="fin-search rounded-lg border border-line px-3 py-2 text-sm bg-white min-w-[200px]"
           />
         </div>
 
@@ -274,8 +275,8 @@ function FinanceVenteRows({
   return (
     <>
       <tr className={`cursor-pointer ${alerteEncaissement ? 'bg-cuivre-tint/20' : ''}`} onClick={onToggle}>
-        <td className="text-faint text-center">{isOpen ? '▾' : '▸'}</td>
-        <td>
+        <td className="fin-toggle-cell text-faint text-center">{isOpen ? '▾' : '▸'}</td>
+        <td data-label="Projet / Client">
           <span className="font-semibold text-text">{a.projectName ?? a.clientName ?? '—'}</span>
           {a.projectName && a.clientName && <span className="block text-xs text-faint">{a.clientName}</span>}
           {alerteEncaissement && (
@@ -284,15 +285,15 @@ function FinanceVenteRows({
             </span>
           )}
         </td>
-        <td className="text-muted">{a.commercialName ?? '—'}</td>
-        <td className="text-muted">
+        <td data-label="Commercial" className="text-muted">{a.commercialName ?? '—'}</td>
+        <td data-label="Paiement" className="text-muted">
           {method ?? '—'}
           {a.edfRecepisse && <span className="ml-1.5 fin-pill bg-or-tint text-or-dark">Récépissé EDF</span>}
         </td>
-        <td>{money(a.montantTotal)}</td>
-        <td className="text-muted">{nbEncaisse}/{a.echeances.length} encaissée{a.echeances.length > 1 ? 's' : ''}</td>
-        <td className="font-semibold">{restant > 0 ? `${restant.toLocaleString('fr-FR')} €` : '—'}</td>
-        <td className="text-right whitespace-nowrap">
+        <td data-label="Montant total">{money(a.montantTotal)}</td>
+        <td data-label="Échéancier" className="text-muted">{nbEncaisse}/{a.echeances.length} encaissée{a.echeances.length > 1 ? 's' : ''}</td>
+        <td data-label="À récupérer" className="font-semibold">{restant > 0 ? `${restant.toLocaleString('fr-FR')} €` : '—'}</td>
+        <td className="fin-actions-cell text-right whitespace-nowrap">
           <button type="button" className="fin-action" title="Modifier les données financières" onClick={(ev) => { ev.stopPropagation(); onEditFinancing() }}>
             ✎
           </button>
@@ -305,27 +306,27 @@ function FinanceVenteRows({
         const meta = STATUT_META[e.statut]
         return (
           <tr key={e.ordre} className="bg-cream-darker/40">
-            <td />
-            <td colSpan={2} className="pl-2">
+            <td className="fin-toggle-cell" />
+            <td data-label="Tranche" colSpan={2} className="pl-2">
               <span className="font-semibold text-text">Tranche {e.ordre}</span>
               <span className="text-faint"> · {e.label}</span>
               {e.percent != null && <span className="text-faint text-xs"> ({e.percent}%)</span>}
             </td>
-            <td className="text-xs">
+            <td data-label="Jalon" className="text-xs">
               {e.jalonKey
                 ? e.jalonAtteint
                   ? <span className="text-or-dark font-semibold">✓ jalon franchi</span>
                   : <span className="text-faint">jalon en attente</span>
                 : <span className="text-faint">—</span>}
             </td>
-            <td className="font-semibold">{money(e.statut === 'encaisse' ? (e.montantReel ?? e.montantPrevu) : e.montantPrevu)}</td>
-            <td>
+            <td data-label="Montant" className="font-semibold">{money(e.statut === 'encaisse' ? (e.montantReel ?? e.montantPrevu) : e.montantPrevu)}</td>
+            <td data-label="Statut">
               <span className={`fin-pill ${meta.cls}`}>{meta.label}</span>
               {e.dateEncaissement
                 ? <span className="text-faint text-xs ml-2">{formatDate(e.dateEncaissement)}</span>
                 : e.dateEcheance && <span className="text-faint text-xs ml-2">échéance {formatDate(e.dateEcheance)}</span>}
             </td>
-            <td className="text-right" colSpan={2}>
+            <td className="fin-actions-cell text-right" colSpan={2}>
               <button type="button" className="fin-action" onClick={(ev) => { ev.stopPropagation(); onEdit(e) }}>
                 {e.statut === 'encaisse' ? 'Modifier' : 'Enregistrer'}
               </button>

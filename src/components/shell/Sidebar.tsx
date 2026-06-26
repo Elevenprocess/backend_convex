@@ -82,7 +82,7 @@ const SECTIONS: Section[] = [
     label: 'Finances',
     collapsible: true,
     items: [
-      { to: '/finances', icon: 'tag', label: 'Acomptes', roles: ['admin', 'finances'] },
+      { to: '/finances', icon: 'tag', label: 'Acomptes', roles: ['admin', 'finances', 'delivrabilite', 'responsable_technique', 'back_office'] },
     ],
   },
   {
