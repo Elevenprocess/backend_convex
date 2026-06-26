@@ -8,6 +8,7 @@ import Orb from '../components/visual/Orb'
 export function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
@@ -119,15 +120,38 @@ export function Login() {
                   <label className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/50">Mot de passe</label>
                   <a href="#" className="text-[11px] font-semibold text-white/60 transition hover:text-white">Oublié ?</a>
                 </div>
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  autoComplete="current-password"
-                  className="w-full rounded-2xl border border-white/12 bg-white/[0.06] px-4 py-3 text-sm text-white placeholder-white/35 outline-none transition focus:border-white/40 focus:bg-white/[0.09]"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    autoComplete="current-password"
+                    className="w-full rounded-2xl border border-white/12 bg-white/[0.06] px-4 py-3 pr-12 text-sm text-white placeholder-white/35 outline-none transition focus:border-white/40 focus:bg-white/[0.09]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-3 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-white/45 transition hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/25"
+                    aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                    title={showPassword ? 'Masquer' : 'Afficher'}
+                  >
+                    {showPassword ? (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M3 3l18 18" />
+                        <path d="M10.7 5.1A10.8 10.8 0 0 1 12 5c5 0 9 4.5 10 7-0.5 1.2-1.6 2.8-3.1 4.1" />
+                        <path d="M6.6 6.6C4.3 8 2.8 10.3 2 12c1 2.5 5 7 10 7 1.7 0 3.3-.5 4.6-1.2" />
+                        <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+                      </svg>
+                    ) : (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </div>
 
               {error && (
