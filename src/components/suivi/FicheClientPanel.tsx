@@ -5,7 +5,7 @@ import { fullName, initials, STATUS_LABEL, type DebriefResponse } from '../../li
 import { useAuth } from '../../lib/auth'
 import { updateLead } from '../../lib/hooks'
 import { type ClientEditForm, leadToClientForm, clientFormToPatch } from '../../lib/clientEditForm'
-import { Section, Field, DebriefCard, formatDebriefPaymentMethod } from './fiche-parts'
+import { Section, Field, DebriefCard } from './fiche-parts'
 
 type Props = {
   dossier: Dossier
@@ -61,17 +61,6 @@ export function FicheClientPanel({ dossier, debriefs, onSaved }: Props) {
       setSaving(false)
     }
   }, [lead, form, onSaved])
-
-  // Financement & méthode de paiement = ce qui a été saisi au débriefing. On prend
-  // le débrief le plus récent qui porte une de ces infos (tous projets confondus),
-  // puis on en dérive le TYPE (+ organisme) et la MÉTHODE (chèque/espèces/virement)
-  // depuis le MÊME débrief, pour deux champs cohérents. Repli sur le financement
-  // du RDV pour le type si aucun débrief n'est renseigné.
-  const financingDebrief = [...debriefs]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .find((d) => d.financingType || d.paymentSubMethod || d.financingOrg) ?? null
-
-  const paymentMethodValue = financingDebrief ? formatDebriefPaymentMethod(financingDebrief) : null
 
   const editAction = canEdit
     ? editing
@@ -136,13 +125,11 @@ export function FicheClientPanel({ dossier, debriefs, onSaved }: Props) {
           <Field label="Campagne" value={lead.campaign} />
           <Field label="Setter" value={dossier.setter?.name} />
           <Field label="Commercial" value={dossier.commercial?.name} />
-          <Field label="RDV" value={dossier.rdv?.scheduledAt ? formatDate(dossier.rdv.scheduledAt) : null} />
           <Field label="Montant" value={dossier.amount ? formatCurrency(dossier.amount) : null} />
           <Field
             label="Signé le"
             value={dossier.rdv?.signatureAt ? formatDate(dossier.rdv.signatureAt) : (dossier.signedAt ? formatDate(dossier.signedAt) : null)}
           />
-          <Field label="Méthode de paiement" value={paymentMethodValue} wide />
         </dl>
         {error && <p className="mt-2 text-xs font-medium text-rouille">{error}</p>}
       </Section>
