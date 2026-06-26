@@ -897,6 +897,7 @@ function OverviewAdmin() {
   // Dates d'arrivée des nouveaux leads (createdAt dans la période) — même source
   // que le KPI « Nouveaux aujourd'hui ». La série « leads » du graph compte les
   // ARRIVÉES réelles par bucket (par heure en vue jour), pas les leads traités.
+  const newLeadTotal = adminSummary?.newLeads ?? funnelTotals.newLeads ?? 0
   const newLeadMs = useMemo(() => {
     const from = new Date(funnelRange.from).getTime()
     const to = new Date(funnelRange.to).getTime()
@@ -904,11 +905,16 @@ function OverviewAdmin() {
       .map((l) => new Date(l.createdAt).getTime())
       .filter((t) => !Number.isNaN(t) && t >= from && t <= to)
   }, [allLeads, funnelRange.from, funnelRange.to])
+  // /leads est volontairement borné côté front (limit 500) : sur une plage de date,
+  // ce tableau peut être incomplet. On ne l'utilise pour la répartition horaire que
+  // s'il concorde exactement avec l'agrégat backend. Sinon, le backend newLeads reste
+  // source de vérité — jamais fallback vers `classified` / leads traités.
+  const reliableNewLeadMs = newLeadMs.length === newLeadTotal ? newLeadMs : undefined
   const evolutionPoints = buildLeadEvolutionPoints(adminSummary?.dailyEvolution ?? [], adminSummary?.hourlyCalls ?? [], funnelRange, evolutionGranularity, {
-    leads: newLeadMs.length || (adminSummary?.newLeads ?? treatedLeadTotal),
+    leads: newLeadTotal,
     qualified: adminSummary?.qualified ?? funnelTotals.qualified,
     signed: adminSummary?.signed ?? 0,
-  }, newLeadMs)
+  }, reliableNewLeadMs)
 
   const prevRange = previousRange(funnelRange)
   const { data: prevFunnel } = useAnalyticsFunnel({ from: prevRange.from, to: prevRange.to })
@@ -933,7 +939,7 @@ function OverviewAdmin() {
     const signed = adminSummary?.signed ?? 0
     const ca = adminSummary?.ca ?? 0
     const team = (usersList ?? []).filter((u) => u.active)
-    const leadsToday = (allLeads ?? []).filter((l) => isCreatedInRange(l.createdAt, funnelRange.from, funnelRange.to)).length
+    const leadsToday = newLeadTotal
     return {
       caMois: ca,
       ventes: signed,
@@ -953,7 +959,7 @@ function OverviewAdmin() {
       nonSaleDebriefSegments: commercialNonSaleDebriefSegments(allRdvs ?? [], allLeads ?? [], undefined, funnelRange),
       funnelProspects: adminFunnelProspects(allRdvs ?? [], allLeads ?? [], usersList ?? []),
     }
-  }, [adminSummary, funnelTotals, treatedLeadTotal, usersList, allLeads, allRdvs, funnelRange.from, funnelRange.to])
+  }, [adminSummary, funnelTotals, treatedLeadTotal, newLeadTotal, usersList, allLeads, allRdvs, funnelRange.from, funnelRange.to])
   // Le funnel backend ne scope que les leads CRÉÉS dans la période, alors que les KPI
   // (summary) comptent les leads ACTIFS/traités → écart 11 vs 104/92. On réaligne le
   // bloc Funnel sur les vrais chiffres du summary (Appels, Traités, RDV), en conservant
@@ -1016,7 +1022,7 @@ function OverviewAdmin() {
               range={funnelRange}
               rangeLabel={`Du ${formatShortDate(new Date(funnelRange.from))} au ${formatShortDate(new Date(funnelRange.to))}`}
               compareLabel={`Du ${formatShortDate(new Date(prevRange.from))} au ${formatShortDate(new Date(prevRange.to))}`}
-              totals={{ leads: newLeadMs.length, qualified: stats.qualified, signed: stats.ventes }}
+              totals={{ leads: newLeadTotal, qualified: stats.qualified, signed: stats.ventes }}
             />
           </div>
 
