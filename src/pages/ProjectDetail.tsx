@@ -91,13 +91,13 @@ export function ProjectDetailPage() {
     }
   }, [project])
 
+  if (role === 'technicien') return <Navigate to="/mes-dossiers" replace />
   if (
     role
     && role !== 'admin'
     && role !== 'delivrabilite'
     && role !== 'responsable_technique'
     && role !== 'back_office'
-    && role !== 'technicien'
     && role !== 'finances'
     && role !== 'commercial'
     && role !== 'commercial_lead'

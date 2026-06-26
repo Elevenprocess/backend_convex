@@ -4682,6 +4682,45 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
   .suivi-kpis {
     grid-template-columns: repeat(4, minmax(76px, 1fr));
   }
+  .suivi-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 10px;
+  }
+  .suivi-card {
+    width: 100%;
+    min-width: 0;
+    padding: 12px;
+  }
+  .suivi-card-head {
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .suivi-avatar {
+    width: 34px;
+    height: 34px;
+    font-size: 11px;
+    flex: 0 0 auto;
+  }
+  .suivi-status-pill {
+    max-width: 42vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .suivi-card-meta-grid {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .suivi-card-action {
+    width: 100%;
+    margin-left: 0;
+  }
+  .suivi-split {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 12px;
+  }
+  .suivi-breadcrumb {
+    margin-bottom: 10px;
+  }
 }
 
 @media (max-width: 700px) {

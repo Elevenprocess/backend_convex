@@ -21,16 +21,16 @@ export function SuiviDetail() {
     return buildDossiers(leads ?? [], rdvs ?? [], users ?? [], {}).find((d) => d.id === id) ?? null
   }, [id, leads, rdvs, users])
 
+  if (role === 'technicien') return <Navigate to="/mes-dossiers" replace />
   if (
     role
     && role !== 'admin'
     && role !== 'delivrabilite'
     && role !== 'responsable_technique'
     && role !== 'back_office'
-    && role !== 'technicien'
     && role !== 'finances'
   ) return <Navigate to="/overview" replace />
-  if (!id) return <Navigate to={role === 'technicien' ? '/mes-dossiers' : '/suivi'} replace />
+  if (!id) return <Navigate to="/suivi" replace />
 
   const isLoading = leadsLoading || rdvLoading
 
@@ -39,7 +39,7 @@ export function SuiviDetail() {
       <Topbar eyebrow="SUIVI INSTALLATION" title="Détail dossier" />
       <main className="suivi-page flex-grow overflow-y-auto px-4 sm:px-8 pt-4 pb-8">
         <nav className="suivi-breadcrumb">
-          <Link to={role === 'technicien' ? '/mes-dossiers' : '/suivi'}>← {role === 'technicien' ? 'Mes dossiers' : 'Tous les dossiers'}</Link>
+          <Link to="/suivi">← Tous les dossiers</Link>
         </nav>
 
         {isLoading ? (
