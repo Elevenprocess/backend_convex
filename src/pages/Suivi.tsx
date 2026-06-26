@@ -18,6 +18,17 @@ import { DateRangePicker } from '../components/analytics/DateRangePicker'
 import { DossierCard } from '../components/suivi/DossierCard'
 import { workflowPhaseProgress } from '../lib/suivi-board'
 
+type ProgressFilter = 'all' | 'todo' | 'running' | 'advanced' | 'blocked' | 'delivered'
+
+const PROGRESS_FILTERS: { id: ProgressFilter; label: string }[] = [
+  { id: 'all', label: 'Tous' },
+  { id: 'todo', label: 'À démarrer' },
+  { id: 'running', label: 'En cours' },
+  { id: 'advanced', label: 'Avancés' },
+  { id: 'blocked', label: 'Bloqués' },
+  { id: 'delivered', label: 'Livrés' },
+]
+
 export function Suivi() {
   const role = useAuth((s) => s.user?.role)
   const navigate = useNavigate()
@@ -41,6 +52,7 @@ export function Suivi() {
     return map
   }, [clients])
   const [query, setQuery] = useState('')
+  const [progressFilter, setProgressFilter] = useState<ProgressFilter>('all')
   const [states, setStates] = useState<Record<string, SuiviState>>({})
   const [period, setPeriod] = useState<PeriodState>(() => defaultPeriod('this_year'))
   const periodRange = useMemo(() => buildPeriodRange(period), [period])
@@ -57,9 +69,24 @@ export function Suivi() {
   )
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return signedDossiers
-    return signedDossiers.filter((d) => [fullName(d.lead), d.lead.phone, d.lead.email, d.lead.city, d.commercial?.name].filter(Boolean).join(' ').toLowerCase().includes(q))
-  }, [signedDossiers, query])
+    return signedDossiers.filter((d) => {
+      const client = clientByLead.get(d.id)
+      const pct = workflowPhaseProgress(client)?.pct ?? 0
+      const delivered = client?.steps?.mes?.status === 'fait'
+      const blocked = client?.blocked || d.state.statuses[d.activeStep] === 'blocked'
+      if (progressFilter === 'todo' && (pct > 0 || delivered)) return false
+      if (progressFilter === 'running' && (pct <= 0 || pct >= 67 || delivered || blocked)) return false
+      if (progressFilter === 'advanced' && (pct < 67 || delivered || blocked)) return false
+      if (progressFilter === 'blocked' && !blocked) return false
+      if (progressFilter === 'delivered' && !delivered) return false
+      if (!q) return true
+      return [fullName(d.lead), d.lead.phone, d.lead.email, d.lead.city, d.commercial?.name]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(q)
+    })
+  }, [signedDossiers, query, progressFilter, clientByLead])
 
   // Compat redirect : /suivi?lead=X → /suivi/X
   const legacyLead = params.get('lead')
@@ -105,7 +132,7 @@ export function Suivi() {
           <div>
             <span className="eyebrow">Pipeline Délivrabilité</span>
             <h1>Prospects signés à suivre</h1>
-            <p>Chaque card ouvre la fiche complète du prospect avec les données setter, commercial et le workflow associé.</p>
+            <p>Fiches clients, progression installation et blocages.</p>
           </div>
           <div className="suivi-hero-actions">
             <DateRangePicker value={period} onChange={setPeriod} align="right" />
@@ -126,12 +153,25 @@ export function Suivi() {
           <div className="kpi-card suivi-kpi"><strong>{deliveredCount}</strong><span>Livrés</span></div>
         </section>
 
+        <section className="suivi-filters" aria-label="Filtres de progression">
+          {PROGRESS_FILTERS.map((filter) => (
+            <button
+              key={filter.id}
+              type="button"
+              className={progressFilter === filter.id ? 'active' : ''}
+              onClick={() => setProgressFilter(filter.id)}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </section>
+
         {isLoading ? (
           <LoadingBlock label="Chargement des dossiers signés…" />
         ) : filtered.length === 0 ? (
           <div className="suivi-empty">
-            <p>{query ? 'Aucun dossier ne correspond à votre recherche.' : 'Aucun dossier signé pour cette période.'}</p>
-            {query && <button type="button" onClick={() => setQuery('')}>Effacer la recherche</button>}
+            <p>{query || progressFilter !== 'all' ? 'Aucun dossier ne correspond aux filtres.' : 'Aucun dossier signé pour cette période.'}</p>
+            {(query || progressFilter !== 'all') && <button type="button" onClick={() => { setQuery(''); setProgressFilter('all') }}>Réinitialiser les filtres</button>}
           </div>
         ) : (
           <section className="suivi-grid">

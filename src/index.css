@@ -4422,16 +4422,25 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
 
 .suivi-hero {
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
+  align-items: start;
 }
 .suivi-hero h1 {
-  font-size: clamp(22px, 2.2vw, 30px);
+  font-size: clamp(19px, 1.9vw, 26px);
   font-weight: 650;
   letter-spacing: -0.025em;
 }
 .suivi-hero p {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 450;
+  max-width: 420px;
+}
+.suivi-hero-actions {
+  justify-content: flex-end;
+  align-items: center;
+}
+.suivi-hero-actions .date-range-picker {
+  max-width: min(100%, 360px);
 }
 .suivi-period,
 .suivi-search,
@@ -4465,24 +4474,24 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
 }
 
 .suivi-kpis {
-  gap: 8px;
-  margin-bottom: 14px;
+  gap: 6px;
+  margin-bottom: 10px;
 }
 .suivi-kpi {
   min-height: 0;
-  padding: 10px 12px !important;
-  border-radius: 14px !important;
+  padding: 7px 10px !important;
+  border-radius: 12px !important;
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: baseline;
-  column-gap: 10px;
+  column-gap: 8px;
   row-gap: 0;
   background: #fff !important;
   background-image: none !important;
   box-shadow: none !important;
 }
 .suivi-kpi strong {
-  font-size: 18px;
+  font-size: 15px;
   line-height: 1;
   font-weight: 650;
   color: var(--color-text);
@@ -4491,11 +4500,44 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
   color: var(--color-text);
 }
 .suivi-kpi span {
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 500;
   letter-spacing: .02em;
   color: var(--color-muted);
   text-transform: none;
+}
+
+.suivi-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 6px;
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  background: #fff !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+.suivi-filters button {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-muted);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 600;
+  transition: background .16s ease, color .16s ease, border-color .16s ease;
+}
+.suivi-filters button:hover {
+  color: var(--color-text);
+  background: var(--color-line-soft);
+}
+.suivi-filters button.active {
+  background: var(--color-or) !important;
+  color: #fff;
+  border-color: var(--color-or);
 }
 
 .suivi-card {
@@ -4558,6 +4600,7 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
 }
 [data-theme="dark"] .suivi-period,
 [data-theme="dark"] .suivi-search,
+[data-theme="dark"] .suivi-filters,
 [data-theme="dark"] .suivi-card,
 [data-theme="dark"] .suivi-card-meta-grid span,
 [data-theme="dark"] .suivi-empty,
@@ -4573,11 +4616,65 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
 [data-theme="dark"] .suivi-kpi:nth-child(3) strong {
   color: rgba(255, 255, 255, .92);
 }
+[data-theme="dark"] .suivi-filters button {
+  color: rgba(255, 255, 255, .62);
+}
+[data-theme="dark"] .suivi-filters button:hover {
+  color: rgba(255, 255, 255, .9);
+  background: rgba(255, 255, 255, .07);
+}
 [data-theme="dark"] .suivi-avatar,
 [data-theme="dark"] .suivi-side-avatar,
 [data-theme="dark"] .suivi-step.is-expanded .suivi-step-body {
   background: rgba(255, 255, 255, .08);
   color: rgba(255, 255, 255, .9);
+}
+
+@media (max-width: 900px) {
+  .suivi-hero {
+    grid-template-columns: 1fr;
+  }
+  .suivi-hero-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+  .suivi-hero-actions > * {
+    flex: 1 1 220px;
+  }
+  .suivi-kpis {
+    grid-template-columns: repeat(4, minmax(72px, 1fr));
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+  .suivi-kpi {
+    min-width: 82px;
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+  .suivi-filters {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+  .suivi-filters button {
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .suivi-page {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  .suivi-hero h1 {
+    font-size: 20px;
+  }
+  .suivi-search {
+    width: 100%;
+  }
+  .suivi-kpis {
+    grid-template-columns: repeat(4, minmax(76px, 1fr));
+  }
 }
 
 /* ======================================================================== */
