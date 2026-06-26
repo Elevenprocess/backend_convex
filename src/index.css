@@ -4439,8 +4439,12 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
   justify-content: flex-end;
   align-items: center;
 }
-.suivi-hero-actions .date-range-picker {
+.suivi-hero-actions .drp {
   max-width: min(100%, 360px);
+}
+.suivi-hero-actions .drp-trigger {
+  width: 100%;
+  justify-content: space-between;
 }
 .suivi-period,
 .suivi-search,
@@ -4669,11 +4673,97 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
   .suivi-hero h1 {
     font-size: 20px;
   }
+  .suivi-hero-actions .drp,
   .suivi-search {
     width: 100%;
+    max-width: none;
+    flex-basis: 100%;
   }
   .suivi-kpis {
     grid-template-columns: repeat(4, minmax(76px, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .drp-panel {
+    position: fixed !important;
+    z-index: 1000;
+    top: 64px !important;
+    left: 10px !important;
+    right: 10px !important;
+    bottom: 10px !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+    border-radius: 16px;
+  }
+  .drp-presets {
+    width: auto;
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 10px;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-line-soft);
+  }
+  .drp-group {
+    margin: 0;
+    padding: 0;
+    border-bottom: 0;
+  }
+  .drp-group-title {
+    display: none;
+  }
+  .drp-preset {
+    padding: 7px 9px;
+    font-size: 11px;
+  }
+  .drp-body {
+    padding: 12px;
+    gap: 10px;
+  }
+  .drp-lastn,
+  .drp-single {
+    font-size: 11px;
+  }
+  .drp-cals {
+    display: block;
+  }
+  .drp-cals .drp-cal:first-child {
+    display: none;
+  }
+  .drp-cal {
+    width: 100%;
+    max-width: 330px;
+    margin: 0 auto;
+  }
+  .drp-day {
+    min-height: 34px;
+    font-size: 12px;
+  }
+  .drp-foot {
+    position: sticky;
+    bottom: -12px;
+    margin: 0 -12px -12px;
+    padding: 10px 12px;
+    background: #fff;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .drp-foot-label,
+  .drp-actions {
+    justify-content: space-between;
+  }
+  .drp-actions .drp-btn {
+    flex: 1;
+  }
+  [data-theme="dark"] .drp-foot {
+    background: #08110C;
   }
 }
 
