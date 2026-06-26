@@ -115,66 +115,116 @@ function fmtMoney(v: string | number | null | undefined): string {
 
 /** Bloc détaillé d'un devis scanné, affiché quand la carte est « développée ». */
 function DevisDetail({ devis }: { devis: Devis }) {
-  const lignes = devis.lignes ?? []
-  const echeancier = devis.echeancier ?? []
+  const extracted = devis.extracted ?? undefined
+  const lignes = (devis.lignes?.length ? devis.lignes : extracted?.lignes) ?? []
+  const echeancier = (devis.echeancier?.length ? devis.echeancier : extracted?.echeancier) ?? []
+  const prime = extracted?.prime
+  const customer = extracted?.customer
+  const vendor = extracted?.vendor
+  const financingDetails = extracted?.financingDetails
   const financing = devis.financingType ? FINANCING_TYPE_SHORT[devis.financingType] ?? devis.financingType : null
+  const customerName = [customer?.firstName, customer?.lastName].filter(Boolean).join(' ')
+  const customerAddress = [customer?.addressLine, customer?.postalCode, customer?.city].filter(Boolean).join(' · ')
+  const vendorAddress = [vendor?.addressLine, vendor?.postalCode, vendor?.city].filter(Boolean).join(' · ')
   return (
-    <div className="fiche-devis-detail">
+    <div className="fiche-devis-detail space-y-4">
       {devis.ocrStatus === 'failed' && (
         <div className="rounded-lg bg-rouille-tint px-3 py-2 text-[11px] font-semibold text-rouille">
           Scan OCR en échec{devis.ocrError ? ` : ${cleanField(devis.ocrError)}` : '.'} — les champs ci-dessous peuvent être vides.
         </div>
       )}
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-        <Field label="Numéro" value={cleanField(devis.devisNumber)} />
-        <Field label="Date" value={devis.devisDate ? formatDate(devis.devisDate) : null} />
-        <Field label="Expiration" value={devis.dateExpiration ? formatDate(devis.dateExpiration) : null} />
-        <Field label="Puissance" value={devis.puissanceKwc ? `${devis.puissanceKwc} kWc` : null} />
-        <Field label="Panneaux" value={devis.nbPanneaux != null ? String(devis.nbPanneaux) : null} />
-        <Field label="Délai" value={cleanField(devis.delaiExecution)} />
-        <Field label="Montant HT" value={devis.montantHt ? fmtMoney(devis.montantHt) : null} />
-        <Field label="TVA" value={devis.montantTva ? fmtMoney(devis.montantTva) : null} />
-        <Field label="Montant TTC" value={devis.montantTtc ? fmtMoney(devis.montantTtc) : null} />
-        <Field label="Net à payer" value={devis.montantNet ? fmtMoney(devis.montantNet) : null} />
-        <Field label="Financement" value={financing} />
-        <Field label="Prime EDF" value={devis.primeAutoconsommation ? fmtMoney(devis.primeAutoconsommation) : null} />
-      </dl>
 
-      {devis.kits && (
-        <div className="mt-3">
-          <dt className="text-[10px] font-semibold uppercase tracking-wide text-faint">Kit</dt>
-          <dd className="text-[12px] font-semibold text-text">{cleanField(devis.kits)}</dd>
-        </div>
+      {(customerName || customerAddress || customer?.email || customer?.phone) && (
+        <section className="rounded-xl border border-line bg-card/70 p-3">
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-cuivre">Client extrait du devis</div>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+            <Field label="Nom" value={cleanField(customerName)} wide />
+            <Field label="Email" value={cleanField(customer?.email)} href={customer?.email ? `mailto:${customer.email}` : undefined} />
+            <Field label="Téléphone" value={cleanField(customer?.phone)} href={customer?.phone ? `tel:${customer.phone}` : undefined} />
+            <Field label="Adresse" value={cleanField(customerAddress)} wide />
+          </dl>
+        </section>
+      )}
+
+      <section>
+        <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-cuivre">Résumé devis</div>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+          <Field label="Numéro" value={cleanField(devis.devisNumber ?? extracted?.devisNumber)} />
+          <Field label="Date" value={devis.devisDate ? formatDate(devis.devisDate) : extracted?.devisDate ? formatDate(extracted.devisDate) : null} />
+          <Field label="Expiration" value={devis.dateExpiration ? formatDate(devis.dateExpiration) : extracted?.dateExpiration ? formatDate(extracted.dateExpiration) : null} />
+          <Field label="Puissance" value={devis.puissanceKwc ? `${devis.puissanceKwc} kWc` : extracted?.puissanceKwc ? `${extracted.puissanceKwc} kWc` : null} />
+          <Field label="Panneaux" value={devis.nbPanneaux != null ? String(devis.nbPanneaux) : extracted?.nbPanneaux != null ? String(extracted.nbPanneaux) : null} />
+          <Field label="Délai" value={cleanField(devis.delaiExecution ?? extracted?.delaiExecution)} />
+          <Field label="Montant HT" value={devis.montantHt ? fmtMoney(devis.montantHt) : fmtMoney(extracted?.montantHt)} />
+          <Field label="TVA" value={devis.montantTva ? fmtMoney(devis.montantTva) : fmtMoney(extracted?.montantTva)} />
+          <Field label="Montant TTC" value={devis.montantTtc ? fmtMoney(devis.montantTtc) : fmtMoney(extracted?.montantTtc)} />
+          <Field label="Net à payer" value={devis.montantNet ? fmtMoney(devis.montantNet) : fmtMoney(extracted?.montantNet)} />
+          <Field label="Financement" value={financing} />
+          <Field label="Prime EDF" value={devis.primeAutoconsommation ? fmtMoney(devis.primeAutoconsommation) : fmtMoney(prime?.montant)} />
+        </dl>
+      </section>
+
+      {(devis.kits || extracted?.kits || prime || extracted?.conditionsReglement || financingDetails) && (
+        <section className="rounded-xl border border-line bg-muted/20 p-3">
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-cuivre">Détails commerciaux</div>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+            <Field label="Kit" value={cleanField(devis.kits ?? extracted?.kits)} wide />
+            <Field label="Conditions" value={cleanField(extracted?.conditionsReglement)} wide />
+            <Field label="Prime" value={prime?.montant ? `${fmtMoney(prime.montant)}${prime.zone ? ` · ${prime.zone}` : ''}` : null} />
+            <Field label="Mensualité" value={financingDetails?.mensualite ? fmtMoney(financingDetails.mensualite) : null} />
+            <Field label="Durée" value={financingDetails?.duree ? `${financingDetails.duree} mois` : null} />
+            <Field label="Apport" value={financingDetails?.apport ? fmtMoney(financingDetails.apport) : null} />
+          </dl>
+        </section>
       )}
 
       {lignes.length > 0 && (
-        <div className="mt-3">
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-faint">Lignes ({lignes.length})</div>
-          <ul className="space-y-1">
+        <section>
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-cuivre">Lignes du devis ({lignes.length})</div>
+          <ul className="space-y-2">
             {lignes.map((l, i) => (
-              <li key={i} className="flex items-baseline justify-between gap-3 text-[12px]">
-                <span className="min-w-0 flex-1 truncate text-text">
-                  {l.qty ? `${l.qty} × ` : ''}{cleanField(l.designation) ?? '—'}
-                </span>
-                <span className="shrink-0 font-semibold tabular-nums text-text">{fmtMoney(l.totalTtc ?? l.totalHt)}</span>
+              <li key={i} className="rounded-xl border border-line bg-card/70 p-2.5 text-[12px]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold text-text">{l.qty ? `${l.qty} × ` : ''}{cleanField(l.designation) ?? '—'}</div>
+                    {l.description && <div className="mt-1 text-[11px] leading-relaxed text-muted">{cleanField(l.description)}</div>}
+                    {l.type && <div className="mt-1 text-[10px] uppercase tracking-wide text-faint">{l.type}</div>}
+                  </div>
+                  <div className="shrink-0 text-right font-semibold tabular-nums text-text">
+                    <div>{fmtMoney(l.totalTtc ?? l.totalHt)}</div>
+                    <div className="text-[10px] font-medium text-faint">HT {fmtMoney(l.totalHt)} · TVA {l.tva ?? '—'}%</div>
+                  </div>
+                </div>
               </li>
             ))}
           </ul>
-        </div>
+        </section>
       )}
 
       {echeancier.length > 0 && (
-        <div className="mt-3">
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-faint">Échéancier ({echeancier.length})</div>
+        <section>
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-cuivre">Échéancier ({echeancier.length})</div>
           <ul className="space-y-1">
             {echeancier.map((e, i) => (
-              <li key={i} className="flex items-baseline justify-between gap-3 text-[12px]">
-                <span className="min-w-0 flex-1 truncate text-muted">{cleanField(e.label) ?? e.phase ?? '—'}</span>
+              <li key={i} className="flex items-baseline justify-between gap-3 rounded-lg border border-line bg-card/70 px-2.5 py-2 text-[12px]">
+                <span className="min-w-0 flex-1 text-muted">{cleanField(e.label) ?? e.phase ?? '—'}</span>
                 <span className="shrink-0 font-semibold tabular-nums text-text">{fmtMoney(e.montant)}</span>
               </li>
             ))}
           </ul>
-        </div>
+        </section>
+      )}
+
+      {(vendor?.name || vendorAddress || vendor?.phone || vendor?.email) && (
+        <details className="rounded-xl border border-line bg-card/40 p-3 text-[12px]">
+          <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-wide text-faint">Vendeur / société émettrice</summary>
+          <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+            <Field label="Société" value={cleanField(vendor?.name)} wide />
+            <Field label="Email" value={cleanField(vendor?.email)} />
+            <Field label="Téléphone" value={cleanField(vendor?.phone)} />
+            <Field label="Adresse" value={cleanField(vendorAddress)} wide />
+          </dl>
+        </details>
       )}
     </div>
   )
