@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import type { Dossier } from '../../lib/suivi'
-import { formatCurrency, formatDate } from '../../lib/suivi'
+import { formatDate } from '../../lib/suivi'
 import { fullName, initials, STATUS_LABEL, type DebriefResponse } from '../../lib/types'
 import { useAuth } from '../../lib/auth'
 import { updateLead } from '../../lib/hooks'
@@ -125,11 +125,6 @@ export function FicheClientPanel({ dossier, debriefs, onSaved }: Props) {
           <Field label="Campagne" value={lead.campaign} />
           <Field label="Setter" value={dossier.setter?.name} />
           <Field label="Commercial" value={dossier.commercial?.name} />
-          <Field label="Montant" value={dossier.amount ? formatCurrency(dossier.amount) : null} />
-          <Field
-            label="Signé le"
-            value={dossier.rdv?.signatureAt ? formatDate(dossier.rdv.signatureAt) : (dossier.signedAt ? formatDate(dossier.signedAt) : null)}
-          />
         </dl>
         {error && <p className="mt-2 text-xs font-medium text-rouille">{error}</p>}
       </Section>
