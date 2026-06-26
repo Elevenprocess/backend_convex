@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Icon } from '../Icon'
 import { FileDropzone } from '../FileDropzone'
 import { SubstepDocPreviewModal } from './SubstepDocPreviewModal'
@@ -61,7 +61,6 @@ export function SubstepModal({
   const [preview, setPreview] = useState<SubstepDocument | null>(null)
   const [techSaving, setTechSaving] = useState(false)
   const [techError, setTechError] = useState<string | null>(null)
-  const notesDebounceRef = useRef<number | null>(null)
 
   // B2 fix: re-sync ALL editable fields (incl. heure) quand le substep change
   // (après refetch post-mutation). substep.id en dep garantit la réinitialisation
@@ -98,52 +97,55 @@ export function SubstepModal({
   // réalisation est posée côté backend au jour de l'upload.
   const depositOnly = substep.depositOnly
 
-  // B2 fix: toutes les sauvegardes sont immédiates (plus de debounce pour date)
-  // pour éviter la race date-debounced vs responsable-immédiat. Seules les notes
-  // (saisie longue) restent debouncées.
+  const hasDraftChanges =
+    date !== (substep.dateRealisee ?? '')
+    || heure !== (substep.heure ?? '')
+    || notes !== (substep.notes ?? '')
+
   const onDateChange = (val: string) => {
     setDate(val)
-    onMutate(substep.id, { dateRealisee: val || null })
   }
 
   const onHeureChange = (val: string) => {
     setHeure(val)
-    onMutate(substep.id, { heure: val || null })
   }
 
   const onNotesChange = (val: string) => {
     setNotes(val)
-    if (notesDebounceRef.current) window.clearTimeout(notesDebounceRef.current)
-    notesDebounceRef.current = window.setTimeout(() => onMutate(substep.id, { notes: val || null }), 500)
+  }
+
+  const draftPatch = (): UpdateSubstepPatch => ({
+    dateRealisee: date || null,
+    heure: heure || null,
+    notes: notes || null,
+  })
+
+  const onSaveDraft = () => {
+    onMutate(substep.id, draftPatch())
   }
 
   const onToggleDone = () => {
-    if (notesDebounceRef.current) window.clearTimeout(notesDebounceRef.current)
-    if (done) onMutate(substep.id, { status: 'a_faire' })
-    else onMutate(substep.id, { status: 'fait', dateRealisee: date || today })
+    if (done) onMutate(substep.id, { ...draftPatch(), status: 'a_faire' })
+    else onMutate(substep.id, { ...draftPatch(), status: 'fait', dateRealisee: date || today })
   }
 
   const onCancelSale = () => {
-    if (notesDebounceRef.current) window.clearTimeout(notesDebounceRef.current)
     if (!window.confirm(
       'Marquer la VT comme NON validée ?\n\nLa vente sera ANNULÉE : le dossier passe en « annulé » et les finances de ce client sont remises à zéro (rien à encaisser).',
     )) return
-    onMutate(substep.id, { status: 'annule', problemReason: 'vt_invalide' })
+    onMutate(substep.id, { ...draftPatch(), status: 'annule', problemReason: 'vt_invalide' })
   }
 
   const onReactivate = () => {
-    if (notesDebounceRef.current) window.clearTimeout(notesDebounceRef.current)
-    onMutate(substep.id, { status: 'a_faire', problemReason: null })
+    onMutate(substep.id, { ...draftPatch(), status: 'a_faire', problemReason: null })
   }
 
   const onMarkDpRefusee = () => {
-    if (notesDebounceRef.current) window.clearTimeout(notesDebounceRef.current)
-    onMutate(substep.id, { status: 'probleme', problemReason: 'dp_refusee', problemNotes: notes || null })
+    onMutate(substep.id, { ...draftPatch(), status: 'probleme', problemReason: 'dp_refusee', problemNotes: notes || null })
   }
 
   const onReopenDp = () => {
-    if (notesDebounceRef.current) window.clearTimeout(notesDebounceRef.current)
-    onMutate(substep.id, { status: 'a_faire', problemReason: null, problemNotes: null })
+    onMutate(substep.id, { ...draftPatch(), status: 'a_faire', problemReason: null, problemNotes: null })
   }
 
   const onUpload = async (files: File[]) => {
@@ -351,6 +353,14 @@ export function SubstepModal({
         {!readOnly && (
           <footer className="wf-modal-foot">
             <button type="button" className="wf-cta-ghost" onClick={onClose}>Fermer</button>
+            {hasDraftChanges && !depositOnly && (
+              <span className="wf-modal-draft" role="status">Modifications non enregistrées</span>
+            )}
+            {!depositOnly && (
+              <button type="button" className="wf-cta-ghost" disabled={!hasDraftChanges || saving} onClick={onSaveDraft}>
+                {saving ? 'Enregistrement…' : 'Enregistrer les modifications'}
+              </button>
+            )}
             {cancelled ? (
               <button type="button" className="wf-cta-primary" disabled={saving} onClick={onReactivate}>
                 {saving ? 'Enregistrement…' : 'Réactiver la vente'}
