@@ -45,7 +45,7 @@ export function FinancesCharts({ data }: Props) {
 
   return (
     <div className="glass-card p-4 mb-5">
-      <div className="eyebrow text-or-dark mb-3">Encaissé vs Reste à encaisser</div>
+      <div className="eyebrow text-or-dark mb-3">Courbe d'encaissement réelle vs reste à encaisser</div>
       <ResponsiveContainer width="100%" height={240}>
         <AreaChart data={chartData} margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
           <defs>
@@ -85,7 +85,7 @@ export function FinancesCharts({ data }: Props) {
           <Area
             type="monotone"
             dataKey="cumulEncaisse"
-            name="Cumul encaissé"
+            name="Encaissement cumulé"
             stroke="#b69a5c"
             strokeWidth={2}
             fill="url(#gradEncaisse)"

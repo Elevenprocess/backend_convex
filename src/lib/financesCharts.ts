@@ -5,50 +5,106 @@ export type MonthPoint = {
   month: string
   /** Σ cumulatif des encaissements jusqu'à ce mois (inclus). */
   cumulEncaisse: number
-  /** Σ des montants non-encaissés à ce mois (tranches a_encaisser / en_retard / en_attente). */
+  /** Σ restant à encaisser après les encaissements cumulés du mois. */
   resteTotal: number
 }
 
+function toNumber(v: string | number | null | undefined): number {
+  if (v == null || v === '') return 0
+  const n = Number(v)
+  return Number.isFinite(n) ? n : 0
+}
+
+function monthKey(date: string | null | undefined): string | null {
+  if (!date || date.length < 7) return null
+  return date.slice(0, 7)
+}
+
+function addMonths(month: string, delta: number): string {
+  const [year, m] = month.split('-').map(Number)
+  const d = new Date(year, m - 1 + delta, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function monthRange(start: string, end: string): string[] {
+  const out: string[] = []
+  let cursor = start
+  for (let guard = 0; cursor <= end && guard < 180; guard += 1) {
+    out.push(cursor)
+    cursor = addMonths(cursor, 1)
+  }
+  return out
+}
+
 /**
- * Construit deux séries mensuelles à partir des AcompteResponse :
- * - cumulEncaisse : cumul croissant des montantReel des tranches `encaisse`,
- *   bucketé par mois de dateEncaissement.
- * - resteTotal : montant planifié total moins le cumul encaissé jusqu'à ce mois
- *   (décroît à mesure que les encaissements s'accumulent, visualisant le gap restant).
+ * Construit une courbe financière logique à partir des vraies échéances :
  *
- * totalPlanned = Σ montantPrevu de toutes les tranches (base identique à cumulEncaisse).
- * Les mois sont déduits des dateEncaissement existantes. Triés chronologiquement.
+ * - `cumulEncaisse` additionne les tranches réellement encaissées, groupées par
+ *   mois de `dateEncaissement`.
+ * - `resteTotal` part du total prévu et diminue avec le cumul encaissé.
+ * - La série contient tous les mois entre le début et la fin de période, même
+ *   s'il n'y a aucun encaissement sur un mois, pour éviter des courbes cassées
+ *   ou trompeuses.
+ * - Si une période est sélectionnée, on affiche la fenêtre demandée, mais le
+ *   cumul tient compte des encaissements antérieurs afin que le reste démarre au
+ *   bon niveau.
  */
-export function buildEncaissementSeries(rows: AcompteResponse[]): MonthPoint[] {
-  // Accumule les encaissements par mois YYYY-MM
-  const byMonth: Map<string, number> = new Map()
+export function buildEncaissementSeries(
+  rows: AcompteResponse[],
+  from?: string | null,
+  to?: string | null,
+): MonthPoint[] {
+  if (rows.length === 0) return []
+
+  const encaisseByMonth: Map<string, number> = new Map()
+  const allMonths = new Set<string>()
+  let totalPlanned = 0
 
   for (const a of rows) {
+    const echeancesTotal = a.echeances.reduce((sum, e) => {
+      if (e.statut === 'annule') return sum
+      return sum + toNumber(e.montantPrevu)
+    }, 0)
+    totalPlanned += echeancesTotal || toNumber(a.montantTotal)
+
+    const signedMonth = monthKey(a.signedAt)
+    if (signedMonth) allMonths.add(signedMonth)
+
     for (const e of a.echeances) {
-      if (e.statut !== 'encaisse' || !e.dateEncaissement) continue
-      const month = e.dateEncaissement.slice(0, 7) // YYYY-MM
-      const montant = Number(e.montantReel ?? e.montantPrevu ?? 0) || 0
-      byMonth.set(month, (byMonth.get(month) ?? 0) + montant)
+      const dueMonth = monthKey(e.dateEcheance)
+      if (dueMonth) allMonths.add(dueMonth)
+
+      if (e.statut !== 'encaisse') continue
+      const paidMonth = monthKey(e.dateEncaissement) ?? dueMonth ?? signedMonth
+      if (!paidMonth) continue
+      const montant = toNumber(e.montantReel) || toNumber(e.montantPrevu)
+      encaisseByMonth.set(paidMonth, (encaisseByMonth.get(paidMonth) ?? 0) + montant)
+      allMonths.add(paidMonth)
     }
   }
 
-  if (byMonth.size === 0) return []
+  if (totalPlanned <= 0 && encaisseByMonth.size === 0) return []
 
-  // Trier les mois et calculer le cumul
-  const months = [...byMonth.keys()].sort()
+  const todayMonth = new Date().toISOString().slice(0, 7)
+  const fromMonth = monthKey(from)
+  const toMonth = monthKey(to)
+  const sortedDataMonths = [...allMonths].sort()
+  const startMonth = fromMonth ?? sortedDataMonths[0] ?? todayMonth
+  const endMonth = toMonth ?? sortedDataMonths[sortedDataMonths.length - 1] ?? todayMonth
+  const months = monthRange(startMonth, endMonth)
 
-  // totalPlanned = Σ montantPrevu de toutes les tranches (non annulées)
-  // Cohérent avec la base de cumul (montantReel ?? montantPrevu pour les encaissées).
-  const totalPlanned = rows.reduce((sum, a) => {
-    return sum + a.echeances.reduce((s, e) => {
-      if (e.statut === 'annule') return s
-      return s + (Number(e.montantPrevu ?? 0) || 0)
-    }, 0)
-  }, 0)
+  let cumulBeforeWindow = 0
+  for (const [month, montant] of encaisseByMonth.entries()) {
+    if (month < startMonth) cumulBeforeWindow += montant
+  }
 
-  let cumul = 0
+  let cumul = cumulBeforeWindow
   return months.map((month) => {
-    cumul += byMonth.get(month) ?? 0
-    return { month, cumulEncaisse: cumul, resteTotal: Math.max(0, totalPlanned - cumul) }
+    cumul += encaisseByMonth.get(month) ?? 0
+    return {
+      month,
+      cumulEncaisse: cumul,
+      resteTotal: Math.max(0, totalPlanned - cumul),
+    }
   })
 }

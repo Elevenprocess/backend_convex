@@ -84,7 +84,7 @@ export function Finances() {
   }, [acomptes, dateFrom, dateTo])
 
   const chartSeries = useMemo(
-    () => buildEncaissementSeries(filterAcomptesByEncaissementDate(acomptes ?? [], dateFrom || null, dateTo || null)),
+    () => buildEncaissementSeries(acomptes ?? [], dateFrom || null, dateTo || null),
     [acomptes, dateFrom, dateTo],
   )
 
