@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../Icon'
 import { FileDropzone } from '../FileDropzone'
 import { SubstepDocPreviewModal } from './SubstepDocPreviewModal'
@@ -65,6 +65,9 @@ export function SubstepModal({
   const [preview, setPreview] = useState<SubstepDocument | null>(null)
   const [techSaving, setTechSaving] = useState(false)
   const [techError, setTechError] = useState<string | null>(null)
+  const assignedTechIds = useMemo(() => assignedTechniciens.map((t) => t.id), [assignedTechniciens])
+  const assignedTechIdsKey = useMemo(() => [...assignedTechIds].sort().join('|'), [assignedTechIds])
+  const lastSyncedTechIdsKey = useRef(assignedTechIdsKey)
 
   // B2 fix: re-sync ALL editable fields (incl. heure) quand le substep change
   // (après refetch post-mutation). substep.id en dep garantit la réinitialisation
@@ -77,8 +80,26 @@ export function SubstepModal({
   }, [substep.id, substep.dateRealisee, substep.heure, substep.notes, substep.responsableId])
 
   useEffect(() => {
-    setSelectedTechIds(assignedTechniciens.map((t) => t.id))
-  }, [assignedTechniciens])
+    lastSyncedTechIdsKey.current = assignedTechIdsKey
+    setSelectedTechIds(assignedTechIds)
+  }, [substep.id])
+
+  useEffect(() => {
+    setSelectedTechIds((current) => {
+      const currentKey = [...current].sort().join('|')
+      const hasLocalDraft = currentKey !== lastSyncedTechIdsKey.current
+
+      // Après un clic direct sur « Valider », le workflow peut se refetch avant
+      // le client. Dans ce court intervalle, assignedTechniciens est encore
+      // l'ancienne valeur : ne pas écraser la coche locale avec une prop stale.
+      if (hasLocalDraft && assignedTechIdsKey === lastSyncedTechIdsKey.current) {
+        return current
+      }
+
+      lastSyncedTechIdsKey.current = assignedTechIdsKey
+      return assignedTechIds
+    })
+  }, [assignedTechIds, assignedTechIdsKey])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -143,14 +164,17 @@ export function SubstepModal({
     notes: notes || null,
   })
 
+  const saveTechnicienDraftIfNeeded = async () => {
+    if (!hasTechnicienChanges) return
+    setTechSaving(true)
+    await assignTechniciens(clientId, selectedTechIds)
+    onTechniciensChanged?.()
+  }
+
   const onSaveDraft = async () => {
     setTechError(null)
-    if (hasTechnicienChanges) setTechSaving(true)
     try {
-      if (hasTechnicienChanges) {
-        await assignTechniciens(clientId, selectedTechIds)
-        onTechniciensChanged?.()
-      }
+      await saveTechnicienDraftIfNeeded()
       onMutate(substep.id, draftPatch())
     } catch (e) {
       console.error('[SubstepModal] save draft failed', e)
@@ -160,9 +184,25 @@ export function SubstepModal({
     }
   }
 
-  const onToggleDone = () => {
-    if (done) onMutate(substep.id, { ...draftPatch(), status: 'a_faire' })
-    else onMutate(substep.id, { ...draftPatch(), status: 'fait', dateRealisee: date || today })
+  const onToggleDone = async () => {
+    setTechError(null)
+    try {
+      await saveTechnicienDraftIfNeeded()
+      if (done) {
+        onMutate(substep.id, { ...draftPatch(), status: 'a_faire' })
+      } else {
+        onMutate(substep.id, {
+          ...draftPatch(),
+          status: 'fait',
+          dateRealisee: isTechnicianAssignmentStep ? (plannedVtDate || date || today) : (date || today),
+        })
+      }
+    } catch (e) {
+      console.error('[SubstepModal] validate failed', e)
+      setTechError(e instanceof Error ? e.message : "Échec de l'enregistrement")
+    } finally {
+      setTechSaving(false)
+    }
   }
 
   const onCancelSale = () => {
@@ -429,7 +469,7 @@ export function SubstepModal({
                 <button
                   type="button"
                   className={done ? 'wf-cta-ghost' : 'wf-cta-primary'}
-                  disabled={(!substep.unlocked && !done) || saving}
+                  disabled={(!substep.unlocked && !done) || saving || techSaving}
                   onClick={onToggleDone}
                 >
                   {!done && !saving && <Icon name="check" size={15} strokeWidth={2.6} />}
