@@ -473,7 +473,7 @@ export function SubstepModal({
                   onClick={onToggleDone}
                 >
                   {!done && !saving && <Icon name="check" size={15} strokeWidth={2.6} />}
-                  {saving ? 'Enregistrement…' : done ? 'Rouvrir le module' : substep.actionLabel}
+                  {saving ? 'Enregistrement…' : done ? 'Remettre à faire' : substep.actionLabel}
                 </button>
               </>
             )}
