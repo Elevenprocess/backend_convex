@@ -26,21 +26,21 @@ describe('SUIVI_SECTIONS', () => {
 describe('groupSubsteps', () => {
   const subs = [
     sub({ key: 'consuel_valide', phase: 'consuel', position: 2 }),
-    sub({ key: 'racco_a_faire', phase: 'racco', position: 1 }),
-    sub({ key: 'vt_mandat', phase: 'vt', position: 4 }),
+    sub({ key: 'racco_envoye', phase: 'racco', position: 1 }),
+    sub({ key: 'vt_validee', phase: 'vt', position: 3 }),
     sub({ key: 'vt_planifie', phase: 'vt', position: 1 }),
-    sub({ key: 'dp_a_faire', phase: 'dp', position: 1 }),
+    sub({ key: 'dp_envoyee_mairie', phase: 'dp', position: 1 }),
     sub({ key: 'install_a_faire', phase: 'installation', position: 1 }),
     sub({ key: 'enquete_satisfaction', phase: 'mes', position: 1 }),
   ]
   const g = groupSubsteps(subs)
 
   it('range la VT dans amont, triée par position', () => {
-    expect(g.amont.map((s) => s.key)).toEqual(['vt_planifie', 'vt_mandat'])
+    expect(g.amont.map((s) => s.key)).toEqual(['vt_planifie', 'vt_validee'])
   })
   it('sépare DP et Racco en 2 colonnes (racco seul, sans consuel)', () => {
-    expect(g.backoffice.dp.map((s) => s.key)).toEqual(['dp_a_faire'])
-    expect(g.backoffice.racco.map((s) => s.key)).toEqual(['racco_a_faire'])
+    expect(g.backoffice.dp.map((s) => s.key)).toEqual(['dp_envoyee_mairie'])
+    expect(g.backoffice.racco.map((s) => s.key)).toEqual(['racco_envoye'])
   })
   it('range installation + consuel + mes dans aval (consuel après installation)', () => {
     expect(g.aval.map((s) => s.key)).toEqual(['install_a_faire', 'consuel_valide', 'enquete_satisfaction'])

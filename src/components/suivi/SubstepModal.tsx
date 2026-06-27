@@ -24,6 +24,8 @@ type Props = {
   clientId: string
   /** Liste des techniciens déjà assignés au dossier (depuis client.techniciens). */
   assignedTechniciens: { id: string; name: string }[]
+  /** Date/heure du module VT planifiée, affichée automatiquement dans Technicien attribué. */
+  vtPlanning?: Pick<SubstepResponse, 'dateRealisee' | 'heure'> | null
   onMutate: (id: string, patch: UpdateSubstepPatch) => void
   onDocsChanged?: () => void
   /** Appelé après un changement de liste de techniciens (pour déclencher un refetch client). */
@@ -47,6 +49,7 @@ export function SubstepModal({
   readOnly,
   clientId,
   assignedTechniciens,
+  vtPlanning,
   onMutate,
   onDocsChanged,
   onTechniciensChanged,
@@ -56,6 +59,7 @@ export function SubstepModal({
   const [heure, setHeure] = useState(substep.heure ?? '')
   const [notes, setNotes] = useState(substep.notes ?? '')
   const [responsable, setResponsable] = useState(substep.responsableId ?? '')
+  const [selectedTechIds, setSelectedTechIds] = useState<string[]>(assignedTechniciens.map((t) => t.id))
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [preview, setPreview] = useState<SubstepDocument | null>(null)
@@ -71,6 +75,10 @@ export function SubstepModal({
     setNotes(substep.notes ?? '')
     setResponsable(substep.responsableId ?? '')
   }, [substep.id, substep.dateRealisee, substep.heure, substep.notes, substep.responsableId])
+
+  useEffect(() => {
+    setSelectedTechIds(assignedTechniciens.map((t) => t.id))
+  }, [assignedTechniciens])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -92,15 +100,30 @@ export function SubstepModal({
   // consuel) ne sont que des démarches administratives : pas de technicien à y
   // attribuer — uniquement date, notes et dépôt de pièces / photos.
   const isFieldPhase = substep.phase === 'vt' || substep.phase === 'installation' || substep.phase === 'mes'
+  const showTechnicianSection = isFieldPhase && substep.key !== 'vt_planifie'
+  const isTechnicianAssignmentStep = substep.key === 'vt_attribuee'
+  const plannedVtDate = isTechnicianAssignmentStep ? (vtPlanning?.dateRealisee ?? null) : null
+  const plannedVtHeure = isTechnicianAssignmentStep ? (vtPlanning?.heure ?? null) : null
   // Module « dépôt seul » : sa seule finalité est de recevoir une pièce. On masque
   // Date / Notes / Technicien — il ne reste que la zone de dépôt. La date de
   // réalisation est posée côté backend au jour de l'upload.
   const depositOnly = substep.depositOnly
+  // VT planifiée = uniquement date/heure/technicien/notes. Pas de dépôt photo/doc
+  // à cette étape : les pièces VT arrivent sur le module « VT validée ».
+  const showDocumentSection = substep.key !== 'vt_planifie' && substep.key !== 'vt_attribuee'
+
+  const currentTechIds = assignedTechniciens.map((t) => t.id).sort()
+  const draftTechIds = [...selectedTechIds].sort()
+  const hasTechnicienChanges = showTechnicianSection && (
+    currentTechIds.length !== draftTechIds.length
+    || currentTechIds.some((id, index) => id !== draftTechIds[index])
+  )
 
   const hasDraftChanges =
-    date !== (substep.dateRealisee ?? '')
-    || heure !== (substep.heure ?? '')
+    (!isTechnicianAssignmentStep && date !== (substep.dateRealisee ?? ''))
+    || (!isTechnicianAssignmentStep && heure !== (substep.heure ?? ''))
     || notes !== (substep.notes ?? '')
+    || hasTechnicienChanges
 
   const onDateChange = (val: string) => {
     setDate(val)
@@ -115,13 +138,26 @@ export function SubstepModal({
   }
 
   const draftPatch = (): UpdateSubstepPatch => ({
-    dateRealisee: date || null,
-    heure: heure || null,
+    dateRealisee: isTechnicianAssignmentStep ? (plannedVtDate ?? null) : (date || null),
+    heure: isTechnicianAssignmentStep ? (plannedVtHeure ?? null) : (heure || null),
     notes: notes || null,
   })
 
-  const onSaveDraft = () => {
-    onMutate(substep.id, draftPatch())
+  const onSaveDraft = async () => {
+    setTechError(null)
+    if (hasTechnicienChanges) setTechSaving(true)
+    try {
+      if (hasTechnicienChanges) {
+        await assignTechniciens(clientId, selectedTechIds)
+        onTechniciensChanged?.()
+      }
+      onMutate(substep.id, draftPatch())
+    } catch (e) {
+      console.error('[SubstepModal] save draft failed', e)
+      setTechError(e instanceof Error ? e.message : "Échec de l'enregistrement")
+    } finally {
+      setTechSaving(false)
+    }
   }
 
   const onToggleDone = () => {
@@ -149,6 +185,7 @@ export function SubstepModal({
   }
 
   const onUpload = async (files: File[]) => {
+    if (!showDocumentSection) return
     setUploading(true)
     setUploadError(null)
     try {
@@ -166,23 +203,17 @@ export function SubstepModal({
     onDocsChanged?.()
   }
 
-  // B3 – multi-technician toggle
-  const onToggleTechnicien = async (techId: string, checked: boolean) => {
-    setTechSaving(true)
+  // Les techniciens sont un brouillon local : aucune synchro workflow/client tant
+  // que l'utilisateur ne clique pas explicitement sur « Enregistrer ».
+  const onToggleTechnicien = (techId: string, checked: boolean) => {
     setTechError(null)
-    try {
-      const current = assignedTechniciens.map((t) => t.id)
-      const next = checked
+    setSelectedTechIds((current) => (
+      checked
         ? [...current.filter((id) => id !== techId), techId]
         : current.filter((id) => id !== techId)
-      await assignTechniciens(clientId, next)
-      onTechniciensChanged?.()
-    } catch (e) {
-      console.error('[SubstepModal] assignTechniciens failed', e)
-      setTechError(e instanceof Error ? e.message : "Échec de l'enregistrement")
-    } finally {
-      setTechSaving(false)
-    }
+    ))
+    if (!responsable && checked) setResponsable(techId)
+    if (responsable === techId && !checked) setResponsable('')
   }
 
   const statusLabel = cancelled ? 'Vente annulée' : done ? 'Terminé' : blocked ? 'Blocage' : substep.unlocked ? 'En cours' : 'En attente'
@@ -223,9 +254,9 @@ export function SubstepModal({
 
           {readOnly ? (
             <dl className="wf-modal-ro">
-              {!depositOnly && <div><dt>Date</dt><dd>{substep.dateRealisee || '—'}</dd></div>}
-              {!depositOnly && substep.heure && <div><dt>Heure</dt><dd>{substep.heure}</dd></div>}
-              {isFieldPhase && !depositOnly && (
+              {!depositOnly && <div><dt>Date</dt><dd>{isTechnicianAssignmentStep ? (plannedVtDate || '—') : (substep.dateRealisee || '—')}</dd></div>}
+              {!depositOnly && (isTechnicianAssignmentStep ? plannedVtHeure : substep.heure) && <div><dt>Heure</dt><dd>{isTechnicianAssignmentStep ? plannedVtHeure : substep.heure}</dd></div>}
+              {showTechnicianSection && !depositOnly && (
                 <div>
                   <dt>Techniciens</dt>
                   <dd>{assignedTechniciens.length > 0 ? assignedTechniciens.map((t) => t.name).join(', ') : '—'}</dd>
@@ -236,7 +267,7 @@ export function SubstepModal({
             </dl>
           ) : (
             <>
-              {!depositOnly && (
+              {!depositOnly && !isTechnicianAssignmentStep && (
                 <section className="wf-modal-section">
                   <h3><Icon name="calendar" size={13} /> Date prévue / réalisation</h3>
                   <div className="flex gap-2">
@@ -258,12 +289,22 @@ export function SubstepModal({
                 </section>
               )}
 
-              {isFieldPhase && !depositOnly && (
+              {!depositOnly && isTechnicianAssignmentStep && (
+                <section className="wf-modal-section">
+                  <h3><Icon name="calendar" size={13} /> Créneau VT planifié</h3>
+                  <div className="wf-modal-ro">
+                    <div><dt>Date</dt><dd>{plannedVtDate || '—'}</dd></div>
+                    <div><dt>Heure</dt><dd>{plannedVtHeure || '—'}</dd></div>
+                  </div>
+                </section>
+              )}
+
+              {showTechnicianSection && !depositOnly && (
                 <section className="wf-modal-section">
                   <h3><Icon name="users" size={13} /> Techniciens{techSaving ? ' …' : ''}</h3>
                   <ul className="flex flex-col gap-1 mt-1">
                     {techniciens.map((t) => {
-                      const checked = assignedTechniciens.some((a) => a.id === t.id)
+                      const checked = selectedTechIds.includes(t.id)
                       return (
                         <li key={t.id} className="flex items-center">
                           <label className="flex items-center gap-2 cursor-pointer text-sm py-1 px-2 rounded hover:bg-black/5 w-full">
@@ -272,7 +313,7 @@ export function SubstepModal({
                               className="accent-[var(--color-cuivre)] w-4 h-4 cursor-pointer"
                               checked={checked}
                               disabled={techSaving || readOnly}
-                              onChange={(e) => void onToggleTechnicien(t.id, e.target.checked)}
+                              onChange={(e) => onToggleTechnicien(t.id, e.target.checked)}
                             />
                             <span>{t.name}</span>
                           </label>
@@ -307,47 +348,49 @@ export function SubstepModal({
             </>
           )}
 
-          <section className="wf-modal-section">
-            <h3><Icon name="tag" size={13} /> Pièces & photos{docStatus.present.length + docStatus.missingTypes.length > 0 ? ` · ${docStatus.present.length}/${docStatus.present.length + docStatus.missingTypes.length}` : ''}</h3>
+          {showDocumentSection && (
+            <section className="wf-modal-section">
+              <h3><Icon name="tag" size={13} /> Pièces & photos{docStatus.present.length + docStatus.missingTypes.length > 0 ? ` · ${docStatus.present.length}/${docStatus.present.length + docStatus.missingTypes.length}` : ''}</h3>
 
-            {(docStatus.present.length > 0 || docStatus.missingTypes.length > 0) && (
-              <ul className="wf-modal-docs">
-                {docStatus.present.map((d) => (
-                  <li key={d.id} className="wf-modal-doc">
-                    <span className={`dochub-thumb kind-${fileKind(d.mimeType)}`}>{KIND_LABEL[fileKind(d.mimeType)]}</span>
-                    <button type="button" className="wf-modal-doc-name" onClick={() => setPreview(d)} title={d.filename}>{d.filename}</button>
-                    <span className="wf-modal-doc-meta">{Math.max(1, Math.round(d.sizeBytes / 1024))} Ko</span>
-                    {!readOnly && (
-                      <button type="button" className="dochub-doc-del" aria-label="Supprimer" onClick={() => void onDeleteDoc(d.id)}>
-                        <Icon name="x" size={13} />
-                      </button>
-                    )}
-                  </li>
-                ))}
-                {docStatus.missingTypes.map((t) => (
-                  <li key={t} className="wf-modal-doc is-missing">
-                    <span className="dochub-thumb kind-missing">—</span>
-                    <span className="wf-modal-doc-name" title={DOC_TYPE_LABEL[t] ?? t}>{DOC_TYPE_LABEL[t] ?? t}</span>
-                    <span className="wf-modal-missing-pill">manquante</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+              {(docStatus.present.length > 0 || docStatus.missingTypes.length > 0) && (
+                <ul className="wf-modal-docs">
+                  {docStatus.present.map((d) => (
+                    <li key={d.id} className="wf-modal-doc">
+                      <span className={`dochub-thumb kind-${fileKind(d.mimeType)}`}>{KIND_LABEL[fileKind(d.mimeType)]}</span>
+                      <button type="button" className="wf-modal-doc-name" onClick={() => setPreview(d)} title={d.filename}>{d.filename}</button>
+                      <span className="wf-modal-doc-meta">{Math.max(1, Math.round(d.sizeBytes / 1024))} Ko</span>
+                      {!readOnly && (
+                        <button type="button" className="dochub-doc-del" aria-label="Supprimer" onClick={() => void onDeleteDoc(d.id)}>
+                          <Icon name="x" size={13} />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                  {docStatus.missingTypes.map((t) => (
+                    <li key={t} className="wf-modal-doc is-missing">
+                      <span className="dochub-thumb kind-missing">—</span>
+                      <span className="wf-modal-doc-name" title={DOC_TYPE_LABEL[t] ?? t}>{DOC_TYPE_LABEL[t] ?? t}</span>
+                      <span className="wf-modal-missing-pill">manquante</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
 
-            {!readOnly && (
-              <>
-                <FileDropzone
-                  id={`wf-modal-drop-${substep.id}`}
-                  multiple
-                  title="Déposer un dossier ou une photo"
-                  subtitle="PDF, images… · 25 Mo / fichier"
-                  onFiles={(files) => void onUpload(files)}
-                />
-                {uploading && <p className="wf-modal-hint">Dépôt en cours…</p>}
-                {uploadError && <p className="wf-modal-error">{uploadError}</p>}
-              </>
-            )}
-          </section>
+              {!readOnly && (
+                <>
+                  <FileDropzone
+                    id={`wf-modal-drop-${substep.id}`}
+                    multiple
+                    title="Déposer un dossier ou une photo"
+                    subtitle="PDF, images… · 25 Mo / fichier"
+                    onFiles={(files) => void onUpload(files)}
+                  />
+                  {uploading && <p className="wf-modal-hint">Dépôt en cours…</p>}
+                  {uploadError && <p className="wf-modal-error">{uploadError}</p>}
+                </>
+              )}
+            </section>
+          )}
         </div>
 
         {!readOnly && (
@@ -357,8 +400,8 @@ export function SubstepModal({
               <span className="wf-modal-draft" role="status">Modifications non enregistrées</span>
             )}
             {!depositOnly && (
-              <button type="button" className="wf-cta-ghost" disabled={!hasDraftChanges || saving} onClick={onSaveDraft}>
-                {saving ? 'Enregistrement…' : 'Enregistrer les modifications'}
+              <button type="button" className="wf-cta-ghost" disabled={!hasDraftChanges || saving || techSaving} onClick={() => void onSaveDraft()}>
+                {saving || techSaving ? 'Enregistrement…' : 'Enregistrer les modifications'}
               </button>
             )}
             {cancelled ? (

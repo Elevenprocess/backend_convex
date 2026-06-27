@@ -82,22 +82,17 @@ export function todayIso(): string {
  * chaque sous-étape (notamment back-office DP / racco / consuel) a la sienne.
  */
 export const SUBSTEP_DESCRIPTION: Partial<Record<WorkflowSubstepKey, string>> = {
-  vt_planifie: "Planifier la visite technique (idéalement sous 72h) et prévenir le technicien.",
-  vt_attribuee: "Attribuer la VT à un technicien : il appelle le client avant de se déplacer.",
-  vt_validee: "Le technicien réalise la VT et confirme la faisabilité. Si non validée → devis perdu.",
-  vt_mandat: "PHOTO du dossier, exactement comme la colonne PHOTO du Sheet.",
-  dp_a_faire: "STATUT DP : NON DÉPOSÉ, DÉPOSÉ ou DÉPOSÉ PAR MAIL.",
-  dp_envoyee_mairie: "DATE DÉPOT DP et récépissé de dépôt DP mairie.",
-  dp_validee: "DP VALIDE (mairie) : validée, en cours, à corriger, refusée, à refaire…",
-  dp_prolongation: "Prolongation du délai d'instruction DP si renseignée dans le Sheet.",
-  racco_a_faire: "Statut Raccordement : NON DÉPOSÉ ou DÉPOSÉ.",
-  racco_envoye: "Date Dépot Raccordement et récépissé EDF/raccordement.",
-  racco_validee: "Récépissé EDF / retour raccordement reçu — conservé pour les finances.",
-  racco_completude: "Attestation de complétude si disponible.",
-  consuel_a_faire: "CONSUEL et DATE DE DEPOT CONSUEL.",
-  consuel_valide: "CONSUEL reçu : Reçu ou Non reçu.",
-  install_a_faire: "Statut d'installation : Installé ou Pas installé.",
-  install_effectuee: "Installation réalisée quand le Sheet indique Installé.",
+  vt_planifie: "Planifier la visite technique avec date et heure uniquement. L'attribution se fait dans le module Technicien attribué.",
+  vt_attribuee: "Attribuer la VT à un ou plusieurs techniciens. Le créneau est repris automatiquement depuis VT planifiée.",
+  vt_validee: "Le technicien confirme la faisabilité. Si VT validée : alerte 40% à encaisser ; sinon dossier bloqué/vente annulée.",
+  dp_envoyee_mairie: "DP envoyée à la mairie : joindre le récépissé de dépôt.",
+  dp_validee: "DP validée ou refusée : joindre le CNO si validée, ou noter le retour mairie (refus, information complémentaire, manque de permis, dossier à revoir).",
+  racco_envoye: "Raccordement envoyé : joindre le récépissé de raccordement.",
+  racco_validee: "Raccordement validé : joindre le CRAE. L'attestation de complétude reste un fichier, pas une étape workflow.",
+  consuel_a_faire: "Après installation : Consuel envoyé avec le PDF rempli.",
+  consuel_valide: "Consuel validé/reçu : joindre l'attestation Consuel.",
+  install_a_faire: "Planifier l'installation avec date, heure et technicien(s).",
+  install_effectuee: "Installation réalisée : afficher le statut Installé et déclencher l'alerte solde/restant à encaisser.",
   enquete_satisfaction: "ETAT DU DOSSIER, SOLTEO, RETOUR CLIENTS et DOCUMENTS MANQUANTS.",
 }
 

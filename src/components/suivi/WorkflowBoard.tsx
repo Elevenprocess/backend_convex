@@ -83,6 +83,7 @@ export function WorkflowBoard({ substeps, onMutate, today, users, client, saving
   const overallPct = overallTotal ? Math.round((overallDone / overallTotal) * 100) : 0
   const [openId, setOpenId] = useState<string | null>(null)
   const openSubstep = openId ? substeps.find((s) => s.id === openId) ?? null : null
+  const vtPlanning = substeps.find((s) => s.key === 'vt_planifie') ?? null
 
   const renderList = (list: SubstepResponse[]) => (
     <div className="wf-list">
@@ -159,6 +160,7 @@ export function WorkflowBoard({ substeps, onMutate, today, users, client, saving
           readOnly={canEditPhase ? !canEditPhase(openSubstep.phase) : false}
           clientId={client?.id ?? openSubstep.clientId}
           assignedTechniciens={client?.techniciens ?? []}
+          vtPlanning={vtPlanning}
           onMutate={onMutate}
           onDocsChanged={onDocsChanged}
           onTechniciensChanged={onTechniciensChanged}

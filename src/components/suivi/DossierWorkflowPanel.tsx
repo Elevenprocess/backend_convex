@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '../../lib/auth'
 import { useClients, useSubsteps, useUsers } from '../../lib/hooks'
 import { bootstrapClient, bootstrapClientForProject, updateSubstep } from '../../lib/api'
@@ -39,12 +39,23 @@ export function DossierWorkflowPanel({ dossier, projectId }: Props) {
   const { data: users } = useUsers()
   const client = clients?.[0] ?? null
   const { data: substeps, loading: substepsLoading, refetch } = useSubsteps(client ? { clientId: client.id } : null)
+  const [localSubsteps, setLocalSubsteps] = useState<typeof substeps>(null)
   const [savingId, setSavingId] = useState<string | null>(null)
   const [initializing, setInitializing] = useState(false)
   const [initError, setInitError] = useState<string | null>(null)
   const today = todayIso()
 
   const canInitDossier = role === 'admin' || role === 'responsable_technique' || role === 'back_office' || role === 'delivrabilite'
+
+  useEffect(() => {
+    if (substeps) setLocalSubsteps(substeps)
+    else if (!client) setLocalSubsteps(null)
+  }, [client, substeps])
+
+  const refreshWorkflow = useCallback(() => {
+    refetch()
+    refetchClients()
+  }, [refetch, refetchClients])
 
   const onInitDossier = useCallback(async () => {
     setInitializing(true)
@@ -62,12 +73,18 @@ export function DossierWorkflowPanel({ dossier, projectId }: Props) {
   const onMutate = useCallback(async (id: string, patch: UpdateSubstepPatch) => {
     setSavingId(id)
     try {
-      await updateSubstep(id, patch)
-      refetch()
+      const updated = await updateSubstep(id, patch)
+      // Synchronisation immédiate : la carte workflow et le module ouvert voient
+      // le même objet mis à jour, sans attendre le refetch/cache realtime.
+      setLocalSubsteps((current) => {
+        const base = current ?? substeps ?? []
+        return base.map((s) => (s.id === id ? updated : s))
+      })
+      refreshWorkflow()
     } finally {
       setSavingId(null)
     }
-  }, [refetch])
+  }, [refreshWorkflow, substeps])
 
   return (
     <div className="suivi-main-col">
@@ -87,7 +104,17 @@ export function DossierWorkflowPanel({ dossier, projectId }: Props) {
         ) : (substeps == null && substepsLoading) ? (
           <p className="wf-empty">Chargement du workflow…</p>
         ) : (
-          <WorkflowBoard substeps={substeps ?? []} onMutate={onMutate} today={today} users={users ?? []} client={client} savingId={savingId} onDocsChanged={refetch} onTechniciensChanged={refetchClients} canEditPhase={canEditPhase} />
+          <WorkflowBoard
+            substeps={localSubsteps ?? substeps ?? []}
+            onMutate={onMutate}
+            today={today}
+            users={users ?? []}
+            client={client}
+            savingId={savingId}
+            onDocsChanged={refreshWorkflow}
+            onTechniciensChanged={refreshWorkflow}
+            canEditPhase={canEditPhase}
+          />
         )}
       </section>
     </div>

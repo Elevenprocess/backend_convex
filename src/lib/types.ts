@@ -962,9 +962,9 @@ export type ClientResponse = {
 }
 
 export type WorkflowSubstepKey =
-  | 'vt_planifie' | 'vt_attribuee' | 'vt_validee' | 'vt_mandat'
-  | 'dp_a_faire' | 'dp_envoyee_mairie' | 'dp_validee' | 'dp_prolongation'
-  | 'racco_a_faire' | 'racco_envoye' | 'racco_validee' | 'racco_completude'
+  | 'vt_planifie' | 'vt_attribuee' | 'vt_validee'
+  | 'dp_envoyee_mairie' | 'dp_validee'
+  | 'racco_envoye' | 'racco_validee'
   | 'consuel_a_faire' | 'consuel_valide'
   | 'install_a_faire' | 'install_effectuee'
   | 'enquete_satisfaction'
