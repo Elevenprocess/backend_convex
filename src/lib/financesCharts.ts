@@ -67,15 +67,9 @@ export function buildEncaissementSeries(
     }, 0)
     totalPlanned += echeancesTotal || toNumber(a.montantTotal)
 
-    const signedMonth = monthKey(a.signedAt)
-    if (signedMonth) allMonths.add(signedMonth)
-
     for (const e of a.echeances) {
-      const dueMonth = monthKey(e.dateEcheance)
-      if (dueMonth) allMonths.add(dueMonth)
-
       if (e.statut !== 'encaisse') continue
-      const paidMonth = monthKey(e.dateEncaissement) ?? dueMonth ?? signedMonth
+      const paidMonth = monthKey(e.dateEncaissement)
       if (!paidMonth) continue
       const montant = toNumber(e.montantReel) || toNumber(e.montantPrevu)
       encaisseByMonth.set(paidMonth, (encaisseByMonth.get(paidMonth) ?? 0) + montant)
@@ -91,7 +85,7 @@ export function buildEncaissementSeries(
   const sortedDataMonths = [...allMonths].sort()
   const startMonth = fromMonth ?? sortedDataMonths[0] ?? todayMonth
   const endMonth = toMonth ?? sortedDataMonths[sortedDataMonths.length - 1] ?? todayMonth
-  const months = monthRange(startMonth, endMonth)
+  const months = (fromMonth || toMonth) ? monthRange(startMonth, endMonth) : sortedDataMonths
 
   let cumulBeforeWindow = 0
   for (const [month, montant] of encaisseByMonth.entries()) {
