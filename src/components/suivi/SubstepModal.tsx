@@ -238,7 +238,8 @@ export function SubstepModal({
     }
   }
 
-  const onDeleteDoc = async (docId: string) => {
+  const onDeleteDoc = async (docId: string, filename: string) => {
+    if (!window.confirm(`Supprimer ce fichier du workflow ?\n\n${filename}`)) return
     await deleteSubstepDocument(docId)
     onDocsChanged?.()
   }
@@ -400,8 +401,8 @@ export function SubstepModal({
                       <button type="button" className="wf-modal-doc-name" onClick={() => setPreview(d)} title={d.filename}>{d.filename}</button>
                       <span className="wf-modal-doc-meta">{Math.max(1, Math.round(d.sizeBytes / 1024))} Ko</span>
                       {!readOnly && (
-                        <button type="button" className="dochub-doc-del" aria-label="Supprimer" onClick={() => void onDeleteDoc(d.id)}>
-                          <Icon name="x" size={13} />
+                        <button type="button" className="dochub-doc-del wf-modal-doc-delete" aria-label={`Supprimer ${d.filename}`} onClick={() => void onDeleteDoc(d.id, d.filename)}>
+                          <Icon name="x" size={13} /> Supprimer
                         </button>
                       )}
                     </li>
