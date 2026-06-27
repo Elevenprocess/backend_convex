@@ -54,9 +54,13 @@ export function Finances() {
   const rows = useMemo(() => {
     const list = acomptes ?? []
     const q = query.trim().toLowerCase()
-    // Filtre date d'encaissement en premier (scope de base)
-    const dated = filterAcomptesByEncaissementDate(list, dateFrom || null, dateTo || null)
-    return dated.filter((a) => {
+    // Le filtre date concerne UNIQUEMENT les encaissements réels. Il ne doit pas
+    // cacher les dossiers « à encaisser / à venir », sinon la page semble vide
+    // alors que le reste à encaisser existe encore.
+    const scoped = filter === 'encaisse'
+      ? filterAcomptesByEncaissementDate(list, dateFrom || null, dateTo || null)
+      : list
+    return scoped.filter((a) => {
       if (filter !== 'tous' && !a.echeances.some((e) => e.statut === filter)) return false
       if (q && ![a.projectName, a.clientName].filter(Boolean).join(' ').toLowerCase().includes(q)) return false
       return true
@@ -64,8 +68,7 @@ export function Finances() {
   }, [acomptes, filter, query, dateFrom, dateTo])
 
   const totals = useMemo(() => {
-    // KPI calculés sur le jeu filtré par date (mais pas par statut/texte)
-    const list = filterAcomptesByEncaissementDate(acomptes ?? [], dateFrom || null, dateTo || null)
+    const list = acomptes ?? []
     let aEncaisser = 0
     let encaisse = 0
     let aVenir = 0
@@ -74,7 +77,11 @@ export function Finances() {
     for (const a of list) {
       for (const e of a.echeances) {
         const prevu = Number(e.montantPrevu ?? 0) || 0
-        if (e.statut === 'encaisse') encaisse += Number(e.montantReel ?? e.montantPrevu ?? 0) || 0
+        if (e.statut === 'encaisse') {
+          const d = e.dateEncaissement
+          const inDateRange = (!dateFrom || (d != null && d >= dateFrom)) && (!dateTo || (d != null && d <= dateTo))
+          if (inDateRange) encaisse += Number(e.montantReel ?? e.montantPrevu ?? 0) || 0
+        }
         else if (e.statut === 'a_encaisser') aEncaisser += prevu
         else if (e.statut === 'en_retard') { nbRetard += 1; aEncaisser += prevu; retardAmount += prevu }
         else if (e.statut === 'en_attente') aVenir += prevu
