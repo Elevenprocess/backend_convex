@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
@@ -103,11 +103,31 @@ export function Suivi() {
   }, [signedDossiers.map((d) => d.id).join('|')])
 
   const scrollRef = useRef<HTMLElement>(null)
-  const COLUMNS = 3
-  const rowVirtualizer = useCardGridVirtualizer(scrollRef, filtered.length, {
-    columns: COLUMNS,
+
+  // ── Scroll-offset correction (Finding 2) ──────────────────────────────────
+  // `scrollRef` est sur <main>, qui contient aussi le hero/KPIs/filtres
+  // (~300-400 px au-dessus de la grille). Sans scrollMargin, react-virtual
+  // calculerait la fenêtre visible depuis le haut de <main>, pas depuis le
+  // début de la grille. On mesure `offsetTop` du wrapper de grille via un
+  // callback ref (stable, vide deps) : il se déclenche quand le div monte
+  // (après chargement des données) et non sur le composant entier.
+  const [scrollMarginValue, setScrollMarginValue] = useState(0)
+  const gridWrapperRef = useCallback((el: HTMLDivElement | null) => {
+    if (el) {
+      const offset = el.offsetTop
+      // Guard against no-layout env (jsdom → offsetTop=0, tests OK with margin=0).
+      setScrollMarginValue((prev) => (prev === offset ? prev : offset))
+    }
+  }, [])
+
+  // ── Colonnes responsives ───────────────────────────────────────────────────
+  // Miroir de `.suivi-grid { repeat(auto-fill, minmax(320px, 1fr)) }`.
+  // Le hook mesure via ResizeObserver + mesure synchrone au montage.
+  const { virtualizer: rowVirtualizer, columns } = useCardGridVirtualizer(scrollRef, filtered.length, {
+    columns: (w) => Math.max(1, Math.floor(w / 320)),
     estimateRowHeight: 220,
     gap: 16,
+    scrollMargin: scrollMarginValue,
   })
 
   if (role === 'technicien') return <Navigate to="/mes-dossiers" replace />
@@ -183,10 +203,10 @@ export function Suivi() {
             {(query || progressFilter !== 'all') && <button type="button" onClick={() => { setQuery(''); setProgressFilter('all') }}>Réinitialiser les filtres</button>}
           </div>
         ) : (
-          <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
+          <div ref={gridWrapperRef} style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
             {rowVirtualizer.getVirtualItems().map((vRow) => {
-              const start = vRow.index * COLUMNS
-              const rowItems = filtered.slice(start, start + COLUMNS)
+              const start = vRow.index * columns
+              const rowItems = filtered.slice(start, start + columns)
               return (
                 <div
                   key={vRow.key}
@@ -195,9 +215,13 @@ export function Suivi() {
                     top: 0,
                     left: 0,
                     width: '100%',
-                    transform: `translateY(${vRow.start}px)`,
+                    // vRow.start est absolu depuis le haut du scroll-element ;
+                    // on soustrait scrollMarginValue pour obtenir la position
+                    // relative au début du wrapper de grille (pattern officiel
+                    // react-virtual scrollMargin).
+                    transform: `translateY(${vRow.start - scrollMarginValue}px)`,
                     display: 'grid',
-                    gridTemplateColumns: `repeat(${COLUMNS}, 1fr)`,
+                    gridTemplateColumns: `repeat(${columns}, 1fr)`,
                     gap: 16,
                   }}
                 >

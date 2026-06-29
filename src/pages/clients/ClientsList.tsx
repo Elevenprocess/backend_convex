@@ -244,9 +244,12 @@ export function ClientsList() {
   }, [allClients, filter, docFilter, dateFilter, dateFieldFilter, commercialFilter, query])
 
   const scrollRef = useRef<HTMLDivElement>(null)
-  const COLUMNS = 3
-  const rowVirtualizer = useCardGridVirtualizer(scrollRef, clients.length, {
-    columns: COLUMNS,
+  // Colonnes responsives : miroir du CSS original grid-cols-1 sm:2 lg:3 xl:4
+  // (sm=640 px, lg=1024 px, xl=1280 px). Le hook mesure la largeur du container
+  // via ResizeObserver et prend une mesure synchrone au montage (offsetWidth
+  // mocké à 1024 dans jsdom → 3 colonnes en test).
+  const { virtualizer: rowVirtualizer, columns } = useCardGridVirtualizer(scrollRef, clients.length, {
+    columns: (w) => (w < 640 ? 1 : w < 1024 ? 2 : w < 1280 ? 3 : 4),
     estimateRowHeight: 220,
     gap: 16,
   })
@@ -305,8 +308,8 @@ export function ClientsList() {
             ) : (
               <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
                 {rowVirtualizer.getVirtualItems().map((vRow) => {
-                  const start = vRow.index * COLUMNS
-                  const rowItems = clients.slice(start, start + COLUMNS)
+                  const start = vRow.index * columns
+                  const rowItems = clients.slice(start, start + columns)
                   return (
                     <div
                       key={vRow.key}
@@ -317,7 +320,7 @@ export function ClientsList() {
                         width: '100%',
                         transform: `translateY(${vRow.start}px)`,
                         display: 'grid',
-                        gridTemplateColumns: `repeat(${COLUMNS}, 1fr)`,
+                        gridTemplateColumns: `repeat(${columns}, 1fr)`,
                         gap: 16,
                       }}
                     >
