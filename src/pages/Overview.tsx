@@ -326,7 +326,7 @@ function OverviewSetter() {
   const [callbackTab, setCallbackTab] = useState<'late' | 'today' | 'tomorrow'>('today')
   const [activityRange, setActivityRange] = useState<'today' | 'week'>('today')
   const { data: leads = [] } = useLeads({ limit: 500 })
-  const { data: calls = [] } = useCallLogs(me?.id ? { setterId: me.id, limit: 3000 } : { limit: 3000 })
+  const { data: calls = [] } = useCallLogs(me?.id ? { setterId: me.id, limit: 500 } : { limit: 500 })
 
   const callbacks = useMemo(
     () =>
