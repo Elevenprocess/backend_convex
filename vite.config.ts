@@ -10,6 +10,19 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => {
+          if (id.includes('node_modules/recharts')) return 'recharts'
+          if (id.includes('node_modules/ogl')) return 'ogl'
+          if (id.includes('node_modules/socket.io-client')) return 'socket'
+          if (id.includes('node_modules/ai')) return 'ai'
+          if (id.includes('node_modules/@ai-sdk/react')) return 'ai'
+        },
+      },
+    },
+  },
   server: {
     host: '0.0.0.0',
     port: 5173,
