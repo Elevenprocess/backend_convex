@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
@@ -17,6 +17,7 @@ import { buildPeriodRange, defaultPeriod, type PeriodState } from '../lib/period
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
 import { DossierCard } from '../components/suivi/DossierCard'
 import { workflowPhaseProgress } from '../lib/suivi-board'
+import { useCardGridVirtualizer } from '../lib/virtualGrid'
 
 type ProgressFilter = 'all' | 'todo' | 'running' | 'advanced' | 'blocked' | 'delivered'
 
@@ -101,6 +102,14 @@ export function Suivi() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signedDossiers.map((d) => d.id).join('|')])
 
+  const scrollRef = useRef<HTMLElement>(null)
+  const COLUMNS = 3
+  const rowVirtualizer = useCardGridVirtualizer(scrollRef, filtered.length, {
+    columns: COLUMNS,
+    estimateRowHeight: 220,
+    gap: 16,
+  })
+
   if (role === 'technicien') return <Navigate to="/mes-dossiers" replace />
 
   if (
@@ -127,7 +136,7 @@ export function Suivi() {
   return (
     <AppShell flat>
       <Topbar eyebrow="SUIVI INSTALLATION" title="Dossiers signés" />
-      <main className="suivi-page flex-grow overflow-y-auto px-4 sm:px-8 pt-4 pb-8">
+      <main ref={scrollRef} className="suivi-page flex-grow overflow-y-auto px-4 sm:px-8 pt-4 pb-8">
         <header className="suivi-hero">
           <div>
             <span className="eyebrow">Pipeline Délivrabilité</span>
@@ -174,11 +183,31 @@ export function Suivi() {
             {(query || progressFilter !== 'all') && <button type="button" onClick={() => { setQuery(''); setProgressFilter('all') }}>Réinitialiser les filtres</button>}
           </div>
         ) : (
-          <section className="suivi-grid">
-            {filtered.map((d) => (
-              <DossierCard key={d.id} dossier={d} client={clientByLead.get(d.id)} projectCount={projectCountByLead.get(d.id)} onClick={() => navigate(`/suivi/${d.id}/fiche`)} />
-            ))}
-          </section>
+          <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
+            {rowVirtualizer.getVirtualItems().map((vRow) => {
+              const start = vRow.index * COLUMNS
+              const rowItems = filtered.slice(start, start + COLUMNS)
+              return (
+                <div
+                  key={vRow.key}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${vRow.start}px)`,
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(${COLUMNS}, 1fr)`,
+                    gap: 16,
+                  }}
+                >
+                  {rowItems.map((d) => (
+                    <DossierCard key={d.id} dossier={d} client={clientByLead.get(d.id)} projectCount={projectCountByLead.get(d.id)} onClick={() => navigate(`/suivi/${d.id}/fiche`)} />
+                  ))}
+                </div>
+              )
+            })}
+          </div>
         )}
       </main>
     </AppShell>
