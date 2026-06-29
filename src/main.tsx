@@ -1,42 +1,46 @@
-import { StrictMode, type ReactElement } from 'react'
+import { StrictMode, lazy, Suspense, type ReactElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createHashRouter, RouterProvider, Navigate } from 'react-router-dom'
 import './index.css'
 
+// Static: critical / unauthenticated first-render path + router infra
 import { RootLayout } from './RootLayout'
 import { RequireAuth } from './components/RequireAuth'
 import { Login } from './pages/Login'
 import { Landing } from './pages/Landing'
-import { Overview } from './pages/Overview'
-import { LeadsList } from './pages/leads/LeadsList'
-import { LeadDetail } from './pages/leads/LeadDetail'
-import { LeadsSplit } from './pages/leads/LeadsSplit'
-import { ClientsList } from './pages/clients/ClientsList'
-import { MesInterventions } from './pages/technicien/MesInterventions'
-import { ProjectDetail } from './pages/projects/ProjectDetail'
-import { RdvCalendar } from './pages/rdv/RdvCalendar'
-import { RdvDetail } from './pages/rdv/RdvDetail'
-import { RdvSplit } from './pages/rdv/RdvSplit'
-import { Analytics } from './pages/Analytics'
-import { Ads } from './pages/Ads'
-import { Suivi } from './pages/Suivi'
-import { Finances } from './pages/Finances'
-import { SuiviDetail } from './pages/SuiviDetail'
-import { FicheCompletePage } from './pages/SuiviFiche'
-import { ProjectDetailPage } from './pages/ProjectDetail'
-import { ProfilSetter } from './pages/profils/ProfilSetter'
-import { ProfilCommercial } from './pages/profils/ProfilCommercial'
-import { Settings } from './pages/Settings'
-import { MyProfile } from './pages/MyProfile'
-import { AcceptInvitation } from './pages/AcceptInvitation'
-import { DebriefMagicPage } from './pages/DebriefMagicPage'
-import { Notifications } from './pages/Notifications'
-import { CallFullScreen } from './pages/call/CallFullScreen'
-import { CallSplit } from './pages/call/CallSplit'
-import { TechnicienPlanning } from './pages/technicien/TechnicienPlanning'
-import { TechnicienDossiers } from './pages/technicien/TechnicienDossiers'
-import { FicheInterventionVT } from './pages/technicien/FicheInterventionVT'
+import { RouteFallback } from './components/RouteFallback'
 import { useAuth } from './lib/auth'
+
+// Lazy: all actual page components (named exports → .then mapping)
+const Overview = lazy(() => import('./pages/Overview').then((m) => ({ default: m.Overview })))
+const LeadsList = lazy(() => import('./pages/leads/LeadsList').then((m) => ({ default: m.LeadsList })))
+const LeadDetail = lazy(() => import('./pages/leads/LeadDetail').then((m) => ({ default: m.LeadDetail })))
+const LeadsSplit = lazy(() => import('./pages/leads/LeadsSplit').then((m) => ({ default: m.LeadsSplit })))
+const ClientsList = lazy(() => import('./pages/clients/ClientsList').then((m) => ({ default: m.ClientsList })))
+const MesInterventions = lazy(() => import('./pages/technicien/MesInterventions').then((m) => ({ default: m.MesInterventions })))
+const ProjectDetail = lazy(() => import('./pages/projects/ProjectDetail').then((m) => ({ default: m.ProjectDetail })))
+const RdvCalendar = lazy(() => import('./pages/rdv/RdvCalendar').then((m) => ({ default: m.RdvCalendar })))
+const RdvDetail = lazy(() => import('./pages/rdv/RdvDetail').then((m) => ({ default: m.RdvDetail })))
+const RdvSplit = lazy(() => import('./pages/rdv/RdvSplit').then((m) => ({ default: m.RdvSplit })))
+const Analytics = lazy(() => import('./pages/Analytics').then((m) => ({ default: m.Analytics })))
+const Ads = lazy(() => import('./pages/Ads').then((m) => ({ default: m.Ads })))
+const Suivi = lazy(() => import('./pages/Suivi').then((m) => ({ default: m.Suivi })))
+const Finances = lazy(() => import('./pages/Finances').then((m) => ({ default: m.Finances })))
+const SuiviDetail = lazy(() => import('./pages/SuiviDetail').then((m) => ({ default: m.SuiviDetail })))
+const FicheCompletePage = lazy(() => import('./pages/SuiviFiche').then((m) => ({ default: m.FicheCompletePage })))
+const ProjectDetailPage = lazy(() => import('./pages/ProjectDetail').then((m) => ({ default: m.ProjectDetailPage })))
+const ProfilSetter = lazy(() => import('./pages/profils/ProfilSetter').then((m) => ({ default: m.ProfilSetter })))
+const ProfilCommercial = lazy(() => import('./pages/profils/ProfilCommercial').then((m) => ({ default: m.ProfilCommercial })))
+const Settings = lazy(() => import('./pages/Settings').then((m) => ({ default: m.Settings })))
+const MyProfile = lazy(() => import('./pages/MyProfile').then((m) => ({ default: m.MyProfile })))
+const AcceptInvitation = lazy(() => import('./pages/AcceptInvitation').then((m) => ({ default: m.AcceptInvitation })))
+const DebriefMagicPage = lazy(() => import('./pages/DebriefMagicPage').then((m) => ({ default: m.DebriefMagicPage })))
+const Notifications = lazy(() => import('./pages/Notifications').then((m) => ({ default: m.Notifications })))
+const CallFullScreen = lazy(() => import('./pages/call/CallFullScreen').then((m) => ({ default: m.CallFullScreen })))
+const CallSplit = lazy(() => import('./pages/call/CallSplit').then((m) => ({ default: m.CallSplit })))
+const TechnicienPlanning = lazy(() => import('./pages/technicien/TechnicienPlanning').then((m) => ({ default: m.TechnicienPlanning })))
+const TechnicienDossiers = lazy(() => import('./pages/technicien/TechnicienDossiers').then((m) => ({ default: m.TechnicienDossiers })))
+const FicheInterventionVT = lazy(() => import('./pages/technicien/FicheInterventionVT').then((m) => ({ default: m.FicheInterventionVT })))
 
 function RoleHome() {
   const role = useAuth((s) => s.user?.role)
@@ -115,6 +119,8 @@ const router = createHashRouter([
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <RouterProvider router={router} />
+    <Suspense fallback={<RouteFallback />}>
+      <RouterProvider router={router} />
+    </Suspense>
   </StrictMode>
 )
