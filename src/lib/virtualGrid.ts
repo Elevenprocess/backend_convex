@@ -36,6 +36,12 @@ function resolveColumnsInput(input: ColumnsInput, width: number): number {
  *
  * Retourne `{ virtualizer, columns }` : utilisez `columns` dans les callers
  * pour le slicing des lignes ET pour `gridTemplateColumns`.
+ *
+ * Mesure dynamique : chaque ligne est mesurée après rendu via
+ * `virtualizer.measureElement`. Pour l'activer, ajoutez
+ * `ref={virtualizer.measureElement}` et `data-index={vRow.index}` sur le div
+ * de ligne positionné en absolu. `estimateRowHeight` n'est utilisé qu'à titre
+ * d'estimation initiale avant la première mesure réelle.
  */
 export function useCardGridVirtualizer(
   scrollRef: RefObject<HTMLElement | null>,
@@ -106,6 +112,7 @@ export function useCardGridVirtualizer(
     count: rowsForGrid(itemCount, cols),
     getScrollElement: () => scrollRef.current,
     estimateSize: () => estimateRowHeight + gap,
+    measureElement: (el) => (el as HTMLElement).getBoundingClientRect().height,
     overscan: 4,
     scrollMargin,
   })

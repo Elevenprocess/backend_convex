@@ -313,6 +313,8 @@ export function ClientsList() {
                   return (
                     <div
                       key={vRow.key}
+                      data-index={vRow.index}
+                      ref={rowVirtualizer.measureElement}
                       style={{
                         position: 'absolute',
                         top: 0,
