@@ -20,6 +20,7 @@ import type {
   RdvResponse,
   UserResponse,
   AnalyticsSummaryResponse,
+  AnalyticsSetterSummary,
   AnalyticsFunnelResponse,
   AnalyticsCommercialSummary,
   CommercialObjectiveResponse,
@@ -535,6 +536,17 @@ export function prefetchAnalyticsSummary(filters?: {
   to?: string
 }, options?: { force?: boolean }): Promise<AnalyticsSummaryResponse | null> {
   return prefetchFetchCache<AnalyticsSummaryResponse>('/analytics/summary', filters, options)
+}
+
+// Stats d'un setter arbitraire (profil /team/setters/:id), filtrables par période.
+export function useSetterStats(
+  id: string | undefined,
+  filters?: { from?: string; to?: string; days?: number },
+): Async<AnalyticsSetterSummary> {
+  return useFetch<AnalyticsSetterSummary>(id ? `/analytics/setters/${id}` : null, filters, {
+    refreshCachedOnMount: true,
+    silentInitialLoading: true,
+  })
 }
 
 export function useCommercialObjectives(period: string | null): Async<CommercialObjectiveResponse[]> {

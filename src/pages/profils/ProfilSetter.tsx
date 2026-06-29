@@ -1,23 +1,24 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
-import { LoadingScreen } from '../../components/Spinner'
-import { useUser, useCallLogs, useLeads, useRdvList } from '../../lib/hooks'
-import type { CallLogResponse, CallResult, LeadResponse } from '../../lib/types'
+import { LoadingScreen, Spinner } from '../../components/Spinner'
+import { DateRangePicker } from '../../components/analytics/DateRangePicker'
+import { SetterCharts } from '../../components/profils/SetterCharts'
+import { useUser, useSetterStats } from '../../lib/hooks'
+import { buildPeriodRange, defaultPeriod, type PeriodState } from '../../lib/period'
 
 export function ProfilSetter() {
   const { id } = useParams()
   const navigate = useNavigate()
 
-  const { data: member, loading, error } = useUser(id)
-  const { data: calls } = useCallLogs(id ? { setterId: id, limit: 200 } : undefined)
-  const { data: rdvs } = useRdvList(id ? { setterId: id, limit: 200 } : undefined)
-  const { data: leads } = useLeads(id ? { setterId: id, limit: 500 } : undefined)
+  // Période par défaut : ce mois-ci (vue d'ensemble plus parlante qu'« aujourd'hui »).
+  const [period, setPeriod] = useState<PeriodState>(() => defaultPeriod('this_month'))
+  const range = useMemo(() => buildPeriodRange(period), [period])
 
-  const callStats = useMemo(() => computeCallStats(calls ?? []), [calls])
-  const days = useMemo(() => buildDailyActivity(calls ?? []), [calls])
+  const { data: member, loading, error } = useUser(id)
+  const { data: stats, loading: statsLoading } = useSetterStats(id, { from: range.from, to: range.to })
 
   if (loading) {
     return (
@@ -41,15 +42,6 @@ export function ProfilSetter() {
       </AppShell>
     )
   }
-
-  const rdvPris = rdvs?.length ?? 0
-  const rdvHonore = (rdvs ?? []).filter((r) => r.status === 'honore').length
-  const leadsCount = leads?.length ?? 0
-  // Qualifié crédité au seul setter qui a réellement fait basculer le lead = celui de
-  // son dernier appel loggé (repli sur le propriétaire). Aligné sur le backend analytics.
-  const qualifiedByThisSetter = (l: LeadResponse) =>
-    (l.latestCallSetterId ?? l.setterId) === id
-  const leadsQualif = (leads ?? []).filter((l) => (l.status === 'qualifie' || l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe') && qualifiedByThisSetter(l)).length
 
   return (
     <AppShell flat>
@@ -83,11 +75,6 @@ export function ProfilSetter() {
                 <p className="eyebrow text-or-dark">Profil setter</p>
                 <h1 className="mt-1 truncate text-3xl font-black tracking-tight md:text-4xl">{member.name}</h1>
                 <p className="mt-1 truncate text-sm font-semibold text-muted">{member.email}</p>
-                <div className="profile-stat-strip mt-5">
-                  <div className="profile-stat-pill"><div className="text-sm font-black">{callStats.total}</div><div className="eyebrow text-[9px]">Appels</div></div>
-                  <div className="profile-stat-pill"><div className="text-sm font-black">{leadsCount}</div><div className="eyebrow text-[9px]">Leads</div></div>
-                  <div className="profile-stat-pill"><div className="text-sm font-black">{rdvPris}</div><div className="eyebrow text-[9px]">RDV pris</div></div>
-                </div>
                 <div className="mt-5 flex flex-wrap justify-center gap-2 md:justify-start">
                   <span className="profile-chip profile-chip-dark">Setter</span>
                   <span className="profile-chip profile-chip-soft">{member.team ?? 'Sans équipe'}</span>
@@ -98,141 +85,70 @@ export function ProfilSetter() {
             </div>
           </section>
 
-          <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
-            <section className="profile-info-card glass-card border border-line-soft bg-white p-5 md:p-6">
-              <p className="eyebrow text-or-dark">Performance</p>
-              <h2 className="mt-1 text-lg font-black">Résumé setter</h2>
-              <div className="mt-5 space-y-3 text-sm">
-                <Row label="Appels passés" value={String(callStats.total)} />
-                <Row label="Connexions" value={`${callStats.joints} (${pct(callStats.joints, callStats.total)})`} />
-                <Row label="Leads assignés" value={String(leadsCount)} />
-                <Row label="Leads qualifiés" value={String(leadsQualif)} />
-                <Row label="RDV pris" value={String(rdvPris)} />
-                <Row label="RDV honorés" value={`${rdvHonore} (${pct(rdvHonore, rdvPris)})`} highlight />
-              </div>
-            </section>
-
-            <section className="profile-info-card glass-card border border-line-soft bg-white p-5 md:p-6">
-              <div className="mb-5">
-                <p className="eyebrow text-or-dark">Issue des appels</p>
-                <h2 className="text-lg font-black">Qualité des conversations</h2>
-              </div>
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                <BigStat color="#3DA86A" bg="bg-success-tint" value={String(callStats.joints)} label="JOINTS" />
-                <BigStat color="#6B7C8C" bg="bg-info-tint" value={String(callStats.injoignable + callStats.nonJoint)} label="INJOIGNABLES" />
-                <BigStat color="#3E9A6F" bg="bg-cuivre-tint" value={String(callStats.rdvPris)} label="RDV PRIS" />
-                <BigStat color="#145A41" bg="bg-rouille-tint" value={String(callStats.refus)} label="REFUS" />
-              </div>
-            </section>
+          {/* Sélecteur de période (calendrier dynamique : jour unique ou plage de dates) */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="eyebrow text-or-dark">Période</span>
+              <span className="font-bold text-text">{range.label}</span>
+              {statsLoading && <Spinner size={14} />}
+            </div>
+            <DateRangePicker value={period} onChange={setPeriod} align="right" />
           </div>
 
-          <section className="profile-info-card glass-card border border-line-soft bg-white p-5 md:p-6">
-            <h3 className="font-black mb-4">Activité (7 derniers jours)</h3>
-            {days.length === 0 ? (
-              <p className="text-sm text-faint">Aucun appel sur les 7 derniers jours.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[620px] text-sm">
-                  <thead className="bg-or-tint">
-                    <tr className="text-left eyebrow">
-                      <Th>JOUR</Th>
-                      <Th>APPELS</Th>
-                      <Th>JOINTS</Th>
-                      <Th>RDV PRIS</Th>
-                      <Th className="text-right">EFFICACITÉ</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {days.map((d) => (
-                      <DayRow key={d.label} {...d} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
+          {/* KPIs minimalistes */}
+          <KpiStrip stats={stats} loading={statsLoading} />
+
+          {/* Statistiques & historique (graphiques + camemberts) */}
+          {stats ? (
+            <SetterCharts stats={stats} />
+          ) : (
+            <section className="profile-info-card glass-card border border-line-soft bg-white p-10 text-center">
+              {statsLoading ? <Spinner /> : <p className="text-sm text-faint">Aucune donnée sur la période.</p>}
+            </section>
+          )}
         </div>
       </main>
     </AppShell>
   )
 }
 
-type CallStats = {
-  total: number
-  joints: number
-  nonJoint: number
-  injoignable: number
-  rdvPris: number
-  refus: number
-  rappel: number
-  messagerie: number
+// ── KPIs minimalistes ─────────────────────────────────────────────────────────
+
+type SetterStats = NonNullable<ReturnType<typeof useSetterStats>['data']>
+
+function KpiStrip({ stats, loading }: { stats: SetterStats | null; loading: boolean }) {
+  const items: { value: string; label: string }[] = stats
+    ? [
+        { value: String(stats.calls), label: 'Appels' },
+        { value: String(stats.connected), label: 'Connexions' },
+        { value: String(stats.qualified), label: 'Qualifiés' },
+        { value: String(stats.rdvPris), label: 'RDV pris' },
+        { value: `${stats.qualificationRate}%`, label: 'Taux qualif.' },
+        { value: `${stats.connectionRate}%`, label: 'Taux connexion' },
+      ]
+    : []
+
+  return (
+    <section className="profile-info-card glass-card border border-line-soft bg-white p-1.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+        {loading && !stats
+          ? Array.from({ length: 6 }).map((_, i) => <KpiCell key={i} value="—" label="…" />)
+          : items.map((it) => <KpiCell key={it.label} value={it.value} label={it.label} />)}
+      </div>
+    </section>
+  )
 }
 
-function computeCallStats(calls: CallLogResponse[]): CallStats {
-  const counts: Record<CallResult, number> = {
-    joint: 0, non_joint: 0, rappel_planifie: 0, rdv_pris: 0, refus: 0, injoignable: 0, messagerie: 0,
-  }
-  for (const c of calls) counts[c.result]++
-  return {
-    total: calls.length,
-    joints: counts.joint,
-    nonJoint: counts.non_joint,
-    injoignable: counts.injoignable,
-    rdvPris: counts.rdv_pris,
-    refus: counts.refus,
-    rappel: counts.rappel_planifie,
-    messagerie: counts.messagerie,
-  }
+function KpiCell({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="px-4 py-4 text-center sm:text-left">
+      <div className="text-2xl font-black leading-none tracking-tight text-text md:text-[28px]">{value}</div>
+      <div className="eyebrow mt-1.5 text-[10px] text-muted">{label}</div>
+    </div>
+  )
 }
 
-type DayRowData = { label: string; appels: number; joints: number; rdvPris: number; eff: string; effClass: string }
-
-function buildDailyActivity(calls: CallLogResponse[]): DayRowData[] {
-  const buckets = new Map<string, { total: number; joints: number; rdvPris: number; date: Date }>()
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  // Init 7 derniers jours
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(today)
-    d.setDate(today.getDate() - i)
-    buckets.set(isoDay(d), { total: 0, joints: 0, rdvPris: 0, date: d })
-  }
-  for (const c of calls) {
-    const d = new Date(c.calledAt)
-    d.setHours(0, 0, 0, 0)
-    const k = isoDay(d)
-    const b = buckets.get(k)
-    if (!b) continue
-    b.total++
-    if (c.result === 'joint') b.joints++
-    if (c.result === 'rdv_pris') b.rdvPris++
-  }
-  const rows: DayRowData[] = []
-  for (const [, b] of buckets) {
-    if (b.total === 0) continue
-    const effPct = b.total ? Math.round(((b.joints + b.rdvPris) / b.total) * 100) : 0
-    rows.push({
-      label: b.date.toDateString() === today.toDateString() ? "Aujourd'hui"
-        : b.date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }),
-      appels: b.total,
-      joints: b.joints,
-      rdvPris: b.rdvPris,
-      eff: `${effPct}%`,
-      effClass: effPct >= 85 ? 'text-success' : '',
-    })
-  }
-  rows.sort((a, b) => (a.label === "Aujourd'hui" ? -1 : b.label === "Aujourd'hui" ? 1 : 0))
-  return rows
-}
-
-function isoDay(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function pct(part: number, total: number): string {
-  if (!total) return '0%'
-  return `${Math.round((part / total) * 100)}%`
-}
+// ── utilitaires ────────────────────────────────────────────────────────────────
 
 function userInitials(name: string): string {
   const parts = name.split(' ').filter(Boolean)
@@ -246,38 +162,4 @@ function monthsSince(iso: string): string {
   if (months <= 0) return 'ce mois'
   if (months === 1) return '1 mois'
   return `${months} mois`
-}
-
-function Row({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) {
-  return (
-    <div className={`flex justify-between ${highlight ? 'text-success pt-2 border-t border-line-soft font-bold' : ''}`}>
-      <span className={highlight ? 'font-semibold' : ''}>{label}</span>
-      <span className="font-bold">{value}</span>
-    </div>
-  )
-}
-
-function BigStat({ color, bg, value, label }: { color: string; bg: string; value: string; label: string }) {
-  return (
-    <div className={`profile-call-stat p-4 rounded-[18px] ${bg}`}>
-      <div className="text-[28px] font-bold" style={{ color }}>{value}</div>
-      <div className="text-xs eyebrow mt-1">{label}</div>
-    </div>
-  )
-}
-
-function Th({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <th className={`px-3 py-2.5 ${className}`}>{children}</th>
-}
-
-function DayRow({ label, appels, joints, rdvPris, eff, effClass }: DayRowData) {
-  return (
-    <tr className="border-b border-line-soft last:border-0">
-      <td className="px-3 py-2.5 font-semibold">{label}</td>
-      <td className="px-3 py-2.5">{appels}</td>
-      <td className="px-3 py-2.5">{joints}</td>
-      <td className="px-3 py-2.5">{rdvPris}</td>
-      <td className={`px-3 py-2.5 text-right font-bold ${effClass}`}>{eff}</td>
-    </tr>
-  )
 }
