@@ -1,24 +1,16 @@
-import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
-import { LoadingScreen, Spinner } from '../../components/Spinner'
-import { DateRangePicker } from '../../components/analytics/DateRangePicker'
-import { SetterCharts } from '../../components/profils/SetterCharts'
-import { useUser, useSetterStats } from '../../lib/hooks'
-import { buildPeriodRange, defaultPeriod, type PeriodState } from '../../lib/period'
+import { LoadingScreen } from '../../components/Spinner'
+import { SetterStatsSection } from '../../components/profils/SetterStatsSection'
+import { useUser } from '../../lib/hooks'
 
 export function ProfilSetter() {
   const { id } = useParams()
   const navigate = useNavigate()
 
-  // Période par défaut : ce mois-ci (vue d'ensemble plus parlante qu'« aujourd'hui »).
-  const [period, setPeriod] = useState<PeriodState>(() => defaultPeriod('this_month'))
-  const range = useMemo(() => buildPeriodRange(period), [period])
-
   const { data: member, loading, error } = useUser(id)
-  const { data: stats, loading: statsLoading } = useSetterStats(id, { from: range.from, to: range.to })
 
   if (loading) {
     return (
@@ -85,70 +77,13 @@ export function ProfilSetter() {
             </div>
           </section>
 
-          {/* Sélecteur de période (calendrier dynamique : jour unique ou plage de dates) */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="eyebrow text-or-dark">Période</span>
-              <span className="font-bold text-text">{range.label}</span>
-              {statsLoading && <Spinner size={14} />}
-            </div>
-            <DateRangePicker value={period} onChange={setPeriod} align="right" />
-          </div>
-
-          {/* KPIs minimalistes */}
-          <KpiStrip stats={stats} loading={statsLoading} />
-
-          {/* Statistiques & historique (graphiques + camemberts) */}
-          {stats ? (
-            <SetterCharts stats={stats} />
-          ) : (
-            <section className="profile-info-card glass-card border border-line-soft bg-white p-10 text-center">
-              {statsLoading ? <Spinner /> : <p className="text-sm text-faint">Aucune donnée sur la période.</p>}
-            </section>
-          )}
+          {/* Statistiques & historique (calendrier dynamique + KPIs + graphiques) */}
+          <SetterStatsSection setterId={id} />
         </div>
       </main>
     </AppShell>
   )
 }
-
-// ── KPIs minimalistes ─────────────────────────────────────────────────────────
-
-type SetterStats = NonNullable<ReturnType<typeof useSetterStats>['data']>
-
-function KpiStrip({ stats, loading }: { stats: SetterStats | null; loading: boolean }) {
-  const items: { value: string; label: string }[] = stats
-    ? [
-        { value: String(stats.calls), label: 'Appels' },
-        { value: String(stats.connected), label: 'Connexions' },
-        { value: String(stats.qualified), label: 'Qualifiés' },
-        { value: String(stats.rdvPris), label: 'RDV pris' },
-        { value: `${stats.qualificationRate}%`, label: 'Taux qualif.' },
-        { value: `${stats.connectionRate}%`, label: 'Taux connexion' },
-      ]
-    : []
-
-  return (
-    <section className="profile-info-card glass-card border border-line-soft bg-white p-1.5">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
-        {loading && !stats
-          ? Array.from({ length: 6 }).map((_, i) => <KpiCell key={i} value="—" label="…" />)
-          : items.map((it) => <KpiCell key={it.label} value={it.value} label={it.label} />)}
-      </div>
-    </section>
-  )
-}
-
-function KpiCell({ value, label }: { value: string; label: string }) {
-  return (
-    <div className="px-4 py-4 text-center sm:text-left">
-      <div className="text-2xl font-black leading-none tracking-tight text-text md:text-[28px]">{value}</div>
-      <div className="eyebrow mt-1.5 text-[10px] text-muted">{label}</div>
-    </div>
-  )
-}
-
-// ── utilitaires ────────────────────────────────────────────────────────────────
 
 function userInitials(name: string): string {
   const parts = name.split(' ').filter(Boolean)

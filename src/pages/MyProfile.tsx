@@ -7,6 +7,7 @@ import { Icon } from '../components/Icon'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Spinner } from '../components/Spinner'
+import { SetterStatsSection } from '../components/profils/SetterStatsSection'
 
 const formatDate = (value: string | null) => {
   if (!value) return '—'
@@ -106,6 +107,8 @@ export function MyProfile() {
     ['Équipe', teamLabel(user.team)],
     ...(user.role === 'commercial' ? ([['Secteur', sectorInfo.label]] as [string, string][]) : []),
   ]
+
+  const isSetter = user.role === 'setter' || user.role === 'setter_lead'
 
   return (
     <AppShell flat>
@@ -242,6 +245,18 @@ export function MyProfile() {
               )}
             </section>
           </div>
+
+          {/* Statistiques & historique de mon activité (setters uniquement) */}
+          {isSetter && (
+            <section className="space-y-4">
+              <div>
+                <p className="eyebrow text-or-dark">Mon activité</p>
+                <h2 className="text-lg font-black">Statistiques &amp; historique</h2>
+                <p className="text-sm text-muted">Mes appels, qualifications et RDV — par jour ou sur une plage de dates.</p>
+              </div>
+              <SetterStatsSection setterId={user.id} />
+            </section>
+          )}
         </div>
       </main>
     </AppShell>
