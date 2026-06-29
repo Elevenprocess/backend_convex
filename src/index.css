@@ -5483,7 +5483,9 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
 .wf-node-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .wf-node-title {
   font-size: 13px; font-weight: 600; color: var(--color-text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+  /* Nom d'étape sur plusieurs lignes au lieu de tronquer avec « … » ;
+     overflow-wrap:anywhere casse aussi un mot trop long pour éviter le débordement. */
+  white-space: normal; overflow-wrap: anywhere; min-width: 0;
 }
 .wf-substep.is-done .wf-node-title { color: var(--color-muted); }
 /* Caption discrète sous le titre : date du jalon + technicien attribué. */
