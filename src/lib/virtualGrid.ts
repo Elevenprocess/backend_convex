@@ -9,7 +9,7 @@ export function rowsForGrid(itemCount: number, columns: number): number {
 // Virtualise une grille de cartes par LIGNES : chaque ligne virtuelle contient
 // `columns` cartes. Même librairie que LeadsList (useLeadRowVirtualizer).
 export function useCardGridVirtualizer(
-  scrollRef: RefObject<HTMLElement>,
+  scrollRef: RefObject<HTMLElement | null>,
   itemCount: number,
   opts: { columns: number; estimateRowHeight: number; gap?: number },
 ): Virtualizer<HTMLElement, Element> {

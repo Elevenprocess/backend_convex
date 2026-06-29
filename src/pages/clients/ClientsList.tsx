@@ -1,6 +1,6 @@
 // Vue commercial — 100% indépendante de pages/leads/LeadsList.tsx.
 // Côté commercial, un "lead qualifié" est appelé un "client".
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
@@ -14,6 +14,7 @@ import type { LeadDateField } from '../../lib/leadFilters'
 import { fullName, type LeadResponse, type UserResponse } from '../../lib/types'
 import { clientBucketForLead, clientStatusBadge, type ClientBucket } from '../../lib/clientStatus'
 import { AssignCommercialModal } from '../../components/leads/AssignCommercialModal'
+import { useCardGridVirtualizer } from '../../lib/virtualGrid'
 
 // ─── Types ────────────────────────────────────────────────
 type ClientStatusFilter = 'all' | ClientBucket
@@ -242,6 +243,14 @@ export function ClientsList() {
     return base
   }, [allClients, filter, docFilter, dateFilter, dateFieldFilter, commercialFilter, query])
 
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const COLUMNS = 3
+  const rowVirtualizer = useCardGridVirtualizer(scrollRef, clients.length, {
+    columns: COLUMNS,
+    estimateRowHeight: 220,
+    gap: 16,
+  })
+
   if (redirectTech) return <Navigate to="/mes-interventions" replace />
 
   return (
@@ -260,7 +269,7 @@ export function ClientsList() {
           commercialFilter={commercialFilter} onCommercialFilter={setCommercialFilter}
           commerciaux={teamCommerciaux} commercialCounts={commercialCounts}
         />
-        <main className="p-4 sm:p-6 md:p-8 flex-grow overflow-auto">
+        <main className="p-4 sm:p-6 md:p-8 flex-grow overflow-hidden flex flex-col">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative flex-grow max-w-md">
               <Icon name="search" size={16} className="absolute left-3 top-2.5 text-faint" />
@@ -274,38 +283,60 @@ export function ClientsList() {
             </div>
             <span className="text-xs text-faint font-semibold whitespace-nowrap">{clients.length}/{allClients.length}</span>
           </div>
-          {loading && clients.length === 0 ? (
-            <LoadingBlock label="Chargement des clients…" />
-          ) : error ? (
-            <div className="py-16 text-center text-rouille text-sm">Erreur : {error}</div>
-          ) : clients.length === 0 ? (
-            <EmptyState
-              icon="users"
-              title={allClients.length === 0
-                ? (isManager ? "Aucun client dans l'équipe" : 'Aucun client assigné')
-                : 'Aucun client pour ce filtre'}
-              description={
-                allClients.length === 0
-                  ? (isManager
-                      ? "Aucun lead n'est rattaché à un commercial de l'équipe pour le moment."
-                      : "Aucun client n'est rattaché à ton compte commercial pour le moment.")
-                  : 'Essaie un autre filtre ou affine ta recherche.'
-              }
-            />
-          ) : (
-            <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {clients.map((c) => (
-                <ClientCard
-                  key={c.id}
-                  client={c}
-                  selected={selectedId === c.id}
-                  onClick={() => selectLead(c.id)}
-                  commercialName={seesFullPortfolio ? commercialNameForLead(c) : null}
-                  onAssign={isManager ? () => setAssignTarget(c) : undefined}
-                />
-              ))}
-            </div>
-          )}
+          <div ref={scrollRef} style={{ overflowY: 'auto', flex: '1 1 0', minHeight: 0 }}>
+            {loading && clients.length === 0 ? (
+              <LoadingBlock label="Chargement des clients…" />
+            ) : error ? (
+              <div className="py-16 text-center text-rouille text-sm">Erreur : {error}</div>
+            ) : clients.length === 0 ? (
+              <EmptyState
+                icon="users"
+                title={allClients.length === 0
+                  ? (isManager ? "Aucun client dans l'équipe" : 'Aucun client assigné')
+                  : 'Aucun client pour ce filtre'}
+                description={
+                  allClients.length === 0
+                    ? (isManager
+                        ? "Aucun lead n'est rattaché à un commercial de l'équipe pour le moment."
+                        : "Aucun client n'est rattaché à ton compte commercial pour le moment.")
+                    : 'Essaie un autre filtre ou affine ta recherche.'
+                }
+              />
+            ) : (
+              <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
+                {rowVirtualizer.getVirtualItems().map((vRow) => {
+                  const start = vRow.index * COLUMNS
+                  const rowItems = clients.slice(start, start + COLUMNS)
+                  return (
+                    <div
+                      key={vRow.key}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        transform: `translateY(${vRow.start}px)`,
+                        display: 'grid',
+                        gridTemplateColumns: `repeat(${COLUMNS}, 1fr)`,
+                        gap: 16,
+                      }}
+                    >
+                      {rowItems.map((c) => (
+                        <ClientCard
+                          key={c.id}
+                          client={c}
+                          selected={selectedId === c.id}
+                          onClick={() => selectLead(c.id)}
+                          commercialName={seesFullPortfolio ? commercialNameForLead(c) : null}
+                          onAssign={isManager ? () => setAssignTarget(c) : undefined}
+                        />
+                      ))}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </main>
       </div>
 
