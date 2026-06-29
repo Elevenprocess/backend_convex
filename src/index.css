@@ -5504,9 +5504,11 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
 /* Miniature pièces sous le nœud */
 .wf-node-docs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 0 2px 36px; }
 .wf-node-doc-chip {
-  display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px 2px 4px;
+  display: inline-flex; align-items: flex-start; gap: 4px; padding: 2px 7px 2px 4px;
   border-radius: 6px; border: 1px solid var(--color-line); background: var(--color-cream);
-  font-size: 10px; cursor: pointer; max-width: 160px; transition: background .15s;
+  /* max-width:100% (et non 160px fixe) : le chip ne dépasse jamais la carte,
+     même dans une colonne étroite (DP / Raccordement côte à côte). */
+  font-size: 10px; cursor: pointer; max-width: 100%; transition: background .15s;
 }
 .wf-node-doc-chip:hover { background: var(--color-cream-darker); }
 .wf-node-doc-chip.kind-pdf { border-color: var(--color-rouille-tint); }
@@ -5515,7 +5517,7 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
   flex-shrink: 0; font-size: 8px; font-weight: 800; padding: 1px 4px; border-radius: 3px;
   background: var(--color-line-soft); color: var(--color-muted);
 }
-.wf-node-doc-chip-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; color: var(--color-text); }
+.wf-node-doc-chip-name { white-space: normal; overflow-wrap: anywhere; min-width: 0; color: var(--color-text); }
 /* Jauge SLA inline dans le meta du nœud */
 .wf-gauge-inline { font-weight: 600; }
 .wf-gauge-inline.wf-gauge-ok { color: var(--color-vert, #4caf50); }
@@ -5557,7 +5559,7 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 .wf-modal-docs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .wf-modal-doc { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--color-line-soft); border-radius: 9px; background: var(--color-card); }
 .wf-modal-doc.is-missing { border-style: dashed; background: var(--color-cream); }
-.wf-modal-doc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 600; color: var(--color-text); text-decoration: none; text-align: left; background: none; border: none; padding: 0; font-family: inherit; cursor: pointer; }
+.wf-modal-doc-name { flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; font-size: 12.5px; font-weight: 600; color: var(--color-text); text-decoration: none; text-align: left; background: none; border: none; padding: 0; font-family: inherit; cursor: pointer; }
 .wf-modal-doc-name:hover { color: var(--color-cuivre); }
 .wf-modal-doc-meta { font-size: 10.5px; color: var(--color-faint); white-space: nowrap; }
 .wf-modal-missing-pill { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: var(--color-rouille-tint); color: var(--color-rouille); }

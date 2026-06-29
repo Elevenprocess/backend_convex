@@ -12,6 +12,7 @@ import {
   fileKind,
 } from '../../lib/suivi-board'
 import { assignTechniciens, uploadSubstepDocuments, deleteSubstepDocument } from '../../lib/api'
+import { displayFilename } from '../../lib/filename'
 import type { SubstepDocument, SubstepResponse, UpdateSubstepPatch, UserResponse } from '../../lib/types'
 
 type Props = {
@@ -398,7 +399,7 @@ export function SubstepModal({
                   {docStatus.present.map((d) => (
                     <li key={d.id} className="wf-modal-doc">
                       <span className={`dochub-thumb kind-${fileKind(d.mimeType)}`}>{KIND_LABEL[fileKind(d.mimeType)]}</span>
-                      <button type="button" className="wf-modal-doc-name" onClick={() => setPreview(d)} title={d.filename}>{d.filename}</button>
+                      <button type="button" className="wf-modal-doc-name" onClick={() => setPreview(d)} title={displayFilename(d.filename)}>{displayFilename(d.filename)}</button>
                       <span className="wf-modal-doc-meta">{Math.max(1, Math.round(d.sizeBytes / 1024))} Ko</span>
                       {!readOnly && (
                         <button type="button" className="dochub-doc-del wf-modal-doc-delete" aria-label={`Supprimer ${d.filename}`} onClick={() => void onDeleteDoc(d.id, d.filename)}>

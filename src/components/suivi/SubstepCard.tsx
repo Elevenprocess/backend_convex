@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Icon } from '../Icon'
 import { formatDate } from '../../lib/suivi'
 import { slaGaugeInfo, fileKind } from '../../lib/suivi-board'
+import { displayFilename } from '../../lib/filename'
 import { SubstepDocPreviewModal } from './SubstepDocPreviewModal'
 import type { SubstepDocument, SubstepResponse, UserResponse } from '../../lib/types'
 
@@ -67,11 +68,11 @@ export function SubstepCard({ substep, users, today, onOpen }: Props) {
               key={doc.id}
               type="button"
               className={`wf-node-doc-chip kind-${fileKind(doc.mimeType)}`}
-              title={doc.filename}
+              title={displayFilename(doc.filename)}
               onClick={(e) => { e.stopPropagation(); setDocPreview(doc) }}
             >
               <span className="wf-node-doc-chip-kind" aria-hidden>{KIND_LABEL[fileKind(doc.mimeType)]}</span>
-              <span className="wf-node-doc-chip-name">{doc.filename}</span>
+              <span className="wf-node-doc-chip-name">{displayFilename(doc.filename)}</span>
             </button>
           ))}
         </div>
