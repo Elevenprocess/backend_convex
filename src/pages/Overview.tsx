@@ -255,26 +255,6 @@ function OverviewResponsableTechnique() {
           <AirKpi icon="shield" label="VT en retard / problème" value={fmtCompact(totalRetard)} sub="à débloquer" />
           <AirKpi icon="check" label="Installations à venir" value={fmtCompact(installAVenir)} sub="à faire + planifiées" />
 
-          <div className="overview-air-card overview-role-wide">
-            <CardHead title="Techniciens" icon="users" />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-              {stats.length === 0 && <div className="text-xs text-faint">Aucun technicien.</div>}
-              {stats.map((s) => (
-                <div key={s.technicien.id} className="rounded-[18px] border border-line-soft bg-white/70 px-4 py-4">
-                  <div className="flex items-center justify-between">
-                    <strong className="text-sm">{s.technicien.name}</strong>
-                    <span className="text-[10px] font-black text-faint">{s.tauxValidation}% validées</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 mt-3 text-center">
-                    <div><strong className="block text-lg tabular-nums">{s.chargeEnCours}</strong><small className="text-muted">en cours</small></div>
-                    <div><strong className="block text-lg tabular-nums text-danger">{s.retardOuProbleme}</strong><small className="text-muted">retard</small></div>
-                    <div><strong className="block text-lg tabular-nums">{s.realiseesPeriode}</strong><small className="text-muted">réalisées</small></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
           <div className="overview-air-card overview-role-side">
             <CardHead title="VT à attribuer" icon="bell" />
             <div className="overview-role-list">
