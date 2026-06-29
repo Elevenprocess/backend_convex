@@ -11,6 +11,7 @@ import { useAuth, impersonationAllowed } from '../lib/auth'
 import { copyText, inviteUser, regenerateInvitation, revokeInvitation, syncGhlCommercialUsers, updateUser, useGhlCalendarConfig, useGhlUsers, useInvitations, useUsers } from '../lib/hooks'
 import { notifyClipboardCopied } from '../lib/clipboardToast'
 import { useTheme } from '../lib/theme'
+import { useOnlineUsers } from '../lib/realtime'
 import type { InvitationResponse, Role, Team, UserResponse } from '../lib/types'
 
 const ROLE_BADGE: Record<Role, string> = {
@@ -575,6 +576,10 @@ function UserRow({ user, ghlUsers, onMapped, onEdit, compact = false, sector = n
   const navigate = useNavigate()
   const realUser = useAuth((s) => s.realUser)
   const viewAs = useAuth((s) => s.viewAs)
+  // Statut "en ligne" = l'utilisateur a au moins une connexion WebSocket active
+  // (il travaille en ce moment), pas l'état d'activation du compte.
+  const onlineUsers = useOnlineUsers()
+  const isOnline = onlineUsers.has(user.id)
 
   const profileHref = user.role === 'commercial'
     ? `/team/commerciaux/${user.id}`
@@ -627,7 +632,7 @@ function UserRow({ user, ghlUsers, onMapped, onEdit, compact = false, sector = n
       {compact
         ? <td className="px-3 py-3 text-muted">{user.email}</td>
         : <td className="px-3 py-3"><span className={`status-badge ${ROLE_BADGE[user.role]}`}>{ROLE_LABEL[user.role]}</span>{sector && <span className="status-badge bg-or-tint text-or-dark" style={{ marginLeft: 6 }}>{sector.charAt(0).toUpperCase() + sector.slice(1)}</span>}</td>}
-      <td className="px-3 py-3"><span className={`status-badge ${user.active ? 'bg-success-tint text-success' : 'bg-rouille-tint text-rouille'}`}>{user.active ? 'Actif' : 'Inactif'}</span></td>
+      <td className="px-3 py-3"><span className={`status-badge ${isOnline ? 'bg-success-tint text-success' : 'bg-muted/10 text-muted'}`}>{isOnline ? 'Actif' : 'Non actif'}</span></td>
       {!compact && (
         <td className="px-3 py-3" onClick={stop}>
           {user.role === 'commercial' ? (

@@ -42,6 +42,30 @@ export function useLeadLocks(): ReadonlyMap<string, LeadLockInfo> {
   )
 }
 
+// Store globale (singleton) des utilisateurs en ligne (présence WebSocket).
+// Alimentée par les events presence:* émis par le gateway backend.
+const onlineUsersStore = new Set<string>()
+const onlineUserSubscribers = new Set<() => void>()
+let onlineUsersSnapshot: ReadonlySet<string> = onlineUsersStore
+
+function notifyOnlineUsersChange() {
+  // Nouvelle référence pour que useSyncExternalStore détecte le changement.
+  onlineUsersSnapshot = new Set(onlineUsersStore)
+  onlineUserSubscribers.forEach((fn) => fn())
+}
+
+// Ensemble des userId actuellement en ligne (au moins un onglet ouvert).
+export function useOnlineUsers(): ReadonlySet<string> {
+  return useSyncExternalStore(
+    (listener) => {
+      onlineUserSubscribers.add(listener)
+      return () => onlineUserSubscribers.delete(listener)
+    },
+    () => onlineUsersSnapshot,
+    () => onlineUsersSnapshot,
+  )
+}
+
 let activeSocket: Socket | null = null
 
 // Émet le verrou côté setter : on s'auto-déclare comme "je regarde ce lead".
@@ -119,12 +143,32 @@ export function useRealtimeSocket() {
       if (leadLocksStore.delete(payload.leadId)) notifyLeadLockChange()
     })
 
+    // Présence utilisateurs — qui est en ligne (un onglet ouvert) en ce moment
+    socket.on('presence:snapshot', (userIds: string[]) => {
+      onlineUsersStore.clear()
+      for (const id of userIds) onlineUsersStore.add(id)
+      notifyOnlineUsersChange()
+    })
+    socket.on('presence:online', (payload: { userId: string }) => {
+      if (!onlineUsersStore.has(payload.userId)) {
+        onlineUsersStore.add(payload.userId)
+        notifyOnlineUsersChange()
+      }
+    })
+    socket.on('presence:offline', (payload: { userId: string }) => {
+      if (onlineUsersStore.delete(payload.userId)) notifyOnlineUsersChange()
+    })
+
     return () => {
       socket.disconnect()
       activeSocket = null
       if (leadLocksStore.size > 0) {
         leadLocksStore.clear()
         notifyLeadLockChange()
+      }
+      if (onlineUsersStore.size > 0) {
+        onlineUsersStore.clear()
+        notifyOnlineUsersChange()
       }
     }
   }, [])
