@@ -834,7 +834,7 @@ function OverviewAdmin() {
   const me = useAuth((s) => s.user)
   const [tab, setTab] = useState('overview')
   const [funnelPeriod, setFunnelPeriod] = useState<FunnelPeriodState>(DEFAULT_FUNNEL_PERIOD)
-  const funnelRange = buildFunnelPeriodRange(funnelPeriod)
+  const funnelRange = useMemo(() => buildFunnelPeriodRange(funnelPeriod), [funnelPeriod])
 
   useEffect(() => {
     let cancelled = false
@@ -910,17 +910,17 @@ function OverviewAdmin() {
   // s'il concorde exactement avec l'agrégat backend. Sinon, le backend newLeads reste
   // source de vérité — jamais fallback vers `classified` / leads traités.
   const reliableNewLeadMs = newLeadMs.length === newLeadTotal ? newLeadMs : undefined
-  const evolutionPoints = buildLeadEvolutionPoints(adminSummary?.dailyEvolution ?? [], adminSummary?.hourlyCalls ?? [], funnelRange, evolutionGranularity, {
+  const evolutionPoints = useMemo(() => buildLeadEvolutionPoints(adminSummary?.dailyEvolution ?? [], adminSummary?.hourlyCalls ?? [], funnelRange, evolutionGranularity, {
     leads: newLeadTotal,
     qualified: adminSummary?.qualified ?? funnelTotals.qualified,
     signed: adminSummary?.signed ?? 0,
-  }, reliableNewLeadMs)
+  }, reliableNewLeadMs), [adminSummary, funnelRange, evolutionGranularity, newLeadTotal, funnelTotals, reliableNewLeadMs])
 
   const prevRange = previousRange(funnelRange)
   const { data: prevFunnel } = useAnalyticsFunnel({ from: prevRange.from, to: prevRange.to })
   const { data: prevSummary } = useAnalyticsSummary({ from: prevRange.from, to: prevRange.to })
   const prevAdmin = prevSummary?.admin ?? null
-  const comparePoints = buildLeadEvolutionPoints(
+  const comparePoints = useMemo(() => buildLeadEvolutionPoints(
     prevAdmin?.dailyEvolution ?? [],
     prevAdmin?.hourlyCalls ?? [],
     prevRange,
@@ -930,7 +930,7 @@ function OverviewAdmin() {
       qualified: prevAdmin?.qualified ?? prevFunnel?.totals?.qualified ?? 0,
       signed: prevAdmin?.signed ?? 0,
     },
-  )
+  ), [prevAdmin, funnelRange, evolutionGranularity, prevFunnel])
 
   const stats = useMemo(() => {
     const calls = adminSummary?.calls ?? funnelTotals.calls
