@@ -112,7 +112,7 @@ export function useCardGridVirtualizer(
     count: rowsForGrid(itemCount, cols),
     getScrollElement: () => scrollRef.current,
     estimateSize: () => estimateRowHeight + gap,
-    measureElement: (el) => (el as HTMLElement).getBoundingClientRect().height,
+    measureElement: (el) => (el as HTMLElement).getBoundingClientRect().height + gap,
     overscan: 4,
     scrollMargin,
   })
