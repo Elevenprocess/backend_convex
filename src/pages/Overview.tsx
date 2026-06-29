@@ -1792,11 +1792,28 @@ function buildFunnelPeriodRange(period: FunnelPeriodState): FunnelPeriodRange {
 }
 
 function getOverviewWarmupRanges(): FunnelPeriodRange[] {
-  const modes: FunnelPeriodMode[] = ['today', 'yesterday', 'this_week', 'this_month', 'this_year']
+  // TOUS les presets du DateRangePicker — pas seulement 5 — pour que n'importe
+  // quelle bascule de période soit instantanée (cache déjà chaud). On ajoute aussi
+  // la plage de COMPARAISON (période précédente) de chacun, que l'Overview charge
+  // en parallèle (prevFunnel/prevSummary).
+  const modes: FunnelPeriodMode[] = [
+    'today', 'yesterday',
+    'this_week', 'last_week',
+    'this_month', 'last_month',
+    'this_year', 'last_year',
+  ]
   const unique = new Map<string, FunnelPeriodRange>()
+  const add = (range: FunnelPeriodRange) => unique.set(`${range.from}|${range.to}`, range)
   modes.forEach((mode) => {
     const range = buildFunnelPeriodRange({ ...DEFAULT_FUNNEL_PERIOD, mode })
-    unique.set(`${range.from}|${range.to}`, range)
+    add(range)
+    add(previousRange(range))
+  })
+  // Presets « N derniers jours » (7/30/90/365) + leur comparaison.
+  ;[7, 30, 90, 365].forEach((lastN) => {
+    const range = buildFunnelPeriodRange({ ...DEFAULT_FUNNEL_PERIOD, mode: 'last_n_days', lastN, includeToday: true })
+    add(range)
+    add(previousRange(range))
   })
   return Array.from(unique.values())
 }
