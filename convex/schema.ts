@@ -6,6 +6,9 @@ import {
   leadStatusValidator, leadSourceValidator, adChannelValidator, stageHistorySourceValidator,
   callResultValidator,
   rdvStatusValidator, rdvLocationValidator, rdvResultValidator, financingTypeValidator,
+  projectStatusValidator, debriefOutcomeValidator, debriefNonSaleReasonValidator,
+  debriefReflexionReasonValidator, debriefSuiviReasonValidator,
+  paymentSubMethodValidator, financingOrgValidator,
 } from "./model/enums";
 
 export default defineSchema({
@@ -170,5 +173,52 @@ export default defineSchema({
     .index("by_signature", ["signatureAt"])
     .index("by_scheduledAt", ["scheduledAt"])
     .index("by_status", ["status"])
+    .index("by_externalId", ["externalId"]),
+
+  projects: defineTable({
+    externalId: v.optional(v.string()),
+    leadId: v.id("leads"),
+    commercialId: v.id("users"),
+    name: v.string(),
+    addressLine: v.optional(v.string()),
+    postalCode: v.optional(v.string()),
+    city: v.optional(v.string()),
+    status: projectStatusValidator,
+    notes: v.optional(v.string()),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_lead", ["leadId"])
+    .index("by_commercial", ["commercialId"])
+    .index("by_status", ["status"])
+    .index("by_externalId", ["externalId"]),
+
+  debriefs: defineTable({
+    externalId: v.optional(v.string()),
+    projectId: v.optional(v.id("projects")),
+    leadId: v.optional(v.id("leads")),
+    rdvId: v.optional(v.id("rdv")),
+    commercialId: v.id("users"),
+    outcome: debriefOutcomeValidator,
+    nonSaleReason: v.optional(debriefNonSaleReasonValidator),
+    reflexionReason: v.optional(debriefReflexionReasonValidator),
+    suiviReason: v.optional(debriefSuiviReasonValidator),
+    objection: v.optional(v.string()),
+    acceptanceFactors: v.array(v.string()),
+    notes: v.optional(v.string()),
+    montantTotal: v.optional(v.number()),
+    financingType: v.optional(financingTypeValidator),
+    kits: v.optional(v.string()),
+    signedAt: v.optional(v.number()),
+    paymentSubMethod: v.optional(paymentSubMethodValidator),
+    financingOrg: v.optional(financingOrgValidator),
+    acomptePercent: v.optional(v.number()),
+    acompteAmount: v.optional(v.number()),
+    customEcheancier: v.boolean(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_lead", ["leadId"])
+    .index("by_rdv", ["rdvId"])
+    .index("by_outcome", ["outcome"])
     .index("by_externalId", ["externalId"]),
 });
