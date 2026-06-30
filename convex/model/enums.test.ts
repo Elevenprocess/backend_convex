@@ -3,6 +3,11 @@ import { ROLES, LEAD_STATUSES, CALL_RESULTS, roleValidator } from "./enums";
 import {
   RDV_STATUSES, RDV_LOCATIONS, RDV_RESULTS, FINANCING_TYPES, rdvStatusValidator,
 } from "./enums";
+import {
+  PROJECT_STATUSES, DEBRIEF_OUTCOMES, DEBRIEF_NON_SALE_REASONS,
+  DEBRIEF_REFLEXION_REASONS, DEBRIEF_SUIVI_REASONS, PAYMENT_SUB_METHODS,
+  FINANCING_ORGS, projectStatusValidator, debriefOutcomeValidator,
+} from "./enums";
 
 test("les rôles reprennent les 10 valeurs Postgres", () => {
   expect(ROLES).toEqual([
@@ -46,4 +51,48 @@ test("financingType reprend les 6 modes", () => {
 
 test("rdvStatusValidator est un union", () => {
   expect(rdvStatusValidator.kind).toBe("union");
+});
+
+test("projectStatus reprend les 6 statuts Postgres", () => {
+  expect(PROJECT_STATUSES).toEqual([
+    "qualification", "devis_en_cours", "signature_en_cours",
+    "signe", "perdu", "abandonne",
+  ]);
+});
+
+test("debriefOutcome reprend les 4 issues", () => {
+  expect(DEBRIEF_OUTCOMES).toEqual(["vente", "non_vente", "en_reflexion", "suivi_prevu"]);
+});
+
+test("debriefNonSaleReason reprend les 6 motifs", () => {
+  expect(DEBRIEF_NON_SALE_REASONS).toEqual([
+    "suivi_prevu", "non_qualifie", "no_show",
+    "contact_annule", "annulation_administrative", "pas_interesse",
+  ]);
+});
+
+test("debriefReflexionReason reprend les 7 motifs", () => {
+  expect(DEBRIEF_REFLEXION_REASONS).toHaveLength(7);
+  expect(DEBRIEF_REFLEXION_REASONS).toContain("besoin_reflechir");
+  expect(DEBRIEF_REFLEXION_REASONS).toContain("autre");
+});
+
+test("debriefSuiviReason reprend les 5 motifs", () => {
+  expect(DEBRIEF_SUIVI_REASONS).toEqual([
+    "rappel_programme", "pas_le_bon_moment",
+    "attend_devis_detaille", "besoin_info_technique", "autre",
+  ]);
+});
+
+test("paymentSubMethod reprend les 3 modes", () => {
+  expect(PAYMENT_SUB_METHODS).toEqual(["cheque", "especes", "virement"]);
+});
+
+test("financingOrg reprend les 2 organismes", () => {
+  expect(FINANCING_ORGS).toEqual(["cmoi", "sofider"]);
+});
+
+test("les validateurs closing sont des unions", () => {
+  expect(projectStatusValidator.kind).toBe("union");
+  expect(debriefOutcomeValidator.kind).toBe("union");
 });

@@ -58,3 +58,44 @@ export const FINANCING_TYPES = [
 ] as const;
 export type FinancingType = (typeof FINANCING_TYPES)[number];
 export const financingTypeValidator = v.union(...FINANCING_TYPES.map((f) => v.literal(f))) as Validator<FinancingType>;
+
+// ─── Closing (tranche 3 : projects + debriefs) ──────────────────────────────
+export const PROJECT_STATUSES = [
+  "qualification", "devis_en_cours", "signature_en_cours",
+  "signe", "perdu", "abandonne",
+] as const;
+export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
+export const projectStatusValidator = v.union(...PROJECT_STATUSES.map((s) => v.literal(s))) as Validator<ProjectStatus>;
+
+export const DEBRIEF_OUTCOMES = ["vente", "non_vente", "en_reflexion", "suivi_prevu"] as const;
+export type DebriefOutcome = (typeof DEBRIEF_OUTCOMES)[number];
+export const debriefOutcomeValidator = v.union(...DEBRIEF_OUTCOMES.map((o) => v.literal(o))) as Validator<DebriefOutcome>;
+
+export const DEBRIEF_NON_SALE_REASONS = [
+  "suivi_prevu", "non_qualifie", "no_show",
+  "contact_annule", "annulation_administrative", "pas_interesse",
+] as const;
+export type DebriefNonSaleReason = (typeof DEBRIEF_NON_SALE_REASONS)[number];
+export const debriefNonSaleReasonValidator = v.union(...DEBRIEF_NON_SALE_REASONS.map((r) => v.literal(r))) as Validator<DebriefNonSaleReason>;
+
+export const DEBRIEF_REFLEXION_REASONS = [
+  "besoin_reflechir", "consulter_partenaire", "comparer_concurrence",
+  "budget_a_revoir", "attente_info_technique", "delai_a_confirmer", "autre",
+] as const;
+export type DebriefReflexionReason = (typeof DEBRIEF_REFLEXION_REASONS)[number];
+export const debriefReflexionReasonValidator = v.union(...DEBRIEF_REFLEXION_REASONS.map((r) => v.literal(r))) as Validator<DebriefReflexionReason>;
+
+export const DEBRIEF_SUIVI_REASONS = [
+  "rappel_programme", "pas_le_bon_moment",
+  "attend_devis_detaille", "besoin_info_technique", "autre",
+] as const;
+export type DebriefSuiviReason = (typeof DEBRIEF_SUIVI_REASONS)[number];
+export const debriefSuiviReasonValidator = v.union(...DEBRIEF_SUIVI_REASONS.map((r) => v.literal(r))) as Validator<DebriefSuiviReason>;
+
+export const PAYMENT_SUB_METHODS = ["cheque", "especes", "virement"] as const;
+export type PaymentSubMethod = (typeof PAYMENT_SUB_METHODS)[number];
+export const paymentSubMethodValidator = v.union(...PAYMENT_SUB_METHODS.map((p) => v.literal(p))) as Validator<PaymentSubMethod>;
+
+export const FINANCING_ORGS = ["cmoi", "sofider"] as const;
+export type FinancingOrg = (typeof FINANCING_ORGS)[number];
+export const financingOrgValidator = v.union(...FINANCING_ORGS.map((o) => v.literal(o))) as Validator<FinancingOrg>;
