@@ -33,4 +33,15 @@ export default defineSchema({
     .index("by_externalId", ["externalId"])
     .index("by_ghlUserId", ["ghlUserId"])
     .index("by_role", ["role"]),
+
+  referrers: defineTable({
+    nom: v.string(),
+    phone: v.optional(v.string()),
+    email: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    active: v.boolean(),
+    externalId: v.optional(v.string()),
+  })
+    .index("by_externalId", ["externalId"])
+    .index("by_active", ["active"]),
 });
