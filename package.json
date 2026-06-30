@@ -1,0 +1,24 @@
+{
+  "name": "ecoi-convex",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "convex dev",
+    "codegen": "convex codegen",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@auth/core": "0.37.0",
+    "@convex-dev/auth": "^0.0.81",
+    "convex": "^1.17.0"
+  },
+  "devDependencies": {
+    "convex-test": "^0.0.35",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "@edge-runtime/vm": "^4.0.0"
+  }
+}
