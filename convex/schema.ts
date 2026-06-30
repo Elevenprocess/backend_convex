@@ -9,6 +9,7 @@ import {
   projectStatusValidator, debriefOutcomeValidator, debriefNonSaleReasonValidator,
   debriefReflexionReasonValidator, debriefSuiviReasonValidator,
   paymentSubMethodValidator, financingOrgValidator,
+  devisStatusValidator, ocrStatusValidator,
 } from "./model/enums";
 
 export default defineSchema({
@@ -220,5 +221,47 @@ export default defineSchema({
     .index("by_lead", ["leadId"])
     .index("by_rdv", ["rdvId"])
     .index("by_outcome", ["outcome"])
+    .index("by_externalId", ["externalId"]),
+
+  devis: defineTable({
+    externalId: v.optional(v.string()),
+    leadId: v.id("leads"),
+    projectId: v.optional(v.id("projects")),
+    rdvId: v.optional(v.id("rdv")),
+    commercialId: v.id("users"),
+    status: devisStatusValidator,
+    storageId: v.optional(v.id("_storage")),
+    filename: v.string(),
+    sizeBytes: v.number(),
+    ocrStatus: ocrStatusValidator,
+    ocrError: v.optional(v.string()),
+    ocrCompletedAt: v.optional(v.number()),
+    devisNumber: v.optional(v.string()),
+    devisDate: v.optional(v.string()),
+    dateExpiration: v.optional(v.string()),
+    delaiExecution: v.optional(v.string()),
+    montantHt: v.optional(v.number()),
+    montantTva: v.optional(v.number()),
+    montantTtc: v.optional(v.number()),
+    montantNet: v.optional(v.number()),
+    puissanceKwc: v.optional(v.number()),
+    nbPanneaux: v.optional(v.number()),
+    kits: v.optional(v.string()),
+    financingType: v.optional(financingTypeValidator),
+    primeAutoconsommation: v.optional(v.number()),
+    primeTarifKwc: v.optional(v.number()),
+    primeZone: v.optional(v.string()),
+    lignes: v.array(v.any()),
+    echeancier: v.array(v.any()),
+    extracted: v.any(),
+    signedAt: v.optional(v.number()),
+    markedSignedById: v.optional(v.id("users")),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_lead", ["leadId"])
+    .index("by_project", ["projectId"])
+    .index("by_rdv", ["rdvId"])
+    .index("by_status", ["status"])
+    .index("by_commercial", ["commercialId"])
     .index("by_externalId", ["externalId"]),
 });
