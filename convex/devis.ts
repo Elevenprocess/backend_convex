@@ -4,6 +4,8 @@ import { v } from "convex/values";
 import { customerPatch, dropUndefined, DevisExtraction } from "./model/devisExtraction";
 import { requireRole, requireUser } from "./model/access";
 import { extractFromPdf } from "./model/ocr";
+import { syncStatusToLeadAndProject } from "./model/devisStatusSync";
+import { devisStatusValidator, financingTypeValidator } from "./model/enums";
 
 const COMMERCIAL = ["admin", "commercial", "commercial_lead"] as const;
 const UPLOAD = [
@@ -165,6 +167,137 @@ export const getRowForOcr = internalQuery({
     const row = await ctx.db.get(args.devisId);
     if (!row) return null;
     return { storageId: row.storageId ?? null, filename: row.filename };
+  },
+});
+
+export const update = mutation({
+  args: {
+    devisId: v.id("devis"),
+    status: v.optional(devisStatusValidator),
+    devisNumber: v.optional(v.union(v.string(), v.null())),
+    devisDate: v.optional(v.union(v.string(), v.null())),
+    dateExpiration: v.optional(v.union(v.string(), v.null())),
+    delaiExecution: v.optional(v.union(v.string(), v.null())),
+    puissanceKwc: v.optional(v.union(v.number(), v.null())),
+    nbPanneaux: v.optional(v.union(v.number(), v.null())),
+    kits: v.optional(v.union(v.string(), v.null())),
+    montantHt: v.optional(v.union(v.number(), v.null())),
+    montantTva: v.optional(v.union(v.number(), v.null())),
+    montantTtc: v.optional(v.union(v.number(), v.null())),
+    montantNet: v.optional(v.union(v.number(), v.null())),
+    financingType: v.optional(v.union(financingTypeValidator, v.null())),
+    primeAutoconsommation: v.optional(v.union(v.number(), v.null())),
+    primeTarifKwc: v.optional(v.union(v.number(), v.null())),
+    primeZone: v.optional(v.union(v.string(), v.null())),
+    lignes: v.optional(v.array(v.any())),
+    echeancier: v.optional(v.array(v.any())),
+    vendor: v.optional(v.any()),
+    customer: v.optional(v.any()),
+    prime: v.optional(v.any()),
+    conditionsReglement: v.optional(v.union(v.string(), v.null())),
+    financingDetails: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, [...COMMERCIAL]);
+    const row = await ctx.db.get(args.devisId);
+    if (!row) throw new Error("Devis introuvable");
+    if (row.status === "signe") throw new Error("Devis signé : modification interdite.");
+
+    const patch: Record<string, unknown> = {};
+    const scalarKeys = [
+      "status", "devisNumber", "devisDate", "dateExpiration", "delaiExecution",
+      "puissanceKwc", "nbPanneaux", "kits", "montantHt", "montantTva", "montantTtc",
+      "montantNet", "financingType", "primeAutoconsommation", "primeTarifKwc",
+      "primeZone", "lignes", "echeancier",
+    ] as const;
+    for (const k of scalarKeys) {
+      const val = (args as Record<string, unknown>)[k];
+      if (val !== undefined) patch[k] = val === null ? undefined : val;
+    }
+
+    // Merge extracted superficiel (vendor/customer/prime/conditionsReglement/
+    // financingDetails) + recopie lignes/echeancier dans extracted (fidèle backend).
+    const extractedKeys = ["vendor", "customer", "prime", "conditionsReglement", "financingDetails"] as const;
+    const touchesExtracted = extractedKeys.some((k) => (args as Record<string, unknown>)[k] !== undefined);
+    if (touchesExtracted || args.lignes !== undefined || args.echeancier !== undefined) {
+      const current = (row.extracted ?? {}) as Record<string, unknown>;
+      const next: Record<string, unknown> = { ...current };
+      for (const k of extractedKeys) {
+        if ((args as Record<string, unknown>)[k] !== undefined) next[k] = (args as Record<string, unknown>)[k];
+      }
+      if (args.lignes !== undefined) next.lignes = args.lignes;
+      if (args.echeancier !== undefined) next.echeancier = args.echeancier;
+      patch.extracted = next;
+    }
+
+    if (Object.keys(patch).length > 0) await ctx.db.patch(args.devisId, patch);
+
+    if (args.status !== undefined && args.status !== row.status) {
+      const updated = await ctx.db.get(args.devisId);
+      if (updated) await syncStatusToLeadAndProject(ctx, updated);
+    }
+    const final = await ctx.db.get(args.devisId);
+    return toResponse(final!);
+  },
+});
+
+export const markAsSigned = mutation({
+  args: { devisId: v.id("devis") },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, [...COMMERCIAL]);
+    const row = await ctx.db.get(args.devisId);
+    if (!row) throw new Error("Devis introuvable");
+    if (row.status === "signe") {
+      await syncStatusToLeadAndProject(ctx, row);
+      return toResponse(row);
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(args.devisId, { status: "signe", signedAt: now, markedSignedById: user._id });
+
+    // Sync rdv inline (hors-scope : payments + dossier délivrabilité).
+    if (row.rdvId) {
+      const montantPourRdv = row.montantNet ?? row.montantTtc;
+      await ctx.db.patch(row.rdvId, {
+        result: "signe",
+        signatureAt: now,
+        montantTotal: montantPourRdv,
+        financingType: row.financingType,
+        kits: row.kits,
+      });
+    }
+
+    const updated = await ctx.db.get(args.devisId);
+    if (updated) await syncStatusToLeadAndProject(ctx, updated);
+    return toResponse(updated!);
+  },
+});
+
+export const remove = mutation({
+  args: { devisId: v.id("devis") },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, [...UPLOAD]);
+    const row = await ctx.db.get(args.devisId);
+    if (!row) throw new Error("Devis introuvable");
+    if (row.status === "signe") throw new Error("Devis signé : suppression interdite.");
+    if (row.storageId) await ctx.storage.delete(row.storageId);
+    await ctx.db.delete(args.devisId);
+    return { id: args.devisId, deleted: true as const };
+  },
+});
+
+export const retryOcr = mutation({
+  args: { devisId: v.id("devis") },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, [...COMMERCIAL]);
+    const row = await ctx.db.get(args.devisId);
+    if (!row) throw new Error("Devis introuvable");
+    if (row.ocrStatus !== "failed") {
+      throw new Error(`OCR retry interdit : statut actuel = ${row.ocrStatus}`);
+    }
+    await ctx.db.patch(args.devisId, { ocrStatus: "pending", ocrError: undefined });
+    await ctx.scheduler.runAfter(0, internal.devis.runOcr, { devisId: args.devisId });
+    return null;
   },
 });
 
