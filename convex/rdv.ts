@@ -1,9 +1,10 @@
-import { mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import {
   rdvLocationValidator, rdvStatusValidator, rdvResultValidator, financingTypeValidator,
 } from "./model/enums";
-import { requireRole, assertCommercialRole } from "./model/access";
+import { requireRole, assertCommercialRole, requireUser } from "./model/access";
 import { insertStageHistory } from "./model/stageHistory";
 import { deriveLeadStatus } from "./model/deriveLeadStatus";
 
@@ -156,5 +157,60 @@ export const update = mutation({
       }
     }
     return null;
+  },
+});
+
+export const get = query({
+  args: { rdvId: v.id("rdv") },
+  handler: async (ctx, args) => {
+    await requireUser(ctx);
+    return await ctx.db.get(args.rdvId);
+  },
+});
+
+export const list = query({
+  args: {
+    commercialId: v.optional(v.id("users")),
+    status: v.optional(rdvStatusValidator),
+    result: v.optional(rdvResultValidator),
+    from: v.optional(v.number()),
+    to: v.optional(v.number()),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    await requireUser(ctx);
+    let q;
+    if (args.commercialId !== undefined) {
+      q = ctx.db.query("rdv").withIndex("by_commercial_scheduled", (ix) => ix.eq("commercialId", args.commercialId!));
+    } else if (args.status !== undefined) {
+      q = ctx.db.query("rdv").withIndex("by_status", (ix) => ix.eq("status", args.status!));
+    } else {
+      q = ctx.db.query("rdv").withIndex("by_scheduledAt");
+    }
+    let ordered = q.order("desc").filter((f) => f.eq(f.field("deletedAt"), undefined));
+    if (args.status !== undefined && args.commercialId !== undefined) {
+      ordered = ordered.filter((f) => f.eq(f.field("status"), args.status!));
+    }
+    if (args.result !== undefined) ordered = ordered.filter((f) => f.eq(f.field("result"), args.result!));
+    if (args.from !== undefined) ordered = ordered.filter((f) => f.gte(f.field("scheduledAt"), args.from!));
+    if (args.to !== undefined) ordered = ordered.filter((f) => f.lte(f.field("scheduledAt"), args.to!));
+    return await ordered.paginate(args.paginationOpts);
+  },
+});
+
+export const awaitingDebrief = query({
+  args: { commercialId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    await requireUser(ctx);
+    const rows = await ctx.db
+      .query("rdv")
+      .withIndex("by_debriefDue", (ix) => ix.gt("debriefDueAt", 0))
+      .collect();
+    return rows.filter(
+      (r) =>
+        r.deletedAt === undefined &&
+        r.debriefFilledAt === undefined &&
+        (args.commercialId === undefined || r.commercialId === args.commercialId),
+    );
   },
 });

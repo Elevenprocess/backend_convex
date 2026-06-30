@@ -99,3 +99,39 @@ test("update report→date future ré-arme le débrief", async () => {
   expect(rdv.debriefFilledAt).toBeUndefined();
   expect(rdv.debriefDueAt).toBeUndefined();
 });
+
+test("awaitingDebrief liste les honorés non débriefés puis les retire", async () => {
+  const t = makeT();
+  const comId = await insertUser(t, { role: "commercial" });
+  const setterId = await insertUser(t, { role: "setter", email: "a1@ecoi.fr" });
+  const leadId = await asUser(t, setterId).mutation(api.leads.create, { firstName: "A" });
+  const rdvId = await asUser(t, comId).mutation(api.rdv.create, { leadId, commercialId: comId });
+  await asUser(t, comId).mutation(api.rdv.update, { rdvId, status: "honore" }); // débrief dû
+  let due = await asUser(t, comId).query(api.rdv.awaitingDebrief, {});
+  expect(due).toHaveLength(1);
+  await asUser(t, comId).mutation(api.rdv.update, { rdvId, result: "signe" }); // débrief rempli
+  due = await asUser(t, comId).query(api.rdv.awaitingDebrief, {});
+  expect(due).toHaveLength(0);
+});
+
+test("list filtre par commercial et pagine", async () => {
+  const t = makeT();
+  const comId = await insertUser(t, { role: "commercial" });
+  const setterId = await insertUser(t, { role: "setter", email: "a2@ecoi.fr" });
+  const leadId = await asUser(t, setterId).mutation(api.leads.create, { firstName: "B" });
+  await asUser(t, comId).mutation(api.rdv.create, { leadId, commercialId: comId });
+  const page = await asUser(t, comId).query(api.rdv.list, {
+    commercialId: comId, paginationOpts: { numItems: 10, cursor: null },
+  });
+  expect(page.page).toHaveLength(1);
+});
+
+test("get renvoie le rdv", async () => {
+  const t = makeT();
+  const comId = await insertUser(t, { role: "commercial" });
+  const setterId = await insertUser(t, { role: "setter", email: "a3@ecoi.fr" });
+  const leadId = await asUser(t, setterId).mutation(api.leads.create, { firstName: "C" });
+  const rdvId = await asUser(t, comId).mutation(api.rdv.create, { leadId, commercialId: comId });
+  const got = await asUser(t, comId).query(api.rdv.get, { rdvId });
+  expect(got?._id).toBe(rdvId);
+});
