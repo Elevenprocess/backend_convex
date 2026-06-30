@@ -99,3 +99,27 @@ export const paymentSubMethodValidator = v.union(...PAYMENT_SUB_METHODS.map((p) 
 export const FINANCING_ORGS = ["cmoi", "sofider"] as const;
 export type FinancingOrg = (typeof FINANCING_ORGS)[number];
 export const financingOrgValidator = v.union(...FINANCING_ORGS.map((o) => v.literal(o))) as Validator<FinancingOrg>;
+
+// ─── Devis (tranche 4) ──────────────────────────────────────────────────────
+export const DEVIS_STATUSES = [
+  "brouillon", "en_attente", "signature_en_cours", "signe", "perdu",
+] as const;
+export type DevisStatus = (typeof DEVIS_STATUSES)[number];
+export const devisStatusValidator = v.union(...DEVIS_STATUSES.map((s) => v.literal(s))) as Validator<DevisStatus>;
+
+export const OCR_STATUSES = ["pending", "processing", "done", "failed"] as const;
+export type OcrStatus = (typeof OCR_STATUSES)[number];
+export const ocrStatusValidator = v.union(...OCR_STATUSES.map((s) => v.literal(s))) as Validator<OcrStatus>;
+
+export const LIGNE_TYPES = [
+  "panneau", "onduleur", "batterie", "fixation", "monitoring",
+  "protection", "prestation", "consuel", "remise", "autre",
+] as const;
+export type LigneType = (typeof LIGNE_TYPES)[number];
+export const ligneTypeValidator = v.union(...LIGNE_TYPES.map((t) => v.literal(t))) as Validator<LigneType>;
+
+export const PAIEMENT_PHASES = [
+  "signature", "vt", "dp", "pose_planif", "pose", "mes", "autre",
+] as const;
+export type PaiementPhase = (typeof PAIEMENT_PHASES)[number];
+export const paiementPhaseValidator = v.union(...PAIEMENT_PHASES.map((p) => v.literal(p))) as Validator<PaiementPhase>;

@@ -8,6 +8,10 @@ import {
   DEBRIEF_REFLEXION_REASONS, DEBRIEF_SUIVI_REASONS, PAYMENT_SUB_METHODS,
   FINANCING_ORGS, projectStatusValidator, debriefOutcomeValidator,
 } from "./enums";
+import {
+  DEVIS_STATUSES, OCR_STATUSES, LIGNE_TYPES, PAIEMENT_PHASES,
+  devisStatusValidator, ocrStatusValidator,
+} from "./enums";
 
 test("les rôles reprennent les 10 valeurs Postgres", () => {
   expect(ROLES).toEqual([
@@ -95,4 +99,32 @@ test("financingOrg reprend les 2 organismes", () => {
 test("les validateurs closing sont des unions", () => {
   expect(projectStatusValidator.kind).toBe("union");
   expect(debriefOutcomeValidator.kind).toBe("union");
+});
+
+test("devisStatus reprend les 5 statuts Postgres", () => {
+  expect(DEVIS_STATUSES).toEqual([
+    "brouillon", "en_attente", "signature_en_cours", "signe", "perdu",
+  ]);
+});
+
+test("ocrStatus reprend les 4 états", () => {
+  expect(OCR_STATUSES).toEqual(["pending", "processing", "done", "failed"]);
+});
+
+test("ligneType reprend les 10 types", () => {
+  expect(LIGNE_TYPES).toEqual([
+    "panneau", "onduleur", "batterie", "fixation", "monitoring",
+    "protection", "prestation", "consuel", "remise", "autre",
+  ]);
+});
+
+test("paiementPhase reprend les 7 phases", () => {
+  expect(PAIEMENT_PHASES).toEqual([
+    "signature", "vt", "dp", "pose_planif", "pose", "mes", "autre",
+  ]);
+});
+
+test("les validateurs devis sont des unions", () => {
+  expect(devisStatusValidator.kind).toBe("union");
+  expect(ocrStatusValidator.kind).toBe("union");
 });
