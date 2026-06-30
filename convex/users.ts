@@ -17,7 +17,7 @@ export const list = query({
   handler: async (ctx, args) => {
     await requireRole(ctx, ["admin", "setter_lead", "commercial_lead"]);
     let rows = args.role
-      ? await ctx.db.query("users").withIndex("by_role", (q) => q.eq("role", args.role)).collect()
+      ? await ctx.db.query("users").withIndex("by_role", (q) => q.eq("role", args.role!)).collect()
       : await ctx.db.query("users").collect();
     if (args.team !== undefined) rows = rows.filter((u) => u.team === args.team);
     if (args.active !== undefined) rows = rows.filter((u) => (u.active ?? true) === args.active);

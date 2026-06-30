@@ -18,7 +18,7 @@ test("create() crée un user (admin) avec rôle défaut setter", async () => {
     name: "Bob",
   });
   const bob = await t.run((ctx) => ctx.db.get(newId));
-  expect(bob?.role ?? "setter").toBe("setter");
+  expect(bob?.role).toBe("setter");
   expect(bob?.createdById).toBe(adminId);
 });
 
@@ -46,6 +46,24 @@ test("list() filtre par rôle", async () => {
   await insertUser(t, { role: "setter", email: "s2@ecoi.fr" });
   const setters = await asUser(t, adminId).query(api.users.list, { role: "setter" });
   expect(setters).toHaveLength(2);
+});
+
+test("toggleActive() désactive un user (admin)", async () => {
+  const t = makeT();
+  const adminId = await insertUser(t, { role: "admin" });
+  const targetId = await insertUser(t, { role: "setter", email: "target@ecoi.fr" });
+  await asUser(t, adminId).mutation(api.users.toggleActive, { userId: targetId, active: false });
+  const target = await t.run((ctx) => ctx.db.get(targetId));
+  expect(target?.active).toBe(false);
+});
+
+test("toggleActive() refusé pour un non-admin", async () => {
+  const t = makeT();
+  const setterId = await insertUser(t, { role: "setter" });
+  const targetId = await insertUser(t, { role: "setter", email: "target2@ecoi.fr" });
+  await expect(
+    asUser(t, setterId).mutation(api.users.toggleActive, { userId: targetId, active: false }),
+  ).rejects.toThrow(/non autorisé/);
 });
 
 test("heartbeat() met à jour lastSeenAt", async () => {
