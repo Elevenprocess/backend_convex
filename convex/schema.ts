@@ -1,7 +1,10 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { authTables } from "@convex-dev/auth/server";
-import { roleValidator, teamValidator } from "./model/enums";
+import {
+  roleValidator, teamValidator,
+  leadStatusValidator, leadSourceValidator, adChannelValidator, stageHistorySourceValidator,
+} from "./model/enums";
 
 export default defineSchema({
   ...authTables,
@@ -44,4 +47,78 @@ export default defineSchema({
   })
     .index("by_externalId", ["externalId"])
     .index("by_active", ["active"]),
+
+  leads: defineTable({
+    externalId: v.optional(v.string()),
+    source: leadSourceValidator,
+    status: leadStatusValidator,
+    // identité
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    addressLine: v.optional(v.string()),
+    city: v.optional(v.string()),
+    postalCode: v.optional(v.string()),
+    localisationMap: v.optional(v.string()),
+    // qualif solaire
+    revenuFiscal: v.optional(v.number()),
+    typeLogement: v.optional(v.string()),
+    // tracking pub
+    utmSource: v.optional(v.string()),
+    utmMedium: v.optional(v.string()),
+    utmCampaign: v.optional(v.string()),
+    campaign: v.optional(v.string()),
+    adset: v.optional(v.string()),
+    ad: v.optional(v.string()),
+    canalAcquisition: v.optional(v.string()),
+    acquisitionChannel: v.optional(adChannelValidator),
+    campaignId: v.optional(v.string()),
+    adsetId: v.optional(v.string()),
+    adId: v.optional(v.string()),
+    attributionMedium: v.optional(v.string()),
+    attributionSessionSource: v.optional(v.string()),
+    // workflow
+    setterId: v.optional(v.id("users")),
+    assignedToId: v.optional(v.id("users")),
+    referrerId: v.optional(v.id("referrers")),
+    lastContactAt: v.optional(v.number()),
+    datePassageRelance: v.optional(v.number()),
+    // pont GHL (non alimenté cette tranche)
+    monetaryValue: v.optional(v.number()),
+    ghlStageName: v.optional(v.string()),
+    ghlPipelineId: v.optional(v.string()),
+    lostReason: v.optional(v.string()),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_status_setter", ["status", "setterId"])
+    .index("by_setter", ["setterId"])
+    .index("by_externalId", ["externalId"])
+    .index("by_lastContact", ["lastContactAt"])
+    .index("by_city", ["city"])
+    .index("by_assignedTo", ["assignedToId"])
+    .index("by_acquisitionChannel", ["acquisitionChannel"]),
+
+  leadStageHistory: defineTable({
+    leadId: v.id("leads"),
+    ghlStageName: v.string(),
+    saasStatus: leadStatusValidator,
+    assignedToId: v.optional(v.id("users")),
+    monetaryValue: v.optional(v.number()),
+    changedAt: v.number(),
+    source: stageHistorySourceValidator,
+    webhookEventId: v.optional(v.string()),
+    externalId: v.optional(v.string()),
+  })
+    .index("by_lead_changedAt", ["leadId", "changedAt"])
+    .index("by_changedAt", ["changedAt"])
+    .index("by_lead_stage_changedAt", ["leadId", "ghlStageName", "changedAt"]),
+
+  leadCustomFields: defineTable({
+    leadId: v.id("leads"),
+    fieldKey: v.string(),
+    fieldName: v.string(),
+    value: v.optional(v.string()),
+    externalId: v.optional(v.string()),
+  }).index("by_lead_field", ["leadId", "fieldKey"]),
 });
