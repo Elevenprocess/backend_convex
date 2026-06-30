@@ -4,6 +4,7 @@ import { authTables } from "@convex-dev/auth/server";
 import {
   roleValidator, teamValidator,
   leadStatusValidator, leadSourceValidator, adChannelValidator, stageHistorySourceValidator,
+  callResultValidator,
 } from "./model/enums";
 
 export default defineSchema({
@@ -121,4 +122,24 @@ export default defineSchema({
     value: v.optional(v.string()),
     externalId: v.optional(v.string()),
   }).index("by_lead_field", ["leadId", "fieldKey"]),
+
+  callLogs: defineTable({
+    externalId: v.optional(v.string()),
+    leadId: v.id("leads"),
+    setterId: v.optional(v.id("users")),
+    calledAt: v.number(),
+    result: callResultValidator,
+    durationSec: v.optional(v.number()),
+    ringoverCallId: v.optional(v.string()),
+    ringoverChannelId: v.optional(v.string()),
+    ringoverStatus: v.optional(v.string()),
+    ringoverPayload: v.optional(v.any()),
+    nextCallbackAt: v.optional(v.number()),
+    notes: v.optional(v.string()),
+  })
+    .index("by_lead_calledAt", ["leadId", "calledAt"])
+    .index("by_setter_calledAt", ["setterId", "calledAt"])
+    .index("by_callback", ["nextCallbackAt"])
+    .index("by_calledAt", ["calledAt"])
+    .index("by_ringoverCallId", ["ringoverCallId"]),
 });
