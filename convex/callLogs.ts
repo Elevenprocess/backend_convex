@@ -43,13 +43,15 @@ export const listByLead = query({
 });
 
 export const upcomingCallbacks = query({
-  args: { setterId: v.optional(v.id("users")) },
+  args: {
+    now: v.number(),
+    setterId: v.optional(v.id("users")),
+  },
   handler: async (ctx, args) => {
     await requireUser(ctx);
-    const now = Date.now();
     const rows = await ctx.db
       .query("callLogs")
-      .withIndex("by_callback", (q) => q.gt("nextCallbackAt", now))
+      .withIndex("by_callback", (q) => q.gt("nextCallbackAt", args.now))
       .collect();
     return args.setterId ? rows.filter((r) => r.setterId === args.setterId) : rows;
   },

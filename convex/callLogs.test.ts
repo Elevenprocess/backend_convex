@@ -27,6 +27,6 @@ test("upcomingCallbacks() renvoie les rappels planifiés", async () => {
     result: "rappel_planifie",
     nextCallbackAt: Date.now() + 86400000,
   });
-  const cbs = await asUser(t, setterId).query(api.callLogs.upcomingCallbacks, {});
+  const cbs = await asUser(t, setterId).query(api.callLogs.upcomingCallbacks, { now: Date.now() });
   expect(cbs).toHaveLength(1);
 });
