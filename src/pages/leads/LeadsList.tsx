@@ -121,8 +121,8 @@ export function LeadsList() {
 
 function LeadsSuivi() {
   const navigate = useNavigate()
-  const { data: leadsData, loading, error } = useLeads({ limit: 500 })
-  const { data: rdvsData, loading: rdvLoading } = useRdvList({ limit: 200 })
+  const { data: leadsData, loading, error } = useLeads({ limit: 1000 })
+  const { data: rdvsData, loading: rdvLoading } = useRdvList({ limit: 500 })
   const { data: usersData } = useUsers()
   const [query, setQuery] = useState('')
   const dossiers = useMemo(() => {
