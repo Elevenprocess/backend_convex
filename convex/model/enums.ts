@@ -39,3 +39,22 @@ export type StageHistorySource = (typeof STAGE_HISTORY_SOURCES)[number];
 export const stageHistorySourceValidator = v.union(
   ...STAGE_HISTORY_SOURCES.map((s) => v.literal(s)),
 ) as Validator<StageHistorySource>;
+
+export const RDV_STATUSES = ["planifie", "honore", "no_show", "reporte", "annule"] as const;
+export type RdvStatus = (typeof RDV_STATUSES)[number];
+export const rdvStatusValidator = v.union(...RDV_STATUSES.map((s) => v.literal(s))) as Validator<RdvStatus>;
+
+export const RDV_LOCATIONS = ["domicile", "agence", "visio"] as const;
+export type RdvLocation = (typeof RDV_LOCATIONS)[number];
+export const rdvLocationValidator = v.union(...RDV_LOCATIONS.map((l) => v.literal(l))) as Validator<RdvLocation>;
+
+export const RDV_RESULTS = ["signe", "reflexion", "perdu", "no_show", "reporte"] as const;
+export type RdvResult = (typeof RDV_RESULTS)[number];
+export const rdvResultValidator = v.union(...RDV_RESULTS.map((r) => v.literal(r))) as Validator<RdvResult>;
+
+export const FINANCING_TYPES = [
+  "comptant", "financement", "financement_sans_apport",
+  "apport_financement", "paiement_10x", "paiement_12x",
+] as const;
+export type FinancingType = (typeof FINANCING_TYPES)[number];
+export const financingTypeValidator = v.union(...FINANCING_TYPES.map((f) => v.literal(f))) as Validator<FinancingType>;
