@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { makeT } from "./test";
+import { makeT } from "./test.kit";
 
 test("le harness convex-test démarre offline", async () => {
   const t = makeT();

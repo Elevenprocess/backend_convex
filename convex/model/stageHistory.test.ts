@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { internal } from "../_generated/api";
-import { makeT } from "../test";
+import { makeT } from "../test.kit";
 
 test("insertStageHistory est idempotent sur (lead, stage, changedAt)", async () => {
   const t = makeT();
@@ -14,8 +14,8 @@ test("insertStageHistory est idempotent sur (lead, stage, changedAt)", async () 
     changedAt: 1000,
     source: "manual" as const,
   };
-  const first = await t.mutation(internal.model.stageHistoryTest.insert, args);
-  const second = await t.mutation(internal.model.stageHistoryTest.insert, args);
+  const first = await t.mutation(internal.model["stageHistory.testfns"].insert, args);
+  const second = await t.mutation(internal.model["stageHistory.testfns"].insert, args);
   expect(first).not.toBeNull();
   expect(second).toBeNull();
   const rows = await t.run((ctx) =>

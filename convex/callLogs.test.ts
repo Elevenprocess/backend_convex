@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { api } from "./_generated/api";
-import { makeT } from "./test";
-import { asUser, insertUser } from "./testHelpers";
+import { makeT } from "./test.kit";
+import { asUser, insertUser } from "./test.helpers";
 
 test("logCall() insère l'appel ET met à jour lead.lastContactAt", async () => {
   const t = makeT();

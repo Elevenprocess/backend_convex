@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { makeT } from "./test";
+import { makeT } from "./test.kit";
 
 test("on peut insérer un user métier avec rôle et externalId", async () => {
   const t = makeT();

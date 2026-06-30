@@ -86,6 +86,7 @@ export const assignCommercial = mutation({
   },
 });
 
+// TODO(workflow-tranche): decide whether to role-gate lead-state mutations (currently any authenticated role). See final review #3.
 export const updateStatus = mutation({
   args: { leadId: v.id("leads"), status: leadStatusValidator },
   handler: async (ctx, args) => {

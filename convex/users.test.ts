@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
-import { makeT } from "./test";
+import { makeT } from "./test.kit";
 import { api } from "./_generated/api";
-import { asUser, insertUser } from "./testHelpers";
+import { asUser, insertUser } from "./test.helpers";
 
 test("me() renvoie le profil courant", async () => {
   const t = makeT();

@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { callResultValidator } from "./model/enums";
 import { requireUser } from "./model/access";
 
+// TODO(workflow-tranche): decide whether to role-gate lead-state mutations (currently any authenticated role). See final review #3.
 export const logCall = mutation({
   args: {
     leadId: v.id("leads"),
