@@ -5,6 +5,7 @@ import {
   roleValidator, teamValidator,
   leadStatusValidator, leadSourceValidator, adChannelValidator, stageHistorySourceValidator,
   callResultValidator,
+  rdvStatusValidator, rdvLocationValidator, rdvResultValidator, financingTypeValidator,
 } from "./model/enums";
 
 export default defineSchema({
@@ -142,4 +143,32 @@ export default defineSchema({
     .index("by_callback", ["nextCallbackAt"])
     .index("by_calledAt", ["calledAt"])
     .index("by_ringoverCallId", ["ringoverCallId"]),
+
+  rdv: defineTable({
+    externalId: v.optional(v.string()),
+    leadId: v.id("leads"),
+    commercialId: v.optional(v.id("users")),
+    scheduledAt: v.optional(v.number()),
+    locationType: rdvLocationValidator,
+    status: rdvStatusValidator,
+    // débrief inline
+    result: v.optional(rdvResultValidator),
+    signatureAt: v.optional(v.number()),
+    montantTotal: v.optional(v.number()),
+    financingType: v.optional(financingTypeValidator),
+    objections: v.optional(v.string()),
+    nonSaleReason: v.optional(v.string()),
+    kits: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    debriefFilledAt: v.optional(v.number()),
+    debriefDueAt: v.optional(v.number()),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_commercial_scheduled", ["commercialId", "scheduledAt"])
+    .index("by_lead", ["leadId"])
+    .index("by_debriefDue", ["debriefDueAt"])
+    .index("by_signature", ["signatureAt"])
+    .index("by_scheduledAt", ["scheduledAt"])
+    .index("by_status", ["status"])
+    .index("by_externalId", ["externalId"]),
 });

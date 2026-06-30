@@ -26,3 +26,18 @@ test("requireUser bloque un compte désactivé", async () => {
     asUser(t, offId).query(internal.model["access.testfns"].whoamiAdmin, {}),
   ).rejects.toThrow(/désactivé/);
 });
+
+test("assertCommercialRole laisse passer un commercial", async () => {
+  const t = makeT();
+  const id = await insertUser(t, { role: "commercial" });
+  const r = await t.query(internal.model["access.testfns"].assertCommercialOk, { userId: id });
+  expect(r.role).toBe("commercial");
+});
+
+test("assertCommercialRole rejette un setter", async () => {
+  const t = makeT();
+  const id = await insertUser(t, { role: "setter" });
+  await expect(
+    t.query(internal.model["access.testfns"].assertCommercialOk, { userId: id }),
+  ).rejects.toThrow(/commercial/);
+});
