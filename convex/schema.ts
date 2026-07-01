@@ -10,6 +10,7 @@ import {
   debriefReflexionReasonValidator, debriefSuiviReasonValidator,
   paymentSubMethodValidator, financingOrgValidator,
   devisStatusValidator, ocrStatusValidator,
+  acompteStatutValidator, legacyAcompteStatutValidator, echeanceJalonValidator,
 } from "./model/enums";
 
 export default defineSchema({
@@ -264,4 +265,55 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_commercial", ["commercialId"])
     .index("by_externalId", ["externalId"]),
+
+  // ─── Finances : tranche 5 ────────────────────────────────────────────────
+
+  /** Échéancier multi-tranches déclenché par jalons suivi (paiements modernes). */
+  acompteEcheances: defineTable({
+    debriefId: v.id("debriefs"),
+    leadId: v.optional(v.id("leads")),
+    ordre: v.number(),
+    label: v.optional(v.string()),
+    percent: v.optional(v.number()),
+    montantPrevu: v.optional(v.number()),
+    jalonKey: v.optional(echeanceJalonValidator),
+    statut: acompteStatutValidator,
+    montantReel: v.optional(v.number()),
+    dateEcheance: v.optional(v.string()),   // YYYY-MM-DD
+    dateEncaissement: v.optional(v.string()), // YYYY-MM-DD
+    notes: v.optional(v.string()),
+    recordedById: v.optional(v.id("users")),
+  })
+    .index("by_debrief_ordre", ["debriefId", "ordre"])
+    .index("by_lead", ["leadId"])
+    .index("by_statut", ["statut"]),
+
+  /** Legacy : encaissements simples (1 ligne par debrief, modèle OCR historique). */
+  acompteEncaissements: defineTable({
+    debriefId: v.id("debriefs"),
+    leadId: v.optional(v.id("leads")),
+    statut: legacyAcompteStatutValidator,
+    montantReel: v.optional(v.number()),
+    dateEncaissement: v.optional(v.string()), // YYYY-MM-DD
+    notes: v.optional(v.string()),
+    recordedById: v.optional(v.id("users")),
+  })
+    .index("by_debrief", ["debriefId"])
+    .index("by_lead", ["leadId"])
+    .index("by_statut", ["statut"]),
+
+  /**
+   * Legacy OCR : paiements importés depuis Airtable / clients NestJS.
+   * TODO(délivrabilité): clientId passera en Id<"clients"> quand la table clients sera portée.
+   */
+  payments: defineTable({
+    clientId: v.string(), // PLACEHOLDER — sera Id<"clients"> après portage délivrabilité
+    type: v.string(),
+    montantTheorique: v.number(),
+    montantReel: v.optional(v.number()),
+    statut: v.optional(legacyAcompteStatutValidator),
+    dateEncaissement: v.optional(v.string()), // YYYY-MM-DD
+  })
+    .index("by_client_type", ["clientId", "type"])
+    .index("by_statut", ["statut"]),
 });
