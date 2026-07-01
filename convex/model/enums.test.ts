@@ -12,6 +12,9 @@ import {
   DEVIS_STATUSES, OCR_STATUSES, LIGNE_TYPES, PAIEMENT_PHASES,
   devisStatusValidator, ocrStatusValidator,
 } from "./enums";
+import {
+  ACOMPTE_STATUSES, LEGACY_ACOMPTE_STATUSES, ECHEANCE_JALONS,
+} from "./enums";
 
 test("les rôles reprennent les 10 valeurs Postgres", () => {
   expect(ROLES).toEqual([
@@ -127,4 +130,22 @@ test("paiementPhase reprend les 7 phases", () => {
 test("les validateurs devis sont des unions", () => {
   expect(devisStatusValidator.kind).toBe("union");
   expect(ocrStatusValidator.kind).toBe("union");
+});
+
+test("acompte statuses", () => {
+  expect(ACOMPTE_STATUSES).toEqual([
+    "en_attente", "a_encaisser", "encaisse", "en_retard", "annule",
+  ]);
+});
+
+test("legacy acompte statuses", () => {
+  expect(LEGACY_ACOMPTE_STATUSES).toEqual([
+    "attendu", "encaisse", "en_retard", "annule",
+  ]);
+});
+
+test("echeance jalons", () => {
+  expect(ECHEANCE_JALONS).toContain("signature");
+  expect(ECHEANCE_JALONS).toContain("racco_validee");
+  expect(ECHEANCE_JALONS).toHaveLength(7);
 });

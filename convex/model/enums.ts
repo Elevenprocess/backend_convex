@@ -123,3 +123,22 @@ export const PAIEMENT_PHASES = [
 ] as const;
 export type PaiementPhase = (typeof PAIEMENT_PHASES)[number];
 export const paiementPhaseValidator = v.union(...PAIEMENT_PHASES.map((p) => v.literal(p))) as Validator<PaiementPhase>;
+
+// ─── Finances (tranche 5 : acomptes/paiements) ──────────────────────────────
+export const ACOMPTE_STATUSES = [
+  "en_attente", "a_encaisser", "encaisse", "en_retard", "annule",
+] as const;
+export type AcompteStatut = (typeof ACOMPTE_STATUSES)[number];
+export const acompteStatutValidator = v.union(...ACOMPTE_STATUSES.map((s) => v.literal(s))) as Validator<AcompteStatut>;
+
+export const LEGACY_ACOMPTE_STATUSES = [
+  "attendu", "encaisse", "en_retard", "annule",
+] as const;
+export type LegacyAcompteStatut = (typeof LEGACY_ACOMPTE_STATUSES)[number];
+export const legacyAcompteStatutValidator = v.union(...LEGACY_ACOMPTE_STATUSES.map((s) => v.literal(s))) as Validator<LegacyAcompteStatut>;
+
+export const ECHEANCE_JALONS = [
+  "signature", "vt_validee", "dp_envoyee_mairie", "dp_validee", "install_a_faire", "install_effectuee", "racco_validee",
+] as const;
+export type EcheanceJalon = (typeof ECHEANCE_JALONS)[number];
+export const echeanceJalonValidator = v.union(...ECHEANCE_JALONS.map((s) => v.literal(s))) as Validator<EcheanceJalon>;
