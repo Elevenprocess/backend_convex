@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Spinner } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
-import { useAnalyticsSummary, prefetchAnalyticsSummary, useClients, useLeads, useRdvList } from '../lib/hooks'
+import { useAnalyticsSummary, prefetchAnalyticsSummary, useLeads, useRdvList, useClients } from '../lib/hooks'
+import { buildDeliveryPipeline, DELIVERY_PHASES } from '../lib/deliveryOverview'
+import { PHASE_LABEL } from '../lib/suivi-board'
 import type { AnalyticsAdminSummary, AnalyticsCommercialPerf, AnalyticsCommercialSummary, AnalyticsSegment, AnalyticsSetterSummary } from '../lib/types'
 import { DebriefAnalytics } from '../components/analytics/DebriefAnalytics'
 import { MagicKpi, type KpiAccent, type DeltaTone } from '../components/kpi/MagicKpi'
@@ -83,14 +86,26 @@ export function Analytics() {
   return <AnalyticsSetter name={me?.name ?? 'Setter'} />
 }
 
+// Couleurs des 6 phases du pipeline délivrabilité (dégradé de la palette Goal).
+const PHASE_GOAL_COLOR: Record<string, string> = {
+  vt: '#9DC41A',
+  dp: '#3E9A6F',
+  racco: '#2E8B8B',
+  installation: '#1F7857',
+  consuel: '#B58A2A',
+  mes: '#0E7E6B',
+}
+
 function AnalyticsSuivi() {
+  const navigate = useNavigate()
   const { data: leadsData } = useLeads({ limit: 500 })
   const { data: rdvsData } = useRdvList({ limit: 200 })
   const { data: clientsData } = useClients()
   const leads = leadsData ?? []
   const rdvs = rdvsData ?? []
-  const clients = clientsData ?? []
-  const deliveryPipeline = useMemo(() => buildDeliveryPipeline(clients, new Date()), [clients])
+  // Pipeline réel (les 6 phases, dont Raccordement et Consuel) calculé sur les
+  // dossiers délivrabilité — mêmes comptes cumulatifs que le funnel Overview.
+  const pipeline = useMemo(() => buildDeliveryPipeline(clientsData ?? [], new Date()), [clientsData])
   const signedRdvs = rdvs.filter((r) => r.result === 'signe' || Boolean(r.signatureAt))
   const signedIds = new Set(signedRdvs.map((r) => r.leadId))
   const signedLeads = leads.filter((l) => l.status === 'signe' || signedIds.has(l.id))
@@ -101,7 +116,7 @@ function AnalyticsSuivi() {
 
   return (
     <AppShell flat>
-      <Topbar eyebrow="ANALYSE / DÉLIVRABILITÉ" title="Performance suivi post-signature" />
+      <Topbar eyebrow="STATISTIQUES / DÉLIVRABILITÉ" title="Performance suivi post-signature" />
       <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 overflow-y-auto space-y-4 sm:space-y-6 flex-grow">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
           <BigStatCard label="DOSSIERS SIGNÉS" value={fmtInt(signedLeads.length)} sub="base Suivi" accent="green" icon="check" />
@@ -111,14 +126,28 @@ function AnalyticsSuivi() {
         </div>
         <div className="grid grid-cols-12 gap-6">
           <div className="glass-card p-6 col-span-12 xl:col-span-7">
-            <div className="flex items-center justify-between mb-4"><h3 className="font-bold">Pipeline délivrabilité</h3><span className="eyebrow">workflow réel côté UI</span></div>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              <Goal label="Devis signés" value={`${signedLeads.length} dossiers`} pct={100} color="#0E7E6B" />
-              <Goal label="Visite technique" value={`${deliveryPipeline.phases.vt.count} dossiers`} pct={pct(deliveryPipeline.phases.vt.count, deliveryPipeline.activeCount)} color="#9DC41A" />
-              <Goal label="Déclaration préalable" value={`${deliveryPipeline.phases.dp.count} dossiers`} pct={pct(deliveryPipeline.phases.dp.count, deliveryPipeline.activeCount)} color="#3E9A6F" />
-              <Goal label="Raccordement EDF" value={`${deliveryPipeline.phases.racco.count} dossiers`} pct={pct(deliveryPipeline.phases.racco.count, deliveryPipeline.activeCount)} color="#1F7857" />
-              <Goal label="Installation" value={`${deliveryPipeline.phases.installation.count} dossiers`} pct={pct(deliveryPipeline.phases.installation.count, deliveryPipeline.activeCount)} color="#256B52" />
-              <Goal label="Consuel" value={`${deliveryPipeline.phases.consuel.count} dossiers`} pct={pct(deliveryPipeline.phases.consuel.count, deliveryPipeline.activeCount)} color="#0E7E6B" />
+            <div className="flex items-center justify-between mb-4"><h3 className="font-bold">Pipeline délivrabilité</h3><span className="eyebrow">{fmtInt(pipeline.activeCount)} dossiers actifs · cliquer = ouvrir /suivi filtré</span></div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-5">
+              {DELIVERY_PHASES.map((phase) => {
+                const c = pipeline.phases[phase]
+                return (
+                  <button
+                    key={phase}
+                    type="button"
+                    data-phase={phase}
+                    className="text-left rounded-lg -m-1 p-1 hover:bg-line-soft/40 transition-colors"
+                    title={`Voir les dossiers en ${PHASE_LABEL[phase]}`}
+                    onClick={() => navigate(`/suivi?phase=${phase}`)}
+                  >
+                    <Goal
+                      label={PHASE_LABEL[phase]}
+                      value={`${c.count} dossier${c.count > 1 ? 's' : ''}`}
+                      pct={percent(c.count, pipeline.activeCount)}
+                      color={PHASE_GOAL_COLOR[phase]}
+                    />
+                  </button>
+                )
+              })}
             </div>
           </div>
           <div className="glass-card p-6 col-span-12 xl:col-span-5">
@@ -167,7 +196,7 @@ function AnalyticsSetter({ name }: { name: string }) {
 
   return (
     <AppShell flat>
-      <Topbar eyebrow="ANALYSE / SETTER" title={`Mes performances — ${name}`} />
+      <Topbar eyebrow="STATISTIQUES / SETTER" title={`Mes performances — ${name}`} />
       <div className="px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 flex items-center justify-between gap-2 sm:gap-4 flex-shrink-0 flex-wrap">
         <div className="text-xs text-faint font-semibold">
           Moteur d'analyse backend : {range.label}.{loading && <AnalyticsInlineLoading />}{error ? ` Erreur: ${error}` : ''}
@@ -238,7 +267,7 @@ function AnalyticsCommercial({ name }: { name: string }) {
 
   return (
     <AppShell blobsKey="commercial">
-      <Topbar eyebrow="ANALYSE / COMMERCIAL" title={`Mes performances — ${name}`} />
+      <Topbar eyebrow="STATISTIQUES / COMMERCIAL" title={`Mes performances — ${name}`} />
       <div className="px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 flex items-center justify-between gap-2 sm:gap-4 flex-shrink-0 flex-wrap">
         <div className="text-xs text-faint font-semibold">Moteur d'analyse backend sur {range.label}.{loading && <AnalyticsInlineLoading />}{error ? ` Erreur: ${error}` : ''}</div>
         <DateRangePicker value={period} onChange={setPeriod} align="right" />
@@ -298,7 +327,7 @@ function AnalyticsAdmin() {
 
   return (
     <AppShell blobsKey="admin" flat>
-      <Topbar eyebrow="ANALYSE / ADMIN" title="Performance globale équipe" />
+      <Topbar eyebrow="STATISTIQUES / ADMIN" title="Performance globale équipe" />
       <div className="px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 flex items-center justify-between gap-2 sm:gap-4 flex-shrink-0 flex-wrap">
         <div className="text-xs text-faint font-semibold">Requête unique backend /analytics/summary : {range.label}.{loading && <AnalyticsInlineLoading />}{error ? ` Erreur: ${error}` : ''}</div>
         <DateRangePicker value={period} onChange={setPeriod} align="right" />

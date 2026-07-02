@@ -31,8 +31,8 @@ describe('Sidebar — navigation par rôle', () => {
     expect(within(nav).getByRole('link', { name: /Planning/i })).toBeInTheDocument()
     expect(within(nav).getByRole('link', { name: /Mes dossiers/i })).toBeInTheDocument()
 
-    expect(within(nav).queryByRole('link', { name: /Tableau de bord/i })).not.toBeInTheDocument()
-    expect(within(nav).queryByRole('link', { name: /Analyse/i })).not.toBeInTheDocument()
+    expect(within(nav).queryByRole('link', { name: /Vue d'ensemble/i })).not.toBeInTheDocument()
+    expect(within(nav).queryByRole('link', { name: /Statistiques/i })).not.toBeInTheDocument()
     expect(within(nav).queryByRole('link', { name: /Calendrier RDV/i })).not.toBeInTheDocument()
   })
 
@@ -41,7 +41,7 @@ describe('Sidebar — navigation par rôle', () => {
     renderSidebar()
     const nav = screen.getByRole('button', { name: /Rechercher/i }).parentElement!
 
-    expect(within(nav).getByRole('link', { name: /Tableau de bord/i })).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: /Vue d'ensemble/i })).toBeInTheDocument()
     expect(within(nav).queryByRole('link', { name: /Calendrier RDV/i })).not.toBeInTheDocument()
   })
 
@@ -56,7 +56,7 @@ describe('Sidebar — navigation par rôle', () => {
     setUser('setter')
     renderSidebar()
 
-    expect(screen.getByRole('navigation', { name: 'Analyse' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Statistiques' })).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: 'Acquisition' })).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: 'Calendriers' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Prospects' })).toBeInTheDocument()
@@ -69,13 +69,13 @@ describe('Sidebar — navigation par rôle', () => {
     setUser('admin')
     renderSidebar()
 
-    expect(screen.getByRole('navigation', { name: 'Analyse' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Statistiques' })).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: 'Acquisition' })).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: 'Délivrabilité' })).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: 'Calendriers' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Prospects' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Client' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Délivrabilité' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Dossiers' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Calendrier RDV' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Planning' })).toBeInTheDocument()
   })
@@ -88,7 +88,7 @@ describe('Sidebar — navigation par rôle', () => {
 
     expect(screen.queryByRole('link', { name: 'Prospects' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Client' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Délivrabilité' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Dossiers' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Calendrier RDV' })).toBeInTheDocument()
   })
 })
