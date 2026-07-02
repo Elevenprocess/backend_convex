@@ -3,13 +3,14 @@
 // Appelée depuis les queries getAcompte / listAcomptes (lecture seule).
 // Ne jamais écrire dans cette fonction (ctx.db.insert/patch interdits).
 
-import { QueryCtx } from "../_generated/server";
+import { QueryCtx, MutationCtx } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import {
   resolveEcheancier,
   customTemplatesFromRows,
   tranchePrevue,
   EDF_CONFIRMATION_JALON,
+  WorkTemplate,
 } from "./acompteEcheancier";
 import { isJalonReached, clientStatusGlobal } from "./delivrabiliteSeam";
 import { AcompteStatut, EcheanceJalon } from "./enums";
@@ -52,6 +53,52 @@ export type AcompteResponse = {
   totalEncaisse: number | null;
   resteAPayer: number | null;
 };
+
+// ─── Helper partagé lecture/écriture ─────────────────────────────────────────
+
+/**
+ * Sélectionne les templates de tranches à partir des données déjà chargées.
+ * Source unique utilisée par la LECTURE (assembleEcheancier) ET l'ÉCRITURE
+ * (recordEcheance), garantissant que l'ensemble des ordres valides est identique.
+ *
+ * @param debrief      Document debriefs
+ * @param imported     true si source === "airtable_migration"
+ * @param persistedRows lignes acompteEcheances existantes pour ce débrief
+ */
+export function resolveTemplatesFromData(
+  debrief: Doc<"debriefs">,
+  imported: boolean,
+  persistedRows: Array<{
+    ordre: number;
+    label?: string;
+    percent?: number;
+    montantPrevu?: number;
+    jalonKey?: string;
+  }>,
+): WorkTemplate[] {
+  const hasUsableCustomPlan = persistedRows.some(
+    (r) => r.montantPrevu != null || r.percent != null || r.jalonKey != null,
+  );
+  const useCustomEcheancier = debrief.customEcheancier && hasUsableCustomPlan;
+
+  return useCustomEcheancier
+    ? customTemplatesFromRows(
+        persistedRows.map((r) => ({
+          ordre: r.ordre,
+          label: r.label ?? null,
+          percent: r.percent ?? null,
+          montantPrevu: r.montantPrevu ?? null,
+          jalonKey: r.jalonKey ?? null,
+        })),
+      )
+    : resolveEcheancier({
+        financingType: debrief.financingType ?? null,
+        montantTotal: debrief.montantTotal ?? null,
+        acompteAmount: debrief.acompteAmount ?? null,
+        acomptePercent: debrief.acomptePercent ?? null,
+        imported,
+      });
+}
 
 // ─── Fonction principale ──────────────────────────────────────────────────────
 
@@ -101,28 +148,14 @@ export async function assembleEcheancier(
     .collect();
 
   // ── 6. Choix du plan : custom ou template déduit du financingType ─────────────
-  const hasUsableCustomPlan = persistedRows.some(
-    (r) => r.montantPrevu != null || r.percent != null || r.jalonKey != null,
-  );
-  const useCustomEcheancier = debrief.customEcheancier && hasUsableCustomPlan;
-
-  const templates = useCustomEcheancier
-    ? customTemplatesFromRows(
-        persistedRows.map((r) => ({
-          ordre: r.ordre,
-          label: r.label ?? null,
-          percent: r.percent ?? null,
-          montantPrevu: r.montantPrevu ?? null,
-          jalonKey: r.jalonKey ?? null,
-        })),
-      )
-    : resolveEcheancier({
-        financingType: debrief.financingType ?? null,
-        montantTotal: debrief.montantTotal ?? null,
-        acompteAmount: debrief.acompteAmount ?? null,
-        acomptePercent: debrief.acomptePercent ?? null,
-        imported,
-      });
+  // Délégué à resolveTemplatesFromData (partagé avec recordEcheance) pour garantir
+  // que l'ensemble des ordres valides est identique en lecture et en écriture.
+  const useCustomEcheancier =
+    debrief.customEcheancier &&
+    persistedRows.some(
+      (r) => r.montantPrevu != null || r.percent != null || r.jalonKey != null,
+    );
+  const templates = resolveTemplatesFromData(debrief, imported, persistedRows);
 
   // 10x/12x sans acompte, ou aucun montant → rien à afficher.
   if (templates.length === 0) return null;

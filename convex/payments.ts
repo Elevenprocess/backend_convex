@@ -7,15 +7,17 @@
 
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { requireRole } from "./model/access";
+import { requireRole, requireUser } from "./model/access";
 import {
   financingTypeValidator,
   paymentSubMethodValidator,
   financingOrgValidator,
+  acompteStatutValidator,
 } from "./model/enums";
 import {
   assembleEcheancier,
   AcompteResponse,
+  resolveTemplatesFromData,
 } from "./model/assembleEcheancier";
 
 // Rôles autorisés pour les queries finances.
@@ -126,6 +128,90 @@ export const updateFinancing = mutation({
     }
 
     await ctx.db.patch(args.debriefId, patch as any);
+    return null;
+  },
+});
+
+// ─── recordEcheance ──────────────────────────────────────────────────────────
+// Enregistre (upsert) UNE tranche d'acompte identifiée par (debriefId, ordre).
+// Rôles : admin + finances UNIQUEMENT (pas les autres rôles finances comme
+// delivrabilite, responsable_technique, back_office).
+export const recordEcheance = mutation({
+  args: {
+    debriefId: v.id("debriefs"),
+    ordre: v.number(),
+    statut: acompteStatutValidator,
+    montantReel: v.optional(v.number()),
+    dateEncaissement: v.optional(v.string()),
+    dateEcheance: v.optional(v.string()),
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // ── 1. Contrôle d'accès : admin + finances seulement ───────────────────
+    const user = await requireRole(ctx, ["admin", "finances"]);
+
+    // ── 2. Charger le débrief ──────────────────────────────────────────────
+    const debrief = await ctx.db.get(args.debriefId);
+    if (!debrief || debrief.deletedAt !== undefined) {
+      throw new Error("Débrief introuvable");
+    }
+
+    // ── 3. Validation statut encaisse ──────────────────────────────────────
+    if (args.statut === "encaisse") {
+      if (args.montantReel === undefined || args.montantReel === null) {
+        throw new Error("montantReel requis pour le statut encaisse");
+      }
+      if (!args.dateEncaissement) {
+        throw new Error("dateEncaissement requis pour le statut encaisse");
+      }
+    }
+
+    // ── 4. Résoudre le template pour valider l'ordre ───────────────────────
+    const lead = debrief.leadId ? await ctx.db.get(debrief.leadId) : null;
+    const imported = lead?.source === "airtable_migration";
+
+    const persistedRows = await ctx.db
+      .query("acompteEcheances")
+      .withIndex("by_debrief_ordre", (q) => q.eq("debriefId", debrief._id))
+      .collect();
+
+    const templates = resolveTemplatesFromData(debrief, imported, persistedRows);
+    const validOrdres = new Set(templates.map((t) => t.ordre));
+
+    if (!validOrdres.has(args.ordre)) {
+      throw new Error(
+        `Ordre ${args.ordre} invalide pour ce débrief (template : [${[...validOrdres].join(", ")}])`,
+      );
+    }
+
+    // ── 5. Upsert via index by_debrief_ordre ──────────────────────────────
+    const existing = persistedRows.find((r) => r.ordre === args.ordre);
+
+    const patch: Record<string, unknown> = {
+      statut: args.statut,
+      recordedById: user._id,
+    };
+    if (args.montantReel !== undefined) patch.montantReel = args.montantReel;
+    if (args.dateEncaissement !== undefined) patch.dateEncaissement = args.dateEncaissement;
+    if (args.dateEcheance !== undefined) patch.dateEcheance = args.dateEcheance;
+    if (args.notes !== undefined) patch.notes = args.notes;
+
+    if (existing) {
+      await ctx.db.patch(existing._id, patch as any);
+    } else {
+      await ctx.db.insert("acompteEcheances", {
+        debriefId: args.debriefId,
+        leadId: debrief.leadId,
+        ordre: args.ordre,
+        statut: args.statut,
+        recordedById: user._id,
+        ...(args.montantReel !== undefined && { montantReel: args.montantReel }),
+        ...(args.dateEncaissement !== undefined && { dateEncaissement: args.dateEncaissement }),
+        ...(args.dateEcheance !== undefined && { dateEcheance: args.dateEcheance }),
+        ...(args.notes !== undefined && { notes: args.notes }),
+      });
+    }
+
     return null;
   },
 });
