@@ -1130,3 +1130,24 @@ export type VtCalendarEntry = {
   techniciens: { id: string; name: string }[]
   notes: string | null
 }
+
+// ─── Interventions SAV (réparations post-livraison) ─────────────────────────
+export type InterventionType = 'reparation' | 'maintenance' | 'garantie' | 'autre'
+export type InterventionStatus = 'planifiee' | 'realisee' | 'a_refaire'
+export type InterventionFile = { id: string; filename: string; mimeType: string; sizeBytes: number }
+export type InterventionResponse = {
+  id: string
+  clientId: string
+  type: InterventionType
+  status: InterventionStatus
+  motif: string
+  observations: string | null
+  technicienId: string | null
+  technicienName: string | null
+  datePlanifiee: string | null
+  heure: string | null
+  dateRealisee: string | null
+  createdAt: string
+  files: InterventionFile[]
+  client: { leadId: string; fullName: string | null; city: string | null }
+}

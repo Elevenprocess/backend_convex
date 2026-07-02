@@ -10,6 +10,9 @@ import type {
   CommercialObjectiveResponse,
   DebriefResponse,
   Devis,
+  InterventionResponse,
+  InterventionStatus,
+  InterventionType,
   LeadResponse,
   NotificationResponse,
   ProjectAttachmentKind,
@@ -703,3 +706,72 @@ export function markAllNotificationsRead(): Promise<{ ok: true }> {
 }
 
 export { API_BASE }
+
+// ─── Interventions SAV ───────────────────────────────────────────────────────
+function bustInterventionCaches() {
+  notifyRealtimeRefresh({ event: 'intervention:changed', paths: ['/interventions'] })
+}
+
+export async function createIntervention(body: {
+  clientId: string
+  type: InterventionType
+  motif: string
+  technicienId?: string | null
+  datePlanifiee?: string | null
+  heure?: string | null
+}): Promise<InterventionResponse> {
+  const res = await api<InterventionResponse>('/interventions', { method: 'POST', body })
+  bustInterventionCaches()
+  return res
+}
+
+export async function updateIntervention(
+  id: string,
+  patch: Partial<{
+    status: InterventionStatus
+    observations: string | null
+    type: InterventionType
+    motif: string
+    technicienId: string | null
+    datePlanifiee: string | null
+    heure: string | null
+    dateRealisee: string | null
+  }>,
+): Promise<InterventionResponse> {
+  const res = await api<InterventionResponse>(`/interventions/${id}`, { method: 'PATCH', body: patch })
+  bustInterventionCaches()
+  return res
+}
+
+export async function deleteIntervention(id: string): Promise<{ ok: true }> {
+  const res = await api<{ ok: true }>(`/interventions/${id}`, { method: 'DELETE' })
+  bustInterventionCaches()
+  return res
+}
+
+// Upload multipart (champ « files ») — même pattern que uploadSubstepDocuments.
+export async function uploadInterventionFiles(id: string, files: File[]): Promise<InterventionResponse> {
+  const fd = new FormData()
+  for (const file of files) fd.append('files', file)
+  const res = await fetch(buildApiUrl(`/interventions/${id}/files`), {
+    method: 'POST',
+    credentials: 'include',
+    body: fd,
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, text || `Upload fichier intervention échoué : ${res.status}`)
+  }
+  bustInterventionCaches()
+  return res.json() as Promise<InterventionResponse>
+}
+
+export function interventionFileRawUrl(interventionId: string, fileId: string): string {
+  return buildApiUrl(`/interventions/${interventionId}/files/${fileId}/raw`)
+}
+
+export async function deleteInterventionFile(interventionId: string, fileId: string): Promise<{ ok: true }> {
+  const res = await api<{ ok: true }>(`/interventions/${interventionId}/files/${fileId}`, { method: 'DELETE' })
+  bustInterventionCaches()
+  return res
+}

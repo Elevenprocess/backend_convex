@@ -11,6 +11,7 @@ import type {
   CallLogResponse,
   ClientResponse,
   DebriefResponse,
+  InterventionResponse,
   InvitationResponse,
   LeadResponse,
   LeadStatsResponse,
@@ -1178,4 +1179,12 @@ export function useVtCalendar(filters?: { from?: string; to?: string } | null): 
     filters === null ? undefined : { from: filters?.from, to: filters?.to },
     { refreshCachedOnMount: true, silentInitialLoading: true },
   )
+}
+
+// ─── Interventions SAV ───────────────────────────────────────────────────────
+export function useInterventions(
+  filters?: { clientId?: string; status?: string } | null,
+): Async<InterventionResponse[]> {
+  const query = filters === null ? undefined : { clientId: filters?.clientId, status: filters?.status }
+  return useFetch<InterventionResponse[]>(filters === null ? null : '/interventions', query)
 }
