@@ -166,3 +166,41 @@ describe('clientMatchesPhase', () => {
     expect(clientMatchesPhase(undefined, 'vt')).toBe(false)
   })
 })
+
+// ─── Récap mensuel « Réalisé ce mois-ci » (Analytics délivrabilité) ──────────
+
+import { monthlyRealisations } from './deliveryOverview'
+
+describe('monthlyRealisations', () => {
+  const withSteps = (id: string, vtDate: string | null, poseDate: string | null): ClientResponse =>
+    client({
+      id,
+      currentPhase: 'installation',
+      steps: {
+        vt: step({ status: 'fait', dateRealisee: vtDate }),
+        installation: step({ status: poseDate ? 'fait' : 'a_faire', dateRealisee: poseDate }),
+      },
+    })
+
+  it('compte les VT et poses réalisées dans le mois demandé (tri date desc)', () => {
+    const rows = [
+      withSteps('a', '2026-06-10', '2026-06-25'),
+      withSteps('b', '2026-06-02', null),
+      withSteps('c', '2026-05-30', '2026-07-01'),
+    ]
+    const juin = monthlyRealisations(rows, 2026, 5)
+    expect(juin.vt.map((r) => r.client.id)).toEqual(['a', 'b'])
+    expect(juin.poses.map((r) => r.client.id)).toEqual(['a'])
+  })
+
+  it('mois vide → listes vides', () => {
+    const janvier = monthlyRealisations([withSteps('a', '2026-06-10', null)], 2026, 0)
+    expect(janvier.vt).toHaveLength(0)
+    expect(janvier.poses).toHaveLength(0)
+  })
+
+  it('ignore les dates non parseables', () => {
+    const juin = monthlyRealisations([withSteps('a', 'nimporte', null)], 2026, 5)
+    expect(juin.vt).toHaveLength(0)
+  })
+})

@@ -131,3 +131,23 @@ export function selectRecentDeliveries(clients: ClientResponse[], range: DateRan
       return db - da
     })
 }
+
+export type MonthlyRealisation = { client: ClientResponse; date: string }
+
+/** VT et poses dont la date de réalisation tombe dans le mois donné (monthIndex 0-based). */
+export function monthlyRealisations(
+  clients: ClientResponse[],
+  year: number,
+  monthIndex: number,
+): { vt: MonthlyRealisation[]; poses: MonthlyRealisation[] } {
+  const inMonth = (value: string | null | undefined): boolean => {
+    const d = value ? parseDate(value) : null
+    return d != null && d.getFullYear() === year && d.getMonth() === monthIndex
+  }
+  const collect = (phase: 'vt' | 'installation'): MonthlyRealisation[] =>
+    clients
+      .filter((c) => inMonth(c.steps[phase]?.dateRealisee))
+      .map((c) => ({ client: c, date: c.steps[phase]!.dateRealisee! }))
+      .sort((a, b) => b.date.localeCompare(a.date))
+  return { vt: collect('vt'), poses: collect('installation') }
+}
