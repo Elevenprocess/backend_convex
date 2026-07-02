@@ -46,6 +46,9 @@ type AsyncProgressive<T> = Async<T> & {
 type FetchCacheEntry = {
   data: unknown
   timestamp: number
+  // Marqué par un event realtime : la donnée reste affichable immédiatement,
+  // mais le prochain montage relance un refetch de fond pour se mettre à jour.
+  stale?: boolean
 }
 
 const FETCH_CACHE_TTL_MS = 10 * 60 * 1000
@@ -142,8 +145,8 @@ async function prefetchFetchCache<T>(
   const queryKey = JSON.stringify(query ?? {})
   const cacheKey = buildFetchCacheKey(path, queryKey)
   if (!options?.force) {
-    const cached = readCachedData<T>(cacheKey)
-    if (cached !== null) return cached
+    const cached = readCachedEntry(cacheKey)
+    if (cached && !cached.stale) return cached.data as T
   }
   return sharedFetch<T>(path, query, cacheKey)
 }
@@ -160,9 +163,15 @@ function deleteCache(cacheKey: string) {
   }
 }
 
-function deleteCachesForPrefixes(prefixes: string[]) {
-  for (const key of Array.from(fetchCache.keys())) {
-    if (prefixes.some((prefix) => key.startsWith(`${prefix}?`))) deleteCache(key)
+// Marque « stale » (sans les VIDER) les caches des chemins touchés par un event
+// realtime. L'ancienne purge faisait disparaître la donnée → spinner de 2-3 s à
+// chaque event pendant que tout se rechargeait. Ici la donnée reste affichée et
+// le refetch se fait en arrière-plan (au tick pour les pages montées, au prochain
+// montage pour les autres).
+function markCachesStaleForPrefixes(prefixes: string[]) {
+  const matches = (key: string) => prefixes.some((prefix) => key.startsWith(`${prefix}?`))
+  for (const [key, entry] of fetchCache) {
+    if (matches(key) && !entry.stale) fetchCache.set(key, { ...entry, stale: true })
   }
   if (typeof window === 'undefined') return
   try {
@@ -171,7 +180,13 @@ function deleteCachesForPrefixes(prefixes: string[]) {
         const storageKey = storage.key(i)
         if (!storageKey?.startsWith(PERSISTED_CACHE_PREFIX)) continue
         const cacheKey = storageKey.slice(PERSISTED_CACHE_PREFIX.length)
-        if (prefixes.some((prefix) => cacheKey.startsWith(`${prefix}?`))) {
+        if (!matches(cacheKey)) continue
+        const raw = storage.getItem(storageKey)
+        if (!raw) continue
+        try {
+          const entry = JSON.parse(raw) as FetchCacheEntry
+          if (!entry.stale) storage.setItem(storageKey, JSON.stringify({ ...entry, stale: true }))
+        } catch {
           storage.removeItem(storageKey)
         }
       }
@@ -179,6 +194,16 @@ function deleteCachesForPrefixes(prefixes: string[]) {
   } catch {
     // best-effort
   }
+}
+
+// Listener global (indépendant des composants montés) : un event realtime rend
+// stales les caches concernés même si la page correspondante n'est pas montée,
+// pour qu'un futur montage re-fetch en arrière-plan au lieu de servir du périmé.
+if (typeof window !== 'undefined') {
+  window.addEventListener(REALTIME_REFRESH_EVENT, (event) => {
+    const detail = (event as CustomEvent<RealtimeRefreshPayload>).detail
+    if (detail?.paths?.length) markCachesStaleForPrefixes(detail.paths)
+  })
 }
 
 // useFetch: passe `path = null` pour désactiver le fetch (utile quand l'id n'existe pas encore).
@@ -218,8 +243,10 @@ function useFetch<T>(
     }
 
     // Si la page revient rapidement sur une liste déjà chargée, on réutilise le cache
-    // sans relancer l'API. Le bouton/flow qui appelle refetch() force toujours un refresh.
-    if (latestCachedEntry && tick === 0 && !options?.refreshCachedOnMount) return
+    // sans relancer l'API — SAUF si un event realtime l'a marquée stale : dans ce cas
+    // la donnée cachée vient d'être affichée ci-dessus et on re-fetch en arrière-plan.
+    // Le bouton/flow qui appelle refetch() force toujours un refresh.
+    if (latestCachedEntry && !latestCachedEntry.stale && tick === 0 && !options?.refreshCachedOnMount) return
 
     let cancelled = false
     setLoading(latestCachedData === undefined && !options?.silentInitialLoading)
@@ -249,7 +276,8 @@ function useFetch<T>(
     const onRealtimeRefresh = (event: Event) => {
       const detail = (event as CustomEvent<RealtimeRefreshPayload>).detail
       if (!detail?.paths?.some((prefix) => path.startsWith(prefix))) return
-      deleteCachesForPrefixes(detail.paths)
+      // Pas de purge : le listener global a déjà marqué le cache stale, la donnée
+      // reste affichée et le tick relance un refetch de fond.
       setTick((t) => t + 1)
     }
     window.addEventListener(REALTIME_REFRESH_EVENT, onRealtimeRefresh)

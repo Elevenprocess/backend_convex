@@ -2,6 +2,7 @@ import { useEffect, useSyncExternalStore } from 'react'
 import { io, type Socket } from 'socket.io-client'
 import { API_BASE } from './api'
 import { shouldSurfaceNotification } from './realtimeNotify'
+import { createRealtimeRefreshCoalescer, REALTIME_REFRESH_COOLDOWN_MS } from './realtimeRefreshQueue'
 import { useAuth } from './auth'
 
 export const REALTIME_REFRESH_EVENT = 'ecoi:realtime-refresh'
@@ -99,6 +100,15 @@ export function notifyRealtimeRefresh(payload: RealtimeRefreshPayload) {
   window.dispatchEvent(new CustomEvent<RealtimeRefreshPayload>(REALTIME_REFRESH_EVENT, { detail: payload }))
 }
 
+// Les events du SOCKET passent par le coalesceur (le flot d'activité des autres
+// utilisateurs ne doit pas déclencher un refetch par event). Les actions LOCALES
+// (mutations dans hooks.ts) continuent d'appeler notifyRealtimeRefresh direct :
+// l'utilisateur qui vient d'agir voit sa donnée se rafraîchir tout de suite.
+const scheduleRealtimeRefresh = createRealtimeRefreshCoalescer(
+  notifyRealtimeRefresh,
+  REALTIME_REFRESH_COOLDOWN_MS,
+)
+
 export function useRealtimeSocket() {
   useEffect(() => {
     const socket: Socket = io(realtimeBaseUrl(), {
@@ -107,14 +117,14 @@ export function useRealtimeSocket() {
     })
     activeSocket = socket
 
-    socket.on('lead:new', () => notifyRealtimeRefresh({ event: 'lead:new', paths: ['/leads', '/analytics/summary', '/analytics/funnel'] }))
-    socket.on('lead:updated', () => notifyRealtimeRefresh({ event: 'lead:updated', paths: ['/leads', '/analytics/summary', '/analytics/funnel'] }))
-    socket.on('call-log:new', () => notifyRealtimeRefresh({ event: 'call-log:new', paths: ['/call-logs', '/leads', '/analytics/summary', '/analytics/funnel'] }))
-    socket.on('rdv:new', () => notifyRealtimeRefresh({ event: 'rdv:new', paths: ['/rdv', '/leads', '/ghl-calendar/free-slots', '/ghl-calendar/events', '/analytics/summary', '/analytics/funnel'] }))
+    socket.on('lead:new', () => scheduleRealtimeRefresh({ event: 'lead:new', paths: ['/leads', '/analytics/summary', '/analytics/funnel'] }))
+    socket.on('lead:updated', () => scheduleRealtimeRefresh({ event: 'lead:updated', paths: ['/leads', '/analytics/summary', '/analytics/funnel'] }))
+    socket.on('call-log:new', () => scheduleRealtimeRefresh({ event: 'call-log:new', paths: ['/call-logs', '/leads', '/analytics/summary', '/analytics/funnel'] }))
+    socket.on('rdv:new', () => scheduleRealtimeRefresh({ event: 'rdv:new', paths: ['/rdv', '/leads', '/ghl-calendar/free-slots', '/ghl-calendar/events', '/analytics/summary', '/analytics/funnel'] }))
     socket.on('notification:new', (notification: { title?: string; body?: string; id?: string; userId?: string }) => {
       const me = useAuth.getState().user?.id ?? null
       if (!shouldSurfaceNotification(notification.userId, me)) return
-      notifyRealtimeRefresh({ event: 'notification:new', paths: ['/notifications', '/leads', '/rdv', '/call-logs', '/analytics/summary', '/analytics/funnel'] })
+      scheduleRealtimeRefresh({ event: 'notification:new', paths: ['/notifications', '/leads', '/rdv', '/call-logs', '/analytics/summary', '/analytics/funnel'] })
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && notification.title) {
         try {
           new Notification(notification.title, { body: notification.body, tag: notification.id, requireInteraction: true, silent: false } as NotificationOptions)
@@ -125,9 +135,9 @@ export function useRealtimeSocket() {
     })
 
     socket.on('workflow_substep:updated', () =>
-      notifyRealtimeRefresh({ event: 'workflow_substep:updated', paths: ['/substeps'] }))
+      scheduleRealtimeRefresh({ event: 'workflow_substep:updated', paths: ['/substeps'] }))
     socket.on('workflow_substep:blocked', () =>
-      notifyRealtimeRefresh({ event: 'workflow_substep:blocked', paths: ['/substeps'] }))
+      scheduleRealtimeRefresh({ event: 'workflow_substep:blocked', paths: ['/substeps'] }))
 
     // Presence locks setter — un autre setter regarde ce lead
     socket.on('lead:locks-snapshot', (locks: LeadLockInfo[]) => {
