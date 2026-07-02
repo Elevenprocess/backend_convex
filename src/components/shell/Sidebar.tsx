@@ -75,6 +75,7 @@ const SECTIONS: Section[] = [
       // Commercial : suivi LECTURE SEULE de l'avancement de ses clients signés.
       { to: '/suivi', icon: 'grid', label: 'Mes dossiers', roles: ['commercial', 'commercial_lead'] },
       { to: '/client', icon: 'inbox', label: 'Client', roles: OPS_ROLES },
+      { to: '/interventions', icon: 'settings', label: 'Interventions', roles: DELIVERY_ROLES },
     ],
   },
   {
@@ -195,6 +196,7 @@ export function Sidebar() {
           items: [
             { to: '/planning', icon: 'calendar' as const, label: 'Planning' },
             { to: '/mes-dossiers', icon: 'inbox' as const, label: 'Mes dossiers' },
+            { to: '/interventions', icon: 'settings' as const, label: 'Interventions' },
           ],
         },
       ]

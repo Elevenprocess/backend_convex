@@ -26,6 +26,7 @@ const Analytics = lazy(() => import('./pages/Analytics').then((m) => ({ default:
 const Ads = lazy(() => import('./pages/Ads').then((m) => ({ default: m.Ads })))
 const Suivi = lazy(() => import('./pages/Suivi').then((m) => ({ default: m.Suivi })))
 const Finances = lazy(() => import('./pages/Finances').then((m) => ({ default: m.Finances })))
+const Interventions = lazy(() => import('./pages/Interventions').then((m) => ({ default: m.Interventions })))
 const SuiviDetail = lazy(() => import('./pages/SuiviDetail').then((m) => ({ default: m.SuiviDetail })))
 const FicheCompletePage = lazy(() => import('./pages/SuiviFiche').then((m) => ({ default: m.FicheCompletePage })))
 const ProjectDetailPage = lazy(() => import('./pages/ProjectDetail').then((m) => ({ default: m.ProjectDetailPage })))
@@ -101,6 +102,7 @@ const router = createHashRouter([
           { path: '/suivi/:id/fiche', element: <FicheCompletePage /> },
           { path: '/suivi/:id/projet/:projectId', element: <ProjectDetailPage /> },
           { path: '/finances', element: <NoTechnicien><Finances /></NoTechnicien> },
+          { path: '/interventions', element: <Interventions /> },
           { path: '/mes-interventions', element: <MesInterventions /> },
           { path: '/fiche-vt/:clientId', element: <FicheInterventionVT /> },
           { path: '/team/setters/:id', element: <ProfilSetter /> },
