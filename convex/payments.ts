@@ -5,7 +5,7 @@
 // financingType/montantTotal/etc. recalcule les tranches au prochain getAcompte.
 // S'appuie sur assembleEcheancier (Task 5) pour assembler un débrief.
 
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireRole, requireUser } from "./model/access";
 import {
@@ -229,6 +229,21 @@ export const setEcheancier = mutation({
     await ctx.db.patch(args.debriefId, { customEcheancier: true });
 
     return null;
+  },
+});
+
+// ─── ensureImportedProjectDebriefs ───────────────────────────────────────────
+// NO-OP — la table `clients` (délivrabilité) n'est pas encore portée en Convex.
+// TODO(délivrabilité): câbler la vraie matérialisation depuis projects + clients
+// quand la tranche délivrabilité arrive. Cf. NestJS payments.service.ts
+// ensureImportedProjectDebriefs (~ligne 267) : INSERT INTO debriefs depuis la
+// jointure projects × clients × devis, idempotent (WHERE NOT EXISTS debrief vente).
+export const ensureImportedProjectDebriefs = internalMutation({
+  args: {},
+  handler: async (_ctx, _args): Promise<{ created: number }> => {
+    // Boucle vide : aucune table `clients` portée → aucune vente importée
+    // à matérialiser. Retourne 0 créations sans rien écrire.
+    return { created: 0 };
   },
 });
 

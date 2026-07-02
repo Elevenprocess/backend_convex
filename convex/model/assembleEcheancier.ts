@@ -147,6 +147,24 @@ export async function assembleEcheancier(
     .withIndex("by_debrief_ordre", (q) => q.eq("debriefId", debrief._id))
     .collect();
 
+  // ── 5b. Pont legacy acompteEncaissements ────────────────────────────────────
+  // Compat legacy : l'ancienne page finances persistait l'acompte dans
+  // `acompteEncaissements` (mono-acompte, une seule ligne par débrief).
+  // La nouvelle page lit `acompteEcheances` (multi-tranches). Sans ce pont,
+  // les anciens encaissements importés disparaissent de la page Finances.
+  // Si aucune ligne moderne n'existe à l'ordre 1, on synthétise une entrée
+  // compatible depuis le premier enregistrement legacy.
+  // Cf. NestJS payments.service.ts queryAcomptes (~lignes 412-446) pour la
+  // sémantique exacte : statut "attendu" → "a_encaisser", ordre figé à 1.
+  //
+  // NOTE: le pont `payments` (OCR historique, table `payments`) dépend de la
+  // table `clients` (non encore portée en Convex) → hors-scope.
+  // TODO(délivrabilité): câbler quand la table `clients` sera disponible.
+  const legacyEncRow = await ctx.db
+    .query("acompteEncaissements")
+    .withIndex("by_debrief", (q) => q.eq("debriefId", debrief._id))
+    .first();
+
   // ── 6. Choix du plan : custom ou template déduit du financingType ─────────────
   // Délégué à resolveTemplatesFromData (partagé avec recordEcheance) pour garantir
   // que l'ensemble des ordres valides est identique en lecture et en écriture.
@@ -165,6 +183,33 @@ export async function assembleEcheancier(
   for (const r of persistedRows) {
     encByOrdre.set(r.ordre, r);
   }
+
+  // Injection pont legacy : si pas de ligne moderne à ordre=1, on insère la
+  // ligne legacy synthétisée. La ligne moderne prend toujours le dessus (priority
+  // map : si encByOrdre.has(1), on skip). Sémantique portée depuis NestJS
+  // queryAcomptes : statut "attendu" → "a_encaisser", ordre figé à 1, pas de
+  // jalonKey/percent/montantPrevu (conservés null pour ne pas perturber le plan).
+  if (legacyEncRow !== null && !encByOrdre.has(1)) {
+    const syntheticStatut =
+      legacyEncRow.statut === "attendu" ? "a_encaisser" : legacyEncRow.statut;
+    // Cast explicite : les champs _id/_creationTime/debriefId/leadId ne sont pas
+    // utilisés par buildLine (lecture seule des champs statut/montant/dates/notes).
+    const syntheticEnc = {
+      ordre: 1,
+      statut: syntheticStatut,
+      montantReel: legacyEncRow.montantReel,
+      dateEcheance: undefined,
+      dateEncaissement: legacyEncRow.dateEncaissement,
+      notes: legacyEncRow.notes,
+      recordedById: legacyEncRow.recordedById,
+      label: undefined,
+      jalonKey: undefined,
+      percent: undefined,
+      montantPrevu: undefined,
+    } as unknown as (typeof persistedRows)[number];
+    encByOrdre.set(1, syntheticEnc);
+  }
+
   const templateOrdres = new Set(templates.map((t) => t.ordre));
 
   // ── 8. Builder d'une ligne d'échéancier ─────────────────────────────────────
