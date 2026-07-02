@@ -3,7 +3,7 @@ import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Spinner } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
-import { useAnalyticsSummary, prefetchAnalyticsSummary, useLeads, useRdvList } from '../lib/hooks'
+import { useAnalyticsSummary, prefetchAnalyticsSummary, useClients, useLeads, useRdvList } from '../lib/hooks'
 import type { AnalyticsAdminSummary, AnalyticsCommercialPerf, AnalyticsCommercialSummary, AnalyticsSegment, AnalyticsSetterSummary } from '../lib/types'
 import { DebriefAnalytics } from '../components/analytics/DebriefAnalytics'
 import { MagicKpi, type KpiAccent, type DeltaTone } from '../components/kpi/MagicKpi'
@@ -11,6 +11,7 @@ import type { IconName } from '../components/Icon'
 import { DEFAULT_PERIOD, buildPeriodRange, type PeriodState, type PeriodMode, type PeriodRange } from '../lib/period'
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
 import { computeSetterAverages } from '../lib/setterAverages'
+import { buildDeliveryPipeline } from '../lib/deliveryOverview'
 
 type Segment = AnalyticsSegment
 
@@ -85,8 +86,11 @@ export function Analytics() {
 function AnalyticsSuivi() {
   const { data: leadsData } = useLeads({ limit: 500 })
   const { data: rdvsData } = useRdvList({ limit: 200 })
+  const { data: clientsData } = useClients()
   const leads = leadsData ?? []
   const rdvs = rdvsData ?? []
+  const clients = clientsData ?? []
+  const deliveryPipeline = useMemo(() => buildDeliveryPipeline(clients, new Date()), [clients])
   const signedRdvs = rdvs.filter((r) => r.result === 'signe' || Boolean(r.signatureAt))
   const signedIds = new Set(signedRdvs.map((r) => r.leadId))
   const signedLeads = leads.filter((l) => l.status === 'signe' || signedIds.has(l.id))
@@ -108,11 +112,13 @@ function AnalyticsSuivi() {
         <div className="grid grid-cols-12 gap-6">
           <div className="glass-card p-6 col-span-12 xl:col-span-7">
             <div className="flex items-center justify-between mb-4"><h3 className="font-bold">Pipeline délivrabilité</h3><span className="eyebrow">workflow réel côté UI</span></div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               <Goal label="Devis signés" value={`${signedLeads.length} dossiers`} pct={100} color="#0E7E6B" />
-              <Goal label="VT / technique" value="à piloter dans Suivi" pct={62} color="#9DC41A" />
-              <Goal label="DP / CNO" value="mandat + mairie" pct={44} color="#3E9A6F" />
-              <Goal label="Installation" value="pose + satisfaction" pct={28} color="#1F7857" />
+              <Goal label="Visite technique" value={`${deliveryPipeline.phases.vt.count} dossiers`} pct={pct(deliveryPipeline.phases.vt.count, deliveryPipeline.activeCount)} color="#9DC41A" />
+              <Goal label="Déclaration préalable" value={`${deliveryPipeline.phases.dp.count} dossiers`} pct={pct(deliveryPipeline.phases.dp.count, deliveryPipeline.activeCount)} color="#3E9A6F" />
+              <Goal label="Raccordement EDF" value={`${deliveryPipeline.phases.racco.count} dossiers`} pct={pct(deliveryPipeline.phases.racco.count, deliveryPipeline.activeCount)} color="#1F7857" />
+              <Goal label="Installation" value={`${deliveryPipeline.phases.installation.count} dossiers`} pct={pct(deliveryPipeline.phases.installation.count, deliveryPipeline.activeCount)} color="#256B52" />
+              <Goal label="Consuel" value={`${deliveryPipeline.phases.consuel.count} dossiers`} pct={pct(deliveryPipeline.phases.consuel.count, deliveryPipeline.activeCount)} color="#0E7E6B" />
             </div>
           </div>
           <div className="glass-card p-6 col-span-12 xl:col-span-5">

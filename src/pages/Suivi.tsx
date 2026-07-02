@@ -5,7 +5,7 @@ import { Topbar } from '../components/shell/Topbar'
 import { LoadingBlock } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
 import { useClients, useLeads, useRdvList, useUsers } from '../lib/hooks'
-import { fullName, type ClientResponse } from '../lib/types'
+import { fullName, type ClientResponse, type WorkflowPhase } from '../lib/types'
 import {
   buildDossiers,
   isDateInRange,
@@ -16,10 +16,11 @@ import {
 import { buildPeriodRange, defaultPeriod, type PeriodState } from '../lib/period'
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
 import { DossierCard } from '../components/suivi/DossierCard'
-import { workflowPhaseProgress } from '../lib/suivi-board'
+import { PHASE_LABEL, workflowPhaseProgress } from '../lib/suivi-board'
 import { useCardGridVirtualizer } from '../lib/virtualGrid'
 
 type ProgressFilter = 'all' | 'todo' | 'running' | 'advanced' | 'blocked' | 'delivered'
+const WORKFLOW_PHASES: WorkflowPhase[] = ['vt', 'dp', 'racco', 'installation', 'consuel', 'mes']
 
 const PROGRESS_FILTERS: { id: ProgressFilter; label: string }[] = [
   { id: 'all', label: 'Tous' },
@@ -59,6 +60,8 @@ export function Suivi() {
   const periodRange = useMemo(() => buildPeriodRange(period), [period])
   const periodFrom = useMemo(() => new Date(periodRange.from), [periodRange.from])
   const periodTo = useMemo(() => new Date(periodRange.to), [periodRange.to])
+  const phaseParam = params.get('phase')
+  const phaseFilter = WORKFLOW_PHASES.includes(phaseParam as WorkflowPhase) ? phaseParam as WorkflowPhase : null
 
   const allSignedDossiers = useMemo(
     () => buildDossiers(leads ?? [], rdvs ?? [], users ?? [], states),
@@ -75,6 +78,7 @@ export function Suivi() {
       const pct = workflowPhaseProgress(client)?.pct ?? 0
       const delivered = client?.steps?.mes?.status === 'fait'
       const blocked = client?.blocked || d.state.statuses[d.activeStep] === 'blocked'
+      if (phaseFilter && client?.currentPhase !== phaseFilter) return false
       if (progressFilter === 'todo' && (pct > 0 || delivered)) return false
       if (progressFilter === 'running' && (pct <= 0 || pct >= 67 || delivered || blocked)) return false
       if (progressFilter === 'advanced' && (pct < 67 || delivered || blocked)) return false
@@ -87,7 +91,7 @@ export function Suivi() {
         .toLowerCase()
         .includes(q)
     })
-  }, [signedDossiers, query, progressFilter, clientByLead])
+  }, [signedDossiers, query, progressFilter, phaseFilter, clientByLead])
 
   // Compat redirect : /suivi?lead=X → /suivi/X
   const legacyLead = params.get('lead')
@@ -183,6 +187,16 @@ export function Suivi() {
         </section>
 
         <section className="suivi-filters" aria-label="Filtres de progression">
+          {phaseFilter && (
+            <button
+              type="button"
+              className="active"
+              onClick={() => navigate('/suivi', { replace: true })}
+              title="Retirer le filtre étape"
+            >
+              Étape : {PHASE_LABEL[phaseFilter]} ×
+            </button>
+          )}
           {PROGRESS_FILTERS.map((filter) => (
             <button
               key={filter.id}
@@ -199,8 +213,8 @@ export function Suivi() {
           <LoadingBlock label="Chargement des dossiers signés…" />
         ) : filtered.length === 0 ? (
           <div className="suivi-empty">
-            <p>{query || progressFilter !== 'all' ? 'Aucun dossier ne correspond aux filtres.' : 'Aucun dossier signé pour cette période.'}</p>
-            {(query || progressFilter !== 'all') && <button type="button" onClick={() => { setQuery(''); setProgressFilter('all') }}>Réinitialiser les filtres</button>}
+            <p>{query || progressFilter !== 'all' || phaseFilter ? 'Aucun dossier ne correspond aux filtres.' : 'Aucun dossier signé pour cette période.'}</p>
+            {(query || progressFilter !== 'all' || phaseFilter) && <button type="button" onClick={() => { setQuery(''); setProgressFilter('all'); if (phaseFilter) navigate('/suivi', { replace: true }) }}>Réinitialiser les filtres</button>}
           </div>
         ) : (
           <div ref={gridWrapperRef} style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
