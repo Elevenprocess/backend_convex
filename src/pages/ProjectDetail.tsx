@@ -9,6 +9,7 @@ import { useDossier } from '../lib/useDossier'
 import { useClients } from '../lib/hooks'
 import { getProjectDetail, updateFinancing, getAcompte } from '../lib/api'
 import { parseNotesJournal } from '../lib/notesJournal'
+import { canEditPayment } from '../lib/role'
 import { formatDate } from '../lib/suivi'
 import { fullName, PROJECT_STATUS_LABEL, type ProjectDetailResponse, type AcompteResponse, type EcheanceLine } from '../lib/types'
 import { DossierWorkflowPanel } from '../components/suivi/DossierWorkflowPanel'
@@ -325,7 +326,7 @@ const money = (v: string | number | null | undefined): string => {
  */
 function PaymentTab({ project, onSaved }: { project: ProjectDetailResponse; onSaved: () => void }) {
   const role = useAuth((s) => s.user?.role)
-  const canEdit = role === 'admin' || role === 'responsable_technique' || role === 'back_office' || role === 'finances'
+  const canEdit = canEditPayment(role)
 
   const debrief = useMemo(() => [...project.debriefs]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())

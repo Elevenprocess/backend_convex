@@ -40,6 +40,21 @@ export const ROLE_LABELS: Record<Role, string> = {
   finances: 'Finances',
 }
 
+// Onglet « Mode de paiement » de la page projet : l'équipe délivrabilité
+// (delivrabilite / responsable_technique / back_office) a le même accès complet
+// que admin/finances — aligné sur les gardes backend (payments.controller.ts).
+const PAYMENT_EDIT_ROLES: ReadonlySet<Role> = new Set([
+  'admin',
+  'finances',
+  'delivrabilite',
+  'responsable_technique',
+  'back_office',
+])
+
+export function canEditPayment(role: Role | undefined): boolean {
+  return role !== undefined && PAYMENT_EDIT_ROLES.has(role)
+}
+
 export type Team = 'setting' | 'closing' | 'admin' | 'delivrabilite' | null
 
 export const TEAM_LABELS: Record<Exclude<Team, null>, string> = {
