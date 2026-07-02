@@ -132,6 +132,127 @@ export const updateFinancing = mutation({
   },
 });
 
+// ─── setEcheancier ───────────────────────────────────────────────────────────
+// Remplace l'intégralité de l'échéancier par un plan PERSONNALISÉ.
+// Position dans le tableau = ordre (1-based). customEcheancier → true.
+// PRÉSERVATION : si le DTO d'une tranche ne fournit PAS statut/montantReel/
+// dateEncaissement, les valeurs encaissées existantes sont conservées.
+// Les lignes d'ordre > tranches.length sont supprimées.
+export const setEcheancier = mutation({
+  args: {
+    debriefId: v.id("debriefs"),
+    tranches: v.array(
+      v.object({
+        label: v.optional(v.string()),
+        percent: v.optional(v.number()),
+        montantPrevu: v.optional(v.number()),
+        jalonKey: v.optional(v.string()),
+        dateEcheance: v.optional(v.string()),
+        statut: v.optional(acompteStatutValidator),
+        montantReel: v.optional(v.number()),
+        dateEncaissement: v.optional(v.string()),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, [...FINANCES_ROLES]);
+
+    // ── 1. Charger le débrief ──────────────────────────────────────────────
+    const debrief = await ctx.db.get(args.debriefId);
+    if (!debrief || debrief.deletedAt !== undefined) {
+      throw new Error("Débrief introuvable");
+    }
+
+    // Validation : 1-20 tranches
+    if (args.tranches.length < 1 || args.tranches.length > 20) {
+      throw new Error("L'échéancier doit contenir entre 1 et 20 tranches");
+    }
+
+    // ── 2. Charger les lignes existantes (pour préservation encaissements) ─
+    const existingRows = await ctx.db
+      .query("acompteEcheances")
+      .withIndex("by_debrief_ordre", (q) => q.eq("debriefId", args.debriefId))
+      .collect();
+
+    // ── 3. Upsert chaque tranche (position dans tableau = ordre 1..N) ──────
+    for (let i = 0; i < args.tranches.length; i++) {
+      const ordre = i + 1;
+      const t = args.tranches[i];
+      const existing = existingRows.find((r) => r.ordre === ordre);
+
+      // Champs du plan (toujours mis à jour)
+      const planPatch: Record<string, unknown> = {};
+      if (t.label !== undefined) planPatch.label = t.label;
+      else planPatch.label = undefined;
+      if (t.percent !== undefined) planPatch.percent = t.percent;
+      if (t.montantPrevu !== undefined) planPatch.montantPrevu = t.montantPrevu;
+      if (t.jalonKey !== undefined) planPatch.jalonKey = t.jalonKey;
+      if (t.dateEcheance !== undefined) planPatch.dateEcheance = t.dateEcheance;
+
+      // Champs d'encaissement : fournis dans le DTO → on écrase ; absents → préserver
+      const hasPaidInfo = t.statut !== undefined;
+
+      if (existing) {
+        const patch: Record<string, unknown> = { ...planPatch };
+        if (hasPaidInfo) {
+          patch.statut = t.statut;
+          // Effacer ou mettre à jour montantReel / dateEncaissement
+          patch.montantReel = t.montantReel;
+          patch.dateEncaissement = t.dateEncaissement;
+        }
+        // Si hasPaidInfo=false, on ne touche pas statut/montantReel/dateEncaissement
+        await ctx.db.patch(existing._id, patch as any);
+      } else {
+        await ctx.db.insert("acompteEcheances", {
+          debriefId: args.debriefId,
+          leadId: debrief.leadId,
+          ordre,
+          statut: t.statut ?? "en_attente",
+          ...(t.label !== undefined && { label: t.label }),
+          ...(t.percent !== undefined && { percent: t.percent }),
+          ...(t.montantPrevu !== undefined && { montantPrevu: t.montantPrevu }),
+          ...(t.jalonKey !== undefined && { jalonKey: t.jalonKey as any }),
+          ...(t.dateEcheance !== undefined && { dateEcheance: t.dateEcheance }),
+          ...(t.montantReel !== undefined && { montantReel: t.montantReel }),
+          ...(t.dateEncaissement !== undefined && { dateEncaissement: t.dateEncaissement }),
+        });
+      }
+    }
+
+    // ── 4. Supprimer les lignes d'ordre > tranches.length ─────────────────
+    const toDelete = existingRows.filter((r) => r.ordre > args.tranches.length);
+    for (const row of toDelete) {
+      await ctx.db.delete(row._id);
+    }
+
+    // ── 5. Passer le débrief en customEcheancier=true ──────────────────────
+    await ctx.db.patch(args.debriefId, { customEcheancier: true });
+
+    return null;
+  },
+});
+
+// ─── resetEcheancier ─────────────────────────────────────────────────────────
+// Revient à l'échéancier STANDARD. Les lignes persistées restent (encaissements
+// préservés) mais sont ignorées à la lecture tant que customEcheancier=false.
+export const resetEcheancier = mutation({
+  args: {
+    debriefId: v.id("debriefs"),
+  },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, [...FINANCES_ROLES]);
+
+    // Charger et vérifier le débrief
+    const debrief = await ctx.db.get(args.debriefId);
+    if (!debrief || debrief.deletedAt !== undefined) {
+      throw new Error("Débrief introuvable");
+    }
+
+    await ctx.db.patch(args.debriefId, { customEcheancier: false });
+    return null;
+  },
+});
+
 // ─── recordEcheance ──────────────────────────────────────────────────────────
 // Enregistre (upsert) UNE tranche d'acompte identifiée par (debriefId, ordre).
 // Rôles : admin + finances UNIQUEMENT (pas les autres rôles finances comme
