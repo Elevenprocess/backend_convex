@@ -11,15 +11,25 @@ vi.mock('../lib/auth', () => ({
     sel({ user: { role: 'delivrabilite', id: 'u1', name: 'Déliv' } }),
 }))
 
-const client = (id: string, currentPhase: WorkflowPhase): ClientResponse => ({
+const client = (id: string, currentPhase: WorkflowPhase, steps: ClientResponse['steps'] = {}): ClientResponse => ({
   id, leadId: `lead-${id}`, rdvId: null,
   lead: { fullName: `Client ${id}`, city: 'Saint-Denis', phone: null },
   technicienVtId: null, poseTeamLeadId: null, adminReferentId: null,
   statusGlobal: 'en_cours', blocked: false, missingDocsCount: 0,
-  signedAt: '2026-06-05', currentPhase, steps: {},
+  signedAt: '2026-06-05', currentPhase, steps,
 } as unknown as ClientResponse)
 
-const CLIENTS: ClientResponse[] = [client('a', 'racco'), client('b', 'consuel')]
+// Dates de réalisation dans le MOIS COURANT pour tester le récap mensuel.
+const now = new Date()
+const thisMonth = (day: number) => new Date(now.getFullYear(), now.getMonth(), day).toISOString()
+const phaseStep = (dateRealisee: string) => ({
+  status: 'fait', datePlanifiee: null, dateRealisee, problemReason: null, responsableId: null,
+}) as NonNullable<ClientResponse['steps']['vt']>
+
+const CLIENTS: ClientResponse[] = [
+  client('a', 'racco', { vt: phaseStep(thisMonth(10)) }),
+  client('b', 'consuel', { vt: phaseStep(thisMonth(3)), installation: phaseStep(thisMonth(20)) }),
+]
 
 vi.mock('../lib/hooks', () => ({
   useLeads: () => ({ data: [], loading: false, error: null }),
@@ -49,5 +59,14 @@ describe('Analytics — vue délivrabilité (pipeline complet)', () => {
     expect(raccoRow?.textContent).toContain('2 dossiers')
     const consuelRow = screen.getByText('Consuel').closest('[data-phase]') ?? screen.getByText('Consuel').parentElement?.parentElement
     expect(consuelRow?.textContent).toContain('1 dossier')
+  })
+})
+
+describe('Analytics — récap mensuel « Réalisé ce mois-ci »', () => {
+  it('affiche la carte avec les VT et poses du mois courant', () => {
+    render(<MemoryRouter><Analytics /></MemoryRouter>)
+    expect(screen.getByText('Réalisé ce mois-ci')).toBeTruthy()
+    expect(screen.getByText(/VT réalisées \(2\)/)).toBeTruthy()
+    expect(screen.getByText(/Poses réalisées \(1\)/)).toBeTruthy()
   })
 })

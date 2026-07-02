@@ -5,7 +5,7 @@ import { Topbar } from '../components/shell/Topbar'
 import { Spinner } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
 import { useAnalyticsSummary, prefetchAnalyticsSummary, useLeads, useRdvList, useClients } from '../lib/hooks'
-import { buildDeliveryPipeline, DELIVERY_PHASES } from '../lib/deliveryOverview'
+import { buildDeliveryPipeline, DELIVERY_PHASES, monthlyRealisations, type MonthlyRealisation } from '../lib/deliveryOverview'
 import { PHASE_LABEL } from '../lib/suivi-board'
 import type { AnalyticsAdminSummary, AnalyticsCommercialPerf, AnalyticsCommercialSummary, AnalyticsSegment, AnalyticsSetterSummary } from '../lib/types'
 import { DebriefAnalytics } from '../components/analytics/DebriefAnalytics'
@@ -106,6 +106,20 @@ function AnalyticsSuivi() {
   // Pipeline réel (les 6 phases, dont Raccordement et Consuel) calculé sur les
   // dossiers délivrabilité — mêmes comptes cumulatifs que le funnel Overview.
   const pipeline = useMemo(() => buildDeliveryPipeline(clientsData ?? [], new Date()), [clientsData])
+  // Récap mensuel « Réalisé ce mois-ci » : mois courant par défaut, navigation ‹ ›.
+  const [month, setMonth] = useState(() => {
+    const n = new Date()
+    return { y: n.getFullYear(), m: n.getMonth() }
+  })
+  const recap = useMemo(() => monthlyRealisations(clientsData ?? [], month.y, month.m), [clientsData, month])
+  const nowMonth = new Date()
+  const isCurrentMonth = month.y === nowMonth.getFullYear() && month.m === nowMonth.getMonth()
+  const monthLabel = new Date(month.y, month.m, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
+  const shiftMonth = (delta: number) =>
+    setMonth((prev) => {
+      const d = new Date(prev.y, prev.m + delta, 1)
+      return { y: d.getFullYear(), m: d.getMonth() }
+    })
   const signedRdvs = rdvs.filter((r) => r.result === 'signe' || Boolean(r.signatureAt))
   const signedIds = new Set(signedRdvs.map((r) => r.leadId))
   const signedLeads = leads.filter((l) => l.status === 'signe' || signedIds.has(l.id))
@@ -159,8 +173,47 @@ function AnalyticsSuivi() {
             </div>
           </div>
         </div>
+
+        {/* Récap mensuel : VT et poses réellement réalisées (dates de réalisation des étapes). */}
+        <div className="glass-card p-6">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 className="font-bold">Réalisé ce mois-ci</h3>
+            <div className="flex items-center gap-2 text-sm">
+              <button type="button" className="px-2 py-1 rounded-lg hover:bg-line-soft/60 font-bold" aria-label="Mois précédent" onClick={() => shiftMonth(-1)}>‹</button>
+              <span className="font-semibold capitalize min-w-32 text-center">{monthLabel}</span>
+              <button type="button" className="px-2 py-1 rounded-lg hover:bg-line-soft/60 font-bold disabled:opacity-30" aria-label="Mois suivant" onClick={() => shiftMonth(1)} disabled={isCurrentMonth}>›</button>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <MonthlyRecapList title={`VT réalisées (${recap.vt.length})`} rows={recap.vt} empty="Aucune VT réalisée ce mois-ci." />
+            <MonthlyRecapList title={`Poses réalisées (${recap.poses.length})`} rows={recap.poses} empty="Aucune pose réalisée ce mois-ci." />
+          </div>
+        </div>
       </main>
     </AppShell>
+  )
+}
+
+function MonthlyRecapList({ title, rows, empty }: { title: string; rows: MonthlyRealisation[]; empty: string }) {
+  return (
+    <div>
+      <div className="text-[11px] font-extrabold uppercase tracking-widest text-faint mb-2">{title}</div>
+      {rows.length === 0 ? (
+        <div className="text-xs text-faint">{empty}</div>
+      ) : (
+        <div className="space-y-1.5 max-h-64 overflow-auto pr-1">
+          {rows.map((r) => (
+            <div key={`${r.client.id}-${r.date}`} className="flex items-center justify-between gap-3 text-sm">
+              <span className="font-semibold truncate">{r.client.lead.fullName || r.client.lead.phone || '—'}</span>
+              <span className="text-xs text-muted whitespace-nowrap">
+                {r.client.lead.city ? `${r.client.lead.city} · ` : ''}
+                {new Date(r.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
