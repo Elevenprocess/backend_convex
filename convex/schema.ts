@@ -11,6 +11,9 @@ import {
   paymentSubMethodValidator, financingOrgValidator,
   devisStatusValidator, ocrStatusValidator,
   acompteStatutValidator, legacyAcompteStatutValidator, echeanceJalonValidator,
+  // Délivrabilité (Tranche 6a)
+  clientStatusValidator, workflowPhaseValidator, workflowStatusValidator,
+  workflowSubstepKeyValidator, problemReasonValidator, productTypeValidator,
 } from "./model/enums";
 
 export default defineSchema({
@@ -316,4 +319,120 @@ export default defineSchema({
   })
     .index("by_client_type", ["clientId", "type"])
     .index("by_statut", ["statut"]),
+
+  // ─── Délivrabilité : tranche 6a ────────────────────────────────────────────
+
+  /**
+   * Dossier délivrabilité créé à la signature d'une vente.
+   * statusGlobal / currentPhase / blocked sont des DÉRIVÉS STOCKÉS (écrits
+   * uniquement par recomputeStatus, jamais directement).
+   */
+  clients: defineTable({
+    externalId: v.optional(v.string()),
+    leadId: v.id("leads"),
+    projectId: v.optional(v.id("projects")),
+    rdvId: v.optional(v.id("rdv")),
+    // Refs utilisateurs
+    adminReferentId: v.optional(v.id("users")),
+    poseTeamLeadId: v.optional(v.id("users")),
+    technicienVtId: v.optional(v.id("users")),
+    // Équipement
+    panneauProductId: v.optional(v.id("products")),
+    panneauQty: v.optional(v.number()),
+    onduleurProductId: v.optional(v.id("products")),
+    onduleurQty: v.optional(v.number()),
+    batterieProductId: v.optional(v.id("products")),
+    batterieQty: v.optional(v.number()),
+    // Vente
+    montantTotal: v.optional(v.number()),
+    typeFinancement: v.optional(financingTypeValidator),
+    kits: v.optional(v.string()),
+    signedAt: v.optional(v.number()), // ms
+    // Dérivés STOCKÉS (recomputeStatus uniquement)
+    statusGlobal: clientStatusValidator,
+    currentPhase: workflowPhaseValidator,
+    blocked: v.boolean(),
+    // Divers
+    solteoProjectId: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_lead", ["leadId"])
+    .index("by_project", ["projectId"])
+    .index("by_status", ["statusGlobal"])
+    .index("by_phase", ["currentPhase"])
+    .index("by_blocked", ["blocked"])
+    .index("by_adminReferent", ["adminReferentId"])
+    .index("by_externalId", ["externalId"]),
+
+  /**
+   * Une étape de workflow par phase (vt / dp / racco / installation / consuel / mes)
+   * pour chaque dossier client.
+   */
+  workflowSteps: defineTable({
+    clientId: v.id("clients"),
+    phase: workflowPhaseValidator,
+    status: workflowStatusValidator,
+    datePlanifiee: v.optional(v.string()),   // YYYY-MM-DD
+    dateRealisee: v.optional(v.string()),    // YYYY-MM-DD
+    deadline: v.optional(v.string()),        // YYYY-MM-DD
+    responsableId: v.optional(v.id("users")),
+    notes: v.optional(v.string()),
+    problemReason: v.optional(problemReasonValidator),
+    problemNotes: v.optional(v.string()),
+    problemResolvedAt: v.optional(v.number()), // ms
+    metadata: v.optional(v.any()),
+    lastSlaNotifiedAt: v.optional(v.number()), // ms
+  })
+    .index("by_client", ["clientId"])
+    .index("by_client_phase", ["clientId", "phase"])
+    .index("by_status", ["status"])
+    .index("by_deadline", ["deadline"])
+    .index("by_responsable", ["responsableId"]),
+
+  /**
+   * Sous-étapes atomiques d'une phase de workflow.
+   * by_client_key est requis par le seam isJalonReached (tâche 9).
+   */
+  workflowSubsteps: defineTable({
+    stepId: v.id("workflowSteps"),
+    clientId: v.id("clients"),
+    key: workflowSubstepKeyValidator,
+    position: v.number(),
+    status: workflowStatusValidator,
+    optional: v.boolean(),
+    dateRealisee: v.optional(v.string()),    // YYYY-MM-DD
+    deadline: v.optional(v.string()),        // YYYY-MM-DD
+    heure: v.optional(v.string()),           // HH:MM (VT — renseigné en 6c)
+    responsableId: v.optional(v.id("users")),
+    notes: v.optional(v.string()),
+    problemReason: v.optional(problemReasonValidator),
+    problemNotes: v.optional(v.string()),
+    problemResolvedAt: v.optional(v.number()), // ms
+    lastSlaNotifiedAt: v.optional(v.number()), // ms
+    metadata: v.optional(v.any()),
+  })
+    .index("by_client", ["clientId"])
+    .index("by_step", ["stepId"])
+    .index("by_client_key", ["clientId", "key"])
+    .index("by_step_key", ["stepId", "key"])
+    .index("by_status", ["status"])
+    .index("by_deadline", ["deadline"])
+    .index("by_responsable", ["responsableId"]),
+
+  /**
+   * Catalogue de produits (panneaux, onduleurs, batteries).
+   * CRUD / gestion du stock hors-scope 6a.
+   */
+  products: defineTable({
+    externalId: v.optional(v.string()),
+    nom: v.string(),
+    marque: v.optional(v.string()),
+    type: productTypeValidator,
+    stockActuel: v.number(),
+    seuilAlerte: v.number(),
+    metadata: v.optional(v.any()),
+  })
+    .index("by_type", ["type"])
+    .index("by_externalId", ["externalId"]),
 });
