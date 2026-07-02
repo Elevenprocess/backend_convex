@@ -7,7 +7,7 @@
 
 import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { requireRole, requireUser } from "./model/access";
+import { requireRole } from "./model/access";
 import {
   financingTypeValidator,
   paymentSubMethodValidator,

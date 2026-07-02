@@ -3,7 +3,7 @@
 // Appelée depuis les queries getAcompte / listAcomptes (lecture seule).
 // Ne jamais écrire dans cette fonction (ctx.db.insert/patch interdits).
 
-import { QueryCtx, MutationCtx } from "../_generated/server";
+import { QueryCtx } from "../_generated/server";
 import { Doc, Id } from "../_generated/dataModel";
 import {
   resolveEcheancier,
