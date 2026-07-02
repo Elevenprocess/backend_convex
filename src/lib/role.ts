@@ -30,12 +30,12 @@ export function useRole<T>(selector: (s: RoleSliceShape) => T): T {
 export const ROLE_LABELS: Record<Role, string> = {
   admin: 'Admin',
   setter: 'Setter',
-  setter_lead: 'Setter Lead',
+  setter_lead: 'Responsable setter',
   commercial: 'Commercial',
-  commercial_lead: 'Commercial Lead',
+  commercial_lead: 'Responsable commercial',
   delivrabilite: 'Délivrabilité',
   responsable_technique: 'Responsable technique',
-  back_office: 'Back office',
+  back_office: 'Back-office',
   technicien: 'Technicien',
   finances: 'Finances',
 }
@@ -44,7 +44,7 @@ export type Team = 'setting' | 'closing' | 'admin' | 'delivrabilite' | null
 
 export const TEAM_LABELS: Record<Exclude<Team, null>, string> = {
   setting: 'Setting',
-  closing: 'Closing',
+  closing: 'Vente',
   admin: 'Admin',
   delivrabilite: 'Délivrabilité',
 }
@@ -62,12 +62,12 @@ export function teamLabel(team: Team): string {
 export const ROLE_USERS: Record<Role, { name: string; firstName: string; initials: string; tint: string }> = {
   admin: { name: 'Admin', firstName: 'Admin', initials: 'AD', tint: 'bg-info-tint' },
   setter: { name: 'Setter', firstName: 'Setter', initials: 'ST', tint: 'bg-cuivre-tint' },
-  setter_lead: { name: 'Setter Lead', firstName: 'Setter', initials: 'SL', tint: 'bg-cuivre-tint' },
+  setter_lead: { name: 'Responsable setter', firstName: 'Setter', initials: 'SL', tint: 'bg-cuivre-tint' },
   commercial: { name: 'Commercial', firstName: 'Commercial', initials: 'CO', tint: 'bg-or-tint' },
-  commercial_lead: { name: 'Commercial Lead', firstName: 'Commercial', initials: 'CL', tint: 'bg-or-tint' },
+  commercial_lead: { name: 'Responsable commercial', firstName: 'Commercial', initials: 'CL', tint: 'bg-or-tint' },
   delivrabilite: { name: 'Délivrabilité', firstName: 'Déliv', initials: 'DV', tint: 'bg-info-tint' },
   responsable_technique: { name: 'Responsable technique', firstName: 'Resp.', initials: 'RT', tint: 'bg-info-tint' },
-  back_office: { name: 'Back office', firstName: 'Back', initials: 'BO', tint: 'bg-info-tint' },
+  back_office: { name: 'Back-office', firstName: 'Back-office', initials: 'BO', tint: 'bg-info-tint' },
   technicien: { name: 'Technicien', firstName: 'Tech.', initials: 'TC', tint: 'bg-info-tint' },
   finances: { name: 'Finances', firstName: 'Finances', initials: 'FI', tint: 'bg-rouille-tint' },
 }

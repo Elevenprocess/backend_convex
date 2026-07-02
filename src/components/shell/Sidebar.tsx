@@ -45,15 +45,15 @@ const SECTIONS: Section[] = [
     id: 'espace',
     label: 'Espace',
     items: [
-      { to: '/overview', icon: 'home', label: 'Overview' },
+      { to: '/overview', icon: 'home', label: 'Tableau de bord' },
       { to: '/notifications', icon: 'bell', label: 'Rappels', roles: NON_SALES_REP_ROLES },
     ],
   },
   {
     id: 'analytics',
-    label: 'Analytics',
+    label: 'Analyse',
     items: [
-      { to: '/analytics', icon: 'chart', label: 'Analytics', roles: NON_SALES_REP_ROLES },
+      { to: '/analytics', icon: 'chart', label: 'Analyse', roles: NON_SALES_REP_ROLES },
       { to: '/ads', icon: 'target', label: 'Publicité', roles: ['admin', 'commercial_lead'] },
     ],
   },
@@ -62,7 +62,7 @@ const SECTIONS: Section[] = [
     label: 'Acquisition',
     collapsible: true,
     items: [
-      { to: '/leads', icon: 'users', label: 'Leads', roles: ['admin', 'setter', 'setter_lead'] },
+      { to: '/leads', icon: 'users', label: 'Prospects', roles: ['admin', 'setter', 'setter_lead'] },
       { to: '/client', icon: 'inbox', label: 'Client', roles: ACQUISITION_ROLES },
     ],
   },
@@ -71,7 +71,7 @@ const SECTIONS: Section[] = [
     label: 'Délivrabilité',
     collapsible: true,
     items: [
-      { to: '/suivi', icon: 'grid', label: 'Delivery', roles: [...DELIVERY_ROLES, 'finances'] },
+      { to: '/suivi', icon: 'grid', label: 'Délivrabilité', roles: [...DELIVERY_ROLES, 'finances'] },
       // Commercial : suivi LECTURE SEULE de l'avancement de ses clients signés.
       { to: '/suivi', icon: 'grid', label: 'Mes dossiers', roles: ['commercial', 'commercial_lead'] },
       { to: '/client', icon: 'inbox', label: 'Client', roles: OPS_ROLES },
@@ -110,12 +110,12 @@ const SIDEBAR_SECTIONS_STORAGE_KEY = 'ecoi.sidebar.collapsedSections'
 const ROLE_TAG: Record<Role, string> = {
   admin: 'Administration',
   setter: 'Setter',
-  setter_lead: 'Setter Lead',
+  setter_lead: 'Responsable setter',
   commercial: 'Commercial',
-  commercial_lead: 'Commercial Lead',
+  commercial_lead: 'Responsable commercial',
   delivrabilite: 'Délivrabilité',
   responsable_technique: 'Responsable technique',
-  back_office: 'Back office',
+  back_office: 'Back-office',
   technicien: 'Technicien',
   finances: 'Finances',
 }

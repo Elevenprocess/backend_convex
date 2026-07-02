@@ -93,8 +93,8 @@ export function Notifications() {
         ) : notifs.length === 0 ? (
           <div className="glass-card p-6 text-sm text-muted">
             {isCommercialTeam
-              ? 'Aucune notification commerciale : pas de nouveau lead qualifié, pas de RDV reporté à venir et pas de débrief à faire.'
-              : 'Aucune notification urgente : pas de nouveau lead récent, pas de rappel à traiter, pas de RDV imminent.'}
+              ? 'Aucune notification commerciale : pas de nouveau prospect qualifié, pas de RDV reporté à venir et pas de débrief à faire.'
+              : 'Aucune notification urgente : pas de nouveau prospect récent, pas de rappel à traiter, pas de RDV imminent.'}
           </div>
         ) : (
           <div className="space-y-3">
@@ -247,7 +247,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
         group: 'NOUVEAUX LEADS',
         icon: 'users',
         ...NOTIF_COLOR.newLead,
-        title: 'Nouveau lead arrivé',
+        title: 'Nouveau prospect arrivé',
         body: <><strong>{name}</strong>{lead.city ? ` · ${lead.city}` : ''}{lead.phone ? ` · ${lead.phone}` : ''}</>,
         time: relativeTime(lead.createdAt),
         sortAt: new Date(lead.createdAt).getTime(),
@@ -283,7 +283,7 @@ export function buildNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): 
 // Trois types seulement. Le périmètre est porté par les filtres de requête en
 // amont : le commercial_lead reçoit toute l'équipe (leads/RDV non filtrés), le
 // commercial individuel ne voit que ses leads/RDV attribués.
-//   1. Nouveau lead qualifié
+//   1. Nouveau prospect qualifié
 //   2. Rappel de RDV reporté (à l'approche de la nouvelle date)
 //   3. Débrief à faire (RDV honoré sans débrief rempli)
 export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvResponse[]): Notif[] {
@@ -304,7 +304,7 @@ export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvRes
       group: 'NOUVEAUX LEADS QUALIFIÉS',
       icon: 'users',
       ...NOTIF_COLOR.newLead,
-      title: 'Nouveau lead qualifié',
+      title: 'Nouveau prospect qualifié',
       body: <><strong>{name}</strong>{commercialLeadDetails(lead)}</>,
       time: relativeTime(lead.lastStageChangeAt ?? lead.updatedAt),
       sortAt: changedAt,

@@ -57,7 +57,7 @@ export function Landing() {
           </p>
 
           <h1 className="max-w-[640px] text-[clamp(34px,5.8vw,74px)] font-black leading-[0.94] tracking-[-0.065em] text-white">
-            Pilotez vos leads.
+            Pilotez vos prospects.
           </h1>
 
           <p className="mt-5 max-w-[420px] text-sm font-medium leading-6 text-white/50 sm:text-[15px]">

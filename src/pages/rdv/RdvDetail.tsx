@@ -81,7 +81,7 @@ export function RdvDetail() {
     <AppShell>
       <Topbar
         eyebrow="RDV / DÉTAIL"
-        title={`${lead ? fullName(lead) : 'Lead'} — ${formatDateShort(rdv.scheduledAt)}`}
+        title={`${lead ? fullName(lead) : 'Prospect'} — ${formatDateShort(rdv.scheduledAt)}`}
       />
       <div className="px-8 pt-4 flex items-center gap-3 flex-shrink-0">
         <button onClick={() => navigate('/rdv')} className="text-muted hover:text-text flex items-center gap-1 text-sm">

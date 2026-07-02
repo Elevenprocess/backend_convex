@@ -258,7 +258,7 @@ export function ProfilCommercial() {
           </div>
           <Metric label={`RDV ${PERIOD_LABEL[periodMode].toLowerCase()}`} value={`${stats.total}`} hint={`${stats.honored} honorés · ${stats.signed} signés`} />
           <Metric label="Secteur GHL" value={sectorInfo.label} hint={`${sectorInfo.count} RDV GHL live`} />
-          <Metric label="CA période" value={formatCurrency(stats.ca)} hint={`${formatPercent(stats.closing)} closing`} />
+          <Metric label="CA période" value={formatCurrency(stats.ca)} hint={`${formatPercent(stats.closing)} taux de vente`} />
         </section>
 
         <section className="commercial-pipeline-board glass-card px-4 py-3 flex flex-col min-h-0 flex-grow bg-white border border-line-soft">

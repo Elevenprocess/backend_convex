@@ -145,11 +145,11 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
 
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 lg:gap-6">
           <MagicKpi label="DÉPENSE" value={fmtEur(totals?.spend)} sub={`${fmtInt(totals?.impressions)} impressions`} accent="gold" icon="tag" />
-          <MagicKpi label="LEADS" value={fmtInt(totals?.leads)} sub={`${fmtInt(totals?.clicks)} clics`} accent="info" icon="users" />
+          <MagicKpi label="PROSPECTS" value={fmtInt(totals?.leads)} sub={`${fmtInt(totals?.clicks)} clics`} accent="info" icon="users" />
           <MagicKpi label="CPL" value={fmtEur(totals?.cpl)} sub="Coût par lead" accent="green" icon="target" />
           <MagicKpi label="CA SIGNÉ" value={fmtEur(totals?.ca)} sub={`${fmtInt(totals?.devisSignes)} devis signés`} accent="gold" icon="trophy" />
           <MagicKpi label="ROAS" value={fmtRoas(totals?.roas)} sub="CA / dépense" accent={roasAccent(totals?.roas)} icon="chart" />
-          <MagicKpi label="TX SIGNATURE" value={fmtPct(totals?.tauxSignature)} sub="Devis signés / leads" accent="success" icon="check" progress={pctValue(totals?.tauxSignature)} />
+          <MagicKpi label="TX SIGNATURE" value={fmtPct(totals?.tauxSignature)} sub="Devis signés / prospects" accent="success" icon="check" progress={pctValue(totals?.tauxSignature)} />
         </div>
 
         {(rows.length > 0 || (totals?.impressions ?? 0) > 0) && (
@@ -238,7 +238,7 @@ function AdsTable({ rows, unmatchedRows, from, to, channel }: {
           <tr className="text-left eyebrow">
             <th className="px-3 py-2.5">CAMPAGNE / ADSET / ANNONCE</th>
             <SortableTh label="DÉPENSE" k="spend" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-            <SortableTh label="LEADS" k="leads" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+            <SortableTh label="PROSPECTS" k="leads" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
             <SortableTh label="CPL" k="cpl" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
             <SortableTh label="CA" k="ca" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
             <SortableTh label="ROAS" k="roas" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
@@ -399,7 +399,7 @@ function DataRow({ row, depth, expandable = false, open = false, onClick, unmatc
           </span>
           {unmatched && (
             <span className="ml-2 inline-flex items-center rounded-full bg-rouille-tint px-2 py-0.5 text-[10px] font-bold text-rouille">
-              ⚠ {row.unmatched === 'spend_no_leads' ? 'dépense sans lead' : 'lead sans dépense'}
+              ⚠ {row.unmatched === 'spend_no_leads' ? 'dépense sans prospect' : 'prospect sans dépense'}
             </span>
           )}
         </div>
@@ -467,7 +467,7 @@ function AdsSourcesView() {
           <div>
             <span className="eyebrow">SOURCES NON CLASSÉES</span>
             <h3 className="text-xl font-extrabold mt-1">Sources GHL brutes sans canal</h3>
-            <p className="text-sm text-muted mt-1">Ces leads sont tombés sur « Autre ». Ajoute un mapping pour les rattacher à un canal.</p>
+            <p className="text-sm text-muted mt-1">Ces prospects sont tombés sur « Autre ». Ajoute un mapping pour les rattacher à un canal.</p>
           </div>
           <button type="button" onClick={() => void reload()} className="inline-flex items-center gap-1.5 rounded-xl border border-line-soft bg-white/70 px-3 py-1.5 text-sm font-bold">
             <Icon name="download" size={14} /> Rafraîchir
@@ -561,7 +561,7 @@ function UnmappedRow({ source, onSaved }: { source: UnmappedSource; onSaved: () 
       </select>
       <label className="flex items-center gap-1.5 text-xs font-semibold text-muted">
         <input type="checkbox" checked={reapply} onChange={(e) => setReapply(e.target.checked)} />
-        Réappliquer aux leads existants
+        Réappliquer aux prospects existants
       </label>
       <button
         type="button"
@@ -610,7 +610,7 @@ function AcquisitionFunnel({ totals }: { totals?: AdsTotals }) {
   const stages = [
     { label: 'Impressions', value: Math.round(totals?.impressions ?? 0) },
     { label: 'Clics', value: Math.round(totals?.clicks ?? 0) },
-    { label: 'Leads', value: Math.round(totals?.leads ?? 0) },
+    { label: 'Prospects', value: Math.round(totals?.leads ?? 0) },
     { label: 'Devis signés', value: Math.round(totals?.devisSignes ?? 0) },
   ]
   const maxVal = Math.max(stages[0].value, 1)
@@ -624,7 +624,7 @@ function AcquisitionFunnel({ totals }: { totals?: AdsTotals }) {
 
   const conversions = [
     { label: 'CTR', sub: 'clic / impression', v: pct1(stages[1].value, stages[0].value) },
-    { label: 'Conv. lead', sub: 'lead / clic', v: pct1(stages[2].value, stages[1].value) },
+    { label: 'Conv. prospect', sub: 'prospect / clic', v: pct1(stages[2].value, stages[1].value) },
     { label: 'Signature', sub: 'devis / lead', v: pct1(stages[3].value, stages[2].value) },
   ]
 

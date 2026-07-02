@@ -58,14 +58,14 @@ export function LeadsSplit() {
   return (
     <AppShell>
       <Topbar
-        eyebrow="LEADS · SPLIT"
-        title="Workflow inline"
+        eyebrow="PROSPECTS · SPLIT"
+        title="Flux intégré"
       />
       <div className="flex flex-col md:flex-row flex-grow overflow-y-auto md:overflow-hidden">
         {/* Main: leads table */}
         <main className="flex-grow p-4 sm:p-6 overflow-y-auto min-w-0">
           {loading ? (
-            <LoadingBlock label="Chargement des leads…" />
+            <LoadingBlock label="Chargement des prospects…" />
           ) : error ? (
             <div className="py-16 text-center text-rouille text-sm">Erreur : {error}</div>
           ) : (
@@ -120,7 +120,7 @@ export function LeadsSplit() {
                   ))}
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-5 py-12 text-center text-faint text-sm">Aucun lead ne correspond.</td>
+                      <td colSpan={4} className="px-5 py-12 text-center text-faint text-sm">Aucun prospect ne correspond.</td>
                     </tr>
                   )}
                 </tbody>

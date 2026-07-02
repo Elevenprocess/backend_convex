@@ -378,16 +378,16 @@ function LeadsSetter() {
           <main className="p-3 pt-3 sm:p-8 sm:pt-4 flex-grow flex flex-col min-h-0 overflow-hidden">
 
             {loading && mine.length === 0 ? (
-              <LoadingBlock label="Chargement des leads…" />
+              <LoadingBlock label="Chargement des prospects…" />
             ) : error ? (
               <div className="py-16 text-center text-rouille text-sm">Erreur : {error}</div>
             ) : filtered.length === 0 ? (
               <div className="py-16">
                 <EmptyState
                   icon="users"
-                  title={mine.length === 0 ? 'Aucun lead pour le moment' : 'Aucun lead ne correspond'}
-                  description={mine.length === 0 ? "Aucun lead disponible pour le moment." : 'Aucun lead ne correspond à cette catégorie.'}
-                  secondaryAction={{ label: 'Voir les nouveaux leads', onClick: () => { setFilter('nouveau'); setMissingFilter('all'); setQuery('') } }}
+                  title={mine.length === 0 ? 'Aucun prospect pour le moment' : 'Aucun prospect ne correspond'}
+                  description={mine.length === 0 ? "Aucun prospect disponible pour le moment." : 'Aucun prospect ne correspond à cette catégorie.'}
+                  secondaryAction={{ label: 'Voir les nouveaux prospects', onClick: () => { setFilter('nouveau'); setMissingFilter('all'); setQuery('') } }}
                 />
               </div>
             ) : (
@@ -685,11 +685,11 @@ function LeadsAdmin() {
         </div>
 
         {loading && leads.length === 0 ? (
-          <LoadingBlock label="Chargement des leads…" />
+          <LoadingBlock label="Chargement des prospects…" />
         ) : error ? (
           <div className="py-16 text-center text-rouille text-sm">Erreur : {error}</div>
         ) : filtered.length === 0 ? (
-          <div className="py-16 text-center text-faint text-sm">Aucun lead ne correspond aux filtres.</div>
+          <div className="py-16 text-center text-faint text-sm">Aucun prospect ne correspond aux filtres.</div>
         ) : (
           <div className="glass-card !p-0 overflow-hidden flex-grow min-h-0">
             <div ref={tableScrollRef} data-preserve-scroll="true" className="overflow-auto h-full">

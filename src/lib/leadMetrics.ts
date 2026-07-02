@@ -49,11 +49,11 @@ export const LEAD_METRICS: Record<LeadMetricKey, {
   format: MetricFormat
   valueOf: (p: LeadEvolutionPoint) => number
 }> = {
-  leads: { label: 'Leads', color: '#1F7857', format: 'count', valueOf: (p) => p.leads },
+  leads: { label: 'Prospects', color: '#1F7857', format: 'count', valueOf: (p) => p.leads },
   calls: { label: 'Appels', color: '#3DA86A', format: 'count', valueOf: (p) => p.calls },
   rdv: { label: 'RDV', color: '#3E9A6F', format: 'count', valueOf: (p) => p.rdv },
   signed: { label: 'Ventes', color: '#145A41', format: 'count', valueOf: (p) => p.signed },
-  closing: { label: 'Closing', color: '#7C6A46', format: 'percent', valueOf: (p) => closingRate(p.signed, p.rdv) },
+  closing: { label: 'Taux de vente', color: '#7C6A46', format: 'percent', valueOf: (p) => closingRate(p.signed, p.rdv) },
 }
 
 export const LEAD_METRIC_ORDER: LeadMetricKey[] = ['leads', 'calls', 'rdv', 'signed', 'closing']

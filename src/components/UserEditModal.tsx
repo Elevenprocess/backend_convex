@@ -8,11 +8,11 @@ import type { InvitationResponse, Role, Team, UserResponse } from '../lib/types'
 
 const ROLE_OPTIONS: { value: Role; label: string }[] = [
   { value: 'setter', label: 'Setter' },
-  { value: 'setter_lead', label: 'Setter Lead' },
+  { value: 'setter_lead', label: 'Responsable setter' },
   { value: 'commercial', label: 'Commercial' },
-  { value: 'commercial_lead', label: 'Commercial Lead' },
+  { value: 'commercial_lead', label: 'Responsable commercial' },
   { value: 'responsable_technique', label: 'Responsable technique' },
-  { value: 'back_office', label: 'Back office' },
+  { value: 'back_office', label: 'Back-office' },
   { value: 'technicien', label: 'Technicien' },
   { value: 'finances', label: 'Finances' },
   { value: 'admin', label: 'Admin' },
@@ -188,7 +188,7 @@ export function UserEditModal({ user, pendingInvitation, onClose, onChanged }: P
               {!confirmRenew ? (
                 <button type="button" onClick={() => setConfirmRenew(true)} disabled={saving} className="w-full rounded-xl border border-cuivre bg-white/70 p-3 text-left hover:bg-cuivre-tint/30 disabled:opacity-50">
                   <div className="font-semibold text-sm flex items-center gap-2"><Icon name="edit" size={14} /> Renouveler / recréer le compte</div>
-                  <div className="text-xs text-muted mt-1">Modifie aussi l'email si besoin et génère un lien de création de mot de passe sans perdre les leads/RDV.</div>
+                  <div className="text-xs text-muted mt-1">Modifie aussi l'email si besoin et génère un lien de création de mot de passe sans perdre les prospects/RDV.</div>
                 </button>
               ) : (
                 <ConfirmBox tone="cuivre" text="Le mot de passe actuel sera supprimé et un nouveau lien sera généré." saving={saving} onCancel={() => setConfirmRenew(false)} onConfirm={doRenew} />

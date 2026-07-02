@@ -47,7 +47,7 @@ export function LeadFiltersBar({
         onClick={() => update({ onlyNew: !filters.onlyNew })}
         className={`pill-tab ${filters.onlyNew ? '!bg-info !text-white' : 'bg-white border border-line text-muted'}`}
       >
-        Nouveaux leads
+        Nouveaux prospects
       </button>
       <select
         value={filters.status}

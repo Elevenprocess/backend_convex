@@ -55,7 +55,7 @@ export function AdminPipeline() {
         <div className="px-6 pt-4 pb-2 flex items-baseline justify-between">
           <div>
             <span className="eyebrow text-[10px]">PIPELINE GHL</span>
-            <h1 className="text-2xl font-black tracking-tight">Pipeline (admin)</h1>
+            <h1 className="text-2xl font-black tracking-tight">Suivi commercial (admin)</h1>
             <p className="text-sm text-muted mt-0.5">
               Tracking admin des commerciaux : RDV, évolution prospect, debriefs et blocages.
             </p>
@@ -79,8 +79,8 @@ function TabSwitcher({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'tracking', label: 'Tracking' },
     { id: 'kanban', label: 'Kanban' },
-    { id: 'commercials', label: 'Performance' },
-    { id: 'stuck', label: 'Leads stuck' },
+    { id: 'commercials', label: 'Performances' },
+    { id: 'stuck', label: 'Prospects bloqués' },
   ]
   return (
     <div className="inline-flex rounded-full border border-line-soft bg-white p-1 gap-1">
@@ -527,7 +527,7 @@ function KanbanView() {
   return (
     <div className="flex flex-col h-full min-h-0">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-        <KpiCard label="Leads ouverts" value={data.totalOpenLeads.toLocaleString('fr-FR')} />
+        <KpiCard label="Prospects ouverts" value={data.totalOpenLeads.toLocaleString('fr-FR')} />
         <KpiCard label="Valeur totale" value={formatCurrency(data.totalOpenValue)} />
         <KpiCard
           label="Stages utilisés"
@@ -578,7 +578,7 @@ function StageColumn({
         </div>
         <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
           <div>
-            <p className="text-faint uppercase tracking-wide text-[10px]">Leads</p>
+            <p className="text-faint uppercase tracking-wide text-[10px]">Prospects</p>
             <p className="font-black text-base">{stage.count}</p>
           </div>
           <div>
@@ -590,7 +590,7 @@ function StageColumn({
       <div className="space-y-1.5 overflow-y-auto pr-1 mt-2 flex-grow min-h-0">
         {visible.length === 0 ? (
           <div className="rounded-[14px] border border-dashed border-line-soft bg-white/70 p-4 text-center text-[11px] text-faint">
-            Aucun lead
+            Aucun prospect
           </div>
         ) : (
           visible.map((lead) => (
@@ -673,12 +673,12 @@ function CommercialsView() {
         <thead className="bg-cream/40 text-left">
           <tr className="text-[11px] uppercase tracking-wide text-muted">
             <th className="px-4 py-3 font-bold">Commercial</th>
-            <th className="px-4 py-3 font-bold text-right">Leads ouverts</th>
+            <th className="px-4 py-3 font-bold text-right">Prospects ouverts</th>
             <th className="px-4 py-3 font-bold text-right">RDV planifiés</th>
             <th className="px-4 py-3 font-bold text-right">Devis en attente</th>
             <th className="px-4 py-3 font-bold text-right">Signés</th>
             <th className="px-4 py-3 font-bold text-right">CA</th>
-            <th className="px-4 py-3 font-bold text-right">Closing rate</th>
+            <th className="px-4 py-3 font-bold text-right">Taux de vente</th>
           </tr>
         </thead>
         <tbody>
@@ -737,12 +737,12 @@ function StuckView() {
           </button>
         ))}
       </div>
-      {loading && <Skeleton label="Calcul des leads stuck…" />}
+      {loading && <Skeleton label="Calcul des prospects bloqués…" />}
       {error && <ErrorBanner error={error} />}
       {data && (
         <>
           <p className="text-sm text-muted">
-            <span className="font-black text-foreground">{data.total}</span> leads sans mouvement depuis ≥ {days}j.
+            <span className="font-black text-foreground">{data.total}</span> prospects sans mouvement depuis ≥ {days}j.
           </p>
           <div className="rounded-[18px] border border-line-soft bg-white overflow-hidden">
             <table className="min-w-full text-sm">
@@ -833,7 +833,7 @@ function BackfillPanel({ onSuccess }: { onSuccess: () => void }) {
           <p className="text-[10px] uppercase tracking-wide text-faint">Sync GHL → SaaS</p>
           <p className="text-sm font-bold mt-0.5">Backfill des opportunités</p>
           <p className="text-xs text-muted mt-1">
-            Récupère les opportunités du pipeline <span className="font-bold">1. CRM Vente</span> côté GHL et remplit <code>ghl_stage_name</code> sur les leads SaaS. Idempotent.
+            Récupère les opportunités du suivi commercial <span className="font-bold">1. CRM Vente</span> côté GHL et remplit <code>ghl_stage_name</code> sur les prospects SaaS. Idempotent.
           </p>
         </div>
         <div className="flex gap-2">
@@ -860,7 +860,7 @@ function BackfillPanel({ onSuccess }: { onSuccess: () => void }) {
       )}
       {summary && (
         <div className="mt-3 grid grid-cols-2 sm:grid-cols-6 gap-2 text-xs">
-          <SummaryStat label="Pipeline" value={summary.pipelineName} />
+          <SummaryStat label="Suivi commercial" value={summary.pipelineName} />
           <SummaryStat label="Processed" value={summary.processed} />
           <SummaryStat label="Created" value={summary.created} highlight={summary.created > 0} />
           <SummaryStat label="Updated" value={summary.updated} highlight={summary.updated > 0} />
@@ -872,7 +872,7 @@ function BackfillPanel({ onSuccess }: { onSuccess: () => void }) {
             </div>
           )}
           <div className="col-span-full text-[10px] text-faint">
-            Durée : {(summary.durationMs / 1000).toFixed(1)}s — {summary.stagesInPipeline} stages dans le pipeline
+            Durée : {(summary.durationMs / 1000).toFixed(1)}s — {summary.stagesInPipeline} étapes dans le suivi commercial
           </div>
         </div>
       )}

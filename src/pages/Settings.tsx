@@ -29,13 +29,13 @@ const ROLE_BADGE: Record<Role, string> = {
 
 const ROLE_LABEL: Record<Role, string> = {
   setter: 'Setter',
-  setter_lead: 'Setter Lead',
+  setter_lead: 'Responsable setter',
   commercial: 'Commercial',
-  commercial_lead: 'Commercial Lead',
+  commercial_lead: 'Responsable commercial',
   admin: 'Admin',
   delivrabilite: 'Délivrabilité',
   responsable_technique: 'Responsable technique',
-  back_office: 'Back office',
+  back_office: 'Back-office',
   technicien: 'Technicien',
   finances: 'Finances',
 }
@@ -526,17 +526,17 @@ function InviteModal({ onClose, onInvited }: { onClose: () => void; onInvited: (
           <select value={role} onChange={(e) => setRole(e.target.value as Role)} className="settings-field-select">
             <optgroup label="Setting">
               <option value="setter">Setter</option>
-              <option value="setter_lead">Setter Lead</option>
+              <option value="setter_lead">Responsable setter</option>
             </optgroup>
-            <optgroup label="Closing">
+            <optgroup label="Vente">
               <option value="commercial">Commercial</option>
-              <option value="commercial_lead">Commercial Lead</option>
+              <option value="commercial_lead">Responsable commercial</option>
             </optgroup>
             {!isCommercialLead && (
               <>
                 <optgroup label="Délivrabilité">
                   <option value="responsable_technique">Responsable technique</option>
-                  <option value="back_office">Back office</option>
+                  <option value="back_office">Back-office</option>
                   <option value="technicien">Technicien</option>
                 </optgroup>
                 <optgroup label="Administration">

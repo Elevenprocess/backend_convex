@@ -11,9 +11,9 @@ type Props = {
 
 function label(toolName: WriteToolName, input: Record<string, unknown>): string {
   if (toolName === 'updateLeadStatus') {
-    return `Passer le lead ${String(input.leadId)} en statut « ${String(input.status)} » ?`
+    return `Passer le prospect ${String(input.leadId)} en statut « ${String(input.status)} » ?`
   }
-  return `Assigner le lead ${String(input.leadId)} au commercial ${String(input.commercialId)} ?`
+  return `Assigner le prospect ${String(input.leadId)} au commercial ${String(input.commercialId)} ?`
 }
 
 export function ToolConfirmation({ toolName, input, onConfirm, onCancel, pending, error }: Props) {

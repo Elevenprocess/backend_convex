@@ -145,7 +145,7 @@ export function ChatPanel() {
             <div>
               <p className="assistant-eyebrow">Assistant VELORA</p>
               <h2>Copilote IA</h2>
-              <span>Connecté à tes leads, RDV, clients et stats.</span>
+              <span>Connecté à tes prospects, RDV, clients et stats.</span>
             </div>
             <button type="button" onClick={() => setOpen(false)} aria-label="Fermer">×</button>
           </header>
@@ -196,9 +196,9 @@ export function ChatPanel() {
                   <div className="assistant-empty">
                     <strong>Bonjour {(user.name ?? '').trim().split(' ')[0] || ''} 👋</strong>
                     <span>Je suis ton copilote VELORA. Demande-moi par exemple :</span>
-                    <span>• « Combien de nouveaux leads aujourd'hui / hier ? »</span>
+                    <span>• « Combien de nouveaux prospects aujourd'hui / hier ? »</span>
                     <span>• « Qu'a fait tel setter aujourd'hui ? »</span>
-                    <span>• « Montre mes RDV de demain » · « Quels leads chauds relancer ? »</span>
+                    <span>• « Montre mes RDV de demain » · « Quels prospects chauds relancer ? »</span>
                   </div>
                 )}
                 {messages.map((message) => {

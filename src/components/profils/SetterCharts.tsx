@@ -219,9 +219,9 @@ export function SetterCharts({ stats }: { stats: AnalyticsSetterSummary }) {
         />
         <DonutCard
           eyebrow="Pipeline"
-          title="Issue des leads"
+          title="Issue des prospects"
           segments={pipelineSegments}
-          emptyMessage="Aucun lead traité sur la période."
+          emptyMessage="Aucun prospect traité sur la période."
         />
       </div>
 

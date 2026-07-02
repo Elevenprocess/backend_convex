@@ -95,9 +95,9 @@ export function CallSplit() {
   if (!lead && !manualNumber) {
     return (
       <AppShell>
-        <Topbar eyebrow="APPEL · SPLIT" title="Aucun lead disponible" />
+        <Topbar eyebrow="APPEL · SPLIT" title="Aucun prospect disponible" />
         <main className="flex-grow flex items-center justify-center">
-          <div className="text-faint text-sm">Aucun lead à appeler.</div>
+          <div className="text-faint text-sm">Aucun prospect à appeler.</div>
         </main>
       </AppShell>
     )
@@ -181,7 +181,7 @@ export function CallSplit() {
           <aside className="w-full md:w-[420px] border-t md:border-t-0 md:border-l border-line bg-white/30 backdrop-blur-md p-6">
             <div className="glass-card p-5">
               <span className="eyebrow">APPEL MANUEL</span>
-              <h3 className="font-bold mt-2">Aucun lead associé</h3>
+              <h3 className="font-bold mt-2">Aucun prospect associé</h3>
               <p className="text-sm text-muted mt-2">Le numéro composé n'est pas encore lié à une fiche.</p>
             </div>
           </aside>

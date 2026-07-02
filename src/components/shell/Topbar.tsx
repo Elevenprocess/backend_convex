@@ -124,7 +124,7 @@ export function Topbar(_props: TopbarProps) {
                 <span className="menu-icon-badge"><Icon name="search" size={14} /></span>
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-widest text-faint">Recherche rapide</div>
-                  <div className="text-xs text-muted">Trouver un lead par nom, ville ou téléphone</div>
+                  <div className="text-xs text-muted">Trouver un prospect par nom, ville ou téléphone</div>
                 </div>
               </div>
               <div className="flex gap-2">
@@ -167,7 +167,7 @@ export function Topbar(_props: TopbarProps) {
             {openMenu === 'settings' && (
               <DropdownFrame className="w-56 p-1.5">
                 <SbMenuItem icon="settings" label="Paramètres SaaS" onClick={() => { setOpenMenu(null); navigate('/settings') }} />
-                <SbMenuItem icon="chart" label="Analytics" onClick={() => { setOpenMenu(null); navigate('/analytics') }} />
+                <SbMenuItem icon="chart" label="Analyse" onClick={() => { setOpenMenu(null); navigate('/analytics') }} />
               </DropdownFrame>
             )}
           </div>

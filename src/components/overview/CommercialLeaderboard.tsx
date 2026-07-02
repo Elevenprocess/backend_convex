@@ -82,7 +82,7 @@ export function CommercialLeaderboard({ rows, onEditObjectives }: { rows: Leader
 
                 <div className="lead-board-metric">
                   <span className="lead-board-metric-val">{perf.closing}%</span>
-                  <small>closing</small>
+                  <small>taux de vente</small>
                 </div>
                 <div className="lead-board-metric">
                   <span className="lead-board-metric-val">{ventesPct != null ? `${ventesPct}%` : '—'}</span>

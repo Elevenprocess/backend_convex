@@ -66,7 +66,7 @@ export function RdvSplit() {
     <AppShell>
       <Topbar
         eyebrow="RDV · SPLIT"
-        title="Workflow inline"
+        title="Flux intégré"
       />
       <div className="flex flex-col md:flex-row flex-grow overflow-y-auto md:overflow-hidden">
         <main className="flex-grow p-4 sm:p-6 overflow-y-auto min-w-0">

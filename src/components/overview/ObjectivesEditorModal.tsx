@@ -100,7 +100,7 @@ export function ObjectivesEditorModal({ commercials, objectives, period, periodL
             <span>CA (€)</span>
             <span>Ventes</span>
             <span>RDV</span>
-            <span>Closing %</span>
+            <span>Taux de vente %</span>
           </div>
           {commercials.length === 0 ? (
             <p className="obj-empty">Aucun commercial à configurer.</p>

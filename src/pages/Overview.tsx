@@ -356,10 +356,10 @@ function OverviewSetter() {
         eyebrow="SETTER"
         title={`Bonjour, ${display.firstName}`}
         tabs={[
-          { id: 'overview', label: 'Overview' },
-          { id: 'performance', label: 'Performance' },
+          { id: 'overview', label: 'Tableau de bord' },
+          { id: 'performance', label: 'Performances' },
           { id: 'notifications', label: 'Notification' },
-          { id: 'leads', label: 'Leads' },
+          { id: 'leads', label: 'Prospects' },
         ]}
         activeTab={tab}
         onTabChange={(id) => {
@@ -394,16 +394,16 @@ function OverviewSetter() {
               </div>
               <div>
                 <span className="shot-eyebrow">Portefeuille</span>
-                <h2>{fmtCompact(stats.total)} leads</h2>
+                <h2>{fmtCompact(stats.total)} prospects</h2>
                 <p>{fmtCompact(callbacks.length)} rappels sur le créneau sélectionné</p>
               </div>
             </div>
             <div className="overview-setter-kpis">
-              <AirKpi icon="inbox" label="Nouveaux aujourd'hui" value={fmtCompact(stats.leadsToday)} sub="leads arrivés" />
+              <AirKpi icon="inbox" label="Nouveaux aujourd'hui" value={fmtCompact(stats.leadsToday)} sub="prospects arrivés" />
               <AirKpi icon="phone" label="Appels" value={fmtCompact(stats.appels)} sub={`${stats.connectionRate}% connexion`} />
               <AirKpi icon="users" label="Connexions" value={fmtCompact(stats.connexions)} sub="contacts joints" />
               <AirKpi icon="target" label="Qualifiés" value={fmtCompact(stats.qualifies)} sub={`${stats.qualifRate}% qualification`} />
-              <AirKpi icon="trophy" label="RDV pris" value={fmtCompact(stats.rdvPris)} sub="issus de tes leads" />
+              <AirKpi icon="trophy" label="RDV pris" value={fmtCompact(stats.rdvPris)} sub="issus de tes prospects" />
             </div>
           </div>
 
@@ -463,7 +463,7 @@ function OverviewSetter() {
             <CardHead title="Progression réelle" icon="check" />
             <TaskLine icon="phone" title="Appels" sub={`${fmtCompact(stats.appels)} appels enregistrés`} done={stats.appels > 0} />
             <TaskLine icon="users" title="Connexions" sub={`${fmtCompact(stats.connexions)} contacts joints`} done={stats.connexions > 0} />
-            <TaskLine icon="target" title="Qualifiés" sub={`${fmtCompact(stats.qualifies)} leads qualifiés`} done={stats.qualifies > 0} />
+            <TaskLine icon="target" title="Qualifiés" sub={`${fmtCompact(stats.qualifies)} prospects qualifiés`} done={stats.qualifies > 0} />
             <TaskLine icon="trophy" title="RDV" sub={`${fmtCompact(stats.rdvPris)} rendez-vous pris`} done={stats.rdvPris > 0} />
           </div>
         </section>
@@ -707,7 +707,7 @@ function OverviewCommercialLead() {
         eyebrow="RESPONSABLE COMMERCIAL"
         title={`Bonjour, ${display.firstName}`}
         tabs={[
-          { id: 'overview', label: 'Overview' },
+          { id: 'overview', label: 'Tableau de bord' },
           { id: 'rdv', label: 'RDV' },
         ]}
         activeTab={tab}
@@ -722,7 +722,7 @@ function OverviewCommercialLead() {
             <span className="shot-eyebrow">VELORA · pilotage commercial</span>
             <h1>Pilotage de l'équipe</h1>
             <p className="text-sm text-muted mt-2">
-              Performance de l'équipe closing, classement et atteinte des objectifs du mois.
+              Performance de l'équipe commerciale, classement et atteinte des objectifs du mois.
             </p>
           </div>
           <div className="overview-commercial-toolbar">
@@ -737,7 +737,7 @@ function OverviewCommercialLead() {
           <MagicKpi size="sm" accent="gold" icon="trophy" label="CA équipe" value={fmtKEur(team.ca)}
             sub={caPct != null ? `${caPct}% · obj. ${fmtKEur(targets.ca)}` : `${fmtCompact(team.signed)} ventes`}
             progress={caPct != null ? Math.min(100, caPct) : undefined} />
-          <MagicKpi size="sm" accent="success" icon="target" label="Closing moyen" value={`${team.closing}%`}
+          <MagicKpi size="sm" accent="success" icon="target" label="Taux de vente moyen" value={`${team.closing}%`}
             sub={targets.closing > 0 ? `objectif ${targets.closing}%` : 'moyenne équipe'} progress={team.closing} />
           <MagicKpi size="sm" accent="green" icon="tag" label="Ventes" value={fmtCompact(team.signed)}
             sub={ventesPct != null ? `${ventesPct}% · obj. ${fmtCompact(targets.ventes)}` : 'devis signés'} />
@@ -952,7 +952,7 @@ function OverviewAdmin() {
     <AppShell blobsKey="admin" flat>
       <Topbar
         tabs={[
-          { id: 'overview', label: 'Overview' },
+          { id: 'overview', label: 'Tableau de bord' },
           { id: 'setters', label: 'Setters' },
           { id: 'commerciaux', label: 'Commerciaux' },
           { id: 'ventes', label: 'Ventes' },
@@ -987,10 +987,10 @@ function OverviewAdmin() {
               </div>
             </div>
             <div className="overview-admin-kpis">
-              <AirKpi icon="inbox" label={leadsKpiLabelFor(funnelPeriod.mode)} value={fmtCompact(stats.leadsToday)} sub="leads arrivés" />
-              <AirKpi icon="target" label="Closing" value={`${stats.closing}%`} sub={`${fmtCompact(stats.rdvPris)} RDV suivis`} />
-              <AirKpi icon="phone" label="Appels" value={fmtCompact(stats.appelsReels)} sub={`${fmtCompact(stats.classified)} leads traités`} />
-              <AirKpi icon="users" label="Leads traités" value={fmtCompact(stats.leads)} sub={`${fmtCompact(stats.qualified)} qualifiés`} />
+              <AirKpi icon="inbox" label={leadsKpiLabelFor(funnelPeriod.mode)} value={fmtCompact(stats.leadsToday)} sub="prospects arrivés" />
+              <AirKpi icon="target" label="Taux de vente" value={`${stats.closing}%`} sub={`${fmtCompact(stats.rdvPris)} RDV suivis`} />
+              <AirKpi icon="phone" label="Appels" value={fmtCompact(stats.appelsReels)} sub={`${fmtCompact(stats.classified)} prospects traités`} />
+              <AirKpi icon="users" label="Prospects traités" value={fmtCompact(stats.leads)} sub={`${fmtCompact(stats.qualified)} qualifiés`} />
             </div>
           </div>
 
@@ -1010,7 +1010,7 @@ function OverviewAdmin() {
           <div className="overview-air-card overview-air-funnel">
             <div className="shot-calendar-head">
               <span>{formatShortDate(new Date(funnelRange.from))}</span>
-              <strong>Funnel CRM</strong>
+              <strong>Entonnoir CRM</strong>
               <button onClick={() => navigate('/analytics')}>Détails</button>
             </div>
             <FunnelFlowMap totals={overviewFunnelTotals} />
@@ -1019,7 +1019,7 @@ function OverviewAdmin() {
           <CommercialQualifiedProspects
             prospects={stats.funnelProspects}
             title="Prospects avec RDV"
-            subtitle="Liste complète des leads qualifiés · commercial assigné + setter qualifiant"
+            subtitle="Liste complète des prospects qualifiés · commercial assigné + setter qualifiant"
             limit={20}
             className="overview-admin-prospects"
           />
@@ -1085,16 +1085,16 @@ function CardHead({ title, icon }: { title: string; icon: ShotIcon }) {
 
 
 const LEAD_EVOLUTION_SERIES: { key: LeadEvolutionSeriesKey; label: string; color: string }[] = [
-  { key: 'leads', label: 'Nouveaux leads', color: '#1F7857' },
+  { key: 'leads', label: 'Nouveaux prospects', color: '#1F7857' },
   { key: 'qualified', label: 'RDV planifiés', color: '#3DA86A' },
   { key: 'signed', label: 'Ventes', color: '#3E9A6F' },
 ]
 
 const GRANULARITY_SUBTITLE: Record<EvolutionGranularity, string> = {
-  hour: 'Arrivée des leads par heure',
-  day: 'Arrivée des leads par jour',
-  week: 'Arrivée des leads par semaine',
-  month: 'Arrivée des leads par mois',
+  hour: 'Arrivée des prospects par heure',
+  day: 'Arrivée des prospects par jour',
+  week: 'Arrivée des prospects par semaine',
+  month: 'Arrivée des prospects par mois',
 }
 
 // Courbes de Bézier segment par segment (contrôles calculés avec les voisins du tracé COMPLET) :
@@ -1308,7 +1308,7 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
     <div className="lead-evolution" style={seriesStyle}>
       <div className="lead-evolution-head">
         <div>
-          <h3>Courbe d'évolution des leads</h3>
+          <h3>Courbe d'évolution des prospects</h3>
           <p>{subtitle} — {rangeLabel}</p>
         </div>
       </div>
@@ -1659,9 +1659,9 @@ function LeadPieAnalysis({
   segments,
   totalFallback = 0,
   leads,
-  title = 'Répartition des leads',
-  unitSingular = 'lead',
-  unitPlural = 'leads',
+  title = 'Répartition des prospects',
+  unitSingular = 'prospect',
+  unitPlural = 'prospects',
 }: {
   segments?: LeadSegment[]
   totalFallback?: number
@@ -1694,7 +1694,7 @@ function LeadPieAnalysis({
         />
         <div className="overview-pie-legend">
           {visibleSegments.length === 0 ? (
-            <span className="text-xs text-faint">Aucune donnée lead.</span>
+            <span className="text-xs text-faint">Aucune donnée prospect.</span>
           ) : visibleSegments.slice(0, 5).map((segment, index) => (
             <div
               key={`${segment.label}-${index}`}
@@ -1857,9 +1857,9 @@ function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_auto_1fr_auto_1.35fr_auto_1fr] gap-2 items-stretch">
-        <MiniFlowStep title="Appels" value={totals.calls} sub={`${callsPerLead(totals.calls, treatedLeads)} / lead traité`} color="#1F7857" />
+        <MiniFlowStep title="Appels" value={totals.calls} sub={`${callsPerLead(totals.calls, treatedLeads)} / prospect traité`} color="#1F7857" />
         <MiniArrow />
-        <MiniFlowStep title="Traités" value={treatedLeads} sub="leads" color="#6B7C8C" />
+        <MiniFlowStep title="Traités" value={treatedLeads} sub="prospects" color="#6B7C8C" />
         <MiniArrow />
         <div className="flow-response rounded-xl border border-line-soft bg-white/70 p-3">
           <div className="text-[10px] font-black uppercase text-faint">A répondu ?</div>
@@ -1867,7 +1867,7 @@ function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }
             <div className="flow-response-yes rounded-lg bg-emerald-50 px-2 py-1.5 text-emerald-800">
               <div className="text-[10px] font-bold">Oui</div>
               <div className="text-lg font-black">{answeredCount}</div>
-              <div className="text-[10px]">{responseRate}% leads traités</div>
+              <div className="text-[10px]">{responseRate}% prospects traités</div>
             </div>
             <div className="flow-response-no rounded-lg bg-amber-50 px-2 py-1.5 text-amber-800">
               <div className="text-[10px] font-bold">Non</div>
@@ -1877,11 +1877,11 @@ function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }
           </div>
         </div>
         <MiniArrow />
-        <MiniFlowStep title="Qualifiés" value={totals.qualified} sub={`${qualifiedConversionRate}% leads traités`} color="#3DA86A" />
+        <MiniFlowStep title="Qualifiés" value={totals.qualified} sub={`${qualifiedConversionRate}% prospects traités`} color="#3DA86A" />
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted">
-        <span className="flow-pill rounded-full bg-white/70 px-2 py-1 border border-line-soft">Formule : Qualifiés / leads traités</span>
+        <span className="flow-pill rounded-full bg-white/70 px-2 py-1 border border-line-soft">Formule : Qualifiés / prospects traités</span>
       </div>
     </div>
   )
