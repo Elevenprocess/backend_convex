@@ -5,7 +5,7 @@ import { Topbar } from '../components/shell/Topbar'
 import { LoadingBlock } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
 import { useClients, useLeads, useRdvList, useUsers } from '../lib/hooks'
-import { fullName, type ClientResponse, type WorkflowPhase } from '../lib/types'
+import { fullName, type ClientResponse } from '../lib/types'
 import {
   buildDossiers,
   isDateInRange,
@@ -16,11 +16,11 @@ import {
 import { buildPeriodRange, defaultPeriod, type PeriodState } from '../lib/period'
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
 import { DossierCard } from '../components/suivi/DossierCard'
-import { PHASE_LABEL, workflowPhaseProgress } from '../lib/suivi-board'
+import { workflowPhaseProgress, PHASE_LABEL } from '../lib/suivi-board'
+import { parseDeliveryPhase, clientMatchesPhase } from '../lib/deliveryOverview'
 import { useCardGridVirtualizer } from '../lib/virtualGrid'
 
 type ProgressFilter = 'all' | 'todo' | 'running' | 'advanced' | 'blocked' | 'delivered'
-const WORKFLOW_PHASES: WorkflowPhase[] = ['vt', 'dp', 'racco', 'installation', 'consuel', 'mes']
 
 const PROGRESS_FILTERS: { id: ProgressFilter; label: string }[] = [
   { id: 'all', label: 'Tous' },
@@ -34,7 +34,16 @@ const PROGRESS_FILTERS: { id: ProgressFilter; label: string }[] = [
 export function Suivi() {
   const role = useAuth((s) => s.user?.role)
   const navigate = useNavigate()
-  const [params] = useSearchParams()
+  const [params, setSearchParams] = useSearchParams()
+  // Arrivée depuis le funnel du dashboard délivrabilité (/suivi?phase=racco…) :
+  // on filtre sur la phase COURANTE du dossier, annulés/clôturés exclus.
+  const phaseFilter = parseDeliveryPhase(params.get('phase'))
+  const clearPhaseFilter = () => {
+    setSearchParams((prev) => {
+      prev.delete('phase')
+      return prev
+    }, { replace: true })
+  }
   // Pas de rafraîchissement temps réel sur cette page : elle ne doit pas se
   // recharger/clignoter en continu au fil des events realtime (lead/rdv/appel).
   const NO_RT = { noRealtimeRefresh: true }
@@ -60,9 +69,6 @@ export function Suivi() {
   const periodRange = useMemo(() => buildPeriodRange(period), [period])
   const periodFrom = useMemo(() => new Date(periodRange.from), [periodRange.from])
   const periodTo = useMemo(() => new Date(periodRange.to), [periodRange.to])
-  const phaseParam = params.get('phase')
-  const phaseFilter = WORKFLOW_PHASES.includes(phaseParam as WorkflowPhase) ? phaseParam as WorkflowPhase : null
-
   const allSignedDossiers = useMemo(
     () => buildDossiers(leads ?? [], rdvs ?? [], users ?? [], states),
     [leads, rdvs, users, states],
@@ -73,12 +79,16 @@ export function Suivi() {
   )
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return signedDossiers.filter((d) => {
+    // Filtre phase actif → base NON bornée par la période : le funnel Overview
+    // compte tous les dossiers actifs quelle que soit leur date de signature,
+    // on doit donc retrouver les mêmes dossiers ici.
+    const base = phaseFilter ? allSignedDossiers : signedDossiers
+    return base.filter((d) => {
       const client = clientByLead.get(d.id)
+      if (phaseFilter && !clientMatchesPhase(client, phaseFilter)) return false
       const pct = workflowPhaseProgress(client)?.pct ?? 0
       const delivered = client?.steps?.mes?.status === 'fait'
       const blocked = client?.blocked || d.state.statuses[d.activeStep] === 'blocked'
-      if (phaseFilter && client?.currentPhase !== phaseFilter) return false
       if (progressFilter === 'todo' && (pct > 0 || delivered)) return false
       if (progressFilter === 'running' && (pct <= 0 || pct >= 67 || delivered || blocked)) return false
       if (progressFilter === 'advanced' && (pct < 67 || delivered || blocked)) return false
@@ -91,7 +101,7 @@ export function Suivi() {
         .toLowerCase()
         .includes(q)
     })
-  }, [signedDossiers, query, progressFilter, phaseFilter, clientByLead])
+  }, [signedDossiers, allSignedDossiers, query, progressFilter, phaseFilter, clientByLead])
 
   // Compat redirect : /suivi?lead=X → fiche client complète.
   const legacyLead = params.get('lead')
@@ -207,6 +217,16 @@ export function Suivi() {
               {filter.label}
             </button>
           ))}
+          {phaseFilter && (
+            <button
+              type="button"
+              className="active"
+              title="Retirer le filtre de phase"
+              onClick={clearPhaseFilter}
+            >
+              Phase : {PHASE_LABEL[phaseFilter]} ✕
+            </button>
+          )}
         </section>
 
         {isLoading ? (
@@ -214,7 +234,7 @@ export function Suivi() {
         ) : filtered.length === 0 ? (
           <div className="suivi-empty">
             <p>{query || progressFilter !== 'all' || phaseFilter ? 'Aucun dossier ne correspond aux filtres.' : 'Aucun dossier signé pour cette période.'}</p>
-            {(query || progressFilter !== 'all' || phaseFilter) && <button type="button" onClick={() => { setQuery(''); setProgressFilter('all'); if (phaseFilter) navigate('/suivi', { replace: true }) }}>Réinitialiser les filtres</button>}
+            {(query || progressFilter !== 'all' || phaseFilter) && <button type="button" onClick={() => { setQuery(''); setProgressFilter('all'); clearPhaseFilter() }}>Réinitialiser les filtres</button>}
           </div>
         ) : (
           <div ref={gridWrapperRef} style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>

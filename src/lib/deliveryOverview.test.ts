@@ -133,3 +133,36 @@ describe('selectRecentDeliveries', () => {
     expect(res.map((c) => c.id)).toEqual(['recent', 'old'])
   })
 })
+
+// ─── Arrivée filtrée depuis le funnel Overview (/suivi?phase=X) ───────────────
+
+import { parseDeliveryPhase, clientMatchesPhase } from './deliveryOverview'
+
+describe('parseDeliveryPhase', () => {
+  it('accepte chacune des 6 phases du pipeline', () => {
+    for (const p of ['vt', 'dp', 'racco', 'installation', 'consuel', 'mes']) {
+      expect(parseDeliveryPhase(p)).toBe(p)
+    }
+  })
+  it('rejette une valeur inconnue ou absente', () => {
+    expect(parseDeliveryPhase('nimporte')).toBeNull()
+    expect(parseDeliveryPhase('')).toBeNull()
+    expect(parseDeliveryPhase(null)).toBeNull()
+  })
+})
+
+describe('clientMatchesPhase', () => {
+  it('true quand le dossier est actuellement à cette phase', () => {
+    expect(clientMatchesPhase(client({ currentPhase: 'racco' }), 'racco')).toBe(true)
+  })
+  it('false pour une autre phase courante', () => {
+    expect(clientMatchesPhase(client({ currentPhase: 'vt' }), 'racco')).toBe(false)
+  })
+  it('false pour un dossier annulé/clôturé (hors pipeline, comme le funnel Overview)', () => {
+    expect(clientMatchesPhase(client({ currentPhase: 'mes', statusGlobal: 'cloture' }), 'mes')).toBe(false)
+    expect(clientMatchesPhase(client({ currentPhase: 'vt', statusGlobal: 'annule' }), 'vt')).toBe(false)
+  })
+  it('false sans fiche client (dossier pas encore matérialisé côté délivrabilité)', () => {
+    expect(clientMatchesPhase(undefined, 'vt')).toBe(false)
+  })
+})

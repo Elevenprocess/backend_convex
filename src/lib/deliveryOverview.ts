@@ -31,6 +31,19 @@ type DateRange = { from: Date; to: Date }
 // et clôturés (déjà livrés). Ils ne comptent ni en « actifs » ni dans le tunnel.
 const TERMINAL_STATUSES = new Set(['annule', 'cloture'])
 
+/** Valide un `?phase=` d'URL (funnel Overview → /suivi) ; null si inconnu. */
+export function parseDeliveryPhase(value: string | null): WorkflowPhase | null {
+  return value && (DELIVERY_PHASES as string[]).includes(value) ? (value as WorkflowPhase) : null
+}
+
+/**
+ * Un dossier « concerné » par une phase du funnel = actuellement à cette phase,
+ * et encore dans le pipeline (annulés/clôturés exclus, comme buildDeliveryPipeline).
+ */
+export function clientMatchesPhase(client: ClientResponse | undefined, phase: WorkflowPhase): boolean {
+  return client != null && client.currentPhase === phase && !TERMINAL_STATUSES.has(client.statusGlobal)
+}
+
 function clientIsLate(c: ClientResponse, now: Date): boolean {
   return Object.values(c.steps).some((s) => s != null && isStepLate(s, now))
 }
