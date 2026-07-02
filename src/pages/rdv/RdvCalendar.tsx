@@ -180,7 +180,7 @@ export function RdvCalendar() {
   const openCalendarItem = (item: CalendarItem) => {
     if (item.source === 'vt') {
       if (role === 'admin' || role === 'delivrabilite' || role === 'responsable_technique' || role === 'back_office') {
-        navigate(`/suivi/${item.vt.clientId}`)
+        navigate(`/suivi/${item.vt.leadId}/fiche`)
       } else {
         setVtPopup(item.vt) // technicien : popup lecture seule
       }

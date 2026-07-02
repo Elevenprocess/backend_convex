@@ -177,7 +177,7 @@ function OverviewSuivi() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className={`text-[10px] font-black px-2 py-1 rounded-full ${badge.cls}`}>{badge.text}</span>
-                      <button onClick={() => navigate(`/suivi?lead=${row.client.leadId}`)}>Suivi</button>
+                      <button onClick={() => navigate(`/suivi/${row.client.leadId}/fiche`)}>Suivi</button>
                     </div>
                   </div>
                 )
@@ -261,7 +261,7 @@ function OverviewResponsableTechnique() {
               {unassigned.slice(0, 6).map((c) => (
                 <div key={c.id} className="overview-role-row overview-role-row--no-avatar">
                   <div><strong>{c.lead.fullName ?? c.lead.phone ?? 'Dossier'}</strong><small>{c.lead.city ?? '—'}</small></div>
-                  <button onClick={() => navigate(`/suivi/${c.leadId}`)}>Attribuer</button>
+                  <button onClick={() => navigate(`/suivi/${c.leadId}/fiche`)}>Attribuer</button>
                 </div>
               ))}
               {unassigned.length === 0 && <div className="text-xs text-faint">Tout est attribué 🎉</div>}

@@ -159,7 +159,7 @@ export function TechnicienPlanning() {
   }
 
   function openEntry(e: VtCalendarEntry) {
-    navigate(`/suivi/${e.clientId}`)
+    navigate(`/suivi/${e.leadId}/fiche`)
   }
 
   return (

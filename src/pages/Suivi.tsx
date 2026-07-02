@@ -93,10 +93,10 @@ export function Suivi() {
     })
   }, [signedDossiers, query, progressFilter, phaseFilter, clientByLead])
 
-  // Compat redirect : /suivi?lead=X → /suivi/X
+  // Compat redirect : /suivi?lead=X → fiche client complète.
   const legacyLead = params.get('lead')
   useEffect(() => {
-    if (legacyLead) navigate(`/suivi/${legacyLead}`, { replace: true })
+    if (legacyLead) navigate(`/suivi/${legacyLead}/fiche`, { replace: true })
   }, [legacyLead, navigate])
 
   useEffect(() => {

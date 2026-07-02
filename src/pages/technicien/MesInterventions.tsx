@@ -17,7 +17,7 @@ export function MesInterventions() {
   const { data: clients, loading, error } = useClients()
 
   const openDossier = useCallback(
-    (c: ClientResponse) => navigate(`/suivi/${c.leadId}`),
+    (c: ClientResponse) => navigate(`/suivi/${c.leadId}/fiche`),
     [navigate],
   )
 

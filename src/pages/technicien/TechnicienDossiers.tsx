@@ -32,7 +32,7 @@ export function TechnicienDossiers() {
               const date = nextFieldDate(c)
               return (
                 <li key={c.id}>
-                  <button onClick={() => navigate(`/suivi/${c.leadId}`)}
+                  <button onClick={() => navigate(`/suivi/${c.leadId}/fiche`)}
                     className="w-full text-left px-4 py-3 hover:bg-cream/60 flex items-center gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="font-bold truncate">{c.lead.fullName ?? 'Client'}</div>

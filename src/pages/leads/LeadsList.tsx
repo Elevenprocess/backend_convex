@@ -164,7 +164,7 @@ function LeadsSuivi() {
         ) : (
           <section className="suivi-grid">
             {filtered.map((dossier) => (
-              <DossierCard key={dossier.id} dossier={dossier} onClick={() => navigate(`/suivi/${dossier.id}`)} />
+              <DossierCard key={dossier.id} dossier={dossier} onClick={() => navigate(`/suivi/${dossier.id}/fiche`)} />
             ))}
           </section>
         )}
