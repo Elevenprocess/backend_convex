@@ -10,6 +10,7 @@ import { listProjectsByLead, getProjectDetail } from '../lib/api'
 import { fullName, type ClientResponse, type ProjectDetailResponse, type ProjectStatus } from '../lib/types'
 import { FicheClientPanel } from '../components/suivi/FicheClientPanel'
 import { ProjectCard } from '../components/suivi/ProjectCard'
+import { InterventionsSection } from '../components/suivi/InterventionsSection'
 
 // Ordre d'affichage des projets : actifs d'abord, perdus/abandonnés en dernier.
 const STATUS_ORDER: Record<ProjectStatus, number> = {
@@ -219,6 +220,15 @@ export function FicheCompletePage() {
                   Aucun projet pour ce client.
                 </div>
               )}
+
+              {/* Historique SAV : interventions post-livraison des dossiers du client. */}
+              {(clients ?? []).map((c) => (
+                <InterventionsSection
+                  key={c.id}
+                  clientId={c.id}
+                  canManage={role === 'admin' || role === 'delivrabilite' || role === 'responsable_technique' || role === 'back_office'}
+                />
+              ))}
             </div>
           </div>
         )}
