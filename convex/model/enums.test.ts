@@ -14,6 +14,10 @@ import {
 } from "./enums";
 import {
   ACOMPTE_STATUSES, LEGACY_ACOMPTE_STATUSES, ECHEANCE_JALONS,
+  CLIENT_STATUSES, WORKFLOW_PHASES, WORKFLOW_STATUSES, WORKFLOW_SUBSTEP_KEYS,
+  PROBLEM_REASONS, DOCUMENT_TYPES, PRODUCT_TYPES, clientStatusValidator,
+  workflowPhaseValidator, workflowStatusValidator, workflowSubstepKeyValidator,
+  problemReasonValidator, documentTypeValidator, productTypeValidator,
 } from "./enums";
 
 test("les rôles reprennent les 10 valeurs Postgres", () => {
@@ -148,4 +152,73 @@ test("echeance jalons", () => {
   expect(ECHEANCE_JALONS).toContain("signature");
   expect(ECHEANCE_JALONS).toContain("racco_validee");
   expect(ECHEANCE_JALONS).toHaveLength(7);
+});
+
+// ─── Délivrabilité (Task 1 — Tranche 6a) ────────────────────
+test("clientStatus reprend les 8 statuts", () => {
+  expect(CLIENT_STATUSES).toContain("nouveau");
+  expect(CLIENT_STATUSES).toContain("annule");
+  expect(CLIENT_STATUSES).toHaveLength(8);
+});
+
+test("workflowPhase reprend les 6 phases (ordre vt/dp/racco/installation/consuel/mes)", () => {
+  expect(WORKFLOW_PHASES).toEqual(["vt", "dp", "racco", "installation", "consuel", "mes"]);
+});
+
+test("workflowStatus reprend les 7 statuts", () => {
+  expect(WORKFLOW_STATUSES).toHaveLength(7);
+  expect(WORKFLOW_STATUSES).toContain("a_faire");
+  expect(WORKFLOW_STATUSES).toContain("planifie");
+  expect(WORKFLOW_STATUSES).toContain("fait");
+  expect(WORKFLOW_STATUSES).toContain("probleme");
+  expect(WORKFLOW_STATUSES).toContain("annule");
+});
+
+test("workflowSubstepKey reprend les 12 clés substep", () => {
+  expect(WORKFLOW_SUBSTEP_KEYS).toHaveLength(12);
+  expect(WORKFLOW_SUBSTEP_KEYS).toContain("vt_planifie");
+  expect(WORKFLOW_SUBSTEP_KEYS).toContain("vt_attribuee");
+  expect(WORKFLOW_SUBSTEP_KEYS).toContain("vt_validee");
+  expect(WORKFLOW_SUBSTEP_KEYS).toContain("dp_envoyee_mairie");
+  expect(WORKFLOW_SUBSTEP_KEYS).toContain("dp_validee");
+  expect(WORKFLOW_SUBSTEP_KEYS).toContain("racco_envoye");
+  expect(WORKFLOW_SUBSTEP_KEYS).toContain("racco_validee");
+  expect(WORKFLOW_SUBSTEP_KEYS).toContain("consuel_a_faire");
+  expect(WORKFLOW_SUBSTEP_KEYS).toContain("consuel_valide");
+  expect(WORKFLOW_SUBSTEP_KEYS).toContain("install_a_faire");
+  expect(WORKFLOW_SUBSTEP_KEYS).toContain("install_effectuee");
+  expect(WORKFLOW_SUBSTEP_KEYS).toContain("enquete_satisfaction");
+});
+
+test("problemReason reprend la liste des motifs (22 valeurs)", () => {
+  expect(PROBLEM_REASONS).toHaveLength(22);
+  expect(PROBLEM_REASONS).toContain("vt_client_absent");
+  expect(PROBLEM_REASONS).toContain("dp_refusee");
+  expect(PROBLEM_REASONS).toContain("installation_stock_panneaux");
+  expect(PROBLEM_REASONS).toContain("autre");
+});
+
+test("documentType reprend les 12 types de documents", () => {
+  expect(DOCUMENT_TYPES).toHaveLength(12);
+  expect(DOCUMENT_TYPES).toContain("rapport_vt");
+  expect(DOCUMENT_TYPES).toContain("mandat");
+  expect(DOCUMENT_TYPES).toContain("recepisse_dp");
+  expect(DOCUMENT_TYPES).toContain("crae");
+  expect(DOCUMENT_TYPES).toContain("attestation_consuel");
+  expect(DOCUMENT_TYPES).toContain("facture");
+  expect(DOCUMENT_TYPES).toContain("autre");
+});
+
+test("productType reprend les 4 types de produits", () => {
+  expect(PRODUCT_TYPES).toEqual(["panneau", "onduleur", "batterie", "autre"]);
+});
+
+test("les validateurs délivrabilité sont des unions", () => {
+  expect(clientStatusValidator.kind).toBe("union");
+  expect(workflowPhaseValidator.kind).toBe("union");
+  expect(workflowStatusValidator.kind).toBe("union");
+  expect(workflowSubstepKeyValidator.kind).toBe("union");
+  expect(problemReasonValidator.kind).toBe("union");
+  expect(documentTypeValidator.kind).toBe("union");
+  expect(productTypeValidator.kind).toBe("union");
 });

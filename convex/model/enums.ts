@@ -142,3 +142,62 @@ export const ECHEANCE_JALONS = [
 ] as const;
 export type EcheanceJalon = (typeof ECHEANCE_JALONS)[number];
 export const echeanceJalonValidator = v.union(...ECHEANCE_JALONS.map((s) => v.literal(s))) as Validator<EcheanceJalon>;
+
+// ─── Délivrabilité (Tranche 6a) ─────────────────────────────
+export const CLIENT_STATUSES = [
+  "nouveau", "vt_a_faire", "administratif_en_cours", "installation_planifiee",
+  "installe_en_attente_mes", "cloture", "bloque", "annule",
+] as const;
+export type ClientStatus = (typeof CLIENT_STATUSES)[number];
+export const clientStatusValidator = v.union(...CLIENT_STATUSES.map((s) => v.literal(s))) as Validator<ClientStatus>;
+
+export const WORKFLOW_PHASES = [
+  "vt", "dp", "racco", "installation", "consuel", "mes",
+] as const;
+export type WorkflowPhase = (typeof WORKFLOW_PHASES)[number];
+export const workflowPhaseValidator = v.union(...WORKFLOW_PHASES.map((p) => v.literal(p))) as Validator<WorkflowPhase>;
+
+export const WORKFLOW_STATUSES = [
+  "a_faire", "planifie", "en_cours", "fait", "probleme", "en_attente", "annule",
+] as const;
+export type WorkflowStatus = (typeof WORKFLOW_STATUSES)[number];
+export const workflowStatusValidator = v.union(...WORKFLOW_STATUSES.map((s) => v.literal(s))) as Validator<WorkflowStatus>;
+
+export const WORKFLOW_SUBSTEP_KEYS = [
+  "vt_planifie", "vt_attribuee", "vt_validee",
+  "dp_envoyee_mairie", "dp_validee",
+  "racco_envoye", "racco_validee",
+  "consuel_a_faire", "consuel_valide",
+  "install_a_faire", "install_effectuee",
+  "enquete_satisfaction",
+] as const;
+export type WorkflowSubstepKey = (typeof WORKFLOW_SUBSTEP_KEYS)[number];
+export const workflowSubstepKeyValidator = v.union(...WORKFLOW_SUBSTEP_KEYS.map((k) => v.literal(k))) as Validator<WorkflowSubstepKey>;
+
+export const PROBLEM_REASONS = [
+  "vt_client_absent", "vt_acces_toit_impossible", "vt_a_refaire", "vt_invalide", "vt_anomalie_structurelle",
+  "dp_refusee", "dp_incomplete",
+  "racco_refus_edf", "racco_documents_manquants",
+  "consuel_non_valide", "consuel_documents_manquants",
+  "installation_stock_panneaux", "installation_stock_onduleur", "installation_stock_batterie",
+  "installation_acces_chantier", "installation_client_absent", "installation_meteo",
+  "installation_equipe_indisponible", "installation_autre",
+  "mes_consuel_manquant", "mes_racco_manquant",
+  "autre",
+] as const;
+export type ProblemReason = (typeof PROBLEM_REASONS)[number];
+export const problemReasonValidator = v.union(...PROBLEM_REASONS.map((r) => v.literal(r))) as Validator<ProblemReason>;
+
+export const DOCUMENT_TYPES = [
+  "rapport_vt", "mandat", "recepisse_dp", "cno_dp", "prolongation_dp",
+  "recepisse_racco", "crae", "attestation_consuel", "attestation_completude",
+  "devis_signe", "facture", "autre",
+] as const;
+export type DocumentType = (typeof DOCUMENT_TYPES)[number];
+export const documentTypeValidator = v.union(...DOCUMENT_TYPES.map((t) => v.literal(t))) as Validator<DocumentType>;
+
+export const PRODUCT_TYPES = [
+  "panneau", "onduleur", "batterie", "autre",
+] as const;
+export type ProductType = (typeof PRODUCT_TYPES)[number];
+export const productTypeValidator = v.union(...PRODUCT_TYPES.map((t) => v.literal(t))) as Validator<ProductType>;
