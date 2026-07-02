@@ -14,6 +14,7 @@ import type { LeadDateField } from '../../lib/leadFilters'
 import { fullName, type LeadResponse, type UserResponse } from '../../lib/types'
 import { clientBucketForLead, clientStatusBadge, type ClientBucket } from '../../lib/clientStatus'
 import { AssignCommercialModal } from '../../components/leads/AssignCommercialModal'
+import { ManualLeadModal } from '../../components/leads/ManualLeadModal'
 import { useCardGridVirtualizer } from '../../lib/virtualGrid'
 
 // ─── Types ────────────────────────────────────────────────
@@ -139,7 +140,7 @@ export function ClientsList() {
     : me?.id
       ? { assignedToId: me.id, scope: 'clients' as const, limit: 1000 }
       : { scope: 'clients' as const, limit: 1000 }
-  const { data, loading, error } = useLeads(leadsFilter)
+  const { data, loading, error, refetch } = useLeads(leadsFilter)
   const { data: usersData } = useUsers()
   const allClients = data ?? []
   const [filter, setFilter] = useState<ClientStatusFilter>('all')
@@ -150,6 +151,7 @@ export function ClientsList() {
   const [query, setQuery] = useState('')
   // Client en cours d'attribution (responsable commercial / admin uniquement).
   const [assignTarget, setAssignTarget] = useState<LeadResponse | null>(null)
+  const [manualOpen, setManualOpen] = useState(false)
 
   const teamCommerciaux = useMemo(
     () => (usersData ?? []).filter((u) => (u.role === 'commercial' || u.role === 'commercial_lead') && u.active),
@@ -284,7 +286,17 @@ export function ClientsList() {
                 className="w-full bg-white border border-line rounded-[14px] pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-or"
               />
             </div>
-            <span className="text-xs text-faint font-semibold whitespace-nowrap">{clients.length}/{allClients.length}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-faint font-semibold whitespace-nowrap">{clients.length}/{allClients.length}</span>
+              <button
+                type="button"
+                onClick={() => setManualOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-success px-3 py-2 text-xs font-black text-white shadow-sm hover:brightness-95"
+              >
+                <Icon name="plus" size={14} />
+                Ajouter un client
+              </button>
+            </div>
           </div>
           <div ref={scrollRef} style={{ overflowY: 'auto', flex: '1 1 0', minHeight: 0 }}>
             {loading && clients.length === 0 ? (
@@ -350,6 +362,18 @@ export function ClientsList() {
           lead={assignTarget}
           commerciaux={teamCommerciaux}
           onClose={() => setAssignTarget(null)}
+        />
+      )}
+      {manualOpen && (
+        <ManualLeadModal
+          mode="client"
+          role={me?.role}
+          commerciaux={teamCommerciaux}
+          onClose={() => setManualOpen(false)}
+          onCreated={(lead) => {
+            refetch()
+            selectLead(lead.id)
+          }}
         />
       )}
     </AppShell>

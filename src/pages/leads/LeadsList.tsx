@@ -11,6 +11,7 @@ import { deleteLead, useLeadStats, useLeads, useLeadsProgressive, useUsers, useS
 import { useLeadSidebar } from '../../lib/leadSidebar'
 import { emitLeadDeselect, emitLeadSelect, useLeadLocks, type LeadLockInfo } from '../../lib/realtime'
 import { DossierCard } from '../../components/suivi/DossierCard'
+import { ManualLeadModal } from '../../components/leads/ManualLeadModal'
 import { buildDossiers, readWorkflowState } from '../../lib/suivi'
 import { DEFAULT_LEAD_FILTERS, applyLeadFilters, leadFiltersActive, matchesLeadDateRange, sortCallbackLeadsByNextCallback, type LeadArrivedAtFilter, type LeadDateField, type LeadHasFilter, type LeadLastCallFilter, type LeadListFilters } from '../../lib/leadFilters'
 import {
@@ -218,6 +219,7 @@ function LeadsSetter() {
     return () => emitLeadDeselect(selectedId)
   }, [selectedId, me?.id, me?.name, me?.email])
   const [openComment, setOpenComment] = useState<{ leadName: string; comment: string } | null>(null)
+  const [manualOpen, setManualOpen] = useState(false)
   const [visibleColumns, setVisibleColumns] = useColumnVisibility('ecoi.leads.setter.columns.v5', SETTER_COLUMNS)
   const startCall = useStartCall()
   const orderedColumns = useOrderedColumns(SETTER_COLUMNS, visibleColumns)
@@ -371,6 +373,14 @@ function LeadsSetter() {
             </div>
 
             <span className="text-xs text-faint font-semibold ml-auto">{filtered.length}/{categoryLeads.length}</span>
+            <button
+              type="button"
+              onClick={() => setManualOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-success px-3 py-2 text-xs font-black text-white shadow-sm hover:brightness-95"
+            >
+              <Icon name="plus" size={14} />
+              Ajouter un prospect
+            </button>
             <ColumnVisibilityMenu columns={SETTER_COLUMNS} visible={visibleColumns} onChange={setVisibleColumns} />
             {(loading || backgroundLoading) && mine.length > 0 && <span className="text-xs text-faint">Actualisation…</span>}
           </div>
@@ -446,6 +456,22 @@ function LeadsSetter() {
             )}
           </main>
         </div>
+
+        {manualOpen && (
+          <ManualLeadModal
+            mode="lead"
+            role={me?.role}
+            onClose={() => setManualOpen(false)}
+            onCreated={(lead) => {
+              baseLeadsState.refetch()
+              searchLeadsState.refetch()
+              setFilter('nouveau')
+              setMissingFilter('all')
+              setQuery('')
+              selectLead(lead.id)
+            }}
+          />
+        )}
 
         <CommentModal data={openComment} onClose={() => setOpenComment(null)} />
 

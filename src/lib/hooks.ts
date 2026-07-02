@@ -334,6 +334,34 @@ export function useLeadStats(): Async<LeadStatsResponse> {
   })
 }
 
+export type CreateLeadInput = {
+  source: 'manual'
+  status?: LeadStatus
+  firstName?: string | null
+  lastName?: string | null
+  email?: string | null
+  phone?: string | null
+  addressLine?: string | null
+  city?: string | null
+  postalCode?: string | null
+  revenuFiscal?: number | null
+  typeLogement?: string | null
+  canalAcquisition?: string | null
+  acquisitionChannel?: AdChannel
+  setterId?: string | null
+  assignedToId?: string | null
+}
+
+export async function createLead(input: CreateLeadInput): Promise<LeadResponse> {
+  const created = await api<LeadResponse>('/leads', { method: 'POST', body: input })
+  updateLeadCaches(created)
+  notifyRealtimeRefresh({
+    event: 'lead:created',
+    paths: ['/leads', '/analytics/summary', '/analytics/funnel'],
+  })
+  return created
+}
+
 // ─── RDV ───────────────────────────────────────────────────
 export function useRdvList(filters?: {
   leadId?: string
