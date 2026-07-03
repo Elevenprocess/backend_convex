@@ -12,6 +12,10 @@ import { insertStageHistory } from "./model/stageHistory";
 import { deriveLeadStatusFromDebrief } from "./model/deriveLeadStatusFromDebrief";
 import { ensureProjectForLead } from "./model/ensureProject";
 import { ensureDossier } from "./model/ensureDossier";
+import {
+  syncFromCommercial,
+  commercialSaleActiveFromLeadStatus,
+} from "./model/syncFromCommercial";
 
 const COMMERCIAL = ["admin", "commercial", "commercial_lead"] as const;
 
@@ -130,6 +134,30 @@ async function ensureDossierForVente(
   });
 }
 
+// Miroir de DebriefsService.syncDelivery : propage l'état commercial du débrief
+// vers le dossier délivrabilité EXISTANT du lead (annulation réversible +
+// données dénormalisées). No-op sans dossier.
+async function syncDeliveryFromDebrief(
+  ctx: MutationCtx,
+  args: {
+    leadId: Id<"leads">;
+    outcome: DebriefOutcome;
+    nonSaleReason: DebriefNonSaleReason | null;
+    montantTotal: number | null;
+    financingType: Doc<"debriefs">["financingType"] | null;
+    kits: string | null;
+  },
+): Promise<void> {
+  const leadStatus = deriveLeadStatusFromDebrief(args.outcome, args.nonSaleReason);
+  await syncFromCommercial(ctx, {
+    leadId: args.leadId,
+    active: commercialSaleActiveFromLeadStatus(leadStatus),
+    montantTotal: args.montantTotal,
+    financingType: args.financingType ?? null,
+    kits: args.kits,
+  });
+}
+
 export const createForLead = mutation({
   args: {
     leadId: v.id("leads"),
@@ -166,6 +194,14 @@ export const createForLead = mutation({
       kits: args.kits,
       signedAt: args.signedAt,
       actorId: user._id,
+    });
+    await syncDeliveryFromDebrief(ctx, {
+      leadId: args.leadId,
+      outcome: args.outcome,
+      nonSaleReason: args.nonSaleReason ?? null,
+      montantTotal: args.montantTotal ?? null,
+      financingType: args.financingType ?? null,
+      kits: args.kits ?? null,
     });
     return debriefId;
   },
@@ -207,6 +243,14 @@ export const create = mutation({
       kits: args.kits,
       signedAt: args.signedAt,
       actorId: user._id,
+    });
+    await syncDeliveryFromDebrief(ctx, {
+      leadId: project.leadId,
+      outcome: args.outcome,
+      nonSaleReason: args.nonSaleReason ?? null,
+      montantTotal: args.montantTotal ?? null,
+      financingType: args.financingType ?? null,
+      kits: args.kits ?? null,
     });
     return debriefId;
   },
@@ -280,6 +324,19 @@ export const update = mutation({
       const effOutcome = args.outcome ?? existing.outcome;
       const effNonSale = args.nonSaleReason ?? existing.nonSaleReason ?? undefined;
       await applyLeadEffect(ctx, existing.leadId, effOutcome, effNonSale, existing.rdvId);
+    }
+
+    // Propage l'état commercial effectif vers le dossier délivrabilité.
+    if (existing.leadId) {
+      const updated = (await ctx.db.get(args.debriefId))!;
+      await syncDeliveryFromDebrief(ctx, {
+        leadId: existing.leadId,
+        outcome: updated.outcome,
+        nonSaleReason: updated.nonSaleReason ?? null,
+        montantTotal: updated.montantTotal ?? null,
+        financingType: updated.financingType ?? null,
+        kits: updated.kits ?? null,
+      });
     }
     return null;
   },
