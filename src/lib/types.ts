@@ -499,6 +499,8 @@ export type RdvLeadSummary = {
   lastName: string | null
   city: string | null
   phone: string | null
+  email: string | null
+  setterId: string | null
 }
 
 export type RdvResponse = {

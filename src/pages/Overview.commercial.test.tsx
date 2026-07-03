@@ -12,7 +12,7 @@ vi.mock('../lib/auth', () => ({
 vi.mock('../lib/role', () => ({ useDisplayUser: () => ({ firstName: 'Alex' }) }))
 
 const lead = (id: string, firstName: string, lastName: string, city: string): RdvLeadSummary =>
-  ({ id, firstName, lastName, city, phone: '0692000000' })
+  ({ id, firstName, lastName, city, phone: '0692000000', email: null, setterId: null })
 
 const rdv = (over: Partial<RdvResponse>): RdvResponse => ({
   id: 'r', leadId: 'lead-x', scheduledAt: '2026-06-05T10:00:00.000Z',

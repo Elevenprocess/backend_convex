@@ -2110,14 +2110,18 @@ function adminFunnelProspects(rdvs: RdvResponse[], leads: LeadResponse[], users:
   return rdvs
     .filter((rdv) => rdv.status === 'planifie' || rdv.status === 'honore')
     .map((rdv) => {
+      // La liste /leads est bornée (limit 500) : quand le lead du RDV n'y est pas,
+      // on retombe sur le résumé embarqué dans la réponse RDV (rdv.lead) — sinon
+      // la ligne s'affichait « Prospect qualifié » sans ville/téléphone/setter.
       const lead = leadById.get(rdv.leadId)
+      const leadInfo = lead ?? rdv.lead
       const commercialName = nameOf(rdv.commercialId) ?? nameOf(lead?.latestRdvCommercialId) ?? nameOf(lead?.assignedToId)
-      const setterName = nameOf(lead?.setterId) ?? (lead?.assignedSetterIds?.length ? nameOf(lead.assignedSetterIds[0]) : null)
+      const setterName = nameOf(lead?.setterId ?? rdv.lead?.setterId) ?? (lead?.assignedSetterIds?.length ? nameOf(lead.assignedSetterIds[0]) : null)
       return {
         id: rdv.id,
-        name: lead ? (fullName(lead) || lead.email || lead.phone || 'Prospect qualifié') : 'Prospect qualifié',
-        phone: lead?.phone ?? null,
-        city: lead?.city ?? null,
+        name: leadInfo ? (fullName(leadInfo) || leadInfo.email || leadInfo.phone || 'Prospect qualifié') : 'Prospect qualifié',
+        phone: leadInfo?.phone ?? null,
+        city: leadInfo?.city ?? null,
         status: commercialProspectStatus({ rdv, lead }),
         scheduledAt: rdv.scheduledAt,
         commercialName,
