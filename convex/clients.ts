@@ -12,8 +12,10 @@ import type { QueryCtx } from "./_generated/server";
 import {
   clientStatusValidator,
   workflowPhaseValidator,
+  type DocumentType,
   type Role,
 } from "./model/enums";
+import { countMissingDocs } from "./model/substepGating";
 import { requireRole } from "./model/access";
 import { ensureDossier, recomputeClientStatus } from "./model/ensureDossier";
 import { can, normalizeRole } from "./model/delivrabilitePermissions";
@@ -84,7 +86,11 @@ export const getByProject = query({
     await requireRole(ctx, WORKFLOW_VIEW_ROLES);
     const dossier = await findActiveByProject(ctx, args.projectId);
     if (!dossier) return null;
-    return { ...dossier, techniciens: await techniciensOf(ctx, dossier._id) };
+    return {
+      ...dossier,
+      techniciens: await techniciensOf(ctx, dossier._id),
+      missingDocs: await missingDocsOf(ctx, dossier._id),
+    };
   },
 });
 
@@ -94,7 +100,11 @@ export const getByLead = query({
     await requireRole(ctx, WORKFLOW_VIEW_ROLES);
     const dossier = await findActiveByLead(ctx, args.leadId);
     if (!dossier) return null;
-    return { ...dossier, techniciens: await techniciensOf(ctx, dossier._id) };
+    return {
+      ...dossier,
+      techniciens: await techniciensOf(ctx, dossier._id),
+      missingDocs: await missingDocsOf(ctx, dossier._id),
+    };
   },
 });
 
@@ -154,7 +164,11 @@ export const list = query({
       .filter((c) => !args.unassignedVt || c.technicienVtId === undefined)
       .sort((a, b) => b._creationTime - a._creationTime);
     return await Promise.all(
-      scoped.map(async (c) => ({ ...c, techniciens: await techniciensOf(ctx, c._id) })),
+      scoped.map(async (c) => ({
+        ...c,
+        techniciens: await techniciensOf(ctx, c._id),
+        missingDocs: await missingDocsOf(ctx, c._id),
+      })),
     );
   },
 });
@@ -194,6 +208,32 @@ async function listVisibleClientIds(
     return out;
   }
   return null;
+}
+
+/**
+ * Nombre de sous-étapes du dossier dont au moins une pièce attendue manque.
+ * Requête documents directe (pas d'import de documents.ts : il importe clients.ts).
+ */
+async function missingDocsOf(ctx: QueryCtx, clientId: Id<"clients">): Promise<number> {
+  const subs = await ctx.db
+    .query("workflowSubsteps")
+    .withIndex("by_client", (q) => q.eq("clientId", clientId))
+    .collect();
+  const docTypesBySubstep = new Map<string, DocumentType[]>();
+  for (const s of subs) {
+    const docs = await ctx.db
+      .query("documents")
+      .withIndex("by_substep", (q) => q.eq("workflowSubstepId", s._id))
+      .collect();
+    docTypesBySubstep.set(
+      s._id,
+      docs.filter((d) => d.deletedAt === undefined).map((d) => d.type),
+    );
+  }
+  return countMissingDocs(
+    subs.map((s) => ({ id: s._id, key: s.key })),
+    docTypesBySubstep,
+  );
 }
 
 /** Techniciens de la jonction, avec noms (ordre d'insertion). */
