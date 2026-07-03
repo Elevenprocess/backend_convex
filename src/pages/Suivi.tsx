@@ -197,16 +197,6 @@ export function Suivi() {
         </section>
 
         <section className="suivi-filters" aria-label="Filtres de progression">
-          {phaseFilter && (
-            <button
-              type="button"
-              className="active"
-              onClick={() => navigate('/suivi', { replace: true })}
-              title="Retirer le filtre étape"
-            >
-              Étape : {PHASE_LABEL[phaseFilter]} ×
-            </button>
-          )}
           {PROGRESS_FILTERS.map((filter) => (
             <button
               key={filter.id}
