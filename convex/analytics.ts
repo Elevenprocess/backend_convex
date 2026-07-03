@@ -27,6 +27,8 @@ import {
 import type { Role } from "./model/enums";
 
 const SUMMARY_ROLES: Role[] = ["admin", "setter", "setter_lead", "commercial", "commercial_lead", "finances"];
+const SETTER_STATS_ROLES: Role[] = ["admin", "setter", "setter_lead", "commercial", "commercial_lead"];
+const COMMERCIAL_STATS_ROLES: Role[] = ["admin", "commercial", "commercial_lead"];
 
 function toLeadRow(l: Doc<"leads">): LeadRow {
   return {
@@ -226,5 +228,93 @@ export const summary = query({
         ? buildAdminStats(leadRows, calls, rdvAll, userRows, range, latestCallByLead)
         : null,
     };
+  },
+});
+
+// ─── Profils équipe (7b) ─────────────────────────────────────────────────────
+
+/**
+ * Stats d'un setter arbitraire (profil /team/setters/:id) — équivalent setter
+ * de commercialStats. Reprend la logique du branch setter de summary, scopée
+ * sur un setterId paramètre. Un setter « simple » est forcé sur SES stats.
+ */
+export const setterStats = query({
+  args: {
+    setterId: v.id("users"),
+    now: v.number(),
+    days: v.optional(v.number()),
+    from: v.optional(v.string()),
+    to: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, SETTER_STATS_ROLES);
+    // Un setter « simple » ne voit que ses propres stats.
+    const setterId = roleOf(user) === "setter" ? user._id : args.setterId;
+    const range = buildRange(args.from, args.to, args.days ?? 30, args.now);
+
+    const callDocs = await ctx.db
+      .query("callLogs")
+      .withIndex("by_calledAt", (q) => q.gte("calledAt", range.fromMs).lte("calledAt", range.toMs))
+      .collect();
+    const calls = callDocs.map(toCallRow);
+    const calledLeadIds = new Set<string>(calls.map((c) => c.leadId as string).filter(Boolean));
+    const [leadRows, rdvDocs, detached] = await Promise.all([
+      loadActiveLeads(ctx, range, calledLeadIds),
+      ctx.db.query("rdv").collect(),
+      loadDetachedDebriefRdvRows(ctx, range),
+    ]);
+    const rdvAll = [
+      ...rdvDocs
+        .filter((r) => r.deletedAt === undefined)
+        .filter((r) => isInRange(r.scheduledAt ?? null, range) || isInRange(r._creationTime, range))
+        .map(toRdvRow),
+      ...detached,
+    ];
+    const latestCallByLead = buildLatestCallByLead(calls);
+    const qualifierByLead = buildQualifierByLead(calls);
+    const setterLeadIds = new Set(
+      calls.filter((c) => c.setterId === setterId && c.leadId).map((c) => c.leadId as string),
+    );
+    const ownLeads = leadRows.filter((l) => l.setterId === setterId || setterLeadIds.has(l.id));
+    const ownIds = new Set(ownLeads.map((l) => l.id));
+
+    return buildSetterStats(
+      ownLeads,
+      calls.filter((c) => c.setterId === setterId),
+      rdvAll.filter((r) => r.leadId && ownIds.has(r.leadId as string)),
+      setterId,
+      range,
+      latestCallByLead,
+      qualifierByLead,
+    );
+  },
+});
+
+/**
+ * Stats d'un commercial arbitraire (profil équipe). Parité NestJS stricte :
+ * UNIQUEMENT les lignes rdv — pas de débriefs détachés, contrairement au
+ * fast-path commercial de summary. Un commercial est forcé sur SES stats.
+ */
+export const commercialStats = query({
+  args: {
+    commercialId: v.id("users"),
+    now: v.number(),
+    days: v.optional(v.number()),
+    from: v.optional(v.string()),
+    to: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, COMMERCIAL_STATS_ROLES);
+    // Un commercial ne voit que ses propres stats.
+    const commercialId = roleOf(user) === "commercial" ? user._id : args.commercialId;
+    const range = buildRange(args.from, args.to, args.days ?? 30, args.now);
+    const rows = await ctx.db
+      .query("rdv")
+      .withIndex("by_commercial_scheduled", (q) => q.eq("commercialId", commercialId))
+      .collect();
+    return buildCommercialStats(
+      rows.filter((r) => r.deletedAt === undefined).map(toRdvRow),
+      range,
+    );
   },
 });
