@@ -225,12 +225,43 @@ export function initialsFromName(name: string): string {
 
 // ─── Séries temporelles ──────────────────────────────────────────────────────
 
+/**
+ * Dates de qualification (setter) tombant dans la plage : première prise de RDV
+ * de chaque lead. Avec la map globale (tous temps, imports exclus), une re-prise
+ * en plage dont la première prise est antérieure ne compte pas ; un lead absent
+ * de la map (import airtable, débrief détaché) ne compte pas. Sans map (vue
+ * commerciale), min local sur les lignes passées. Les RDV sans lead comptent 1
+ * chacun le jour de leur création.
+ */
+export function qualificationDates(
+  rdvs: RdvRow[],
+  range: RangeMs,
+  firstRdvByLead?: Map<string, number>,
+): number[] {
+  const firstByLead = new Map<string, number>();
+  for (const row of rdvs) {
+    if (!row.leadId) continue;
+    if (firstRdvByLead) {
+      const known = firstRdvByLead.get(row.leadId);
+      if (known !== undefined) firstByLead.set(row.leadId, known);
+      continue;
+    }
+    const current = firstByLead.get(row.leadId);
+    if (current === undefined || row.createdAt < current) firstByLead.set(row.leadId, row.createdAt);
+  }
+  const dates: number[] = [];
+  for (const firstAt of firstByLead.values()) if (isInRange(firstAt, range)) dates.push(firstAt);
+  for (const row of rdvs) if (!row.leadId && isInRange(row.createdAt, range)) dates.push(row.createdAt);
+  return dates;
+}
+
 export function buildDailyEvolution(
   leadsRows: LeadRow[],
   calls: CallRow[],
   rdvs: RdvRow[],
   range: RangeMs,
   latestCallByLead = buildLatestCallByLead(calls),
+  firstRdvByLead?: Map<string, number>,
 ) {
   const points = new Map(
     dayKeys(range).map((day) => [
@@ -277,22 +308,12 @@ export function buildDailyEvolution(
     }
   }
 
-  // « RDV planifiés » par jour = leads distincts dont un RDV a été CRÉÉ ce jour-là
-  // (événement daté, immuable). Surtout PAS le statut ACTUEL du lead reporté sur
-  // ses jours d'appel : un lead qualifié après coup regonflait les journées passées.
-  const qualifiedByDay = new Map<string, { leadIds: Set<string>; orphans: number }>();
-  for (const row of rdvs) {
-    if (!isInRange(row.createdAt, range)) continue;
-    const day = reunionDayKey(row.createdAt);
-    if (!points.has(day)) continue;
-    const bucket = qualifiedByDay.get(day) ?? { leadIds: new Set<string>(), orphans: 0 };
-    if (row.leadId) bucket.leadIds.add(row.leadId);
-    else bucket.orphans += 1;
-    qualifiedByDay.set(day, bucket);
-  }
-  for (const [day, bucket] of qualifiedByDay) {
-    const point = points.get(day);
-    if (point) point.qualified = bucket.leadIds.size + bucket.orphans;
+  // Leads qualifiés par jour = leads dont la PREMIÈRE prise de RDV tombe ce
+  // jour-là (événement daté, immuable). Surtout PAS le statut ACTUEL du lead :
+  // un lead qualifié après coup regonflait les journées passées.
+  for (const date of qualificationDates(rdvs, range, firstRdvByLead)) {
+    const point = points.get(reunionDayKey(date));
+    if (point) point.qualified += 1;
   }
 
   for (const call of calls) {
@@ -378,6 +399,7 @@ export function buildSetterStats(
   range: RangeMs,
   latestCallByLead = buildLatestCallByLead(calls),
   qualifierByLead = buildQualifierByLead(calls),
+  firstRdvByLead?: Map<string, number>,
 ) {
   const ownLeads = leadsRows.filter((l) => belongsToSetter(l, setterId, calls));
   const leadsById = new Map(leadsRows.map((l) => [l.id, l]));
@@ -461,7 +483,7 @@ export function buildSetterStats(
     resultSegments: resultSegments(resultCounts),
     dailyCalls: dailyLogicalCalls(scopedCalls, classifiedLeads, range, latestCallByLead),
     hourlyCalls: buildHourlyCalls(scopedCalls, range),
-    dailyEvolution: buildDailyEvolution(ownLeads, calls, rdvs, range, latestCallByLead),
+    dailyEvolution: buildDailyEvolution(ownLeads, calls, rdvs, range, latestCallByLead, firstRdvByLead),
   };
 }
 
@@ -505,6 +527,7 @@ export function buildAdminStats(
   userRows: UserRow[],
   range: RangeMs,
   latestCallByLead = buildLatestCallByLead(calls),
+  firstRdvByLead?: Map<string, number>,
 ) {
   const scopedCalls = filterRange(calls, range, (c) => c.calledAt);
   const scopedLeads = leadsRows.filter((l) => isLeadActiveInRange(l, range, latestCallByLead));
@@ -514,13 +537,19 @@ export function buildAdminStats(
   const resultCounts = countResults(scopedCalls);
   addSyntheticResults(resultCounts, classifiedLeads, syntheticCalls);
   const callsTotal = scopedCalls.length + syntheticCalls;
-  const qualified = classifiedLeads.filter(isQualifiedLead).length;
-  // RDV pris = leads ayant atteint le stage RDV, clampé ≤ qualified (funnel monotone).
+  // Qualifiés = leads dont la PREMIÈRE prise de RDV tombe dans la plage (travail
+  // setter, événement daté). Plus jamais le statut ACTUEL des leads : il incluait
+  // rdv_pris/rdv_honore/signe (le pipeline des commerciaux) et regonflait les
+  // périodes passées à chaque qualification tardive.
+  const qualified = qualificationDates(rdvs, range, firstRdvByLead).length;
+  // RDV pris = leads ayant atteint le stage RDV. Plus de clamp ≤ qualified : les
+  // deux KPI mesurent des choses différentes (qualifications de la période vs
+  // RDV commerciaux actifs).
   const rdvReachedIds = new Set(
     classifiedLeads.filter((l) => RDV_REACHED_STATUSES.has(l.status)).map((l) => l.id),
   );
   for (const r of scopedRdvs) if (r.leadId) rdvReachedIds.add(r.leadId);
-  const rdvPris = Math.min(qualified, rdvReachedIds.size);
+  const rdvPris = rdvReachedIds.size;
   const honored = scopedRdvs.filter((r) => r.status === "honore");
   void honored;
   // Même règle GHL/import que le profil commercial : l'issue vit dans result.
@@ -543,7 +572,7 @@ export function buildAdminStats(
     signed: signed.length,
     resultSegments: resultSegments(resultCounts),
     hourlyCalls: buildHourlyCalls(scopedCalls, range),
-    dailyEvolution: buildDailyEvolution(leadsRows, calls, rdvs, range, latestCallByLead),
+    dailyEvolution: buildDailyEvolution(leadsRows, calls, rdvs, range, latestCallByLead, firstRdvByLead),
     setters: buildSetterRows(scopedLeads, scopedCalls, userRows),
     commercials: buildCommercialRows(scopedRdvs, userRows),
   };

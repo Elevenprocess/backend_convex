@@ -105,6 +105,32 @@ export async function loadDetachedDebriefRdvRows(
 }
 
 /**
+ * Date de PREMIÈRE prise de RDV par lead (min rdv._creationTime, tous temps).
+ * C'est l'événement daté qui matérialise « lead qualifié par un setter » : les
+ * re-prises (reports, 2e visite) sont l'agenda des commerciaux, pas une nouvelle
+ * qualification. Les leads airtable_migration sont exclus — leurs RDV importés
+ * portent une date de création = jour d'import.
+ */
+async function loadFirstRdvByLead(ctx: QueryCtx): Promise<Map<string, number>> {
+  const rows = await ctx.db.query("rdv").collect();
+  const map = new Map<string, number>();
+  const sourceByLead = new Map<string, string>();
+  for (const r of rows) {
+    if (r.deletedAt !== undefined || !r.leadId) continue;
+    let source = sourceByLead.get(r.leadId);
+    if (source === undefined) {
+      const lead = await ctx.db.get(r.leadId);
+      source = lead?.source ?? "";
+      sourceByLead.set(r.leadId, source);
+    }
+    if (source === "airtable_migration") continue;
+    const current = map.get(r.leadId);
+    if (current === undefined || r._creationTime < current) map.set(r.leadId, r._creationTime);
+  }
+  return map;
+}
+
+/**
  * Leads « actifs dans la période » (transposition de leadsActiveInRangeWhere) :
  * créés dans la période OU lastContactAt dans la période OU appelés dans la
  * période. Les imports historiques restent exclus des KPI en aval.
@@ -180,11 +206,12 @@ export const summary = query({
       .collect();
     const calls = callDocs.map(toCallRow);
     const calledLeadIds = new Set<string>(calls.map((c) => c.leadId as string).filter(Boolean));
-    const [leadRows, rdvDocs, userDocs, detached] = await Promise.all([
+    const [leadRows, rdvDocs, userDocs, detached, firstRdvByLead] = await Promise.all([
       loadActiveLeads(ctx, range, calledLeadIds),
       ctx.db.query("rdv").collect(),
       ctx.db.query("users").collect(),
       loadDetachedDebriefRdvRows(ctx, range),
+      loadFirstRdvByLead(ctx),
     ]);
     const rdvRows = rdvDocs
       .filter((r) => r.deletedAt === undefined)
@@ -214,6 +241,7 @@ export const summary = query({
           range,
           latestCallByLead,
           qualifierByLead,
+          firstRdvByLead,
         ),
       };
     }
@@ -225,7 +253,7 @@ export const summary = query({
     return {
       ...base,
       admin: isAdminView
-        ? buildAdminStats(leadRows, calls, rdvAll, userRows, range, latestCallByLead)
+        ? buildAdminStats(leadRows, calls, rdvAll, userRows, range, latestCallByLead, firstRdvByLead)
         : null,
     };
   },
@@ -258,10 +286,11 @@ export const setterStats = query({
       .collect();
     const calls = callDocs.map(toCallRow);
     const calledLeadIds = new Set<string>(calls.map((c) => c.leadId as string).filter(Boolean));
-    const [leadRows, rdvDocs, detached] = await Promise.all([
+    const [leadRows, rdvDocs, detached, firstRdvByLead] = await Promise.all([
       loadActiveLeads(ctx, range, calledLeadIds),
       ctx.db.query("rdv").collect(),
       loadDetachedDebriefRdvRows(ctx, range),
+      loadFirstRdvByLead(ctx),
     ]);
     const rdvAll = [
       ...rdvDocs
@@ -286,6 +315,7 @@ export const setterStats = query({
       range,
       latestCallByLead,
       qualifierByLead,
+      firstRdvByLead,
     );
   },
 });

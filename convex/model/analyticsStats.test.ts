@@ -1,10 +1,25 @@
 import { expect, test } from "vitest";
-import { buildSetterStats, buildCommercialStats, buildAdminStats } from "./analyticsBuilders";
+import { buildSetterStats, buildCommercialStats, buildAdminStats, qualificationDates } from "./analyticsBuilders";
 import { buildRange } from "./analyticsRange";
 
 const NOW = Date.UTC(2026, 6, 3, 12, 0);
 const range = buildRange("2026-07-01T00:00:00.000Z", "2026-07-03T23:59:59.999Z", 1, NOW);
 const T = Date.UTC(2026, 6, 2, 8, 0);
+
+test("qualificationDates : première prise seule, re-prise en plage ignorée si première antérieure (map)", () => {
+  const before = Date.UTC(2026, 5, 15, 8, 0); // avant la plage
+  const rdvs = [
+    { leadId: "L1", status: "planifie", createdAt: T }, // re-prise en plage
+    { leadId: "L2", status: "planifie", createdAt: T },
+    { leadId: null, status: "planifie", createdAt: T }, // orphelin : compte 1
+  ] as any[];
+  // Sans map : min local → L1 et L2 comptent + orphelin = 3
+  expect(qualificationDates(rdvs, range).length).toBe(3);
+  // Avec map globale : L1 a une première prise ANTÉRIEURE → ne compte pas ;
+  // L2 absent de la map (import) → ne compte pas ; orphelin compte.
+  const map = new Map([["L1", before]]);
+  expect(qualificationDates(rdvs, range, map).length).toBe(1);
+});
 
 test("buildCommercialStats : signés depuis result (règle GHL), CA, panier, closing", () => {
   const rdvs = [
@@ -85,8 +100,12 @@ test("buildAdminStats : nouveaux leads hors imports, funnel monotone, lignes éq
   const a = buildAdminStats(leads, calls, rdvs, users, range);
   expect(a.newLeads).toBe(1); // import historique exclu
   expect(a.classified).toBe(2);
-  expect(a.qualified).toBe(2);
-  expect(a.rdvPris).toBeLessThanOrEqual(a.qualified); // clamp monotone
+  // Qualifiés = premières prises de RDV de la période (événement daté, d47b69a) :
+  // 1 seul RDV (L1). Le statut ACTUEL des leads ne compte plus.
+  expect(a.qualified).toBe(1);
+  // rdvPris = leads ayant atteint le stage RDV (L1 via ligne rdv + L2 statut signe),
+  // plus de clamp ≤ qualified : les deux KPI mesurent des choses différentes.
+  expect(a.rdvPris).toBe(2);
   expect(a.signed).toBe(1);
   expect(a.ca).toBe(5000);
   expect(a.setters.map((r: any) => r.id)).toEqual(["S1"]);
