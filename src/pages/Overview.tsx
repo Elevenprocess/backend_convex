@@ -1086,7 +1086,7 @@ function CardHead({ title, icon }: { title: string; icon: ShotIcon }) {
 
 const LEAD_EVOLUTION_SERIES: { key: LeadEvolutionSeriesKey; label: string; color: string }[] = [
   { key: 'leads', label: 'Nouveaux prospects', color: '#1F7857' },
-  { key: 'qualified', label: 'RDV planifiés', color: '#3DA86A' },
+  { key: 'qualified', label: 'Leads qualifiés', color: '#3DA86A' },
   { key: 'signed', label: 'Ventes', color: '#3E9A6F' },
 ]
 
