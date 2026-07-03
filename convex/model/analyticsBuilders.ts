@@ -223,6 +223,151 @@ export function initialsFromName(name: string): string {
   return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "??";
 }
 
+// ─── Séries temporelles ──────────────────────────────────────────────────────
+
+export function buildDailyEvolution(
+  leadsRows: LeadRow[],
+  calls: CallRow[],
+  rdvs: RdvRow[],
+  range: RangeMs,
+  latestCallByLead = buildLatestCallByLead(calls),
+) {
+  const points = new Map(
+    dayKeys(range).map((day) => [
+      day,
+      { date: day, label: formatDayLabel(day), calls: 0, rdv: 0, signed: 0, ca: 0, classified: 0, qualified: 0, newLeads: 0 },
+    ]),
+  );
+
+  // Nouveaux leads par jour = vrais leads entrants (hors imports historiques)
+  // créés ce jour-là. Les imports Airtable restent dans classified/active, pas ici.
+  for (const lead of leadsRows) {
+    if (!isNewLeadInRange(lead, range)) continue;
+    const point = points.get(reunionDayKey(lead.createdAt));
+    if (point) point.newLeads += 1;
+  }
+
+  // Jours (TZ Réunion) où chaque lead a au moins un appel loggé dans la période.
+  // Un lead retravaillé sur plusieurs jours compte sur CHAQUE jour d'appel : le
+  // hover d'une date en mode plage doit afficher le même chiffre que cette date
+  // en mode journée.
+  const callDaysByLead = new Map<string, Set<string>>();
+  for (const call of calls) {
+    if (!call.leadId || !isInRange(call.calledAt, range)) continue;
+    const set = callDaysByLead.get(call.leadId) ?? new Set<string>();
+    set.add(reunionDayKey(call.calledAt));
+    callDaysByLead.set(call.leadId, set);
+  }
+
+  for (const lead of leadsRows) {
+    if (!isClassifiedLead(lead)) continue;
+    const callDays = callDaysByLead.get(lead.id);
+    // Leads sans appel loggé (lastContactAt / import) → un seul jour de traitement.
+    let days: Iterable<string>;
+    if (callDays && callDays.size) {
+      days = callDays;
+    } else {
+      const treatedAt = leadTreatmentDate(lead, latestCallByLead);
+      if (treatedAt == null) continue; // pas de traitement réel → absent du graphe
+      days = [reunionDayKey(treatedAt)];
+    }
+    for (const day of days) {
+      const point = points.get(day);
+      if (point) point.classified += 1;
+    }
+  }
+
+  // « RDV planifiés » par jour = leads distincts dont un RDV a été CRÉÉ ce jour-là
+  // (événement daté, immuable). Surtout PAS le statut ACTUEL du lead reporté sur
+  // ses jours d'appel : un lead qualifié après coup regonflait les journées passées.
+  const qualifiedByDay = new Map<string, { leadIds: Set<string>; orphans: number }>();
+  for (const row of rdvs) {
+    if (!isInRange(row.createdAt, range)) continue;
+    const day = reunionDayKey(row.createdAt);
+    if (!points.has(day)) continue;
+    const bucket = qualifiedByDay.get(day) ?? { leadIds: new Set<string>(), orphans: 0 };
+    if (row.leadId) bucket.leadIds.add(row.leadId);
+    else bucket.orphans += 1;
+    qualifiedByDay.set(day, bucket);
+  }
+  for (const [day, bucket] of qualifiedByDay) {
+    const point = points.get(day);
+    if (point) point.qualified = bucket.leadIds.size + bucket.orphans;
+  }
+
+  for (const call of calls) {
+    if (!isInRange(call.calledAt, range)) continue;
+    const point = points.get(reunionDayKey(call.calledAt));
+    if (point) point.calls += 1;
+  }
+
+  for (const row of rdvs) {
+    const date = row.scheduledAt ?? row.createdAt;
+    if (!date || !isInRange(date, range)) continue;
+    const point = points.get(reunionDayKey(date));
+    if (!point) continue;
+    point.rdv += 1;
+    if (row.result === "signe") {
+      point.signed += 1;
+      point.ca += money(row.montantTotal);
+    }
+  }
+
+  // rdv reste « RDV se déroulant ce jour » (scheduledAt) — pas de clamp sur
+  // qualified : les deux séries mesurent des événements différents.
+  return Array.from(points.values()).map(({ classified, ...point }) => ({
+    ...point,
+    classified,
+    calls: Math.max(point.calls, classified),
+  }));
+}
+
+export function dailyLogicalCalls(
+  calls: CallRow[],
+  classified: LeadRow[],
+  range: RangeMs,
+  latestCallByLead = buildLatestCallByLead(calls),
+): number[] {
+  const loggedByDay = new Map<string, number>();
+  const classifiedByDay = new Map<string, number>();
+
+  for (const call of calls) {
+    const day = reunionDayKey(call.calledAt);
+    loggedByDay.set(day, (loggedByDay.get(day) ?? 0) + 1);
+  }
+  for (const lead of classified) {
+    const treatedAt = leadTreatmentDate(lead, latestCallByLead);
+    if (treatedAt == null) continue;
+    const day = reunionDayKey(treatedAt);
+    classifiedByDay.set(day, (classifiedByDay.get(day) ?? 0) + 1);
+  }
+
+  return dayKeys(range).map((day) => Math.max(loggedByDay.get(day) ?? 0, classifiedByDay.get(day) ?? 0));
+}
+
+export function buildHourlyCalls(calls: CallRow[], range: RangeMs) {
+  const hours = Array.from({ length: 14 }, (_, index) => index + 8);
+  const points = new Map<string, { date: string; hour: number; label: string; calls: number }>();
+
+  for (const day of dayKeys(range)) {
+    const dayLabel = formatDayLabel(day);
+    for (const hour of hours) {
+      points.set(`${day}-${hour}`, { date: day, hour, label: `${dayLabel} ${hour}h`, calls: 0 });
+    }
+  }
+
+  for (const call of calls) {
+    if (!isInRange(call.calledAt, range)) continue;
+    const hour = reunionHour(call.calledAt);
+    if (hour < 8 || hour > 21) continue;
+    const key = `${reunionDayKey(call.calledAt)}-${hour}`;
+    const point = points.get(key);
+    if (point) point.calls += 1;
+  }
+
+  return Array.from(points.values());
+}
+
 // Réexports pratiques pour les builders (Tasks suivantes) et la query.
 export {
   pct,
