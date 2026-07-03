@@ -368,6 +368,304 @@ export function buildHourlyCalls(calls: CallRow[], range: RangeMs) {
   return Array.from(points.values());
 }
 
+// ─── Builders de stats (portage verbatim analytics.service.ts:729-992) ────────
+
+export function buildSetterStats(
+  leadsRows: LeadRow[],
+  calls: CallRow[],
+  rdvs: RdvRow[],
+  setterId: string | undefined,
+  range: RangeMs,
+  latestCallByLead = buildLatestCallByLead(calls),
+  qualifierByLead = buildQualifierByLead(calls),
+) {
+  const ownLeads = leadsRows.filter((l) => belongsToSetter(l, setterId, calls));
+  const leadsById = new Map(leadsRows.map((l) => [l.id, l]));
+  const scopedCalls = filterRange(calls, range, (c) => c.calledAt);
+  const scopedLeads = ownLeads.filter((l) => isLeadActiveInRange(l, range, latestCallByLead));
+  const newLeadRows = ownLeads.filter((l) => isNewLeadInRange(l, range));
+  const classifiedLeads = scopedLeads.filter(isClassifiedLead);
+  const scopedCallLeadIds = new Set(scopedCalls.map((c) => c.leadId).filter(Boolean));
+  const classifiedWithoutLoggedCall = classifiedLeads.filter((l) => !scopedCallLeadIds.has(l.id));
+  const syntheticCalls = classifiedWithoutLoggedCall.length;
+  const resultCounts = countResults(scopedCalls);
+  addSyntheticResults(resultCounts, classifiedWithoutLoggedCall, syntheticCalls);
+  const callsTotal = scopedCalls.length + syntheticCalls;
+
+  const answeredIds = new Set<string>();
+  const relanceIds = new Set<string>();
+  const notQualifiedIds = new Set<string>();
+  const qualifiedIds = new Set<string>();
+  const rdvIds = new Set<string>();
+
+  for (const call of scopedCalls) {
+    if (!call.leadId) continue;
+    if (ANSWERED_RESULTS.has(call.result)) answeredIds.add(call.leadId);
+    if (CALLBACK_RESULTS.has(call.result)) answeredIds.add(call.leadId);
+    if (RELANCE_RESULTS.has(call.result)) relanceIds.add(call.leadId);
+    if (call.result === "refus") notQualifiedIds.add(call.leadId);
+    // NB : le résultat d'appel 'rdv_pris' est étiqueté « Qualifié » dans l'UI et
+    // mappe le lead vers 'qualifie' (pas un vrai RDV) → PAS compté en RDV pris.
+  }
+
+  for (const lead of classifiedLeads) {
+    if (CALLBACK_STATUSES.has(lead.status)) answeredIds.add(lead.id);
+    if (RELANCE_STATUSES.has(lead.status)) relanceIds.add(lead.id);
+    if (NOT_QUALIFIED_STATUSES.has(lead.status)) {
+      notQualifiedIds.add(lead.id);
+      answeredIds.add(lead.id);
+    }
+    if (QUALIFIED_STATUSES.has(lead.status)) {
+      answeredIds.add(lead.id);
+      // Crédité uniquement si CE setter a réellement qualifié (dernier appelant).
+      if (qualifierMatches(lead, setterId, qualifierByLead)) qualifiedIds.add(lead.id);
+    }
+    // RDV crédité au seul setter qui a fait basculer le lead, comme qualified.
+    if (RDV_REACHED_STATUSES.has(lead.status) && qualifierMatches(lead, setterId, qualifierByLead)) {
+      rdvIds.add(lead.id);
+    }
+  }
+
+  for (const r of rdvs.filter((row) => isInRange(row.createdAt, range))) {
+    if (!r.leadId) continue;
+    answeredIds.add(r.leadId);
+    const lead = leadsById.get(r.leadId);
+    if (!lead || qualifierMatches(lead, setterId, qualifierByLead)) {
+      rdvIds.add(r.leadId);
+      qualifiedIds.add(r.leadId);
+    }
+  }
+
+  const answered = answeredIds.size;
+  const rdvPris = rdvIds.size;
+  return {
+    newLeads: newLeadRows.length,
+    calls: callsTotal,
+    loggedCalls: scopedCalls.length,
+    syntheticCalls,
+    callsPerDay: Math.round(callsTotal / range.days),
+    classified: classifiedLeads.length,
+    unclassified: scopedLeads.length - classifiedLeads.length,
+    answered,
+    connected: answered,
+    relance: relanceIds.size,
+    notQualified: notQualifiedIds.size,
+    qualified: qualifiedIds.size,
+    rdvPris,
+    responseRate: pct(answered, newLeadRows.length),
+    rdvAfterAnswerRate: pct(rdvPris, answered),
+    globalRdvRate: pct(rdvPris, newLeadRows.length),
+    connectionRate: pct(answered, callsTotal),
+    qualificationRate: pct(qualifiedIds.size, answered),
+    rdvRate: pct(rdvPris, callsTotal),
+    resultSegments: resultSegments(resultCounts),
+    dailyCalls: dailyLogicalCalls(scopedCalls, classifiedLeads, range, latestCallByLead),
+    hourlyCalls: buildHourlyCalls(scopedCalls, range),
+    dailyEvolution: buildDailyEvolution(ownLeads, calls, rdvs, range, latestCallByLead),
+  };
+}
+
+export function buildCommercialStats(rdvs: RdvRow[], range: RangeMs) {
+  const scoped = filterRange(rdvs, range, (r) => r.scheduledAt ?? r.createdAt);
+  const honored = scoped.filter((r) => r.status === "honore");
+  // L'historique GHL/importé porte souvent l'issue dans result alors que status
+  // reste planifie → ventes/CA récupérés depuis result sur TOUS les RDV scopés.
+  const signed = scoped.filter((r) => r.result === "signe");
+  const reflexion = scoped.filter((r) => r.result === "reflexion");
+  const lost = scoped.filter((r) => r.result === "perdu");
+  const outcomeBase = Math.max(honored.length, signed.length + reflexion.length + lost.length);
+  const ca = signed.reduce((sum, r) => sum + money(r.montantTotal), 0);
+  return {
+    total: scoped.length,
+    honored: honored.length,
+    signed: signed.length,
+    ca,
+    panier: signed.length ? ca / signed.length : 0,
+    closing: pct(signed.length, outcomeBase),
+    resultSegments: pieFromCounts([
+      ["Signé", signed.length],
+      ["Réflexion", reflexion.length],
+      ["Perdu", lost.length],
+      ["No-show", scoped.filter((r) => r.status === "no_show").length],
+      ["Reporté", scoped.filter((r) => r.status === "reporte").length],
+    ]),
+    financingSegments: pieFromCounts([
+      ["Comptant", signed.filter((r) => r.financingType === "comptant").length],
+      ["Financement", signed.filter((r) => r.financingType === "financement").length],
+      ["À définir", signed.filter((r) => !r.financingType).length],
+    ]),
+    dailyEvolution: buildDailyEvolution([], [], rdvs, range),
+  };
+}
+
+export function buildAdminStats(
+  leadsRows: LeadRow[],
+  calls: CallRow[],
+  rdvs: RdvRow[],
+  userRows: UserRow[],
+  range: RangeMs,
+  latestCallByLead = buildLatestCallByLead(calls),
+) {
+  const scopedCalls = filterRange(calls, range, (c) => c.calledAt);
+  const scopedLeads = leadsRows.filter((l) => isLeadActiveInRange(l, range, latestCallByLead));
+  const scopedRdvs = filterRange(rdvs, range, (r) => r.scheduledAt ?? r.createdAt);
+  const classifiedLeads = scopedLeads.filter(isClassifiedLead);
+  const syntheticCalls = Math.max(0, classifiedLeads.length - scopedCalls.length);
+  const resultCounts = countResults(scopedCalls);
+  addSyntheticResults(resultCounts, classifiedLeads, syntheticCalls);
+  const callsTotal = scopedCalls.length + syntheticCalls;
+  const qualified = classifiedLeads.filter(isQualifiedLead).length;
+  // RDV pris = leads ayant atteint le stage RDV, clampé ≤ qualified (funnel monotone).
+  const rdvReachedIds = new Set(
+    classifiedLeads.filter((l) => RDV_REACHED_STATUSES.has(l.status)).map((l) => l.id),
+  );
+  for (const r of scopedRdvs) if (r.leadId) rdvReachedIds.add(r.leadId);
+  const rdvPris = Math.min(qualified, rdvReachedIds.size);
+  const honored = scopedRdvs.filter((r) => r.status === "honore");
+  void honored;
+  // Même règle GHL/import que le profil commercial : l'issue vit dans result.
+  const signed = scopedRdvs.filter((r) => r.result === "signe");
+  const ca = signed.reduce((sum, r) => sum + money(r.montantTotal), 0);
+  const newLeads = leadsRows.filter((l) => isNewLeadInRange(l, range)).length;
+  return {
+    calls: callsTotal,
+    loggedCalls: scopedCalls.length,
+    newLeads,
+    classified: classifiedLeads.length,
+    qualified,
+    unclassified: scopedLeads.length - classifiedLeads.length,
+    syntheticCalls,
+    scheduledRdv: scopedRdvs.length,
+    rdvPris,
+    rdvRate: pct(rdvPris, callsTotal),
+    qualificationRate: pct(qualified, callsTotal),
+    ca,
+    signed: signed.length,
+    resultSegments: resultSegments(resultCounts),
+    hourlyCalls: buildHourlyCalls(scopedCalls, range),
+    dailyEvolution: buildDailyEvolution(leadsRows, calls, rdvs, range, latestCallByLead),
+    setters: buildSetterRows(scopedLeads, scopedCalls, userRows),
+    commercials: buildCommercialRows(scopedRdvs, userRows),
+  };
+}
+
+function buildSetterRows(leadsRows: LeadRow[], calls: CallRow[], userRows: UserRow[]) {
+  const callsBySetter = groupCallsBySetter(calls);
+  const leadIdsBySetter = groupLeadIdsBySetter(leadsRows, calls);
+  const leadsById = new Map(leadsRows.map((l) => [l.id, l]));
+  const qualifierByLead = buildQualifierByLead(calls);
+
+  const rows = userRows
+    .filter((u) => u.role === "setter")
+    .map((u) => {
+      const ownLeadIds = leadIdsBySetter.get(u.id) ?? new Set<string>();
+      const ownLeads = Array.from(ownLeadIds)
+        .map((id) => leadsById.get(id))
+        .filter((l): l is LeadRow => Boolean(l));
+      const classified = ownLeads.filter(isClassifiedLead);
+      const ownCalls = callsBySetter.get(u.id) ?? [];
+      const synthetic = Math.max(0, classified.length - ownCalls.length);
+      const counts = countResults(ownCalls);
+      addSyntheticResults(counts, classified, synthetic);
+      const callsTotal = ownCalls.length + synthetic;
+      const noAnswer = (counts.non_joint ?? 0) + (counts.injoignable ?? 0) + (counts.messagerie ?? 0);
+      const connected = Math.max(0, callsTotal - noAnswer);
+      // Seul le setter qui a réellement qualifié (dernier appelant) est crédité.
+      const qualified = classified.filter(
+        (l) => isQualifiedLead(l) && qualifierMatches(l, u.id, qualifierByLead),
+      ).length;
+      const rdvPris = Math.min(
+        qualified,
+        classified.filter(
+          (l) => RDV_REACHED_STATUSES.has(l.status) && qualifierMatches(l, u.id, qualifierByLead),
+        ).length,
+      );
+      return {
+        id: u.id,
+        name: u.name,
+        initials: initialsFromName(u.name),
+        calls: callsTotal,
+        connected,
+        classified: classified.length,
+        qualified,
+        rdvPris,
+        efficiency: 0,
+      };
+    });
+
+  const totalCalls = rows.reduce((sum, r) => sum + r.calls, 0);
+  for (const r of rows) r.efficiency = pct(r.calls, totalCalls);
+
+  return rows.sort((a, b) => b.calls - a.calls);
+}
+
+export function groupCallsBySetter(calls: CallRow[]): Map<string, CallRow[]> {
+  const map = new Map<string, CallRow[]>();
+  for (const call of calls) {
+    if (!call.setterId) continue;
+    const rows = map.get(call.setterId) ?? [];
+    rows.push(call);
+    map.set(call.setterId, rows);
+  }
+  return map;
+}
+
+export function groupLeadIdsBySetter(leadsRows: LeadRow[], calls: CallRow[]): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>();
+  const add = (setterId: string | null | undefined, leadId: string | null | undefined) => {
+    if (!setterId || !leadId) return;
+    const ids = map.get(setterId) ?? new Set<string>();
+    ids.add(leadId);
+    map.set(setterId, ids);
+  };
+  for (const lead of leadsRows) add(lead.setterId, lead.id);
+  for (const call of calls) add(call.setterId, call.leadId);
+  return map;
+}
+
+// Le commercial_lead (responsable commercial) ferme aussi des dossiers : il doit
+// apparaître dans le classement et compter dans les KPI équipe au même titre
+// qu'un commercial.
+export function isClosingRole(role: string): boolean {
+  return role === "commercial" || role === "commercial_lead";
+}
+
+function buildCommercialRows(rdvs: RdvRow[], userRows: UserRow[]) {
+  return userRows
+    .filter((u) => isClosingRole(u.role))
+    .map((u) => {
+      const ownRdvs = rdvs.filter((r) => r.commercialId === u.id);
+      const planned = ownRdvs.filter((r) => r.status === "planifie");
+      const honored = ownRdvs.filter((r) => r.status === "honore");
+      const noShow = ownRdvs.filter((r) => r.status === "no_show");
+      const cancelled = ownRdvs.filter((r) => r.status === "annule");
+      const postponed = ownRdvs.filter((r) => r.status === "reporte");
+      // L'historique GHL/importé porte l'issue dans result même si status = planifie.
+      const signed = ownRdvs.filter((r) => r.result === "signe");
+      const ca = signed.reduce((sum, r) => sum + money(r.montantTotal), 0);
+      return {
+        id: u.id,
+        name: u.name,
+        initials: initialsFromName(u.name),
+        total: ownRdvs.length,
+        planned: planned.length,
+        honored: honored.length,
+        noShow: noShow.length,
+        cancelled: cancelled.length,
+        postponed: postponed.length,
+        signed: signed.length,
+        closing: pct(
+          signed.length,
+          Math.max(honored.length, signed.length + ownRdvs.filter((r) => r.result === "perdu").length),
+        ),
+        panier: signed.length ? ca / signed.length : 0,
+        ca,
+      };
+    })
+    .filter((p) => p.total > 0 || p.honored > 0 || p.signed > 0)
+    .sort((a, b) => b.ca - a.ca || b.total - a.total);
+}
+
 // Réexports pratiques pour les builders (Tasks suivantes) et la query.
 export {
   pct,
