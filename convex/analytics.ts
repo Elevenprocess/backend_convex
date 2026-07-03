@@ -456,3 +456,150 @@ export const funnel = query({
     };
   },
 });
+
+// ─── Pipeline analytics (7c) ─────────────────────────────────────────────────
+// Alimentés par le pont GHL (leads.ghlStageName + leadStageHistory). Sans cache :
+// vues de monitoring quasi-temps réel, la réactivité Convex fait le travail.
+
+/**
+ * Distribution des leads actifs par stage GHL (libellé exact) : rendu kanban
+ * admin avec totaux + valeurs.
+ */
+export const pipelineDistribution = query({
+  args: { now: v.number() },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, BUSINESS_MANAGER_ROLES);
+    const rows = (await ctx.db.query("leads").collect()).filter((l) => l.deletedAt === undefined);
+
+    const groups = new Map<string | null, { count: number; totalValue: number; saasStatus: string | null }>();
+    for (const l of rows) {
+      const key = l.ghlStageName ?? null;
+      const g = groups.get(key) ?? { count: 0, totalValue: 0, saasStatus: null };
+      g.count += 1;
+      g.totalValue += l.monetaryValue ?? 0;
+      // MIN(status) lexical, parité SQL NestJS.
+      if (g.saasStatus === null || l.status < g.saasStatus) g.saasStatus = l.status;
+      groups.set(key, g);
+    }
+
+    let totalCount = 0;
+    let totalValue = 0;
+    for (const g of groups.values()) {
+      totalCount += g.count;
+      totalValue += g.totalValue;
+    }
+    return {
+      generatedAt: new Date(args.now).toISOString(),
+      totalOpenLeads: totalCount,
+      totalOpenValue: totalValue,
+      stages: [...groups.entries()]
+        .map(([ghlStageName, g]) => ({
+          ghlStageName,
+          saasStatus: g.saasStatus,
+          count: g.count,
+          totalValue: g.totalValue,
+        }))
+        .sort((a, b) => (a.ghlStageName ?? "~").localeCompare(b.ghlStageName ?? "~")),
+    };
+  },
+});
+
+/**
+ * KPIs par commercial sur les leads ouverts. Inclut tous les commerciaux actifs,
+ * même à 0 dossier (pour repérer les sous-chargés).
+ */
+export const pipelineByCommercial = query({
+  args: { now: v.number() },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, BUSINESS_MANAGER_ROLES);
+    const [userDocs, leadDocs] = await Promise.all([
+      ctx.db.query("users").collect(),
+      ctx.db.query("leads").collect(),
+    ]);
+    const commercials = userDocs.filter(
+      (u) => u.deletedAt === undefined && roleOf(u) === "commercial" && u.active !== false,
+    );
+
+    type Agg = { openLeads: number; rdvPlanned: number; devisEnAttente: number; signed: number; lost: number; ca: number };
+    const stats = new Map<string, Agg>();
+    for (const l of leadDocs) {
+      if (l.deletedAt !== undefined || !l.assignedToId) continue;
+      const s = stats.get(l.assignedToId) ?? { openLeads: 0, rdvPlanned: 0, devisEnAttente: 0, signed: 0, lost: 0, ca: 0 };
+      s.openLeads += 1;
+      if (l.status === "rdv_pris") s.rdvPlanned += 1;
+      if (l.status === "rdv_honore") s.devisEnAttente += 1;
+      if (l.status === "signe") {
+        s.signed += 1;
+        s.ca += l.monetaryValue ?? 0;
+      }
+      if (l.status === "perdu") s.lost += 1;
+      stats.set(l.assignedToId, s);
+    }
+
+    const result = commercials.map((c) => {
+      const s = stats.get(c._id) ?? { openLeads: 0, rdvPlanned: 0, devisEnAttente: 0, signed: 0, lost: 0, ca: 0 };
+      const denom = s.signed + s.lost;
+      return {
+        userId: c._id,
+        name: c.name ?? "",
+        ghlUserId: c.ghlUserId ?? null,
+        openLeads: s.openLeads,
+        rdvPlanned: s.rdvPlanned,
+        devisEnAttente: s.devisEnAttente,
+        signed: s.signed,
+        ca: s.ca,
+        closingRate: denom > 0 ? s.signed / denom : 0,
+      };
+    });
+    result.sort((a, b) => b.openLeads - a.openLeads);
+    return { generatedAt: new Date(args.now).toISOString(), commercials: result };
+  },
+});
+
+/**
+ * Leads ouverts sans changement de stage GHL depuis `days` jours
+ * (max leadStageHistory.changedAt ; sans history, repli _creationTime —
+ * écart : leads.updatedAt n'existe pas en Convex).
+ */
+export const pipelineStuck = query({
+  args: { days: v.number(), now: v.number() },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, BUSINESS_MANAGER_ROLES);
+    const threshold = args.now - args.days * 24 * 60 * 60 * 1000;
+
+    const [leadDocs, historyDocs] = await Promise.all([
+      ctx.db.query("leads").collect(),
+      ctx.db.query("leadStageHistory").collect(),
+    ]);
+    const lastChangeByLead = new Map<string, number>();
+    for (const h of historyDocs) {
+      const current = lastChangeByLead.get(h.leadId);
+      if (current === undefined || h.changedAt > current) lastChangeByLead.set(h.leadId, h.changedAt);
+    }
+
+    const stuck = [];
+    for (const l of leadDocs) {
+      if (l.deletedAt !== undefined) continue;
+      // Pas de stuck pour les états « finis ».
+      if (l.status === "signe" || l.status === "perdu") continue;
+      const effective = lastChangeByLead.get(l._id) ?? l._creationTime;
+      if (effective > threshold) continue;
+      const assignedTo = l.assignedToId ? await ctx.db.get(l.assignedToId) : null;
+      stuck.push({
+        leadId: l._id,
+        firstName: l.firstName ?? null,
+        lastName: l.lastName ?? null,
+        email: l.email ?? null,
+        ghlStageName: l.ghlStageName ?? null,
+        saasStatus: l.status,
+        assignedToId: l.assignedToId ?? null,
+        assignedToName: assignedTo?.name ?? null,
+        monetaryValue: l.monetaryValue ?? null,
+        lastStageChangeAt: new Date(effective).toISOString(),
+        stuckDays: Math.floor((args.now - effective) / 86_400_000),
+      });
+    }
+    stuck.sort((a, b) => b.stuckDays - a.stuckDays);
+    return { generatedAt: new Date(args.now).toISOString(), thresholdDays: args.days, leads: stuck };
+  },
+});
