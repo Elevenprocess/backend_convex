@@ -15,8 +15,10 @@ import { WORKFLOW_ROLES, WORKFLOW_VIEW_ROLES } from "./clients";
 import { can, canEditSubstep, visibleClientIds } from "./model/delivrabilitePermissions";
 import { recomputePhase, recomputeClientStatus } from "./model/ensureDossier";
 import { catalogByKey } from "./model/substepCatalog";
-import { isSubstepUnlocked } from "./model/substepGating";
+import { isSubstepUnlocked, computeSlaDeadline } from "./model/substepGating";
 import { insertAudit } from "./model/audit";
+import { shouldNotifyVtDateChange } from "./model/notifMessages";
+import { notifyAcompte, notifyVtDateChange } from "./model/notify";
 
 /**
  * Décore une substep du flag unlocked (depuis ses sœurs du même dossier).
@@ -137,6 +139,21 @@ async function applySubstepUpdate(
   await ctx.db.patch(substepId, patch);
   const updated = (await ctx.db.get(substepId))!;
 
+  // SLA : si la substep modifiée est un déclencheur, pose/efface la deadline
+  // sur sa cible (même dossier). fait → dateRealisee + 28j, sinon effacée.
+  const def = catalogByKey(before.key);
+  if (def?.slaTargetKey) {
+    const deadline =
+      updated.status === "fait" ? computeSlaDeadline(updated.dateRealisee ?? null) : null;
+    const target = await ctx.db
+      .query("workflowSubsteps")
+      .withIndex("by_client_key", (q) =>
+        q.eq("clientId", before.clientId).eq("key", def.slaTargetKey!),
+      )
+      .first();
+    if (target) await ctx.db.patch(target._id, { deadline: deadline ?? undefined });
+  }
+
   if (args.status !== undefined && args.status !== before.status) {
     await insertAudit(ctx, {
       userId: user._id,
@@ -150,6 +167,26 @@ async function applySubstepUpdate(
 
   await recomputePhase(ctx, before.stepId);
   await recomputeClientStatus(ctx, before.clientId);
+
+  // ── Effets jalon (best-effort, jamais bloquants) ────────────────────────────
+  if (
+    shouldNotifyVtDateChange({
+      key: before.key,
+      beforeDate: before.dateRealisee ?? null,
+      nextDate: args.dateRealisee !== undefined ? args.dateRealisee : undefined,
+    })
+  ) {
+    await notifyVtDateChange(ctx, before.clientId, updated.dateRealisee ?? null);
+  }
+  // Transition idempotente : uniquement au passage ≠fait → fait.
+  if (
+    before.status !== "fait" &&
+    updated.status === "fait" &&
+    (updated.key === "vt_validee" || updated.key === "install_effectuee")
+  ) {
+    await notifyAcompte(ctx, before.clientId, updated.key);
+  }
+
   return updated;
 }
 
