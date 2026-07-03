@@ -14,7 +14,6 @@ import type { IconName } from '../components/Icon'
 import { DEFAULT_PERIOD, buildPeriodRange, type PeriodState, type PeriodMode, type PeriodRange } from '../lib/period'
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
 import { computeSetterAverages } from '../lib/setterAverages'
-import { buildDeliveryPipeline } from '../lib/deliveryOverview'
 
 type Segment = AnalyticsSegment
 
