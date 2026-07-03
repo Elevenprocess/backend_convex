@@ -14,6 +14,7 @@ import {
   // Délivrabilité (Tranche 6a)
   clientStatusValidator, workflowPhaseValidator, workflowStatusValidator,
   workflowSubstepKeyValidator, problemReasonValidator, productTypeValidator,
+  documentTypeValidator,
 } from "./model/enums";
 
 export default defineSchema({
@@ -419,6 +420,28 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_deadline", ["deadline"])
     .index("by_responsable", ["responsableId"]),
+
+  /**
+   * Pièces (documents) des sous-étapes workflow. Les bytea document_files
+   * NestJS deviennent le storage Convex. uploadedAt = _creationTime.
+   * L'anti-doublon (client, substep, type, filename) NestJS n'a pas
+   * d'équivalent natif : sans matérialisation d'imports (différée), l'upload
+   * utilisateur ne déduplique pas (parité NestJS).
+   */
+  documents: defineTable({
+    clientId: v.id("clients"),
+    workflowStepId: v.optional(v.id("workflowSteps")),
+    workflowSubstepId: v.optional(v.id("workflowSubsteps")),
+    type: documentTypeValidator,
+    storageId: v.id("_storage"),
+    filename: v.string(),
+    sizeBytes: v.number(),
+    mimeType: v.string(),
+    uploadedById: v.optional(v.id("users")),
+    deletedAt: v.optional(v.number()), // ms
+  })
+    .index("by_client", ["clientId"])
+    .index("by_substep", ["workflowSubstepId"]),
 
   /**
    * Jonction multi-techniciens VT.
