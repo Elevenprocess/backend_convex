@@ -17,7 +17,7 @@ import {
 import { requireRole } from "./model/access";
 import { ensureDossier, recomputeClientStatus } from "./model/ensureDossier";
 import { can, normalizeRole } from "./model/delivrabilitePermissions";
-import { newlyAddedTechs } from "./model/vtCalendar";
+import { newlyAddedTechs, pickVtDate, pickVtHeure, inPeriod } from "./model/vtCalendar";
 import { vtAssignedMessage } from "./model/notifMessages";
 import { createNotification } from "./model/notify";
 
@@ -212,6 +212,106 @@ export async function techniciensOf(
   }
   return out;
 }
+
+// Rôles voyant TOUTES les interventions des dossiers visibles (rôle brut, parité NestJS).
+const PRIVILEGED_CALENDAR_ROLES = new Set([
+  "admin",
+  "delivrabilite",
+  "responsable_technique",
+  "back_office",
+]);
+
+/**
+ * Calendrier VT + installations (portage GET /clients/vt-calendar).
+ * Une entrée 'vt' par dossier avec date (priorité vt_planifie, repli
+ * vt_attribuee) ; une entrée 'installation' par datePlanifiee de la phase,
+ * visible seulement des privilégiés, du responsable de l'étape ou du pose
+ * team lead (un technicien ne voit pas la pose d'un autre tech sur un
+ * dossier visible via sa VT).
+ */
+export const vtCalendar = query({
+  args: { from: v.optional(v.string()), to: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, WORKFLOW_VIEW_ROLES);
+    const visible = await listVisibleClientIds(ctx, user);
+    const all = (await ctx.db.query("clients").collect())
+      .filter(isActive)
+      .filter((c) => visible === null || visible.has(c._id));
+    if (all.length === 0) return [];
+
+    const isPrivileged = PRIVILEGED_CALENDAR_ROLES.has(user.role ?? "setter");
+    const entries: Array<Record<string, unknown>> = [];
+
+    for (const c of all) {
+      const lead = await ctx.db.get(c.leadId);
+      const project = c.projectId ? await ctx.db.get(c.projectId) : null;
+      const steps = await ctx.db
+        .query("workflowSteps")
+        .withIndex("by_client", (q) => q.eq("clientId", c._id))
+        .collect();
+      const vtStep = steps.find((s) => s.phase === "vt");
+      const installStep = steps.find((s) => s.phase === "installation");
+      const subs = await ctx.db
+        .query("workflowSubsteps")
+        .withIndex("by_client", (q) => q.eq("clientId", c._id))
+        .collect();
+      const subByKey = new Map(subs.map((s) => [s.key as string, s]));
+      const heureOf = (key: string) => {
+        const h = subByKey.get(key)?.heure;
+        return h ? h.slice(0, 5) : null;
+      };
+      const dateOf = (key: string) => subByKey.get(key)?.dateRealisee ?? null;
+
+      const common = {
+        clientId: c._id,
+        leadId: c.leadId,
+        leadName: [lead?.firstName, lead?.lastName].filter(Boolean).join(" ").trim() || "Client",
+        projectName: project?.name ?? null,
+        city: lead?.city ?? null,
+        phone: lead?.phone ?? null,
+        technicienVtId: c.technicienVtId ?? null,
+        techniciens: await techniciensOf(ctx, c._id),
+        notes: null,
+      };
+
+      // ── VT : date + heure issues des sous-étapes vt_planifie / vt_attribuee ──
+      const vtDate = pickVtDate({
+        vt_planifie: dateOf("vt_planifie"),
+        vt_attribuee: dateOf("vt_attribuee"),
+      });
+      const vtHeure = pickVtHeure({
+        vt_planifie: heureOf("vt_planifie"),
+        vt_attribuee: heureOf("vt_attribuee"),
+      });
+      if (vtDate && inPeriod(vtDate, args.from, args.to)) {
+        entries.push({
+          ...common,
+          kind: "vt",
+          date: vtDate.slice(0, 10),
+          heure: vtHeure,
+          status: vtStep?.status ?? "a_faire",
+          technicienId: c.technicienVtId ?? null,
+        });
+      }
+
+      // ── Installation : date planifiée de la phase 'installation' ──
+      const installDate = installStep?.datePlanifiee ?? null;
+      const installVisible =
+        isPrivileged || installStep?.responsableId === user._id || c.poseTeamLeadId === user._id;
+      if (installDate && inPeriod(installDate, args.from, args.to) && installVisible) {
+        entries.push({
+          ...common,
+          kind: "installation",
+          date: installDate.slice(0, 10),
+          heure: heureOf("install_a_faire"),
+          status: installStep?.status ?? "a_faire",
+          technicienId: installStep?.responsableId ?? c.poseTeamLeadId ?? null,
+        });
+      }
+    }
+    return entries;
+  },
+});
 
 // ─── Mutations ───────────────────────────────────────────────────────────────
 
