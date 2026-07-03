@@ -11,6 +11,7 @@ import { requireRole, requireUser, assertCommercialRole } from "./model/access";
 import { insertStageHistory } from "./model/stageHistory";
 import { deriveLeadStatusFromDebrief } from "./model/deriveLeadStatusFromDebrief";
 import { ensureProjectForLead } from "./model/ensureProject";
+import { ensureDossier } from "./model/ensureDossier";
 
 const COMMERCIAL = ["admin", "commercial", "commercial_lead"] as const;
 
@@ -99,6 +100,36 @@ async function applyLeadEffect(
   }
 }
 
+// Bootstrap du dossier délivrabilité à la vente (écart assumé vs NestJS où
+// c'est le modal frontend qui enchaîne : ici le débrief vente garantit le
+// dossier côté serveur, idempotent via ensureDossier).
+async function ensureDossierForVente(
+  ctx: MutationCtx,
+  args: {
+    outcome: DebriefOutcome;
+    leadId: Id<"leads">;
+    projectId: Id<"projects"> | undefined;
+    rdvId: Id<"rdv"> | undefined;
+    montantTotal: number | undefined;
+    financingType: Doc<"debriefs">["financingType"];
+    kits: string | undefined;
+    signedAt: number | undefined;
+    actorId: Id<"users">;
+  },
+): Promise<void> {
+  if (args.outcome !== "vente") return;
+  await ensureDossier(ctx, {
+    leadId: args.leadId,
+    projectId: args.projectId,
+    rdvId: args.rdvId,
+    montantTotal: args.montantTotal,
+    typeFinancement: args.financingType ?? undefined,
+    kits: args.kits,
+    signedAt: args.signedAt,
+    actorId: args.actorId,
+  });
+}
+
 export const createForLead = mutation({
   args: {
     leadId: v.id("leads"),
@@ -125,6 +156,17 @@ export const createForLead = mutation({
     );
 
     await applyLeadEffect(ctx, args.leadId, args.outcome, args.nonSaleReason, args.rdvId);
+    await ensureDossierForVente(ctx, {
+      outcome: args.outcome,
+      leadId: args.leadId,
+      projectId,
+      rdvId: args.rdvId,
+      montantTotal: args.montantTotal,
+      financingType: args.financingType,
+      kits: args.kits,
+      signedAt: args.signedAt,
+      actorId: user._id,
+    });
     return debriefId;
   },
 });
@@ -155,6 +197,17 @@ export const create = mutation({
     );
 
     await applyLeadEffect(ctx, project.leadId, args.outcome, args.nonSaleReason, args.rdvId);
+    await ensureDossierForVente(ctx, {
+      outcome: args.outcome,
+      leadId: project.leadId,
+      projectId: args.projectId,
+      rdvId: args.rdvId,
+      montantTotal: args.montantTotal,
+      financingType: args.financingType,
+      kits: args.kits,
+      signedAt: args.signedAt,
+      actorId: user._id,
+    });
     return debriefId;
   },
 });

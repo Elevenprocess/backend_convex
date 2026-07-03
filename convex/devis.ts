@@ -5,6 +5,7 @@ import { customerPatch, dropUndefined, DevisExtraction } from "./model/devisExtr
 import { requireRole, requireUser } from "./model/access";
 import { extractFromPdf } from "./model/ocr";
 import { syncStatusToLeadAndProject } from "./model/devisStatusSync";
+import { ensureDossier } from "./model/ensureDossier";
 import { devisStatusValidator, financingTypeValidator } from "./model/enums";
 
 const COMMERCIAL = ["admin", "commercial", "commercial_lead"] as const;
@@ -255,7 +256,7 @@ export const markAsSigned = mutation({
     const now = Date.now();
     await ctx.db.patch(args.devisId, { status: "signe", signedAt: now, markedSignedById: user._id });
 
-    // Sync rdv inline (hors-scope : payments + dossier délivrabilité).
+    // Sync rdv inline (hors-scope : propagation échéancier → payments).
     if (row.rdvId) {
       const montantPourRdv = row.montantNet ?? row.montantTtc;
       await ctx.db.patch(row.rdvId, {
@@ -266,6 +267,19 @@ export const markAsSigned = mutation({
         kits: row.kits,
       });
     }
+
+    // Garantit le dossier délivrabilité à la signature (fidèle à NestJS :
+    // montantNet prioritaire = ce que le client paie réellement, hors prime EDF).
+    await ensureDossier(ctx, {
+      leadId: row.leadId,
+      projectId: row.projectId,
+      rdvId: row.rdvId,
+      montantTotal: row.montantNet ?? row.montantTtc,
+      typeFinancement: row.financingType,
+      kits: row.kits,
+      signedAt: now,
+      actorId: user._id,
+    });
 
     const updated = await ctx.db.get(args.devisId);
     if (updated) await syncStatusToLeadAndProject(ctx, updated);
