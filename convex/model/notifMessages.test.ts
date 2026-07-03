@@ -1,11 +1,20 @@
 import { expect, test } from "vitest";
 import {
   formatFrDate,
+  vtAssignedMessage,
   vtDateChangedMessage,
   acompte40Message,
   acompteSoldeMessage,
   shouldNotifyVtDateChange,
 } from "./notifMessages";
+
+test("vtAssignedMessage : leadName — city, city optionnelle", () => {
+  expect(vtAssignedMessage({ leadName: "Sophie Martin", city: "Lyon" })).toEqual({
+    title: "Nouvelle VT attribuée",
+    body: "Sophie Martin — Lyon",
+  });
+  expect(vtAssignedMessage({ leadName: "Sophie Martin", city: null }).body).toBe("Sophie Martin");
+});
 
 test("formatFrDate : YYYY-MM-DD → JJ/MM/AAAA, '' sinon", () => {
   expect(formatFrDate("2026-07-03")).toBe("03/07/2026");

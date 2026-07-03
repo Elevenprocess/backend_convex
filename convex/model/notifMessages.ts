@@ -11,6 +11,14 @@ export function formatFrDate(isoDate: string | null | undefined): string {
   return `${d}/${m}/${y}`;
 }
 
+export function vtAssignedMessage(input: {
+  leadName: string;
+  city: string | null;
+}): { title: string; body: string } {
+  const body = [input.leadName, input.city].filter(Boolean).join(" — ");
+  return { title: "Nouvelle VT attribuée", body };
+}
+
 export function vtDateChangedMessage(input: {
   leadName: string;
   date: string | null;
