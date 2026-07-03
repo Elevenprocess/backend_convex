@@ -16,7 +16,7 @@ import {
 } from "./model/enums";
 import { requireRole } from "./model/access";
 import { ensureDossier, recomputeClientStatus } from "./model/ensureDossier";
-import { can } from "./model/delivrabilitePermissions";
+import { can, normalizeRole } from "./model/delivrabilitePermissions";
 import { newlyAddedTechs } from "./model/vtCalendar";
 import { vtAssignedMessage } from "./model/notifMessages";
 import { createNotification } from "./model/notify";
@@ -82,7 +82,9 @@ export const getByProject = query({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
     await requireRole(ctx, WORKFLOW_VIEW_ROLES);
-    return await findActiveByProject(ctx, args.projectId);
+    const dossier = await findActiveByProject(ctx, args.projectId);
+    if (!dossier) return null;
+    return { ...dossier, techniciens: await techniciensOf(ctx, dossier._id) };
   },
 });
 
@@ -90,7 +92,9 @@ export const getByLead = query({
   args: { leadId: v.id("leads") },
   handler: async (ctx, args) => {
     await requireRole(ctx, WORKFLOW_VIEW_ROLES);
-    return await findActiveByLead(ctx, args.leadId);
+    const dossier = await findActiveByLead(ctx, args.leadId);
+    if (!dossier) return null;
+    return { ...dossier, techniciens: await techniciensOf(ctx, dossier._id) };
   },
 });
 
@@ -101,9 +105,11 @@ export const list = query({
     phase: v.optional(workflowPhaseValidator),
     statusGlobal: v.optional(clientStatusValidator),
     blocked: v.optional(v.boolean()),
+    technicienVtId: v.optional(v.id("users")),
+    unassignedVt: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, WORKFLOW_VIEW_ROLES);
+    const user = await requireRole(ctx, WORKFLOW_VIEW_ROLES);
 
     // Choisir l'index le plus sélectif disponible, filtrer le reste en mémoire.
     let rows: Doc<"clients">[];
@@ -136,14 +142,59 @@ export const list = query({
       rows = await ctx.db.query("clients").collect();
     }
 
-    return rows
+    // Scoping serveur (les filtres query ne peuvent qu'affiner, jamais élargir).
+    const visible = await listVisibleClientIds(ctx, user);
+    const scoped = rows
       .filter(isActive)
+      .filter((c) => visible === null || visible.has(c._id))
       .filter((c) => args.statusGlobal === undefined || c.statusGlobal === args.statusGlobal)
       .filter((c) => args.phase === undefined || c.currentPhase === args.phase)
       .filter((c) => args.blocked === undefined || c.blocked === args.blocked)
+      .filter((c) => args.technicienVtId === undefined || c.technicienVtId === args.technicienVtId)
+      .filter((c) => !args.unassignedVt || c.technicienVtId === undefined)
       .sort((a, b) => b._creationTime - a._creationTime);
+    return await Promise.all(
+      scoped.map(async (c) => ({ ...c, techniciens: await techniciensOf(ctx, c._id) })),
+    );
   },
 });
+
+/**
+ * Dossiers visibles pour clients.list/vtCalendar (parité ClientsService.list) :
+ * technicien → VT attribuée (scalaire) OU responsable d'une étape installation ;
+ * commercial (pas commercial_lead) → dossiers de SES leads. null = tout voir.
+ * Périmètre volontairement plus restreint que visibleClientIds (steps/substeps).
+ */
+async function listVisibleClientIds(
+  ctx: QueryCtx,
+  user: Doc<"users">,
+): Promise<Set<Id<"clients">> | null> {
+  const role = user.role ?? "setter";
+  if (normalizeRole(role) === "technicien") {
+    const out = new Set<Id<"clients">>();
+    const all = await ctx.db.query("clients").collect();
+    for (const c of all) {
+      if (c.deletedAt === undefined && c.technicienVtId === user._id) out.add(c._id);
+    }
+    const steps = await ctx.db
+      .query("workflowSteps")
+      .withIndex("by_responsable", (q) => q.eq("responsableId", user._id))
+      .collect();
+    for (const s of steps) if (s.phase === "installation") out.add(s.clientId);
+    return out;
+  }
+  if (role === "commercial") {
+    const out = new Set<Id<"clients">>();
+    const all = await ctx.db.query("clients").collect();
+    for (const c of all) {
+      if (c.deletedAt !== undefined) continue;
+      const lead = await ctx.db.get(c.leadId);
+      if (lead?.assignedToId === user._id) out.add(c._id);
+    }
+    return out;
+  }
+  return null;
+}
 
 /** Techniciens de la jonction, avec noms (ordre d'insertion). */
 export async function techniciensOf(

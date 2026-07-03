@@ -162,17 +162,19 @@ test("list filtre par projectId et leadId", async () => {
 
 // ─── Rôles ───────────────────────────────────────────────────────────────────
 
-test("les rôles lecture élargie (finances, commercial, technicien) accèdent à list", async () => {
+test("les rôles lecture élargie accèdent à list, mais scopés (6c)", async () => {
   const t = makeT();
   const finId = await insertUser(t, { role: "finances", email: "f@ecoi.fr" });
   const comId = await insertUser(t, { role: "commercial", email: "com@ecoi.fr" });
   const techId = await insertUser(t, { role: "technicien", email: "t@ecoi.fr" });
   await seedDossier(t);
 
-  for (const uid of [finId, comId, techId]) {
-    const rows = await asUser(t, uid).query(api.clients.list, {});
-    expect(rows).toHaveLength(1);
-  }
+  // finances : non scopé → voit le dossier
+  expect(await asUser(t, finId).query(api.clients.list, {})).toHaveLength(1);
+  // commercial : scopé à SES leads → dossier d'un autre invisible (pas de throw)
+  expect(await asUser(t, comId).query(api.clients.list, {})).toHaveLength(0);
+  // technicien : scopé à ses VT/installations → invisible aussi
+  expect(await asUser(t, techId).query(api.clients.list, {})).toHaveLength(0);
 });
 
 test("un setter n'a pas accès aux queries clients", async () => {
