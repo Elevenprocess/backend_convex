@@ -19,11 +19,20 @@ import {
   buildAdminStats,
   buildSetterStats,
   buildCommercialStats,
+  isNewLeadInRange,
+  isClassifiedLead,
   type LeadRow,
   type CallRow,
   type RdvRow,
   type UserRow,
 } from "./model/analyticsBuilders";
+import {
+  matchesSector,
+  buildFunnelSetterRows,
+  buildFunnelCommercialRows,
+  buildFunnelDaily,
+} from "./model/funnelBuilders";
+import { computeFunnelTotals, pct } from "./model/funnelMath";
 import type { Role } from "./model/enums";
 
 const SUMMARY_ROLES: Role[] = ["admin", "setter", "setter_lead", "commercial", "commercial_lead", "finances"];
@@ -346,5 +355,104 @@ export const commercialStats = query({
       rows.filter((r) => r.deletedAt === undefined).map(toRdvRow),
       range,
     );
+  },
+});
+
+// ─── Funnel (7c) ─────────────────────────────────────────────────────────────
+
+const BUSINESS_MANAGER_ROLES: Role[] = ["admin", "commercial_lead"];
+
+/**
+ * Funnel commercial filtrable (setter / secteur). Portage de
+ * AnalyticsService.funnel : lead.status = source de vérité, funnel monotone
+ * par construction (computeFunnelTotals). Sans cache (réactivité Convex).
+ */
+export const funnel = query({
+  args: {
+    now: v.number(),
+    days: v.optional(v.number()),
+    from: v.optional(v.string()),
+    to: v.optional(v.string()),
+    setterId: v.optional(v.id("users")),
+    sector: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, BUSINESS_MANAGER_ROLES);
+    const range = buildRange(args.from, args.to, args.days ?? 30, args.now);
+
+    const callDocs = await ctx.db
+      .query("callLogs")
+      .withIndex("by_calledAt", (q) => q.gte("calledAt", range.fromMs).lte("calledAt", range.toMs))
+      .collect();
+    const calls = callDocs.map(toCallRow);
+    const [allLeads, rdvDocs, userDocs, detached] = await Promise.all([
+      ctx.db.query("leads").collect(),
+      ctx.db.query("rdv").collect(),
+      ctx.db.query("users").collect(),
+      loadDetachedDebriefRdvRows(ctx, range),
+    ]);
+    const activeLeads = allLeads.filter((l) => l.deletedAt === undefined);
+    const leadRows = activeLeads
+      .filter((l) => isInRange(l._creationTime, range))
+      .map(toLeadRow);
+    const rdvRows = rdvDocs
+      .filter((r) => r.deletedAt === undefined && isInRange(r._creationTime, range))
+      .map(toRdvRow);
+    const userRows: UserRow[] = userDocs
+      .filter((u) => u.active !== false)
+      .map((u) => ({ id: u._id, name: u.name ?? "", role: roleOf(u) }));
+    // Liste globale des secteurs (toutes périodes) pour le dropdown.
+    const sectorList = [
+      ...new Set(
+        activeLeads
+          .map((l) => l.city || l.canalAcquisition || l.utmSource || l.source || "")
+          .filter(Boolean),
+      ),
+    ].sort();
+
+    const scopedLeads = leadRows.filter((lead) => {
+      if (!isNewLeadInRange(lead, range)) return false;
+      if (args.setterId && lead.setterId !== args.setterId) return false;
+      if (args.sector && !matchesSector(lead, args.sector)) return false;
+      return true;
+    });
+    const scopedLeadIds = new Set(scopedLeads.map((l) => l.id));
+    const scopedCalls = calls.filter(
+      (call) =>
+        call.leadId &&
+        scopedLeadIds.has(call.leadId) &&
+        isInRange(call.calledAt, range) &&
+        (!args.setterId || call.setterId === args.setterId),
+    );
+    const rdvRowsAll = [...rdvRows, ...detached];
+    const scopedRdvs = rdvRowsAll.filter(
+      (row) => row.leadId && scopedLeadIds.has(row.leadId as string) && isInRange(row.createdAt, range),
+    );
+    const classifiedLeads = scopedLeads.filter(isClassifiedLead);
+    const rdvLeadIds = scopedRdvs.map((row) => row.leadId).filter((id): id is string => Boolean(id));
+    const totals = computeFunnelTotals({ scopedLeads, classifiedLeads, scopedCalls, rdvLeadIds });
+
+    return {
+      generatedAt: new Date(args.now).toISOString(),
+      engine: "convex-funnel" as const,
+      range: {
+        from: new Date(range.fromMs).toISOString(),
+        to: new Date(range.toMs).toISOString(),
+        days: range.days,
+      },
+      filters: { setterId: args.setterId ?? null, sector: args.sector ?? null },
+      totals,
+      stages: [
+        { id: "new", label: "Nouveaux leads", value: totals.newLeads, percent: 100, detail: "Leads reçus dans le CRM" },
+        { id: "calls", label: "Appels setters", value: totals.calls, percent: pct(totals.calls, totals.newLeads), detail: "Leads appelés ou travaillés" },
+        { id: "answered", label: "A répondu", value: totals.answered, percent: totals.responseRate, detail: "Réponses / leads contactés" },
+        { id: "qualified", label: "Qualifiés", value: totals.qualified, percent: totals.qualificationRate, detail: "Qualifiés / réponses" },
+        { id: "rdv", label: "RDV pris", value: totals.rdv, percent: totals.globalConversionRate, detail: "Conversion globale nouveaux leads → RDV" },
+      ],
+      setterComparison: buildFunnelSetterRows(scopedLeads, scopedCalls, scopedRdvs, userRows),
+      commercialComparison: buildFunnelCommercialRows(scopedRdvs, userRows),
+      daily: buildFunnelDaily(scopedLeads, scopedCalls, scopedRdvs, range),
+      sectors: sectorList,
+    };
   },
 });
