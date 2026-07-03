@@ -5,7 +5,7 @@
  * currentStep détaillé) différé en 6b/6d.
  */
 
-import { query } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
@@ -15,6 +15,7 @@ import {
   type Role,
 } from "./model/enums";
 import { requireRole } from "./model/access";
+import { ensureDossier } from "./model/ensureDossier";
 
 // ─── Rôles (portés de roles.decorator.ts + clients.controller.ts) ────────────
 
@@ -137,5 +138,47 @@ export const list = query({
       .filter((c) => args.phase === undefined || c.currentPhase === args.phase)
       .filter((c) => args.blocked === undefined || c.blocked === args.blocked)
       .sort((a, b) => b._creationTime - a._creationTime);
+  },
+});
+
+// ─── Mutations ───────────────────────────────────────────────────────────────
+
+/**
+ * Initialisation manuelle d'un dossier délivrabilité (portage de
+ * POST /clients/bootstrap). projectId fourni → dossier scopé au projet
+ * (leadId résolu depuis le projet) ; sinon dossier legacy scopé au lead.
+ * Idempotent via ensureDossier.
+ */
+export const bootstrap = mutation({
+  args: {
+    leadId: v.optional(v.id("leads")),
+    projectId: v.optional(v.id("projects")),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireRole(ctx, BOOTSTRAP_ROLES);
+
+    if (args.leadId === undefined && args.projectId === undefined) {
+      throw new Error("leadId ou projectId requis");
+    }
+
+    let leadId = args.leadId;
+    if (args.projectId !== undefined) {
+      const project = await ctx.db.get(args.projectId);
+      if (!project || project.deletedAt !== undefined) {
+        throw new Error(`Projet ${args.projectId} introuvable`);
+      }
+      leadId = leadId ?? project.leadId;
+    }
+
+    const lead = await ctx.db.get(leadId!);
+    if (!lead || lead.deletedAt !== undefined) {
+      throw new Error(`Lead ${leadId} introuvable`);
+    }
+
+    return await ensureDossier(ctx, {
+      leadId: leadId!,
+      projectId: args.projectId,
+      actorId: actor._id,
+    });
   },
 });
