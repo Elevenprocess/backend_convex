@@ -10,8 +10,8 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { requireRole } from "./model/access";
-import { WORKFLOW_ROLES } from "./clients";
-import { canEditSubstep } from "./model/delivrabilitePermissions";
+import { WORKFLOW_ROLES, WORKFLOW_VIEW_ROLES } from "./clients";
+import { canEditSubstep, normalizeRole, visibleClientIds } from "./model/delivrabilitePermissions";
 import { catalogByKey } from "./model/substepCatalog";
 import type { DocumentType, Role } from "./model/enums";
 
@@ -19,7 +19,6 @@ const MAX_DOCUMENT_SIZE = 25 * 1024 * 1024; // 25 Mo / fichier
 // Upload/suppression : qui gère le workflow (technicien scopé par canEditSubstep).
 const MANAGE_ROLES = WORKFLOW_ROLES;
 const READ_ROLES: Role[] = [...WORKFLOW_ROLES, "finances"];
-void READ_ROLES; // consommé par getUrl (Task 2)
 
 export function toDocumentSummary(row: Doc<"documents">) {
   return {
@@ -115,5 +114,52 @@ export const attachToSubstep = mutation({
     }
 
     return created;
+  },
+});
+
+export const getUrl = query({
+  args: { documentId: v.id("documents") },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, READ_ROLES);
+    const row = await ctx.db.get(args.documentId);
+    if (!row || row.deletedAt !== undefined) return null;
+    // Technicien : accès limité aux pièces de SES dossiers attribués.
+    if (normalizeRole(user.role ?? "setter") === "technicien") {
+      const client = await ctx.db.get(row.clientId);
+      if (client?.technicienVtId !== user._id) return null;
+    }
+    const url = await ctx.storage.getUrl(row.storageId);
+    if (!url) return null;
+    return { url, filename: row.filename, mimeType: row.mimeType };
+  },
+});
+
+export const listBySubstep = query({
+  args: { substepId: v.id("workflowSubsteps") },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, WORKFLOW_VIEW_ROLES);
+    const substep = await ctx.db.get(args.substepId);
+    if (!substep) return [];
+    const visible = await visibleClientIds(ctx, user);
+    if (visible !== null && !visible.has(substep.clientId)) return [];
+    return (await activeDocsOfSubstep(ctx, args.substepId)).map(toDocumentSummary);
+  },
+});
+
+export const remove = mutation({
+  args: { documentId: v.id("documents") },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, MANAGE_ROLES);
+    const doc = await ctx.db.get(args.documentId);
+    if (!doc || doc.deletedAt !== undefined) {
+      throw new Error(`Document ${args.documentId} introuvable`);
+    }
+    if (doc.workflowSubstepId) {
+      const substep = await ctx.db.get(doc.workflowSubstepId);
+      if (substep) await assertCanManage(ctx, user, substep);
+    }
+    await ctx.db.patch(args.documentId, { deletedAt: Date.now() });
+    await ctx.storage.delete(doc.storageId);
+    return { ok: true as const };
   },
 });
