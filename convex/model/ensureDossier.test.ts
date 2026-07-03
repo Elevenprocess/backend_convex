@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { makeT } from "../test.kit";
 import { insertUser } from "../test.helpers";
-import { ensureDossier, recomputeStatus } from "./ensureDossier";
+import { ensureDossier, recomputePhase, recomputeClientStatus } from "./ensureDossier";
 
 // ─── Helpers de seed ─────────────────────────────────────────────────────────
 
@@ -160,7 +160,7 @@ test("idempotence par leadId sans projectId : 2e appel retourne le même dossier
   expect(client.kits).toBe("Kit 6kWc");
 });
 
-test("recomputeStatus relit les substeps et met à jour step + client", async () => {
+test("recomputePhase + recomputeClientStatus mettent à jour step + client", async () => {
   const t = makeT();
   const leadId = await seedLead(t);
   const clientId = await t.run((ctx: any) =>
@@ -188,8 +188,11 @@ test("recomputeStatus relit les substeps et met à jour step + client", async ()
     }
   });
 
-  // Recompute
-  await t.run((ctx: any) => recomputeStatus(ctx, clientId));
+  // Recompute (chaîne scindée : le step depuis SES substeps, puis le client)
+  await t.run(async (ctx: any) => {
+    await recomputePhase(ctx, vtStep._id);
+    await recomputeClientStatus(ctx, clientId);
+  });
 
   // VT step doit être 'fait'
   const vtStepAfter = await t.run((ctx: any) => ctx.db.get(vtStep._id));
@@ -199,4 +202,28 @@ test("recomputeStatus relit les substeps et met à jour step + client", async ()
   const client = await t.run((ctx: any) => ctx.db.get(clientId));
   expect(client.statusGlobal).toBe("administratif_en_cours");
   expect(client.currentPhase).toBe("dp");
+});
+
+test("recomputeClientStatus ne re-dérive PAS les steps : un step annulé reste annulé", async () => {
+  const t = makeT();
+  const leadId = await seedLead(t);
+  const clientId = await t.run((ctx: any) => ensureDossier(ctx, { leadId }));
+  // Annuler TOUS les steps directement (comme setSaleCancelled), substeps intactes
+  await t.run(async (ctx: any) => {
+    const steps = await ctx.db
+      .query("workflowSteps")
+      .withIndex("by_client", (q: any) => q.eq("clientId", clientId))
+      .collect();
+    for (const s of steps) await ctx.db.patch(s._id, { status: "annule" });
+  });
+  await t.run((ctx: any) => recomputeClientStatus(ctx, clientId));
+  const client = await t.run((ctx: any) => ctx.db.get(clientId));
+  expect(client.statusGlobal).toBe("annule"); // pas écrasé par les substeps a_faire
+  const steps = await t.run((ctx: any) =>
+    ctx.db
+      .query("workflowSteps")
+      .withIndex("by_client", (q: any) => q.eq("clientId", clientId))
+      .collect(),
+  );
+  expect(steps.every((s: any) => s.status === "annule")).toBe(true);
 });

@@ -1,6 +1,6 @@
 /**
  * Helpers ctx de création idempotente de dossier délivrabilité.
- * Portage de ClientsService.ensureDossier + recomputeStatus (NestJS backend).
+ * Portage de ClientsService.ensureDossier + recomputePhase/recomputeStatus (NestJS backend).
  *
  * Ces fonctions ÉCRIVENT en base : à appeler depuis des mutations uniquement.
  */
@@ -37,7 +37,7 @@ export type EnsureDossierInput = {
  * - Si un dossier actif (sans deletedAt) existe déjà pour le même projet (ou
  *   pour le même lead sans projet), le retourne en patchant les champs vente.
  * - Sinon, insère `clients` + 6 `workflowSteps` + 12 `workflowSubsteps` (tous
- *   `a_faire`) puis appelle `recomputeStatus`.
+ *   `a_faire`) puis dérive les statuts (recomputePhase × 6 + recomputeClientStatus).
  */
 export async function ensureDossier(
   ctx: MutationCtx,
@@ -83,19 +83,21 @@ export async function ensureDossier(
       : {}),
     ...(input.kits !== undefined ? { kits: input.kits } : {}),
     ...(input.signedAt !== undefined ? { signedAt: input.signedAt } : {}),
-    // Dérivés initiaux (recomputeStatus les recalculera juste après)
+    // Dérivés initiaux (recalculés juste après le seed)
     statusGlobal: "nouveau",
     currentPhase: "vt",
     blocked: false,
   });
 
   // ── 3. SEEDING DU WORKFLOW ──────────────────────────────────────────────────
+  const stepIds: Id<"workflowSteps">[] = [];
   for (const phase of WORKFLOW_PHASE_ORDER) {
     const stepId = await ctx.db.insert("workflowSteps", {
       clientId,
       phase,
       status: "a_faire",
     });
+    stepIds.push(stepId);
 
     const defs = substepsForPhase(phase);
     for (const def of defs) {
@@ -111,22 +113,37 @@ export async function ensureDossier(
   }
 
   // ── 4. DÉRIVATION INITIALE ──────────────────────────────────────────────────
-  await recomputeStatus(ctx, clientId);
+  for (const stepId of stepIds) await recomputePhase(ctx, stepId);
+  await recomputeClientStatus(ctx, clientId);
 
   return clientId;
 }
 
-// ─── recomputeStatus ─────────────────────────────────────────────────────────
+// ─── recompute (scindé, parité NestJS) ───────────────────────────────────────
+//
+// Le statut d'un step n'est re-dérivé de ses substeps QUE quand une de ses
+// substeps change (recomputePhase). Le client est TOUJOURS dérivé des statuts
+// de steps STOCKÉS (recomputeClientStatus) — un step saisi/annulé à la main
+// (ex. setSaleCancelled) ne doit jamais être écrasé par ses substeps.
 
-/**
- * Relit toutes les sous-étapes du client, dérive le statut de chaque phase
- * (derivePhaseStatus), patche les steps, puis dérive et stocke le statut
- * global du client (deriveClientStatus).
- *
- * ATTENTION : utilise les statuts FRAÎCHEMENT calculés (pas les anciens) pour
- * alimenter deriveClientStatus.
- */
-export async function recomputeStatus(
+/** Dérive le statut d'UN step depuis ses substeps et le patche. */
+export async function recomputePhase(
+  ctx: MutationCtx,
+  stepId: Id<"workflowSteps">,
+): Promise<void> {
+  const substeps = await ctx.db
+    .query("workflowSubsteps")
+    .withIndex("by_step", (q) => q.eq("stepId", stepId))
+    .collect();
+  if (substeps.length === 0) return;
+  const status = derivePhaseStatus(
+    substeps.map((s) => ({ status: s.status, optional: s.optional })),
+  );
+  await ctx.db.patch(stepId, { status });
+}
+
+/** Dérive le client depuis les statuts de steps STOCKÉS (jamais re-dérivés ici). */
+export async function recomputeClientStatus(
   ctx: MutationCtx,
   clientId: Id<"clients">,
 ): Promise<void> {
@@ -134,32 +151,9 @@ export async function recomputeStatus(
     .query("workflowSteps")
     .withIndex("by_client", (q) => q.eq("clientId", clientId))
     .collect();
-
-  // Pour chaque step : dériver le statut depuis ses substeps et patcher
-  const freshStepStatuses: Array<{
-    phase: (typeof WORKFLOW_PHASE_ORDER)[number];
-    status: ReturnType<typeof derivePhaseStatus>;
-  }> = [];
-
-  for (const step of steps) {
-    const substeps = await ctx.db
-      .query("workflowSubsteps")
-      .withIndex("by_step", (q) => q.eq("stepId", step._id))
-      .collect();
-
-    const derivedStatus = derivePhaseStatus(
-      substeps.map((s) => ({ status: s.status, optional: s.optional })),
-    );
-
-    await ctx.db.patch(step._id, { status: derivedStatus });
-    freshStepStatuses.push({ phase: step.phase, status: derivedStatus });
-  }
-
-  // Dériver le statut global à partir des statuts de phase FRAÎCHEMENT calculés
   const { statusGlobal, currentPhase, blocked } = deriveClientStatus(
-    freshStepStatuses,
+    steps.map((s) => ({ phase: s.phase, status: s.status })),
   );
-
   await ctx.db.patch(clientId, { statusGlobal, currentPhase, blocked });
 }
 
