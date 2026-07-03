@@ -3,7 +3,9 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "convex dev",
     "codegen": "convex codegen",
@@ -16,9 +18,10 @@
     "convex": "^1.17.0"
   },
   "devDependencies": {
+    "@edge-runtime/vm": "^4.0.0",
+    "@types/node": "^26.1.0",
     "convex-test": "^0.0.35",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.0",
-    "@edge-runtime/vm": "^4.0.0"
+    "vitest": "^2.1.0"
   }
 }

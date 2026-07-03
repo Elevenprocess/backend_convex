@@ -1,4 +1,4 @@
-import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { customerPatch, dropUndefined, DevisExtraction } from "./model/devisExtraction";
@@ -315,9 +315,19 @@ export const retryOcr = mutation({
   },
 });
 
+// Encodage base64 sans Buffer : le runtime Convex par défaut n'expose que btoa.
+function toBase64(bytes: Uint8Array): string {
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+
 // Action OCR (OpenRouter Vision) — câblée, non testée offline. Toujours résolue
 // (les erreurs sont capturées → markOcrFailed) pour ne jamais casser le scheduler.
-export const runOcr = action({
+export const runOcr = internalAction({
   args: { devisId: v.id("devis") },
   handler: async (ctx, args) => {
     await ctx.runMutation(internal.devis.setOcrProcessing, { devisId: args.devisId });
@@ -326,8 +336,7 @@ export const runOcr = action({
       if (!row || !row.storageId) throw new Error("PDF introuvable");
       const blob = await ctx.storage.get(row.storageId);
       if (!blob) throw new Error("PDF introuvable en storage");
-      const buf = Buffer.from(await blob.arrayBuffer());
-      const extracted = await extractFromPdf(buf.toString("base64"), row.filename);
+      const extracted = await extractFromPdf(toBase64(new Uint8Array(await blob.arrayBuffer())), row.filename);
       await ctx.runMutation(internal.devis.applyExtraction, { devisId: args.devisId, extracted });
     } catch (err) {
       await ctx.runMutation(internal.devis.markOcrFailed, {
