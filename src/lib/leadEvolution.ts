@@ -57,6 +57,14 @@ export function buildLeadEvolutionPoints(
     // pour un fuseau à l'est, minuit local tombe la veille en UTC → mauvais jour
     // → les buckets ne couvrent plus les arrivées du jour (courbe à 0).
     const day = toDateInputValue(new Date(range.from))
+    // Totaux du jour repris de la série QUOTIDIENNE quand elle couvre la journée :
+    // `totals` vient de KPI basés sur le statut ACTUEL des leads (rétroactifs, ils
+    // regonflent les journées passées), alors que daily est ancrée sur des événements
+    // datés → le même jour affiche le même chiffre en vue plage et en vue journée.
+    const dayPoint = daily.find((p) => p.date === day)
+    const dayTotals = dayPoint
+      ? { leads: dayPoint.newLeads ?? dayPoint.classified, qualified: dayPoint.qualified ?? dayPoint.rdv, signed: dayPoint.signed }
+      : totals
     const callsByKey = new Map(hourlyCalls.map((p) => [`${p.date}-${p.hour}`, p.calls]))
     const allHours: EvolutionHourlyInput[] = []
     for (let hour = HOUR_WINDOW_START; hour <= HOUR_WINDOW_END; hour++) {
@@ -67,7 +75,7 @@ export function buildLeadEvolutionPoints(
       .filter((point) => new Date(`${point.date}T${String(point.hour).padStart(2, '0')}:00:00`).getTime() <= nowMs)
       .sort((a, b) => hourKey(a).localeCompare(hourKey(b)))
     if (activeHours.length > 0) {
-      return withArrival(distributeTotalsAcrossHours(activeHours, totals))
+      return withArrival(distributeTotalsAcrossHours(activeHours, dayTotals))
     }
     // Pas d'heures démarrées → on retombe sur la vue jour.
   }
