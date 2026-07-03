@@ -15,15 +15,13 @@ import { WORKFLOW_ROLES, WORKFLOW_VIEW_ROLES } from "./clients";
 import { can, canEditSubstep, visibleClientIds } from "./model/delivrabilitePermissions";
 import { recomputePhase, recomputeClientStatus } from "./model/ensureDossier";
 import { catalogByKey } from "./model/substepCatalog";
-import { isSubstepUnlocked, computeSlaDeadline } from "./model/substepGating";
+import { isSubstepUnlocked, computeSlaDeadline, missingDocuments } from "./model/substepGating";
+import { activeDocsOfSubstep, toDocumentSummary } from "./documents";
 import { insertAudit } from "./model/audit";
 import { shouldNotifyVtDateChange } from "./model/notifMessages";
 import { notifyAcompte, notifyVtDateChange } from "./model/notify";
 
-/**
- * Décore une substep du flag unlocked (depuis ses sœurs du même dossier).
- * Écart 6d : pas encore de missingDocument/documents (table absente).
- */
+/** Décore une substep : unlocked (sœurs), documents actifs et badge pièce manquante. */
 async function decorate(ctx: QueryCtx, row: Doc<"workflowSubsteps">) {
   const siblings = await ctx.db
     .query("workflowSubsteps")
@@ -33,7 +31,9 @@ async function decorate(ctx: QueryCtx, row: Doc<"workflowSubsteps">) {
     row.key,
     siblings.map((s) => ({ key: s.key, status: s.status })),
   );
-  return { ...row, unlocked };
+  const docs = await activeDocsOfSubstep(ctx, row._id);
+  const missingDocument = missingDocuments(row.key, docs.map((d) => d.type));
+  return { ...row, unlocked, documents: docs.map(toDocumentSummary), missingDocument };
 }
 
 export const list = query({
