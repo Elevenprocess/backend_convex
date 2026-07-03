@@ -16,6 +16,7 @@
     "@tailwindcss/vite": "^4.2.4",
     "@tanstack/react-virtual": "^3.14.3",
     "ai": "^5.0.196",
+    "convex": "^1.42.1",
     "ldrs": "^1.1.9",
     "ogl": "^1.0.11",
     "react": "^19.2.5",

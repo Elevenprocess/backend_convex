@@ -10,6 +10,8 @@ import { Login } from './pages/Login'
 import { Landing } from './pages/Landing'
 import { RouteFallback } from './components/RouteFallback'
 import { useAuth } from './lib/auth'
+import { ConvexProvider } from 'convex/react'
+import { convexClient } from './lib/convex'
 
 // Lazy: all actual page components (named exports → .then mapping)
 const Overview = lazy(() => import('./pages/Overview').then((m) => ({ default: m.Overview })))
@@ -119,10 +121,14 @@ const router = createHashRouter([
   },
 ])
 
+const app = (
+  <Suspense fallback={<RouteFallback />}>
+    <RouterProvider router={router} />
+  </Suspense>
+)
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Suspense fallback={<RouteFallback />}>
-      <RouterProvider router={router} />
-    </Suspense>
+    {convexClient ? <ConvexProvider client={convexClient}>{app}</ConvexProvider> : app}
   </StrictMode>
 )
