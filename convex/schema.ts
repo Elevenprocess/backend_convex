@@ -421,6 +421,18 @@ export default defineSchema({
     .index("by_responsable", ["responsableId"]),
 
   /**
+   * Jonction multi-techniciens VT.
+   * Unicité (clientId, userId) garantie par la mutation assignTechniciens
+   * (remplacement complet du set — seule écriture de cette table).
+   */
+  vtTechniciens: defineTable({
+    clientId: v.id("clients"),
+    userId: v.id("users"),
+  })
+    .index("by_client", ["clientId"])
+    .index("by_user", ["userId"]),
+
+  /**
    * Notifications cloche (l'emit socket NestJS est remplacé par la réactivité
    * Convex : la cloche s'abonne à notifications.listMine).
    */

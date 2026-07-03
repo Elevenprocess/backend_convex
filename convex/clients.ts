@@ -7,7 +7,7 @@
 
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import {
   clientStatusValidator,
@@ -15,7 +15,11 @@ import {
   type Role,
 } from "./model/enums";
 import { requireRole } from "./model/access";
-import { ensureDossier } from "./model/ensureDossier";
+import { ensureDossier, recomputeClientStatus } from "./model/ensureDossier";
+import { can } from "./model/delivrabilitePermissions";
+import { newlyAddedTechs } from "./model/vtCalendar";
+import { vtAssignedMessage } from "./model/notifMessages";
+import { createNotification } from "./model/notify";
 
 // ─── Rôles (portés de roles.decorator.ts + clients.controller.ts) ────────────
 
@@ -141,7 +145,93 @@ export const list = query({
   },
 });
 
+/** Techniciens de la jonction, avec noms (ordre d'insertion). */
+export async function techniciensOf(
+  ctx: QueryCtx,
+  clientId: Id<"clients">,
+): Promise<Array<{ id: Id<"users">; name: string }>> {
+  const rows = await ctx.db
+    .query("vtTechniciens")
+    .withIndex("by_client", (q) => q.eq("clientId", clientId))
+    .collect();
+  const out: Array<{ id: Id<"users">; name: string }> = [];
+  for (const r of rows) {
+    const u = await ctx.db.get(r.userId);
+    out.push({ id: r.userId, name: u?.name ?? "" });
+  }
+  return out;
+}
+
 // ─── Mutations ───────────────────────────────────────────────────────────────
+
+/**
+ * Attribution multi-techniciens VT (portage PATCH /clients/:id).
+ * `technicienVtIds` prioritaire ; repli sur le scalaire `technicienVtId` ;
+ * set vide = désassignation. Le scalaire clients.technicienVtId = premier du
+ * set (rétro-compat, pilote le scoping steps/substeps). Notifie uniquement
+ * les techniciens NOUVELLEMENT assignés.
+ */
+export const assignTechniciens = mutation({
+  args: {
+    clientId: v.id("clients"),
+    technicienVtIds: v.optional(v.array(v.id("users"))),
+    technicienVtId: v.optional(v.union(v.null(), v.id("users"))),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, WORKFLOW_VIEW_ROLES);
+    if (!can(user.role ?? "setter", "assign")) {
+      throw new Error(`Rôle ${user.role} non autorisé à attribuer un technicien`);
+    }
+    const existing = await ctx.db.get(args.clientId);
+    if (!existing || existing.deletedAt !== undefined) {
+      throw new Error(`Client ${args.clientId} introuvable`);
+    }
+
+    // Normalisation : liste prioritaire, repli scalaire, sinon désassignation.
+    const nextIds =
+      args.technicienVtIds && args.technicienVtIds.length > 0
+        ? args.technicienVtIds
+        : args.technicienVtId
+          ? [args.technicienVtId]
+          : [];
+    const primaryTechId = nextIds[0];
+
+    // Remplacement complet du set (seule écriture de la jonction → unicité garantie).
+    const currentRows = await ctx.db
+      .query("vtTechniciens")
+      .withIndex("by_client", (q) => q.eq("clientId", args.clientId))
+      .collect();
+    const previousIds = currentRows.map((r) => r.userId as string);
+    for (const r of currentRows) await ctx.db.delete(r._id);
+    for (const userId of nextIds) {
+      await ctx.db.insert("vtTechniciens", { clientId: args.clientId, userId });
+    }
+    await ctx.db.patch(args.clientId, { technicienVtId: primaryTechId ?? undefined });
+
+    await recomputeClientStatus(ctx, args.clientId);
+
+    // Notifie chaque technicien NOUVELLEMENT assigné (best-effort).
+    const newTechs = newlyAddedTechs(previousIds, nextIds as string[]);
+    if (newTechs.length > 0) {
+      const lead = await ctx.db.get(existing.leadId);
+      const leadName =
+        [lead?.firstName, lead?.lastName].filter(Boolean).join(" ").trim() || "Client";
+      const { title, body } = vtAssignedMessage({ leadName, city: lead?.city ?? null });
+      for (const userId of newTechs) {
+        await createNotification(ctx, {
+          userId: userId as Id<"users">,
+          type: "vt_assigned",
+          title,
+          body,
+          payload: { clientId: args.clientId, leadId: existing.leadId },
+        });
+      }
+    }
+
+    const updated = (await ctx.db.get(args.clientId))!;
+    return { ...updated, techniciens: await techniciensOf(ctx, args.clientId) };
+  },
+});
 
 /**
  * Initialisation manuelle d'un dossier délivrabilité (portage de
