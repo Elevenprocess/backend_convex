@@ -421,6 +421,36 @@ export default defineSchema({
     .index("by_responsable", ["responsableId"]),
 
   /**
+   * Notifications cloche (l'emit socket NestJS est remplacé par la réactivité
+   * Convex : la cloche s'abonne à notifications.listMine).
+   */
+  notifications: defineTable({
+    userId: v.id("users"),
+    type: v.string(),
+    title: v.string(),
+    body: v.optional(v.string()),
+    payload: v.optional(v.any()),
+    readAt: v.optional(v.number()), // ms
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_read", ["userId", "readAt"]),
+
+  /**
+   * Audit des changements de statut workflow.
+   * Écart NestJS : pas d'ip/userAgent (pas de contexte requête en Convex).
+   */
+  auditLog: defineTable({
+    userId: v.id("users"),
+    action: v.string(),
+    entityType: v.string(),
+    entityId: v.string(),
+    before: v.optional(v.any()),
+    after: v.optional(v.any()),
+  })
+    .index("by_entity", ["entityType", "entityId"])
+    .index("by_user", ["userId"]),
+
+  /**
    * Catalogue de produits (panneaux, onduleurs, batteries).
    * CRUD / gestion du stock hors-scope 6a.
    */
