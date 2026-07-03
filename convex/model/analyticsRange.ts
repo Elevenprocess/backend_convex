@@ -1,6 +1,6 @@
 /**
  * Périodes analytics + bucketing en jours calendaires de La Réunion.
- * Transposition de buildRange/normalize*/reunionDayKey/dayKeys (analytics.service.ts)
+ * Transposition de buildRange/normalizeRange/reunionDayKey/dayKeys (analytics.service.ts)
  * en timestamps ms — pas d'Intl : La Réunion = UTC+4 fixe (pas de DST), donc
  * l'arithmétique d'offset est une équivalence exacte. Les bornes de période
  * restent en UTC (parité serveur Render TZ=UTC).
