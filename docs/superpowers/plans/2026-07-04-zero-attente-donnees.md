@@ -519,7 +519,7 @@ function writeCache(cacheKey: string | null, entry: FetchCacheEntry) {
 }
 ```
 
-5. `deleteCache` devient :
+5. Recréer `deleteCache` (supprimée en Task 1 : plus aucun appelant après le TTL non destructif, et `noUnusedLocals` interdit une fonction morte) :
 
 ```ts
 function deleteCache(cacheKey: string) {
