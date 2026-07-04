@@ -36,10 +36,12 @@ async function seed(t: ReturnType<typeof makeT>) {
 test("admin : vue admin remplie, setter/commercial null", async () => {
   const t = makeT();
   const { adminId } = await seed(t);
+  // « Qualifiés » se base sur rdv._creationTime, que convex-test fixe à l'heure
+  // réelle du run : la borne haute doit couvrir maintenant, pas une date figée.
   const res = await asUser(t, adminId).query(api.analytics.summary, {
     now: NOW,
     from: "2026-07-01T00:00:00.000Z",
-    to: "2026-07-03T23:59:59.999Z",
+    to: new Date(Date.now() + 86_400_000).toISOString(),
   });
   expect(res.role).toBe("admin");
   expect(res.engine).toBe("convex-reactive");
@@ -90,7 +92,8 @@ test("débrief détaché : compté comme ligne synthétique (une seule fois)", a
   const res = await asUser(t, adminId).query(api.analytics.summary, {
     now: NOW,
     from: "2026-07-01T00:00:00.000Z",
-    to: new Date(NOW + 86_400_000).toISOString(),
+    // Le débrief détaché est daté par _creationTime (heure réelle du run).
+    to: new Date(Date.now() + 86_400_000).toISOString(),
   });
   // 12000 (rdv) + 8000 (débrief détaché synthétique) — pas de double comptage
   expect(res.admin!.ca).toBe(20000);
