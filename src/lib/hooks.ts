@@ -65,12 +65,13 @@ function readCachedEntry(cacheKey: string | null): FetchCacheEntry | null {
   if (!cacheKey) return null
   const entry = fetchCache.get(cacheKey) ?? readPersistedCache(cacheKey)
   if (!entry) return null
-  if (Date.now() - entry.timestamp > FETCH_CACHE_TTL_MS) {
-    deleteCache(cacheKey)
-    return null
-  }
-  fetchCache.set(cacheKey, entry)
-  return entry
+  // TTL non destructif : une entrée expirée n'est JAMAIS purgée — elle est
+  // servie immédiatement, marquée stale, et le montage relance un refetch de
+  // fond. Le loader plein écran ne réapparaît plus sur une page déjà visitée.
+  const expired = Date.now() - entry.timestamp > FETCH_CACHE_TTL_MS
+  const effective = expired && !entry.stale ? { ...entry, stale: true } : entry
+  fetchCache.set(cacheKey, effective)
+  return effective
 }
 
 function readCachedData<T>(cacheKey: string | null): T | null {
@@ -152,17 +153,6 @@ async function prefetchFetchCache<T>(
   return sharedFetch<T>(path, query, cacheKey)
 }
 
-function deleteCache(cacheKey: string) {
-  fetchCache.delete(cacheKey)
-  if (typeof window === 'undefined') return
-  try {
-    const storageKey = `${PERSISTED_CACHE_PREFIX}${cacheKey}`
-    window.sessionStorage.removeItem(storageKey)
-    window.localStorage.removeItem(storageKey)
-  } catch {
-    // best-effort
-  }
-}
 
 // Marque « stale » (sans les VIDER) les caches des chemins touchés par un event
 // realtime. L'ancienne purge faisait disparaître la donnée → spinner de 2-3 s à
@@ -1187,4 +1177,19 @@ export function useInterventions(
 ): Async<InterventionResponse[]> {
   const query = filters === null ? undefined : { clientId: filters?.clientId, status: filters?.status }
   return useFetch<InterventionResponse[]>(filters === null ? null : '/interventions', query)
+}
+
+// ─── Helpers test-only ─────────────────────────────────────
+// Le cache est une Map module-scope : les tests ont besoin de la semer et de
+// la vider sans passer par le réseau. Ne pas utiliser en code de prod.
+export function __testSeedFetchCache(cacheKey: string, entry: FetchCacheEntry): void {
+  fetchCache.set(cacheKey, entry)
+}
+
+export function __testReadFetchCacheEntry(cacheKey: string): FetchCacheEntry | undefined {
+  return fetchCache.get(cacheKey)
+}
+
+export function __testResetFetchCache(): void {
+  fetchCache.clear()
 }
