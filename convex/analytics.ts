@@ -358,6 +358,58 @@ export const commercialStats = query({
   },
 });
 
+// ─── Stats débriefs (7d) ─────────────────────────────────────────────────────
+
+/**
+ * Agrégation des débriefs commerciaux (Overview). Portage de
+ * DebriefAnalyticsService.debriefStats : source de vérité = table debriefs,
+ * facteurs comptés sur les « vente », motifs sur les « non_vente ».
+ * Sans from/to : toute la période (parité NestJS, pas de défaut).
+ */
+export const debriefStats = query({
+  args: {
+    from: v.optional(v.string()),
+    to: v.optional(v.string()),
+    commercialId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, COMMERCIAL_STATS_ROLES);
+    // Un commercial ne voit que ses propres débriefs ; admin / commercial_lead
+    // voient toute l'équipe (commercialId optionnel).
+    const commercialId = roleOf(user) === "commercial" ? user._id : args.commercialId;
+    const fromMs = args.from ? new Date(args.from).getTime() : undefined;
+    const toMs = args.to ? new Date(args.to).getTime() : undefined;
+
+    const all = await ctx.db.query("debriefs").collect();
+    const rows = all.filter(
+      (d) =>
+        d.deletedAt === undefined &&
+        (!commercialId || d.commercialId === commercialId) &&
+        (fromMs === undefined || d._creationTime >= fromMs) &&
+        (toMs === undefined || d._creationTime <= toMs),
+    );
+
+    const outcomeCounts = { vente: 0, non_vente: 0, en_reflexion: 0, suivi_prevu: 0 };
+    const acceptanceFactorCounts: Record<string, number> = {};
+    const nonSaleReasonCounts: Record<string, number> = {};
+    for (const row of rows) {
+      if (row.outcome in outcomeCounts) {
+        outcomeCounts[row.outcome as keyof typeof outcomeCounts] += 1;
+      }
+      if (row.outcome === "vente") {
+        for (const factor of row.acceptanceFactors) {
+          acceptanceFactorCounts[factor] = (acceptanceFactorCounts[factor] ?? 0) + 1;
+        }
+      }
+      if (row.outcome === "non_vente" && row.nonSaleReason) {
+        nonSaleReasonCounts[row.nonSaleReason] = (nonSaleReasonCounts[row.nonSaleReason] ?? 0) + 1;
+      }
+    }
+
+    return { outcomeCounts, acceptanceFactorCounts, nonSaleReasonCounts, total: rows.length };
+  },
+});
+
 // ─── Funnel (7c) ─────────────────────────────────────────────────────────────
 
 const BUSINESS_MANAGER_ROLES: Role[] = ["admin", "commercial_lead"];
@@ -417,13 +469,17 @@ export const funnel = query({
       return true;
     });
     const scopedLeadIds = new Set(scopedLeads.map((l) => l.id));
-    const scopedCalls = calls.filter(
-      (call) =>
-        call.leadId &&
-        scopedLeadIds.has(call.leadId) &&
-        isInRange(call.calledAt, range) &&
-        (!args.setterId || call.setterId === args.setterId),
-    );
+    const scopedCalls = calls
+      .filter(
+        (call) =>
+          call.leadId &&
+          scopedLeadIds.has(call.leadId) &&
+          isInRange(call.calledAt, range) &&
+          (!args.setterId || call.setterId === args.setterId),
+      )
+      // leadId normalisé pour FunnelCallInput (jamais undefined) SANS perdre
+      // calledAt/setterId, requis par buildFunnelDaily/buildFunnelSetterRows.
+      .map((call) => ({ ...call, leadId: call.leadId ?? null }));
     const rdvRowsAll = [...rdvRows, ...detached];
     const scopedRdvs = rdvRowsAll.filter(
       (row) => row.leadId && scopedLeadIds.has(row.leadId as string) && isInRange(row.createdAt, range),
