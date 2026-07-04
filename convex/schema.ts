@@ -135,7 +135,9 @@ export default defineSchema({
 
   callLogs: defineTable({
     externalId: v.optional(v.string()),
-    leadId: v.id("leads"),
+    // Optionnel : les appels Ringover non rattachés à un lead (migration NestJS)
+    // n'ont pas de leadId. logCall exige toujours un lead.
+    leadId: v.optional(v.id("leads")),
     setterId: v.optional(v.id("users")),
     calledAt: v.number(),
     result: callResultValidator,
@@ -371,6 +373,7 @@ export default defineSchema({
    * pour chaque dossier client.
    */
   workflowSteps: defineTable({
+    externalId: v.optional(v.string()),
     clientId: v.id("clients"),
     phase: workflowPhaseValidator,
     status: workflowStatusValidator,
@@ -396,6 +399,7 @@ export default defineSchema({
    * by_client_key est requis par le seam isJalonReached (tâche 9).
    */
   workflowSubsteps: defineTable({
+    externalId: v.optional(v.string()),
     stepId: v.id("workflowSteps"),
     clientId: v.id("clients"),
     key: workflowSubstepKeyValidator,
@@ -429,11 +433,14 @@ export default defineSchema({
    * utilisateur ne déduplique pas (parité NestJS).
    */
   documents: defineTable({
+    externalId: v.optional(v.string()),
     clientId: v.id("clients"),
     workflowStepId: v.optional(v.id("workflowSteps")),
     workflowSubstepId: v.optional(v.id("workflowSubsteps")),
     type: documentTypeValidator,
-    storageId: v.id("_storage"),
+    // Optionnel : pièces migrées de NestJS dont le blob disque/R2 a été perdu
+    // avant la bascule bytea (métadonnées conservées, contenu absent).
+    storageId: v.optional(v.id("_storage")),
     filename: v.string(),
     sizeBytes: v.number(),
     mimeType: v.string(),
@@ -481,6 +488,10 @@ export default defineSchema({
     entityId: v.string(),
     before: v.optional(v.any()),
     after: v.optional(v.any()),
+    // Renseignés uniquement sur les lignes migrées de NestJS (pas de contexte
+    // requête en Convex pour les nouvelles écritures).
+    ip: v.optional(v.string()),
+    userAgent: v.optional(v.string()),
   })
     .index("by_entity", ["entityType", "entityId"])
     .index("by_user", ["userId"]),
@@ -500,4 +511,37 @@ export default defineSchema({
   })
     .index("by_type", ["type"])
     .index("by_externalId", ["externalId"]),
+
+  /**
+   * Pièces jointes projet (photos/documents commercial) migrées de NestJS
+   * (project_attachments + attachment_files bytea → storage Convex).
+   * La matérialisation croisée vers `documents` (read-path NestJS) sera
+   * recâblée plus tard ; ici on conserve la source telle quelle.
+   */
+  projectAttachments: defineTable({
+    externalId: v.optional(v.string()),
+    projectId: v.id("projects"),
+    uploadedById: v.optional(v.id("users")),
+    kind: v.string(), // photo | document (enum PG attachment_kind)
+    label: v.optional(v.string()),
+    filename: v.string(),
+    contentType: v.string(),
+    sizeBytes: v.number(),
+    // Absent si le blob disque/R2 a été perdu avant la bascule bytea NestJS.
+    storageId: v.optional(v.id("_storage")),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_externalId", ["externalId"]),
+
+  /**
+   * Archive fidèle des tables NestJS sans équivalent fonctionnel Convex
+   * (webhook_events, airtable_raw_records/import_errors, assistant_*,
+   * user_invitations, sessions better-auth…). `data` = row_to_json intégral.
+   */
+  legacyArchive: defineTable({
+    table: v.string(),
+    externalId: v.optional(v.string()),
+    data: v.any(),
+  }).index("by_table", ["table"]),
 });

@@ -128,6 +128,7 @@ export const getUrl = query({
       const client = await ctx.db.get(row.clientId);
       if (client?.technicienVtId !== user._id) return null;
     }
+    if (!row.storageId) return null; // pièce migrée dont le blob NestJS avait été perdu
     const url = await ctx.storage.getUrl(row.storageId);
     if (!url) return null;
     return { url, filename: row.filename, mimeType: row.mimeType };
@@ -159,7 +160,7 @@ export const remove = mutation({
       if (substep) await assertCanManage(ctx, user, substep);
     }
     await ctx.db.patch(args.documentId, { deletedAt: Date.now() });
-    await ctx.storage.delete(doc.storageId);
+    if (doc.storageId) await ctx.storage.delete(doc.storageId);
     return { ok: true as const };
   },
 });

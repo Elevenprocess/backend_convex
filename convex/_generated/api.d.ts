@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as analytics from "../analytics.js";
 import type * as auth from "../auth.js";
 import type * as callLogs from "../callLogs.js";
 import type * as clients from "../clients.js";
@@ -16,6 +17,7 @@ import type * as devis from "../devis.js";
 import type * as documents from "../documents.js";
 import type * as http from "../http.js";
 import type * as leads from "../leads.js";
+import type * as migration from "../migration.js";
 import type * as model_access from "../model/access.js";
 import type * as model_acompteEcheancier from "../model/acompteEcheancier.js";
 import type * as model_analyticsBuilders from "../model/analyticsBuilders.js";
@@ -32,10 +34,12 @@ import type * as model_devisStatusSync from "../model/devisStatusSync.js";
 import type * as model_ensureDossier from "../model/ensureDossier.js";
 import type * as model_ensureProject from "../model/ensureProject.js";
 import type * as model_enums from "../model/enums.js";
+import type * as model_funnelBuilders from "../model/funnelBuilders.js";
 import type * as model_funnelMath from "../model/funnelMath.js";
 import type * as model_notifMessages from "../model/notifMessages.js";
 import type * as model_notify from "../model/notify.js";
 import type * as model_ocr from "../model/ocr.js";
+import type * as model_passwordCrypto from "../model/passwordCrypto.js";
 import type * as model_stageHistory from "../model/stageHistory.js";
 import type * as model_substepCatalog from "../model/substepCatalog.js";
 import type * as model_substepGating from "../model/substepGating.js";
@@ -46,6 +50,7 @@ import type * as payments from "../payments.js";
 import type * as projects from "../projects.js";
 import type * as rdv from "../rdv.js";
 import type * as referrers from "../referrers.js";
+import type * as testSeed from "../testSeed.js";
 import type * as users from "../users.js";
 import type * as workflowSteps from "../workflowSteps.js";
 import type * as workflowSubsteps from "../workflowSubsteps.js";
@@ -57,6 +62,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  analytics: typeof analytics;
   auth: typeof auth;
   callLogs: typeof callLogs;
   clients: typeof clients;
@@ -65,6 +71,7 @@ declare const fullApi: ApiFromModules<{
   documents: typeof documents;
   http: typeof http;
   leads: typeof leads;
+  migration: typeof migration;
   "model/access": typeof model_access;
   "model/acompteEcheancier": typeof model_acompteEcheancier;
   "model/analyticsBuilders": typeof model_analyticsBuilders;
@@ -81,10 +88,12 @@ declare const fullApi: ApiFromModules<{
   "model/ensureDossier": typeof model_ensureDossier;
   "model/ensureProject": typeof model_ensureProject;
   "model/enums": typeof model_enums;
+  "model/funnelBuilders": typeof model_funnelBuilders;
   "model/funnelMath": typeof model_funnelMath;
   "model/notifMessages": typeof model_notifMessages;
   "model/notify": typeof model_notify;
   "model/ocr": typeof model_ocr;
+  "model/passwordCrypto": typeof model_passwordCrypto;
   "model/stageHistory": typeof model_stageHistory;
   "model/substepCatalog": typeof model_substepCatalog;
   "model/substepGating": typeof model_substepGating;
@@ -95,6 +104,7 @@ declare const fullApi: ApiFromModules<{
   projects: typeof projects;
   rdv: typeof rdv;
   referrers: typeof referrers;
+  testSeed: typeof testSeed;
   users: typeof users;
   workflowSteps: typeof workflowSteps;
   workflowSubsteps: typeof workflowSubsteps;
