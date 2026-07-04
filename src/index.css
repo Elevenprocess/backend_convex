@@ -6327,3 +6327,23 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 .obj-btn-primary:hover:not(:disabled) { background: var(--color-or-dark); }
 .obj-btn-primary:disabled, .obj-btn-ghost:disabled { opacity: .55; cursor: not-allowed; }
 @media (max-width: 600px) { .obj-grid { grid-template-columns: 1fr; } .obj-grid-head { display: none; } .obj-row { gap: 6px; padding: 12px 4px; } }
+
+/* ── PhaseHelp : popover d'aide des phases délivrabilité ─────────────────── */
+.phase-help { position: relative; display: inline-flex; }
+.phase-help > button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 999px; padding: 0;
+  color: rgba(42, 37, 32, 0.42); background: none; border: none; cursor: pointer;
+}
+.phase-help > button:hover { color: var(--color-text); }
+.phase-help-pop {
+  position: absolute; z-index: 40; top: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  width: 260px; padding: 12px 14px; border-radius: 12px; text-align: left;
+  background: var(--color-surface, #fff); border: 1px solid var(--color-line, #e7e2db);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.14); font-size: 12px; line-height: 1.45;
+}
+.phase-help-pop strong { display: block; margin-bottom: 4px; font-size: 12px; }
+.phase-help-pop p { margin: 4px 0 0; color: rgba(42, 37, 32, 0.62); }
+.phase-help-pop b { color: var(--color-text); font-weight: 650; }
+[data-theme="dark"] .phase-help > button { color: rgba(255, 255, 255, 0.45); }
+[data-theme="dark"] .phase-help-pop p { color: rgba(255, 255, 255, 0.6); }

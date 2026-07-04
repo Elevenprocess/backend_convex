@@ -4,6 +4,7 @@ import { SubstepModal } from './SubstepModal'
 import { groupSubsteps, SUIVI_SECTIONS } from '../../lib/suivi-board'
 import { useCollapsibleState } from '../../lib/useCollapsibleState'
 import { Icon, type IconName } from '../Icon'
+import { PhaseHelp } from './PhaseHelp'
 import type { SubstepResponse, UpdateSubstepPatch, UserResponse, WorkflowPhase } from '../../lib/types'
 import type { ClientResponse } from '../../lib/types'
 
@@ -54,8 +55,8 @@ function allDone(list: SubstepResponse[]): boolean {
 }
 
 function CollapsibleWfSection({
-  section, sectionList, children,
-}: { section: typeof SUIVI_SECTIONS[number]; sectionList: SubstepResponse[]; children: ReactNode }) {
+  section, sectionList, helpPhases, children,
+}: { section: typeof SUIVI_SECTIONS[number]; sectionList: SubstepResponse[]; helpPhases: WorkflowPhase[]; children: ReactNode }) {
   const [collapsed, toggle] = useCollapsibleState(`wf.section.${section.key}`, allDone(sectionList))
   return (
     <section className={`wf-section wf-section-${section.key}`}>
@@ -68,6 +69,7 @@ function CollapsibleWfSection({
             <span className="wf-section-title-text">{section.title}</span>
           </span>
         </button>
+        {helpPhases.map((p) => <PhaseHelp key={p} phase={p} />)}
         <Progress list={sectionList} />
       </header>
       {!collapsed && children}
@@ -128,7 +130,8 @@ export function WorkflowBoard({ substeps, onMutate, today, users, client, saving
               ? grouped.aval
               : [...grouped.backoffice.dp, ...grouped.backoffice.racco]
         return (
-          <CollapsibleWfSection key={section.key} section={section} sectionList={sectionList}>
+          <CollapsibleWfSection key={section.key} section={section} sectionList={sectionList}
+            helpPhases={section.layout === 'single' ? (section.phases ?? []) : []}>
             {section.layout === 'parallel' && section.columns ? (
               <div className="wf-parallel">
                 {section.columns.map((col) => {
@@ -137,6 +140,7 @@ export function WorkflowBoard({ substeps, onMutate, today, users, client, saving
                     <div key={col.key} className="wf-col">
                       <div className="wf-col-head">
                         <span className="wf-col-title">{col.title}</span>
+                        <PhaseHelp phase={col.phases[0]} />
                         <Progress list={colList} />
                       </div>
                       {renderList(colList)}
