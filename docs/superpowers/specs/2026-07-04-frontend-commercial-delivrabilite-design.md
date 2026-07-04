@@ -50,7 +50,7 @@ Fichier principal : `src/pages/Overview.tsx` → `OverviewSuivi` (actuellement :
 - Tri par urgence (bloqués d'abord, puis retard décroissant).
 
 ### 2.2 Guide des phases (`src/lib/phase-guide.ts`, nouveau)
-- Config statique frontend décrivant chaque phase (VT, DP, RACCO, Installation, Consuel, MES) : objectif en une phrase, documents attendus, action qui clôture la phase, phase suivante. Tient compte du flag `depositOnly` (phases DP/RACCO retirées pour les dépôt-seul).
+- Config statique frontend décrivant chaque phase (VT, DP, RACCO, Installation, Consuel, MES) : objectif en une phrase, documents attendus, action qui clôture la phase, phase suivante. Note « dépôt seul » : le flag `depositOnly` est porté par les sous-étapes (il simplifie leur pop-up), les 6 phases restent présentes sur tous les dossiers — le guide mentionne simplement le cas dépôt-seul dans son texte, sans filtrage par dossier.
 - Les tableaux d'ordre de phase existants (dont `DELIVERY_PHASES`) restent la source de vérité pour l'ordre ; le guide n'ajoute que du texte.
 - Consommé par :
   - une icône « ? » sur chaque phase du tunnel de l'overview (popover),
@@ -84,4 +84,4 @@ Fichier principal : `src/pages/Overview.tsx` → `OverviewSuivi` (actuellement :
 
 - Vérification par rôle en « view as » / impersonation (`lib/auth.ts`) : commercial, delivrabilite, et non-régression sur admin + commercial_lead.
 - États vides : nouveau commercial sans RDV ni leads → chaque bloc affiche son explication.
-- Cas `depositOnly` : le guide des phases et la file de travail n'affichent pas DP/RACCO pour ces dossiers.
+- Cas « dépôt seul » : le texte du guide mentionne la simplification dépôt-seul (RACCO) ; aucun filtrage de phase par dossier (les 6 phases existent sur tous les dossiers).
