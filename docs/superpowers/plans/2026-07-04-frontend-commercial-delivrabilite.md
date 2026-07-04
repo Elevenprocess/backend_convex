@@ -545,6 +545,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 4: Accueil commercial enrichi (« Mon espace » 4 blocs)
 
 **Files:**
+- Modify: `src/lib/types.ts` (helper `initialsOfName` après `initials`, ligne ~596)
 - Create: `src/components/overview/CommercialUpcomingRdv.tsx`
 - Create: `src/components/overview/CommercialMyLeads.tsx`
 - Modify: `src/pages/Overview.tsx` (fonction `OverviewCommercialSolo`, ~lignes 545-603, et `CommercialDebriefsToFill` ligne ~498)
@@ -554,6 +555,18 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Consumes: `selectUpcomingRdvs` / `selectMyActiveLeads` (Task 3), `useCommercialAnalytics(id, { from, to })` (`src/lib/hooks.ts:1052`, retourne `Async<AnalyticsCommercialSummary>` avec `{ total, honored, signed, ca, panier, closing }`, `closing` en % entier 0-100), `MagicKpi`, `leadDetailPath(role, id)`, `STATUS_LABEL` / `fullName` (`types.ts`).
 - Produces: rien de consommé par les autres tâches.
 
+- [ ] **Step 0: Helper partagé `initialsOfName` dans `src/lib/types.ts`**
+
+Juste après la fonction `initials` existante (`src/lib/types.ts:596`), ajouter (utilisé par les 3 nouveaux composants des Tasks 4 et 5 — ne PAS le dupliquer localement) :
+
+```ts
+/** Initiales depuis un nom complet affichable (fallback « — »). */
+export function initialsOfName(name: string | null | undefined): string {
+  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean)
+  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '—'
+}
+```
+
 - [ ] **Step 1: Créer `src/components/overview/CommercialUpcomingRdv.tsx`**
 
 ```tsx
@@ -561,12 +574,7 @@ import { useNavigate } from 'react-router-dom'
 import { Icon } from '../Icon'
 import { useAuth } from '../../lib/auth'
 import { leadDetailPath } from '../../lib/leadPaths'
-import { fullName, type RdvResponse } from '../../lib/types'
-
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '—'
-}
+import { fullName, initialsOfName, type RdvResponse } from '../../lib/types'
 
 function rdvDateTime(iso: string): string {
   const d = new Date(iso)
@@ -604,7 +612,7 @@ export function CommercialUpcomingRdv({ rdvs }: { rdvs: RdvResponse[] }) {
               onClick={() => rdv.leadId && navigate(leadDetailPath(role, rdv.leadId))}
               disabled={!rdv.leadId}
             >
-              <div className="overview-role-avatar">{initialsOf(name)}</div>
+              <div className="overview-role-avatar">{initialsOfName(name)}</div>
               <div>
                 <strong>{name}</strong>
                 <small>{rdv.lead?.city ?? 'Ville non renseignée'} · {rdv.lead?.phone ?? 'sans téléphone'}</small>
@@ -629,12 +637,7 @@ import { useNavigate } from 'react-router-dom'
 import { Icon } from '../Icon'
 import { useAuth } from '../../lib/auth'
 import { leadDetailPath, leadListPath } from '../../lib/leadPaths'
-import { STATUS_LABEL, fullName, type LeadResponse } from '../../lib/types'
-
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '—'
-}
+import { STATUS_LABEL, fullName, initialsOfName, type LeadResponse } from '../../lib/types'
 
 function shortDate(iso: string | null): string {
   if (!iso) return '—'
@@ -677,7 +680,7 @@ export function CommercialMyLeads({ leads }: { leads: LeadResponse[] }) {
               style={{ background: 'none', border: 'none', font: 'inherit', textAlign: 'left', width: '100%', cursor: 'pointer' }}
               onClick={() => navigate(leadDetailPath(role, lead.id))}
             >
-              <div className="overview-role-avatar">{initialsOf(name)}</div>
+              <div className="overview-role-avatar">{initialsOfName(name)}</div>
               <div>
                 <strong>{name}</strong>
                 <small>{lead.city ?? 'Ville non renseignée'} · {lead.phone ?? 'sans téléphone'}</small>
@@ -818,7 +821,7 @@ Lancer `npm run dev`, se connecter en admin et utiliser « Voir en tant que » (
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/pages/Overview.tsx src/components/overview/CommercialUpcomingRdv.tsx src/components/overview/CommercialMyLeads.tsx src/index.css
+git add src/lib/types.ts src/pages/Overview.tsx src/components/overview/CommercialUpcomingRdv.tsx src/components/overview/CommercialMyLeads.tsx src/index.css
 git commit -m "feat(commercial): accueil poste de pilotage — stats, prochains RDV, leads en cours
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
@@ -907,6 +910,7 @@ import { useMemo, useState } from 'react'
 import { Icon } from '../Icon'
 import { PHASE_LABEL } from '../../lib/suivi-board'
 import { nextActionLabel } from '../../lib/phase-guide'
+import { initialsOfName } from '../../lib/types'
 import type { PriorityReason, PriorityRow } from '../../lib/deliveryOverview'
 
 type Filter = 'all' | PriorityReason
@@ -917,11 +921,6 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: 'late', label: 'Retards' },
   { id: 'missing_docs', label: 'Docs manquants' },
 ]
-
-function initialsOf(name: string | null): string {
-  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean)
-  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '—'
-}
 
 /**
  * File de travail de l'accueil délivrabilité : TOUS les dossiers qui attendent
@@ -977,7 +976,7 @@ export function DeliveryWorkQueue({ rows, now, onOpen }: {
           const badge = badgeFor(row)
           return (
             <div key={row.client.id} className="overview-role-row">
-              <div className="overview-role-avatar">{initialsOf(row.client.lead.fullName)}</div>
+              <div className="overview-role-avatar">{initialsOfName(row.client.lead.fullName)}</div>
               <div>
                 <strong>{row.client.lead.fullName || row.client.lead.phone || '—'}</strong>
                 <small>{row.client.lead.city ?? '—'} · {PHASE_LABEL[row.client.currentPhase]} · <b className="delivery-next-action">{nextActionLabel(row)}</b></small>
