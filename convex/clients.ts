@@ -83,9 +83,12 @@ async function findActiveByLead(
 export const getByProject = query({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
-    await requireRole(ctx, WORKFLOW_VIEW_ROLES);
+    const user = await requireRole(ctx, WORKFLOW_VIEW_ROLES);
     const dossier = await findActiveByProject(ctx, args.projectId);
     if (!dossier) return null;
+    // Même périmètre que list : null hors scope, sans fuite d'existence.
+    const visible = await listVisibleClientIds(ctx, user);
+    if (visible !== null && !visible.has(dossier._id)) return null;
     return {
       ...dossier,
       techniciens: await techniciensOf(ctx, dossier._id),
@@ -97,9 +100,12 @@ export const getByProject = query({
 export const getByLead = query({
   args: { leadId: v.id("leads") },
   handler: async (ctx, args) => {
-    await requireRole(ctx, WORKFLOW_VIEW_ROLES);
+    const user = await requireRole(ctx, WORKFLOW_VIEW_ROLES);
     const dossier = await findActiveByLead(ctx, args.leadId);
     if (!dossier) return null;
+    // Même périmètre que list : null hors scope, sans fuite d'existence.
+    const visible = await listVisibleClientIds(ctx, user);
+    if (visible !== null && !visible.has(dossier._id)) return null;
     return {
       ...dossier,
       techniciens: await techniciensOf(ctx, dossier._id),

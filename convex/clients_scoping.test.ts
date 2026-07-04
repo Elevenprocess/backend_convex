@@ -73,3 +73,25 @@ test("filtres technicienVtId / unassignedVt + décor techniciens", async () => {
   const one = await asUser(t, boId).query(api.clients.getByLead, { leadId: assigned.leadId });
   expect(one!.techniciens).toEqual([{ id: techId, name: "Tech Un" }]);
 });
+
+test("getByProject/getByLead : dossier d'autrui masqué (pas de fuite d'existence)", async () => {
+  const t = makeT();
+  const comId = await insertUser(t, { role: "commercial" });
+  const com2Id = await insertUser(t, { role: "commercial", email: "c2@e.fr" });
+  const techId = await insertUser(t, { role: "technicien", email: "t@e.fr" });
+  const foreign = await seedDossier(t, { assignedToId: com2Id });
+  const projectId = await t.run(async (ctx: any) => {
+    const id = await ctx.db.insert("projects", {
+      leadId: foreign.leadId, commercialId: com2Id, name: "P", status: "signe",
+    });
+    await ctx.db.patch(foreign.clientId, { projectId: id });
+    return id;
+  });
+  expect(await asUser(t, comId).query(api.clients.getByProject, { projectId })).toBeNull();
+  expect(await asUser(t, comId).query(api.clients.getByLead, { leadId: foreign.leadId })).toBeNull();
+  expect(await asUser(t, techId).query(api.clients.getByLead, { leadId: foreign.leadId })).toBeNull();
+  // Le sien reste visible.
+  const mine = await seedDossier(t, { assignedToId: comId });
+  const got = await asUser(t, comId).query(api.clients.getByLead, { leadId: mine.leadId });
+  expect(got!._id).toBe(mine.clientId);
+});
