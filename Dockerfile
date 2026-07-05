@@ -3,9 +3,15 @@
 # ─── deps ───────────────────────────────────────────────────
 FROM node:22-alpine AS deps
 WORKDIR /app
-COPY package.json package-lock.jsong ./
-RUN npm ci
+# Le glob tolère un package-lock.json supprimé localement (dérive fréquente
+# des clones) ; sans lockfile, npm ci échoue et on retombe sur npm install.
+COPY package.json package-lock.json* ./
+RUN npm ci || npm install
 
+# Le glob tolère un package-lock.json supprimé localement (dérive fréquente
+# des clones) ; sans lockfile, npm ci échoue et on retombe sur npm install.
+COPY package.json package-lock.json* ./
+RUN npm ci || npm install
 # ─── dev ── serveur Vite + HMR pour le poste local ──────────
 # Usage : docker compose up   (voir compose.yaml)
 # Le code est bind-mounté à l'exécution ; la copie ci-dessous ne
