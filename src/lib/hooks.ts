@@ -31,6 +31,8 @@ import type {
   SubstepResponse,
   VtCalendarEntry,
 } from './types'
+import { fetchCache, type FetchCacheEntry } from './fetchCacheStore'
+import { persistEntry, loadAllEntries, migrateLegacyLocalStorage } from './cachePersist'
 
 type Async<T> = {
   data: T | null
@@ -44,18 +46,21 @@ type AsyncProgressive<T> = Async<T> & {
   backgroundLoading: boolean
 }
 
-type FetchCacheEntry = {
-  data: unknown
-  timestamp: number
-  // Marqué par un event realtime : la donnée reste affichable immédiatement,
-  // mais le prochain montage relance un refetch de fond pour se mettre à jour.
-  stale?: boolean
-}
-
 const FETCH_CACHE_TTL_MS = 10 * 60 * 1000
-const PERSISTED_CACHE_PREFIX = 'ecoi.fetchCache.v1:'
-const PERSISTED_CACHE_PATHS = ['/leads', '/users', '/analytics/summary', '/analytics/funnel', '/ghl-calendar/events']
-const fetchCache = new Map<string, FetchCacheEntry>()
+
+// Routes persistées sur disque (IndexedDB) : tout ce qui peint une page
+// principale. Exclusions implicites : binaires (/attachments/*/raw,
+// /documents/*/raw ne passent pas par useFetch) et auth.
+const PERSISTED_PATH_PREFIXES = [
+  '/leads', '/users', '/clients', '/rdv', '/call-logs', '/debriefs',
+  '/payments/acomptes', '/analytics/', '/notifications',
+  '/ghl-calendar/events', '/commercial-objectives', '/substeps',
+  '/interventions', '/projects',
+]
+
+function shouldPersistCache(cacheKey: string): boolean {
+  return PERSISTED_PATH_PREFIXES.some((prefix) => cacheKey.startsWith(prefix))
+}
 
 function buildFetchCacheKey(path: string | null, queryKey: string): string | null {
   return path === null ? null : `${path}?${queryKey}`
@@ -63,7 +68,7 @@ function buildFetchCacheKey(path: string | null, queryKey: string): string | nul
 
 function readCachedEntry(cacheKey: string | null): FetchCacheEntry | null {
   if (!cacheKey) return null
-  const entry = fetchCache.get(cacheKey) ?? readPersistedCache(cacheKey)
+  const entry = fetchCache.get(cacheKey)
   if (!entry) return null
   // TTL non destructif : une entrée expirée n'est JAMAIS purgée — elle est
   // servie immédiatement, marquée stale, et le montage relance un refetch de
@@ -78,34 +83,10 @@ function readCachedData<T>(cacheKey: string | null): T | null {
   return (readCachedEntry(cacheKey)?.data as T | undefined) ?? null
 }
 
-function shouldPersistCache(cacheKey: string): boolean {
-  return PERSISTED_CACHE_PATHS.some((path) => cacheKey.startsWith(`${path}?`))
-}
-
-function readPersistedCache(cacheKey: string): FetchCacheEntry | null {
-  if (typeof window === 'undefined' || !shouldPersistCache(cacheKey)) return null
-  try {
-    const storageKey = `${PERSISTED_CACHE_PREFIX}${cacheKey}`
-    const raw = window.sessionStorage.getItem(storageKey) ?? window.localStorage.getItem(storageKey)
-    if (!raw) return null
-    return JSON.parse(raw) as FetchCacheEntry
-  } catch {
-    return null
-  }
-}
-
 function writeCache(cacheKey: string | null, entry: FetchCacheEntry) {
   if (!cacheKey) return
   fetchCache.set(cacheKey, entry)
-  if (typeof window === 'undefined' || !shouldPersistCache(cacheKey)) return
-  try {
-    const storageKey = `${PERSISTED_CACHE_PREFIX}${cacheKey}`
-    const serialized = JSON.stringify(entry)
-    window.sessionStorage.setItem(storageKey, serialized)
-    window.localStorage.setItem(storageKey, serialized)
-  } catch {
-    // Cache best-effort : si le navigateur refuse/limite le stockage, l'app continue.
-  }
+  if (shouldPersistCache(cacheKey)) persistEntry(cacheKey, entry)
 }
 
 // Coalescing des requêtes concurrentes : l'Overview monte plusieurs sous-vues qui
@@ -160,30 +141,12 @@ async function prefetchFetchCache<T>(
 // le refetch se fait en arrière-plan (au tick pour les pages montées, au prochain
 // montage pour les autres).
 function markCachesStaleForPrefixes(prefixes: string[]) {
-  const matches = (key: string) => prefixes.some((prefix) => key.startsWith(`${prefix}?`))
-  for (const [key, entry] of fetchCache) {
-    if (matches(key) && !entry.stale) fetchCache.set(key, { ...entry, stale: true })
-  }
-  if (typeof window === 'undefined') return
-  try {
-    for (const storage of [window.sessionStorage, window.localStorage]) {
-      for (let i = storage.length - 1; i >= 0; i--) {
-        const storageKey = storage.key(i)
-        if (!storageKey?.startsWith(PERSISTED_CACHE_PREFIX)) continue
-        const cacheKey = storageKey.slice(PERSISTED_CACHE_PREFIX.length)
-        if (!matches(cacheKey)) continue
-        const raw = storage.getItem(storageKey)
-        if (!raw) continue
-        try {
-          const entry = JSON.parse(raw) as FetchCacheEntry
-          if (!entry.stale) storage.setItem(storageKey, JSON.stringify({ ...entry, stale: true }))
-        } catch {
-          storage.removeItem(storageKey)
-        }
-      }
-    }
-  } catch {
-    // best-effort
+  const matches = (cacheKey: string) => prefixes.some((prefix) => cacheKey.startsWith(`${prefix}?`))
+  for (const [key, entry] of fetchCache.entries()) {
+    if (!matches(key) || entry.stale) continue
+    const stale = { ...entry, stale: true }
+    fetchCache.set(key, stale)
+    if (shouldPersistCache(key)) persistEntry(key, stale)
   }
 }
 
@@ -1177,6 +1140,22 @@ export function useInterventions(
 ): Async<InterventionResponse[]> {
   const query = filters === null ? undefined : { clientId: filters?.clientId, status: filters?.status }
   return useFetch<InterventionResponse[]>(filters === null ? null : '/interventions', query)
+}
+
+// Hydratation au boot : recharge le cache disque (IndexedDB) vers la Map
+// mémoire AVANT le premier rendu, pour que les pages peignent immédiatement
+// les données de la dernière session. Migration one-shot de l'ancien
+// localStorage au passage.
+export async function hydrateFetchCache(): Promise<void> {
+  try {
+    await migrateLegacyLocalStorage('ecoi.fetchCache.v1:')
+    const entries = await loadAllEntries()
+    for (const [key, entry] of entries) {
+      if (!fetchCache.has(key)) fetchCache.set(key, entry)
+    }
+  } catch {
+    // best-effort : sans hydratation on retombe sur le comportement réseau
+  }
 }
 
 // ─── Helpers test-only ─────────────────────────────────────

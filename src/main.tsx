@@ -12,6 +12,7 @@ import { RouteFallback } from './components/RouteFallback'
 import { useAuth } from './lib/auth'
 import { ConvexProvider } from 'convex/react'
 import { convexClient } from './lib/convex'
+import { hydrateFetchCache } from './lib/hooks'
 
 // Lazy: all actual page components (named exports → .then mapping)
 const Overview = lazy(() => import('./pages/Overview').then((m) => ({ default: m.Overview })))
@@ -127,8 +128,17 @@ const app = (
   </Suspense>
 )
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    {convexClient ? <ConvexProvider client={convexClient}>{app}</ConvexProvider> : app}
-  </StrictMode>
-)
+// Hydrate le cache disque avant le premier rendu (peinture immédiate avec les
+// données de la dernière session), plafonné à 150 ms pour ne jamais retarder
+// le boot : au-delà, on rend et l'hydratation complète la Map en arrière-plan.
+void (async () => {
+  await Promise.race([
+    hydrateFetchCache(),
+    new Promise((resolve) => setTimeout(resolve, 150)),
+  ])
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      {convexClient ? <ConvexProvider client={convexClient}>{app}</ConvexProvider> : app}
+    </StrictMode>
+  )
+})()

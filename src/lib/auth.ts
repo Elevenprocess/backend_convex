@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { api, ApiError } from './api'
 import type { UserResponse, Role } from './types'
+import { clearFetchCache } from './fetchCacheStore'
 
 const VIEW_AS_KEY = 'ecoi.viewAsUserId'
 
@@ -128,6 +129,8 @@ export const useAuth = create<AuthState>((set, get) => ({
       // on ignore — on déconnecte en local quoi qu'il arrive
     }
     if (typeof window !== 'undefined') window.localStorage.removeItem(VIEW_AS_KEY)
+    // Les données métier en cache ne survivent pas au logout.
+    void clearFetchCache()
     set({ user: null, realUser: null, viewAsUser: null, status: 'guest', error: null })
   },
 

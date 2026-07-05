@@ -67,10 +67,13 @@ export function buildApiUrl(path: string): string {
 export class ApiError extends Error {
   status: number
   code?: string
-  constructor(status: number, message: string, code?: string) {
+  /** Corps JSON brut de la réponse d'erreur (ex. { lead } sur un 409 doublon). */
+  data?: unknown
+  constructor(status: number, message: string, code?: string, data?: unknown) {
     super(message)
     this.status = status
     this.code = code
+    this.data = data
   }
 }
 
@@ -123,7 +126,7 @@ export async function api<T>(path: string, opts: FetchOpts = {}): Promise<T> {
   if (!res.ok) {
     const msg = extractApiErrorMessage(data, `${res.status} ${res.statusText}`)
     const code = data && typeof data === 'object' && 'code' in data ? (data as { code?: string }).code : undefined
-    throw new ApiError(res.status, msg, code)
+    throw new ApiError(res.status, msg, code, data)
   }
   return data as T
 }
@@ -271,6 +274,32 @@ export function bootstrapClientForProject(projectId: string): Promise<ClientResp
     method: 'POST',
     body: { projectId },
   })
+}
+
+export type ManualClientPayload = {
+  firstName: string
+  lastName: string
+  phone?: string
+  email?: string
+  addressLine?: string
+  city?: string
+  postalCode?: string
+  montantTotal?: string
+  typeFinancement?: string
+  signedAt?: string
+}
+
+export type DuplicateLeadInfo = {
+  id: string
+  firstName: string | null
+  lastName: string | null
+  status: string
+  hasDossier: boolean
+}
+
+/** Création manuelle d'un dossier client (lead 'manual' + projet + client). 409 → ApiError.data.lead. */
+export function createManualClient(payload: ManualClientPayload): Promise<ClientResponse> {
+  return api<ClientResponse>('/clients/manual', { method: 'POST', body: payload })
 }
 
 export function getSubsteps(clientId: string): Promise<SubstepResponse[]> {
