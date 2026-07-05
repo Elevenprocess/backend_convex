@@ -37,6 +37,7 @@ import { convexAuthEnabled } from './convex'
 import {
   useConvexAnalyticsFunnel,
   useConvexAnalyticsSummary,
+  useConvexClients,
   useConvexDebriefAnalytics,
   useConvexEmptyList,
   useConvexLeads,
@@ -450,7 +451,7 @@ export function useLeadDebriefs(leadId?: string | null): Async<DebriefResponse[]
 }
 
 // ─── Clients ───────────────────────────────────────────────
-export function useClients(filters?: {
+function useClientsRest(filters?: {
   technicienVtId?: string
   phase?: string
   leadId?: string
@@ -466,6 +467,10 @@ export function useClients(filters?: {
   }
   return useFetch<ClientResponse[]>(filters === null ? null : '/clients', query, opts)
 }
+
+export const useClients: typeof useClientsRest = convexAuthEnabled
+  ? (useConvexClients as unknown as typeof useClientsRest)
+  : useClientsRest
 
 export function useSubsteps(
   filters?: { clientId?: string } | null,

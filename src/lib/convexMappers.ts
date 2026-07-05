@@ -1,5 +1,7 @@
-import type { ConvexLeadDoc, ConvexRdvDoc, ConvexUserDoc } from './convexApi'
+import type { ConvexClientDoc, ConvexLeadDoc, ConvexRdvDoc, ConvexUserDoc } from './convexApi'
 import type {
+  ClientPhaseStep,
+  ClientResponse,
   FinancingType,
   LeadResponse,
   LeadSource,
@@ -11,6 +13,8 @@ import type {
   Role,
   Team,
   UserResponse,
+  WorkflowPhase,
+  WorkflowStatus,
 } from './types'
 
 // Convertit les docs Convex vers les types REST existants : les composants
@@ -126,5 +130,35 @@ export function mapConvexRdv(doc: ConvexRdvDoc): RdvResponse {
     createdAt: new Date(doc._creationTime).toISOString(),
     updatedAt: new Date(doc._creationTime).toISOString(),
     lead: null,
+  }
+}
+
+export function mapConvexClient(doc: ConvexClientDoc): ClientResponse {
+  const steps: Partial<Record<WorkflowPhase, ClientPhaseStep>> = {}
+  for (const [phase, s] of Object.entries(doc.steps ?? {})) {
+    steps[phase as WorkflowPhase] = {
+      status: s.status as WorkflowStatus,
+      datePlanifiee: s.datePlanifiee,
+      dateRealisee: s.dateRealisee,
+      problemReason: s.problemReason,
+      responsableId: s.responsableId,
+    }
+  }
+  return {
+    id: doc._id,
+    leadId: doc.leadId,
+    projectId: doc.projectId ?? null,
+    rdvId: doc.rdvId ?? null,
+    lead: doc.lead ?? { fullName: null, city: null, phone: null },
+    technicienVtId: doc.technicienVtId ?? null,
+    techniciens: doc.techniciens ?? [],
+    poseTeamLeadId: doc.poseTeamLeadId ?? null,
+    adminReferentId: doc.adminReferentId ?? null,
+    statusGlobal: doc.statusGlobal,
+    currentPhase: doc.currentPhase as WorkflowPhase,
+    blocked: doc.blocked,
+    missingDocsCount: doc.missingDocs ?? 0,
+    signedAt: iso(doc.signedAt),
+    steps,
   }
 }

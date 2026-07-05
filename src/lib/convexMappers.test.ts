@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { mapConvexLead, mapConvexRdv, mapConvexUser } from './convexMappers'
-import type { ConvexLeadDoc, ConvexRdvDoc, ConvexUserDoc } from './convexApi'
+import { mapConvexClient, mapConvexLead, mapConvexRdv, mapConvexUser } from './convexMappers'
+import type { ConvexClientDoc, ConvexLeadDoc, ConvexRdvDoc, ConvexUserDoc } from './convexApi'
 
 const T0 = 1783181401517 // _creationTime de référence (ms)
 
@@ -62,5 +62,40 @@ describe('mapConvexRdv', () => {
   it('scheduledAt absent → retombe sur _creationTime (le type REST est non-null)', () => {
     const r = mapConvexRdv({ _id: 'r2', _creationTime: T0, leadId: 'l1', locationType: 'visio', status: 'planifie' })
     expect(r.scheduledAt).toBe(new Date(T0).toISOString())
+  })
+})
+
+describe('mapConvexClient', () => {
+  const base: ConvexClientDoc = {
+    _id: 'c1', _creationTime: T0, leadId: 'l1',
+    statusGlobal: 'en_cours', currentPhase: 'installation', blocked: false,
+    techniciens: [{ id: 'u1', name: 'Tech' }], missingDocs: 2,
+    steps: {
+      installation: { status: 'fait', datePlanifiee: '2026-06-01', dateRealisee: '2026-06-02', problemReason: null, responsableId: 'u1' },
+    },
+    lead: { fullName: 'Jean Dupont', city: 'Lyon', phone: '+262690000000' },
+  }
+
+  it('mappe le décor serveur (steps/lead/techniciens/missingDocs)', () => {
+    const c = mapConvexClient(base)
+    expect(c.id).toBe('c1')
+    expect(c.missingDocsCount).toBe(2)
+    expect(c.techniciens).toEqual([{ id: 'u1', name: 'Tech' }])
+    expect(c.lead).toEqual({ fullName: 'Jean Dupont', city: 'Lyon', phone: '+262690000000' })
+    expect(c.steps.installation?.status).toBe('fait')
+    expect(c.steps.installation?.dateRealisee).toBe('2026-06-02')
+    expect(c.currentPhase).toBe('installation')
+  })
+
+  it('décor absent → valeurs neutres (jamais de crash côté pipeline)', () => {
+    const c = mapConvexClient({
+      _id: 'c2', _creationTime: T0, leadId: 'l2',
+      statusGlobal: 'signe', currentPhase: 'vt', blocked: true,
+      techniciens: [], missingDocs: 0, steps: {}, lead: { fullName: null, city: null, phone: null },
+    })
+    expect(c.steps).toEqual({})
+    expect(c.projectId).toBeNull()
+    expect(c.signedAt).toBeNull()
+    expect(c.blocked).toBe(true)
   })
 })

@@ -78,6 +78,35 @@ export type ConvexRdvDoc = {
   deletedAt?: number
 }
 
+// Décor renvoyé par clients.list/getByProject/getByLead (decorateClient côté
+// serveur ajoute techniciens/missingDocs/steps/lead au doc brut).
+export type ConvexClientStep = {
+  status: string
+  datePlanifiee: string | null
+  dateRealisee: string | null
+  problemReason: string | null
+  responsableId: string | null
+}
+export type ConvexClientDoc = {
+  _id: string
+  _creationTime: number
+  leadId: string
+  projectId?: string
+  rdvId?: string
+  adminReferentId?: string
+  poseTeamLeadId?: string
+  technicienVtId?: string
+  signedAt?: number
+  statusGlobal: string
+  currentPhase: string
+  blocked: boolean
+  techniciens: { id: string; name: string }[]
+  missingDocs: number
+  steps: Record<string, ConvexClientStep>
+  lead: { fullName: string | null; city: string | null; phone: string | null }
+  [k: string]: unknown
+}
+
 type PaginationOptsArg = { numItems: number; cursor: string | null }
 
 export const usersMe = makeFunctionReference<'query', Record<string, never>, ConvexUserDoc | null>('users:me')
@@ -99,6 +128,12 @@ export const rdvList = makeFunctionReference<
   { commercialId?: string; status?: string; result?: string; from?: number; to?: number; paginationOpts: PaginationOptsArg },
   PaginationResult<ConvexRdvDoc>
 >('rdv:list')
+
+export const clientsList = makeFunctionReference<
+  'query',
+  { leadId?: string; projectId?: string; phase?: string; statusGlobal?: string; blocked?: boolean; technicienVtId?: string; unassignedVt?: boolean },
+  ConvexClientDoc[]
+>('clients:list')
 
 // Analytics. Les fonctions Convex renvoient volontairement les mêmes shapes que
 // les réponses REST (parité), au champ `engine` près (`convex-*` vs `backend-*`).

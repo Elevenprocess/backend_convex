@@ -1,11 +1,12 @@
 import { useEffect, useMemo } from 'react'
 import { usePaginatedQuery, useQuery } from 'convex/react'
-import { analyticsDebriefStats, analyticsFunnel, analyticsSummary, leadsList, rdvList, usersList } from './convexApi'
-import { mapConvexLead, mapConvexRdv, mapConvexUser } from './convexMappers'
+import { analyticsDebriefStats, analyticsFunnel, analyticsSummary, clientsList, leadsList, rdvList, usersList } from './convexApi'
+import { mapConvexClient, mapConvexLead, mapConvexRdv, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
 import type {
   AnalyticsFunnelResponse,
   AnalyticsSummaryResponse,
+  ClientResponse,
   LeadResponse,
   LeadStatus,
   RdvResponse,
@@ -184,6 +185,43 @@ export function useConvexDebriefAnalytics(filters?: {
 // NestJS de prod (401 + latence). À câbler quand le domaine sera porté.
 export function useConvexEmptyList<T>(): Async<T[]> {
   return { data: [], loading: false, error: null, refetch: noop }
+}
+
+// clients.list exige un rôle « vue workflow » côté serveur (admin, délivrabilité,
+// resp. technique, back-office, technicien, finances, commerciaux). Hors de ce
+// périmètre → skip (sinon la query throw) et liste vide.
+const CLIENTS_VIEW_ROLES = new Set<Role>([
+  'admin', 'delivrabilite', 'responsable_technique', 'back_office',
+  'technicien', 'finances', 'commercial', 'commercial_lead',
+])
+
+export function useConvexClients(filters?: {
+  technicienVtId?: string
+  phase?: string
+  leadId?: string
+  projectId?: string
+  unassignedVt?: boolean
+} | null): Async<ClientResponse[]> {
+  const role = useAuth((s) => s.user?.role)
+  const allowed = filters !== null && !!role && CLIENTS_VIEW_ROLES.has(role)
+  const rows = useQuery(
+    clientsList,
+    allowed
+      ? {
+          leadId: filters?.leadId,
+          projectId: filters?.projectId,
+          phase: filters?.phase,
+          technicienVtId: filters?.technicienVtId,
+          unassignedVt: filters?.unassignedVt,
+        }
+      : 'skip',
+  )
+  const data = useMemo(() => {
+    if (!allowed) return filters === null ? null : []
+    if (rows === undefined) return null
+    return rows.map(mapConvexClient)
+  }, [allowed, rows, filters])
+  return { data, loading: allowed && rows === undefined, error: null, refetch: noop }
 }
 
 const USERS_LIST_ROLES = new Set(['admin', 'setter_lead', 'commercial_lead'])
