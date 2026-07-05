@@ -10,6 +10,7 @@ import type { ActionCtx, MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { requireUser, roleOf } from "./model/access";
+import type { Role } from "./model/enums";
 import { ghlRequest, isGhlConfigured, requireGhlLocationId } from "./ghlClient";
 import {
   normalizeEvents, normalizeGhlCalendars, normalizeGhlContact, normalizeGhlUsers,
@@ -31,7 +32,9 @@ import type { GhlCalendarEvent, GhlContactInfo } from "./model/ghl/calendarTypes
 
 export const cacheGet = internalQuery({
   args: { key: v.string(), now: v.number() },
-  handler: async (ctx, args) => {
+  // Retour explicite : appelée via runQuery depuis des actions du même module →
+  // sans annotation, l'inférence boucle (implicit any en cascade au push).
+  handler: async (ctx, args): Promise<string | null> => {
     const row = await ctx.db
       .query("ghlEventsCache")
       .withIndex("by_key", (q) => q.eq("key", args.key))
@@ -66,7 +69,7 @@ export const viewerInfo = internalQuery({
 
 export const commercialsByGhlUserId = internalQuery({
   args: {},
-  handler: async (ctx) => {
+  handler: async (ctx): Promise<Array<{ ghlUserId: string; userId: Id<"users">; name: string }>> => {
     const rows = await ctx.db.query("users").collect();
     return rows
       .filter((u) =>
@@ -80,7 +83,7 @@ export const commercialsByGhlUserId = internalQuery({
 
 export const leadSyncInfo = internalQuery({
   args: { leadId: v.id("leads") },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ externalId: string | undefined } | null> => {
     const lead = await ctx.db.get(args.leadId);
     if (!lead || lead.deletedAt !== undefined) return null;
     return { externalId: lead.externalId };
@@ -89,7 +92,7 @@ export const leadSyncInfo = internalQuery({
 
 export const userForMySector = internalQuery({
   args: { userId: v.id("users") },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ ghlUserId: string | undefined; ghlCalendarId: string | undefined } | null> => {
     const user = await ctx.db.get(args.userId);
     if (!user || user.deletedAt !== undefined) return null;
     return { ghlUserId: user.ghlUserId, ghlCalendarId: user.ghlCalendarId };
@@ -138,7 +141,7 @@ export const ghlEventValidator = v.object({
  */
 export const persistGhlEvents = internalMutation({
   args: { events: v.array(ghlEventValidator), now: v.number() },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ created: number; updated: number; skipped: number }> => {
     let created = 0, updated = 0, skipped = 0;
 
     for (const event of args.events) {
@@ -253,7 +256,13 @@ const SALES_VIEW = ["admin", "setter", "setter_lead", "commercial", "commercial_
 const BUSINESS_VIEW = ["admin", "commercial_lead"];
 const GHL_EVENTS_CACHE_TTL_MS = 60_000;
 
-async function requireViewer(ctx: ActionCtx, allowed: string[]) {
+// Type de retour explicite : viewerInfo est dans CE module (internal.ghlCalendar)
+// et est appelée via runQuery ici même → sans annotation, TS boucle sur
+// l'inférence (implicit any en cascade sur tout le fichier au push Convex).
+async function requireViewer(
+  ctx: ActionCtx,
+  allowed: string[],
+): Promise<{ userId: Id<"users">; role: Role }> {
   const viewer = await ctx.runQuery(internal.ghlCalendar.viewerInfo, {});
   if (!allowed.includes(viewer.role)) throw new Error("Accès refusé");
   return viewer;
@@ -409,7 +418,9 @@ export const events = action({
     from: v.number(), to: v.number(),
     sector: v.optional(v.string()), calendarId: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
+  // Retour explicite : appelle internal.ghlCalendar.* via runQuery → sans
+  // annotation, le type de l'api générée boucle (implicit any en cascade).
+  handler: async (ctx, args): Promise<{ configured: boolean; events: GhlCalendarEvent[] }> => {
     const viewer = await requireViewer(ctx, SALES_VIEW);
     const bounded = boundRdvEventsRange(args.from, args.to);
     if (!bounded) return { configured: isGhlConfigured(), events: [] as GhlCalendarEvent[] };
@@ -436,7 +447,11 @@ export const events = action({
 
 export const mySector = action({
   args: { userId: v.optional(v.id("users")) },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{
+    configured: boolean; linked: boolean; userId: Id<"users">;
+    ghlUserId: string | null; primarySector: string | null; primaryCalendarId: string | null;
+    sectors: Array<{ sector: string; calendarId: string; label: string; primary: boolean }>;
+  }> => {
     const viewer = await requireViewer(ctx, SALES_VIEW);
     const userId = args.userId ?? viewer.userId;
     const empty = {
@@ -522,7 +537,9 @@ export const syncEvents = action({
 
 export const syncLeadEvents = action({
   args: { leadId: v.id("leads") },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{
+    configured: boolean; created: number; updated: number; skipped: number; matched: number; events: GhlCalendarEvent[];
+  }> => {
     await requireViewer(ctx, SETTER_VIEW);
     if (!isGhlConfigured()) return { configured: false, created: 0, updated: 0, skipped: 0, matched: 0, events: [] as GhlCalendarEvent[] };
     const lead = await ctx.runQuery(internal.ghlCalendar.leadSyncInfo, { leadId: args.leadId });

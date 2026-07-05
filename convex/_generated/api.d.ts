@@ -47,6 +47,7 @@ import type * as model_ghl_calendarTypes from "../model/ghl/calendarTypes.js";
 import type * as model_ghl_leadWebhook from "../model/ghl/leadWebhook.js";
 import type * as model_ghl_opportunityWebhook from "../model/ghl/opportunityWebhook.js";
 import type * as model_ghl_projectSync from "../model/ghl/projectSync.js";
+import type * as model_ghl_sectorConfig from "../model/ghl/sectorConfig.js";
 import type * as model_ghl_stageMapper from "../model/ghl/stageMapper.js";
 import type * as model_ghl_webhookAuth from "../model/ghl/webhookAuth.js";
 import type * as model_notifMessages from "../model/notifMessages.js";
@@ -116,6 +117,7 @@ declare const fullApi: ApiFromModules<{
   "model/ghl/leadWebhook": typeof model_ghl_leadWebhook;
   "model/ghl/opportunityWebhook": typeof model_ghl_opportunityWebhook;
   "model/ghl/projectSync": typeof model_ghl_projectSync;
+  "model/ghl/sectorConfig": typeof model_ghl_sectorConfig;
   "model/ghl/stageMapper": typeof model_ghl_stageMapper;
   "model/ghl/webhookAuth": typeof model_ghl_webhookAuth;
   "model/notifMessages": typeof model_notifMessages;

@@ -89,11 +89,7 @@ export const getByProject = query({
     // Même périmètre que list : null hors scope, sans fuite d'existence.
     const visible = await listVisibleClientIds(ctx, user);
     if (visible !== null && !visible.has(dossier._id)) return null;
-    return {
-      ...dossier,
-      techniciens: await techniciensOf(ctx, dossier._id),
-      missingDocs: await missingDocsOf(ctx, dossier._id),
-    };
+    return await decorateClient(ctx, dossier);
   },
 });
 
@@ -106,11 +102,7 @@ export const getByLead = query({
     // Même périmètre que list : null hors scope, sans fuite d'existence.
     const visible = await listVisibleClientIds(ctx, user);
     if (visible !== null && !visible.has(dossier._id)) return null;
-    return {
-      ...dossier,
-      techniciens: await techniciensOf(ctx, dossier._id),
-      missingDocs: await missingDocsOf(ctx, dossier._id),
-    };
+    return await decorateClient(ctx, dossier);
   },
 });
 
@@ -169,13 +161,7 @@ export const list = query({
       .filter((c) => args.technicienVtId === undefined || c.technicienVtId === args.technicienVtId)
       .filter((c) => !args.unassignedVt || c.technicienVtId === undefined)
       .sort((a, b) => b._creationTime - a._creationTime);
-    return await Promise.all(
-      scoped.map(async (c) => ({
-        ...c,
-        techniciens: await techniciensOf(ctx, c._id),
-        missingDocs: await missingDocsOf(ctx, c._id),
-      })),
-    );
+    return await Promise.all(scoped.map((c) => decorateClient(ctx, c)));
   },
 });
 
@@ -240,6 +226,65 @@ async function missingDocsOf(ctx: QueryCtx, clientId: Id<"clients">): Promise<nu
     subs.map((s) => ({ id: s._id, key: s.key })),
     docTypesBySubstep,
   );
+}
+
+/**
+ * Carte des étapes par phase (parité ClientResponse.steps du NestJS) : une
+ * entrée workflowSteps par phase → { status, dates, problème, responsable }.
+ */
+async function stepsMapOf(
+  ctx: QueryCtx,
+  clientId: Id<"clients">,
+): Promise<Record<string, {
+  status: string;
+  datePlanifiee: string | null;
+  dateRealisee: string | null;
+  problemReason: string | null;
+  responsableId: string | null;
+}>> {
+  const steps = await ctx.db
+    .query("workflowSteps")
+    .withIndex("by_client", (q) => q.eq("clientId", clientId))
+    .collect();
+  const out: Record<string, {
+    status: string;
+    datePlanifiee: string | null;
+    dateRealisee: string | null;
+    problemReason: string | null;
+    responsableId: string | null;
+  }> = {};
+  for (const s of steps) {
+    out[s.phase] = {
+      status: s.status,
+      datePlanifiee: s.datePlanifiee ?? null,
+      dateRealisee: s.dateRealisee ?? null,
+      problemReason: s.problemReason ?? null,
+      responsableId: s.responsableId ?? null,
+    };
+  }
+  return out;
+}
+
+/** Décor lead minimal pour les cartes (parité ClientResponse.lead). */
+async function leadDecorOf(
+  ctx: QueryCtx,
+  leadId: Id<"leads">,
+): Promise<{ fullName: string | null; city: string | null; phone: string | null }> {
+  const lead = await ctx.db.get(leadId);
+  const fullName =
+    [lead?.firstName, lead?.lastName].filter((s) => s && s.trim()).join(" ").trim() || null;
+  return { fullName, city: lead?.city ?? null, phone: lead?.phone ?? null };
+}
+
+/** Décor commun des trois lectures de dossier (list/getByProject/getByLead). */
+async function decorateClient(ctx: QueryCtx, c: Doc<"clients">) {
+  return {
+    ...c,
+    techniciens: await techniciensOf(ctx, c._id),
+    missingDocs: await missingDocsOf(ctx, c._id),
+    steps: await stepsMapOf(ctx, c._id),
+    lead: await leadDecorOf(ctx, c.leadId),
+  };
 }
 
 /** Techniciens de la jonction, avec noms (ordre d'insertion). */
