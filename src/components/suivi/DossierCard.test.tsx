@@ -21,11 +21,12 @@ function client(over: Partial<ClientResponse>): ClientResponse {
 describe('DossierCard enrichie', () => {
   it('affiche la phase active du backend', () => {
     render(<DossierCard dossier={dossier} client={client({})} onClick={vi.fn()} />)
-    expect(screen.getByText('Consuel')).toBeInTheDocument()
+    // Le libellé de phase apparaît en nom de projet ET en étape courante.
+    expect(screen.getAllByText('Consuel').length).toBeGreaterThan(0)
   })
-  it('affiche le compteur de pièces manquantes', () => {
+  it("n'affiche plus le compteur de pièces manquantes (retiré par 63f7a18 — défaut trompeur)", () => {
     render(<DossierCard dossier={dossier} client={client({ missingDocsCount: 2 })} onClick={vi.fn()} />)
-    expect(screen.getByText(/2 pièces/i)).toBeInTheDocument()
+    expect(screen.queryByText(/pièces/i)).not.toBeInTheDocument()
   })
   it('affiche le badge bloqué', () => {
     render(<DossierCard dossier={dossier} client={client({ blocked: true })} onClick={vi.fn()} />)
