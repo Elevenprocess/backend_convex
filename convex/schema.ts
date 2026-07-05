@@ -15,6 +15,8 @@ import {
   clientStatusValidator, workflowPhaseValidator, workflowStatusValidator,
   workflowSubstepKeyValidator, problemReasonValidator, productTypeValidator,
   documentTypeValidator,
+  // Webhooks entrants (Tranche 8a)
+  webhookProviderValidator, webhookEventStatusValidator,
 } from "./model/enums";
 
 export default defineSchema({
@@ -101,6 +103,10 @@ export default defineSchema({
     ghlPipelineId: v.optional(v.string()),
     lostReason: v.optional(v.string()),
     deletedAt: v.optional(v.number()),
+    // Posé uniquement par le backfill/migration (lignes historiques) ; les
+    // webhooks live laissent _creationTime faire foi. Lu en priorité par les
+    // KPI datés une fois la migration branchée (cf. risque _creationTime).
+    createdAt: v.optional(v.number()),
   })
     .index("by_status_setter", ["status", "setterId"])
     .index("by_setter", ["setterId"])
@@ -124,6 +130,27 @@ export default defineSchema({
     .index("by_lead_changedAt", ["leadId", "changedAt"])
     .index("by_changedAt", ["changedAt"])
     .index("by_lead_stage_changedAt", ["leadId", "ghlStageName", "changedAt"]),
+
+  // Audit trail des webhooks entrants (parité webhook_events NestJS) : le raw
+  // payload survit à l'échec du traitement → replay/debug possibles.
+  webhookEvents: defineTable({
+    provider: webhookProviderValidator,
+    eventType: v.string(),
+    payload: v.string(), // JSON.stringify du body brut
+    status: webhookEventStatusValidator,
+    error: v.optional(v.string()),
+    ipAddress: v.optional(v.string()),
+    processedAt: v.optional(v.number()),
+  }).index("by_status", ["status"]),
+
+  // Fallback de classification du canal d'acquisition : rawSource (normalisé
+  // lowercase/trim, unique par convention d'écriture) → canal.
+  acquisitionSourceMap: defineTable({
+    rawSource: v.string(),
+    channel: adChannelValidator,
+    label: v.string(),
+    updatedAt: v.optional(v.number()),
+  }).index("by_rawSource", ["rawSource"]),
 
   leadCustomFields: defineTable({
     leadId: v.id("leads"),

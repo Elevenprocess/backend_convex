@@ -201,3 +201,16 @@ export const PRODUCT_TYPES = [
 ] as const;
 export type ProductType = (typeof PRODUCT_TYPES)[number];
 export const productTypeValidator = v.union(...PRODUCT_TYPES.map((t) => v.literal(t))) as Validator<ProductType>;
+
+// ─── Webhooks entrants (Tranche 8a) ──────────────────────────────────────────
+export const WEBHOOK_PROVIDERS = ["ghl", "ringover"] as const;
+export type WebhookProvider = (typeof WEBHOOK_PROVIDERS)[number];
+export const webhookProviderValidator = v.union(
+  ...WEBHOOK_PROVIDERS.map((p) => v.literal(p)),
+) as Validator<WebhookProvider>;
+
+export const WEBHOOK_EVENT_STATUSES = ["recorded", "processed", "failed"] as const;
+export type WebhookEventStatus = (typeof WEBHOOK_EVENT_STATUSES)[number];
+export const webhookEventStatusValidator = v.union(
+  ...WEBHOOK_EVENT_STATUSES.map((s) => v.literal(s)),
+) as Validator<WebhookEventStatus>;
