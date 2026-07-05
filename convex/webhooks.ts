@@ -7,8 +7,10 @@
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import { webhookProviderValidator } from "./model/enums";
 import { mapGhlStageToStatus } from "./model/ghl/stageMapper";
+import { ensureDossier } from "./model/ensureDossier";
 
 export const recordEvent = internalMutation({
   args: {
@@ -41,6 +43,28 @@ export const markFailed = internalMutation({
     return null;
   },
 });
+
+/**
+ * Vrai si le lead a un projet 'signe' actif ET aucun dossier délivrabilité
+ * actif. Dans cet état, le statut lead reste 'signe' (règle « signé gagne »)
+ * quel que soit le mouvement GHL. Portage hasSignedProjectAwaitingDelivrabilite.
+ */
+async function hasSignedProjectAwaitingDelivrabilite(
+  ctx: MutationCtx,
+  leadId: Id<"leads">,
+): Promise<boolean> {
+  const projects = await ctx.db
+    .query("projects")
+    .withIndex("by_lead", (q) => q.eq("leadId", leadId))
+    .collect();
+  const signed = projects.some((p) => p.status === "signe" && p.deletedAt === undefined);
+  if (!signed) return false;
+  const dossiers = await ctx.db
+    .query("clients")
+    .withIndex("by_lead", (q) => q.eq("leadId", leadId))
+    .collect();
+  return !dossiers.some((c) => c.deletedAt === undefined);
+}
 
 /**
  * Portage central de LeadsService.applyGhlStageChange (NestJS l.678-878).
@@ -133,7 +157,19 @@ export const applyGhlStageChange = internalMutation({
       if (input.lostReason !== undefined) patch.lostReason = input.lostReason;
       if (assignedToId !== undefined) patch.assignedToId = assignedToId;
       if (mapped.isKnown && mapped.status) {
-        const nextStatus = mapped.status;
+        // « signé gagne » : tant qu'un projet signé existe et n'a pas encore
+        // été transmis à la délivrabilité (aucun dossier `clients` actif), on
+        // refuse toute rétrogradation venant de GHL.
+        let nextStatus = mapped.status;
+        if (
+          nextStatus !== "signe" &&
+          (await hasSignedProjectAwaitingDelivrabilite(ctx, leadId))
+        ) {
+          console.log(
+            `[signe-wins] lead=${leadId} mouvement GHL "${mapped.status}" ignoré : projet signé non encore transmis à la délivrabilité — statut maintenu 'signe'.`,
+          );
+          nextStatus = "signe";
+        }
         patch.status = nextStatus;
         statusChanged = previousStatus !== nextStatus;
       }
@@ -163,6 +199,18 @@ export const applyGhlStageChange = internalMutation({
         ...(input.webhookEventId !== undefined ? { webhookEventId: input.webhookEventId } : {}),
       });
       historyAppended = true;
+    }
+
+    // 4) Passage à 'signe' → dossier délivrabilité (une fois). Parité NestJS :
+    // n'importe quel dossier actif du lead suffit à skipper (même lié projet).
+    if (mapped.status === "signe" && previousStatus !== "signe") {
+      const dossiers = await ctx.db
+        .query("clients")
+        .withIndex("by_lead", (q) => q.eq("leadId", leadId))
+        .collect();
+      if (!dossiers.some((c) => c.deletedAt === undefined)) {
+        await ensureDossier(ctx, { leadId });
+      }
     }
 
     return {

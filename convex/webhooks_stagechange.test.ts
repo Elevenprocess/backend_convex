@@ -101,3 +101,80 @@ describe("applyGhlStageChange — création / patch / historique", () => {
     expect(h.source).toBe("backfill");
   });
 });
+
+describe("applyGhlStageChange — signé-gagne + bootstrap", () => {
+  async function seedSignedLead(t: ReturnType<typeof makeT>, withDossier: boolean) {
+    return await t.run(async (ctx) => {
+      const commercialId = await ctx.db.insert("users", {
+        email: "c@ecoi.fr", role: "commercial", active: true,
+      });
+      const leadId = await ctx.db.insert("leads", {
+        source: "ghl", externalId: "c1", status: "signe", assignedToId: commercialId,
+      });
+      await ctx.db.insert("projects", {
+        leadId, commercialId, name: "P", status: "signe",
+      });
+      if (withDossier) {
+        await ctx.db.insert("clients", {
+          leadId, statusGlobal: "nouveau", currentPhase: "vt", blocked: false,
+        });
+      }
+      return leadId;
+    });
+  }
+
+  it("projet signé SANS dossier → rétrogradation GHL refusée (statut maintenu signe)", async () => {
+    const t = makeT();
+    const leadId = await seedSignedLead(t, false);
+    const r = await t.mutation(internal.webhooks.applyGhlStageChange, {
+      ...base, ghlStageName: "12. Devis Perdu 💔",
+    });
+    expect(r.statusChanged).toBe(false);
+    expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("signe");
+    // L'historique trace quand même le mouvement GHL
+    expect(await t.run((ctx) => ctx.db.query("leadStageHistory").collect())).toHaveLength(1);
+  });
+
+  it("projet signé AVEC dossier → rétrogradation acceptée", async () => {
+    const t = makeT();
+    const leadId = await seedSignedLead(t, true);
+    const r = await t.mutation(internal.webhooks.applyGhlStageChange, {
+      ...base, ghlStageName: "12. Devis Perdu 💔",
+    });
+    expect(r.statusChanged).toBe(true);
+    expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("perdu");
+  });
+
+  it("passage à signe → bootstrap dossier une seule fois", async () => {
+    const t = makeT();
+    const leadId = await t.run((ctx) =>
+      ctx.db.insert("leads", { source: "ghl", externalId: "c1", status: "signature_en_cours" }),
+    );
+    await t.mutation(internal.webhooks.applyGhlStageChange, {
+      ...base, ghlStageName: "11. Devis Signé ✍️",
+    });
+    expect(await t.run((ctx) => ctx.db.query("clients").collect())).toHaveLength(1);
+    // Replay à date différente : déjà signe → pas de re-bootstrap
+    await t.mutation(internal.webhooks.applyGhlStageChange, {
+      ...base, occurredAt: base.occurredAt + 1, ghlStageName: "11. Devis Signé ✍️",
+    });
+    expect(await t.run((ctx) => ctx.db.query("clients").collect())).toHaveLength(1);
+    expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("signe");
+  });
+
+  it("archived → deletedAt posé, pas écrasé au replay", async () => {
+    const t = makeT();
+    const leadId = await t.run((ctx) =>
+      ctx.db.insert("leads", { source: "ghl", externalId: "c1", status: "relance" }),
+    );
+    await t.mutation(internal.webhooks.applyGhlStageChange, {
+      ...base, ghlStageName: "1. Prospects Archivés 📦",
+    });
+    const lead1 = await t.run((ctx) => ctx.db.get(leadId));
+    expect(lead1).toMatchObject({ status: "perdu", deletedAt: base.occurredAt });
+    await t.mutation(internal.webhooks.applyGhlStageChange, {
+      ...base, occurredAt: base.occurredAt + 999, ghlStageName: "1. Prospects Archivés 📦",
+    });
+    expect((await t.run((ctx) => ctx.db.get(leadId)))?.deletedAt).toBe(base.occurredAt);
+  });
+});
