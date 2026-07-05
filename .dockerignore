@@ -11,3 +11,4 @@ dist-ssr
 README.md
 Dockerfile
 .dockerignore
+compose.yaml
