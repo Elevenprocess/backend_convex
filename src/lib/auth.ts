@@ -2,8 +2,26 @@ import { create } from 'zustand'
 import { api, ApiError } from './api'
 import type { UserResponse, Role } from './types'
 import { clearFetchCache } from './fetchCacheStore'
+import { convexAuthEnabled } from './convex'
 
 const VIEW_AS_KEY = 'ecoi.viewAsUserId'
+
+// ─── Mode Convex (tranche 1) ────────────────────────────────
+// En mode Convex, les actions du store délèguent à l'implémentation branchée
+// par <ConvexAuthBridge> (@convex-dev/auth) ; le pont pousse aussi user/status
+// dans le store via useAuth.setState au fil des changements de session.
+export type AuthBackend = {
+  signIn: (email: string, password: string, flow: 'signIn' | 'signUp') => Promise<void>
+  signOut: () => Promise<void>
+}
+let convexBackend: AuthBackend | null = null
+export function configureAuthBackend(impl: AuthBackend) {
+  convexBackend = impl
+}
+function requireConvexBackend(): AuthBackend {
+  if (!convexBackend) throw new Error('Auth Convex non initialisée — <ConvexAuthBridge> doit être monté')
+  return convexBackend
+}
 
 // Promesse du hydrate() en cours, pour sérialiser les appels concurrents
 // (focus + visibilitychange + interval déclenchés quasi simultanément).
@@ -37,7 +55,9 @@ type AuthState = {
   status: 'loading' | 'authed' | 'guest'
   error: string | null
   hydrate: () => Promise<void>
-  signIn: (email: string, password: string) => Promise<UserResponse>
+  // Retourne null en mode Convex : le user arrive de façon réactive via le
+  // pont (useQuery users:me), pas en réponse directe du signIn.
+  signIn: (email: string, password: string, opts?: { signUp?: boolean }) => Promise<UserResponse | null>
   signOut: () => Promise<void>
   viewAs: (user: UserResponse) => void
   exitViewAs: () => void
@@ -54,6 +74,8 @@ export const useAuth = create<AuthState>((set, get) => ({
   error: null,
 
   hydrate: async () => {
+    // Mode Convex : la session est poussée par le pont, rien à hydrater.
+    if (convexAuthEnabled) return
     // Garde anti-concurrence : useAuthSessionKeeper appelle hydrate() sur focus,
     // visibilitychange ET un interval — deux runs concurrents pouvaient se
     // chevaucher et faire sauter le bandeau « voir en tant que ». On sérialise.
@@ -110,8 +132,17 @@ export const useAuth = create<AuthState>((set, get) => ({
     return hydrateInFlight
   },
 
-  signIn: async (email, password) => {
+  signIn: async (email, password, opts) => {
     set({ error: null })
+    if (convexAuthEnabled) {
+      await requireConvexBackend().signIn(email, password, opts?.signUp ? 'signUp' : 'signIn')
+      // Le token est posé ; useConvexAuth va basculer et le pont poussera le
+      // user. On passe en 'loading' pour que RequireAuth attende au lieu de
+      // renvoyer vers /login pendant la transition.
+      if (typeof window !== 'undefined') window.localStorage.removeItem(VIEW_AS_KEY)
+      set({ status: 'loading' })
+      return null
+    }
     await api<SignInResponse>('/api/auth/sign-in/email', {
       method: 'POST',
       body: { email, password },
@@ -124,7 +155,11 @@ export const useAuth = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     try {
-      await api<unknown>('/api/auth/sign-out', { method: 'POST' })
+      if (convexAuthEnabled) {
+        await requireConvexBackend().signOut()
+      } else {
+        await api<unknown>('/api/auth/sign-out', { method: 'POST' })
+      }
     } catch {
       // on ignore — on déconnecte en local quoi qu'il arrive
     }

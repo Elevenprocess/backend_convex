@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth, signInWithGoogle } from '../lib/auth'
 import { ApiError } from '../lib/api'
+import { convexAuthEnabled } from '../lib/convex'
 import { Spinner } from '../components/Spinner'
 import Orb from '../components/visual/Orb'
 
@@ -12,6 +13,9 @@ export function Login() {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
+  // Mode Convex : création de compte via le flow signUp du provider Password
+  // (les comptes seed n'ont pas de mot de passe connu en dev).
+  const [createAccount, setCreateAccount] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const signIn = useAuth((s) => s.signIn)
@@ -50,7 +54,7 @@ export function Login() {
     setSubmitting(true)
     setError(null)
     try {
-      await signIn(email, password)
+      await signIn(email, password, createAccount ? { signUp: true } : undefined)
       navigate(redirectTo, { replace: true })
     } catch (err) {
       if (err instanceof ApiError) {
@@ -165,10 +169,17 @@ export function Login() {
                 disabled={submitting}
                 className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-xs font-black uppercase tracking-[0.2em] text-black shadow-[0_18px_60px_rgba(255,255,255,0.18)] transition hover:-translate-y-0.5 hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
               >
-                {submitting ? <Spinner size={16} stroke={3} label="Connexion…" /> : 'Se connecter'}
+                {submitting ? (
+                  <Spinner size={16} stroke={3} label="Connexion…" />
+                ) : createAccount ? (
+                  'Créer le compte'
+                ) : (
+                  'Se connecter'
+                )}
               </button>
 
-              <div className="flex items-center gap-3 py-1">
+              {!convexAuthEnabled && (
+              <><div className="flex items-center gap-3 py-1">
                 <div className="h-px flex-1 bg-white/10" />
                 <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/35">ou</span>
                 <div className="h-px flex-1 bg-white/10" />
@@ -193,12 +204,26 @@ export function Login() {
                     Continuer avec Google
                   </>
                 )}
-              </button>
+              </button></>
+              )}
             </form>
 
-            <p className="mt-7 text-center text-[11px] text-white/40">
-              Pas de compte ? <a href="#" className="font-semibold text-white/70 transition hover:text-white">Contacter votre admin</a>
-            </p>
+            {convexAuthEnabled ? (
+              <p className="mt-7 text-center text-[11px] text-white/40">
+                {createAccount ? 'Déjà un compte ? ' : 'Pas de compte ? '}
+                <button
+                  type="button"
+                  onClick={() => { setCreateAccount((v) => !v); setError(null) }}
+                  className="font-semibold text-white/70 transition hover:text-white"
+                >
+                  {createAccount ? 'Se connecter' : 'Créer un compte'}
+                </button>
+              </p>
+            ) : (
+              <p className="mt-7 text-center text-[11px] text-white/40">
+                Pas de compte ? <a href="#" className="font-semibold text-white/70 transition hover:text-white">Contacter votre admin</a>
+              </p>
+            )}
           </div>
         </div>
       </section>

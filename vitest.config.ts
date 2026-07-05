@@ -8,5 +8,9 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    // Les tests tournent en mode NestJS : sans ça, le VITE_CONVEX_URL du .env
+    // local basculerait useLeads & co sur Convex sans ConvexProvider monté.
+    // Les tests du mode Convex re-stubbent la variable explicitement.
+    env: { VITE_CONVEX_URL: '' },
   },
 })

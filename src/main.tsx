@@ -10,8 +10,9 @@ import { Login } from './pages/Login'
 import { Landing } from './pages/Landing'
 import { RouteFallback } from './components/RouteFallback'
 import { useAuth } from './lib/auth'
-import { ConvexProvider } from 'convex/react'
+import { ConvexAuthProvider } from '@convex-dev/auth/react'
 import { convexClient } from './lib/convex'
+import { ConvexAuthBridge } from './components/auth/ConvexAuthBridge'
 import { hydrateFetchCache } from './lib/hooks'
 
 // Lazy: all actual page components (named exports → .then mapping)
@@ -138,7 +139,14 @@ void (async () => {
   ])
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      {convexClient ? <ConvexProvider client={convexClient}>{app}</ConvexProvider> : app}
+      {convexClient ? (
+        <ConvexAuthProvider client={convexClient}>
+          <ConvexAuthBridge />
+          {app}
+        </ConvexAuthProvider>
+      ) : (
+        app
+      )}
     </StrictMode>
   )
 })()

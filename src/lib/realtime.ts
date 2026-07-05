@@ -4,6 +4,7 @@ import { API_BASE } from './api'
 import { shouldSurfaceNotification } from './realtimeNotify'
 import { createRealtimeRefreshCoalescer, REALTIME_REFRESH_COOLDOWN_MS } from './realtimeRefreshQueue'
 import { useAuth } from './auth'
+import { convexAuthEnabled } from './convex'
 
 export const REALTIME_REFRESH_EVENT = 'ecoi:realtime-refresh'
 
@@ -111,6 +112,9 @@ const scheduleRealtimeRefresh = createRealtimeRefreshCoalescer(
 
 export function useRealtimeSocket() {
   useEffect(() => {
+    // Mode Convex : pas de socket NestJS — les useQuery Convex sont réactifs
+    // nativement, le serveur pousse les changements tout seul.
+    if (convexAuthEnabled) return
     const socket: Socket = io(realtimeBaseUrl(), {
       withCredentials: true,
       transports: ['websocket', 'polling'],

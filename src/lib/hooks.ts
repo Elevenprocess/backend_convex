@@ -33,6 +33,8 @@ import type {
 } from './types'
 import { fetchCache, type FetchCacheEntry } from './fetchCacheStore'
 import { persistEntry, loadAllEntries, migrateLegacyLocalStorage } from './cachePersist'
+import { convexAuthEnabled } from './convex'
+import { useConvexLeads, useConvexRdvList, useConvexUsers } from './convexHooks'
 
 type Async<T> = {
   data: T | null
@@ -250,7 +252,10 @@ function clampLimit(limit: number | undefined, fallback: number, max: number): n
 }
 
 // ─── Leads ─────────────────────────────────────────────────
-export function useLeads(filters?: {
+// Mode Convex : useLeads/useLeadsProgressive/useRdvList/useUsers sont servis
+// par les adaptateurs Convex (convexHooks.ts). La sélection se fait au niveau
+// module (flag constant au runtime) — jamais de hook conditionnel au rendu.
+function useLeadsRest(filters?: {
   status?: LeadStatus
   setterId?: string
   assignedToId?: string
@@ -272,11 +277,15 @@ export function useLeads(filters?: {
   return useFetch<LeadResponse[]>(filters === null ? null : '/leads', query, opts)
 }
 
+export const useLeads: typeof useLeadsRest = convexAuthEnabled
+  ? (useConvexLeads as unknown as typeof useLeadsRest)
+  : useLeadsRest
+
 // Two-phase fetch (Facebook News-Feed style):
 //   phase 1 → quickFetch (defaults to 50 leads) renvoie vite, on peint l'écran
 //   phase 2 → fullFetch (defaults to 500) tourne en parallèle, remplace phase 1 dès qu'il arrive
 // Pendant la phase 2, `backgroundLoading` = true → le composant peut afficher un badge subtil.
-export function useLeadsProgressive(filters?: {
+function useLeadsProgressiveRest(filters?: {
   status?: LeadStatus
   setterId?: string
   assignedToId?: string
@@ -304,6 +313,10 @@ export function useLeadsProgressive(filters?: {
     refetch: () => { quick.refetch(); full.refetch() },
   }
 }
+
+export const useLeadsProgressive: typeof useLeadsProgressiveRest = convexAuthEnabled
+  ? (useConvexLeads as unknown as typeof useLeadsProgressiveRest)
+  : useLeadsProgressiveRest
 
 export function useLead(id: string | undefined): Async<LeadResponse> {
   return useFetch<LeadResponse>(id ? `/leads/${id}` : null)
@@ -345,7 +358,7 @@ export async function createLead(input: CreateLeadInput): Promise<LeadResponse> 
 }
 
 // ─── RDV ───────────────────────────────────────────────────
-export function useRdvList(filters?: {
+function useRdvListRest(filters?: {
   leadId?: string
   commercialId?: string
   setterId?: string
@@ -359,6 +372,10 @@ export function useRdvList(filters?: {
     { refreshCachedOnMount: true, silentInitialLoading: true, ...opts },
   )
 }
+
+export const useRdvList: typeof useRdvListRest = convexAuthEnabled
+  ? (useConvexRdvList as unknown as typeof useRdvListRest)
+  : useRdvListRest
 
 // Cf. useLeadsProgressive — même pattern pour les RDV.
 export function useRdvListProgressive(filters?: {
@@ -411,9 +428,13 @@ export async function updateRdv(id: string, input: UpdateRdvPayload): Promise<Rd
 }
 
 // ─── Users ─────────────────────────────────────────────────
-export function useUsers(opts?: { noRealtimeRefresh?: boolean }): Async<UserResponse[]> {
+function useUsersRest(opts?: { noRealtimeRefresh?: boolean }): Async<UserResponse[]> {
   return useFetch<UserResponse[]>('/users', undefined, opts)
 }
+
+export const useUsers: typeof useUsersRest = convexAuthEnabled
+  ? (useConvexUsers as unknown as typeof useUsersRest)
+  : useUsersRest
 
 // ─── Débriefs d'un lead ────────────────────────────────────
 export function useLeadDebriefs(leadId?: string | null): Async<DebriefResponse[]> {
