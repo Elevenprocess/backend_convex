@@ -6,14 +6,27 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
+# ─── dev ── serveur Vite + HMR pour le poste local ──────────
+# Usage : docker compose up   (voir compose.yaml)
+# Le code est bind-mounté à l'exécution ; la copie ci-dessous ne
+# sert que de fallback si on lance l'image sans volume.
+FROM node:22-alpine AS dev
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+EXPOSE 5173
+CMD ["npm", "run", "dev"]
+
 # ─── build ──────────────────────────────────────────────────
 FROM node:22-alpine AS builder
 WORKDIR /app
 # Vite bakes VITE_* vars at build time, so they must be ARGs, not runtime env.
 ARG VITE_API_URL
 ARG VITE_REALTIME_URL
+ARG VITE_CONVEX_URL
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_REALTIME_URL=$VITE_REALTIME_URL
+ENV VITE_CONVEX_URL=$VITE_CONVEX_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build

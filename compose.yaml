@@ -1,0 +1,22 @@
+# Dev local sans Node sur la machine hôte (macOS trop ancien pour les
+# binaires esbuild ≥ 0.27) : tout tourne dans un conteneur Linux.
+#
+#   docker compose up            # démarre Vite sur http://localhost:5173
+#   docker compose up --build -V # après un changement de package.json
+#
+# Le dossier est bind-mounté : les modifs de code sont vues par le HMR
+# (vite.config.ts active déjà usePolling pour les bind-mounts Docker).
+# Le .env local (VITE_API_URL / VITE_REALTIME_URL / VITE_CONVEX_URL) est
+# monté avec le reste — le navigateur se connecte directement à Convex.
+services:
+  frontend:
+    build:
+      context: .
+      target: dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      # node_modules du conteneur (Linux) — masque ceux du Mac, jamais partagés
+      - /app/node_modules
+    tty: true
