@@ -99,3 +99,24 @@ export const rdvList = makeFunctionReference<
   { commercialId?: string; status?: string; result?: string; from?: number; to?: number; paginationOpts: PaginationOptsArg },
   PaginationResult<ConvexRdvDoc>
 >('rdv:list')
+
+// Analytics. Les fonctions Convex renvoient volontairement les mêmes shapes que
+// les réponses REST (parité), au champ `engine` près (`convex-*` vs `backend-*`).
+// On type les retours en `unknown` et on caste dans les hooks (convexHooks.ts).
+export const analyticsSummary = makeFunctionReference<
+  'query',
+  { now: number; days?: number; from?: string; to?: string },
+  unknown
+>('analytics:summary')
+
+export const analyticsFunnel = makeFunctionReference<
+  'query',
+  { now: number; days?: number; from?: string; to?: string; setterId?: string; sector?: string },
+  unknown
+>('analytics:funnel')
+
+export const analyticsDebriefStats = makeFunctionReference<
+  'query',
+  { from?: string; to?: string; commercialId?: string },
+  unknown
+>('analytics:debriefStats')

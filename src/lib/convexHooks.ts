@@ -1,9 +1,17 @@
 import { useEffect, useMemo } from 'react'
 import { usePaginatedQuery, useQuery } from 'convex/react'
-import { leadsList, rdvList, usersList } from './convexApi'
+import { analyticsDebriefStats, analyticsFunnel, analyticsSummary, leadsList, rdvList, usersList } from './convexApi'
 import { mapConvexLead, mapConvexRdv, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
-import type { LeadResponse, LeadStatus, RdvResponse, UserResponse } from './types'
+import type {
+  AnalyticsFunnelResponse,
+  AnalyticsSummaryResponse,
+  LeadResponse,
+  LeadStatus,
+  RdvResponse,
+  Role,
+  UserResponse,
+} from './types'
 
 // Adaptateurs Convex des hooks data de la tranche 1. Même contrat de retour
 // que useFetch ({ data, loading, error, refetch }) pour que les pages ne
@@ -84,6 +92,98 @@ export function useConvexRdvList(filters?: {
     error: null,
     refetch: noop,
   }
+}
+
+// ─── Analytics ──────────────────────────────────────────────
+// `now` doit être STABLE entre les rendus : le passer via Date.now() à chaque
+// render ferait boucler le useQuery (args différents → refetch en boucle). On
+// le fige au montage, bucketé à 5 min (le serveur ne s'en sert que pour la
+// troncature "live" et le fallback de plage).
+function useStableNow(): number {
+  return useMemo(() => Math.floor(Date.now() / 300_000) * 300_000, [])
+}
+
+// Rôles autorisés côté serveur (analytics.ts). Une query Convex lancée par un
+// rôle non autorisé THROW au rendu (→ crash/remount). On skip donc la query
+// pour ces rôles et on renvoie null, comme un 403 REST capté silencieusement.
+const SUMMARY_ROLES = new Set<Role>(['admin', 'setter', 'setter_lead', 'commercial', 'commercial_lead', 'finances'])
+const FUNNEL_ROLES = new Set<Role>(['admin', 'commercial_lead'])
+const DEBRIEF_ROLES = new Set<Role>(['admin', 'commercial', 'commercial_lead'])
+
+type DebriefStats = {
+  outcomeCounts: { vente: number; non_vente: number; en_reflexion: number; suivi_prevu: number }
+  acceptanceFactorCounts: Record<string, number>
+  nonSaleReasonCounts: Record<string, number>
+  total: number
+}
+
+export function useConvexAnalyticsSummary(filters?: {
+  days?: number
+  from?: string
+  to?: string
+}): Async<AnalyticsSummaryResponse> {
+  const now = useStableNow()
+  const role = useAuth((s) => s.user?.role)
+  const allowed = !!role && SUMMARY_ROLES.has(role)
+  const res = useQuery(
+    analyticsSummary,
+    allowed ? { now, days: filters?.days, from: filters?.from, to: filters?.to } : 'skip',
+  )
+  return {
+    data: allowed ? ((res ?? null) as AnalyticsSummaryResponse | null) : null,
+    loading: allowed && res === undefined,
+    error: null,
+    refetch: noop,
+  }
+}
+
+export function useConvexAnalyticsFunnel(filters?: {
+  days?: number
+  from?: string
+  to?: string
+  setterId?: string
+  sector?: string
+}): Async<AnalyticsFunnelResponse> {
+  const now = useStableNow()
+  const role = useAuth((s) => s.user?.role)
+  const allowed = !!role && FUNNEL_ROLES.has(role)
+  const res = useQuery(
+    analyticsFunnel,
+    allowed
+      ? { now, days: filters?.days, from: filters?.from, to: filters?.to, setterId: filters?.setterId, sector: filters?.sector }
+      : 'skip',
+  )
+  return {
+    data: allowed ? ((res ?? null) as AnalyticsFunnelResponse | null) : null,
+    loading: allowed && res === undefined,
+    error: null,
+    refetch: noop,
+  }
+}
+
+export function useConvexDebriefAnalytics(filters?: {
+  from?: string
+  to?: string
+  commercialId?: string
+}): Async<DebriefStats> {
+  const role = useAuth((s) => s.user?.role)
+  const allowed = !!role && DEBRIEF_ROLES.has(role)
+  const res = useQuery(
+    analyticsDebriefStats,
+    allowed ? { from: filters?.from, to: filters?.to, commercialId: filters?.commercialId } : 'skip',
+  )
+  return {
+    data: allowed ? ((res ?? null) as DebriefStats | null) : null,
+    loading: allowed && res === undefined,
+    error: null,
+    refetch: noop,
+  }
+}
+
+// Hooks sans équivalent Convex (tranche 1) : renvoient vide au lieu de taper le
+// NestJS de prod (401 + latence). À câbler quand le domaine sera porté.
+export function useConvexEmptyList<T>(): Async<T[]> {
+  return { data: [], loading: false, error: null, refetch: noop }
 }
 
 const USERS_LIST_ROLES = new Set(['admin', 'setter_lead', 'commercial_lead'])

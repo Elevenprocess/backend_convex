@@ -34,7 +34,15 @@ import type {
 import { fetchCache, type FetchCacheEntry } from './fetchCacheStore'
 import { persistEntry, loadAllEntries, migrateLegacyLocalStorage } from './cachePersist'
 import { convexAuthEnabled } from './convex'
-import { useConvexLeads, useConvexRdvList, useConvexUsers } from './convexHooks'
+import {
+  useConvexAnalyticsFunnel,
+  useConvexAnalyticsSummary,
+  useConvexDebriefAnalytics,
+  useConvexEmptyList,
+  useConvexLeads,
+  useConvexRdvList,
+  useConvexUsers,
+} from './convexHooks'
 
 type Async<T> = {
   data: T | null
@@ -550,7 +558,7 @@ export function useUser(id: string | undefined): Async<UserResponse> {
 }
 
 // ─── Analytics ─────────────────────────────────────────────
-export function useAnalyticsSummary(filters?: {
+function useAnalyticsSummaryRest(filters?: {
   days?: number
   from?: string
   to?: string
@@ -561,11 +569,17 @@ export function useAnalyticsSummary(filters?: {
   })
 }
 
+export const useAnalyticsSummary: typeof useAnalyticsSummaryRest = convexAuthEnabled
+  ? (useConvexAnalyticsSummary as unknown as typeof useAnalyticsSummaryRest)
+  : useAnalyticsSummaryRest
+
 export function prefetchAnalyticsSummary(filters?: {
   days?: number
   from?: string
   to?: string
 }, options?: { force?: boolean }): Promise<AnalyticsSummaryResponse | null> {
+  // Pas de prefetch impératif en mode Convex (le useQuery réactif s'en charge).
+  if (convexAuthEnabled) return Promise.resolve(null)
   return prefetchFetchCache<AnalyticsSummaryResponse>('/analytics/summary', filters, options)
 }
 
@@ -580,7 +594,7 @@ export function useSetterStats(
   })
 }
 
-export function useCommercialObjectives(period: string | null): Async<CommercialObjectiveResponse[]> {
+function useCommercialObjectivesRest(period: string | null): Async<CommercialObjectiveResponse[]> {
   return useFetch<CommercialObjectiveResponse[]>(
     period ? '/commercial-objectives' : null,
     period ? { period } : undefined,
@@ -588,7 +602,13 @@ export function useCommercialObjectives(period: string | null): Async<Commercial
   )
 }
 
-export function useAnalyticsFunnel(filters?: {
+// Pas d'objectifs commerciaux côté Convex (tranche 1) → liste vide plutôt que
+// de taper le NestJS de prod.
+export const useCommercialObjectives: typeof useCommercialObjectivesRest = convexAuthEnabled
+  ? (useConvexEmptyList as unknown as typeof useCommercialObjectivesRest)
+  : useCommercialObjectivesRest
+
+function useAnalyticsFunnelRest(filters?: {
   days?: number
   from?: string
   to?: string
@@ -601,6 +621,10 @@ export function useAnalyticsFunnel(filters?: {
   })
 }
 
+export const useAnalyticsFunnel: typeof useAnalyticsFunnelRest = convexAuthEnabled
+  ? (useConvexAnalyticsFunnel as unknown as typeof useAnalyticsFunnelRest)
+  : useAnalyticsFunnelRest
+
 export function prefetchAnalyticsFunnel(filters?: {
   days?: number
   from?: string
@@ -608,6 +632,7 @@ export function prefetchAnalyticsFunnel(filters?: {
   setterId?: string
   sector?: string
 }, options?: { force?: boolean }): Promise<AnalyticsFunnelResponse | null> {
+  if (convexAuthEnabled) return Promise.resolve(null)
   return prefetchFetchCache<AnalyticsFunnelResponse>('/analytics/funnel', filters, options)
 }
 
@@ -643,7 +668,7 @@ export type DebriefAnalyticsResponse = {
   total: number
 }
 
-export function useDebriefAnalytics(filters?: {
+function useDebriefAnalyticsRest(filters?: {
   from?: string
   to?: string
   commercialId?: string
@@ -653,6 +678,10 @@ export function useDebriefAnalytics(filters?: {
     silentInitialLoading: true,
   })
 }
+
+export const useDebriefAnalytics: typeof useDebriefAnalyticsRest = convexAuthEnabled
+  ? (useConvexDebriefAnalytics as unknown as typeof useDebriefAnalyticsRest)
+  : useDebriefAnalyticsRest
 
 // ─── Pipeline analytics (admin) ─────────────────────────────
 export type PipelineDistributionEntry = {
@@ -736,7 +765,7 @@ export async function runPipelineBackfill(opts: { dryRun: boolean; limit?: numbe
 }
 
 // ─── Call logs ─────────────────────────────────────────────
-export function useCallLogs(filters?: {
+function useCallLogsRest(filters?: {
   leadId?: string
   setterId?: string
   limit?: number
@@ -744,6 +773,12 @@ export function useCallLogs(filters?: {
 } | null): Async<CallLogResponse[]> {
   return useFetch<CallLogResponse[]>(filters === null ? null : '/call-logs', filters === null ? undefined : { ...filters, limit: clampLimit(filters?.limit, 50, CALL_LOGS_LIMIT_MAX) })
 }
+
+// Pas de liste globale d'appels côté Convex (tranche 1) → vide (stoppe les
+// requêtes NestJS échouées ; l'activité setter est dégradée en attendant).
+export const useCallLogs: typeof useCallLogsRest = convexAuthEnabled
+  ? (useConvexEmptyList as unknown as typeof useCallLogsRest)
+  : useCallLogsRest
 
 export type CreateCallLogInput = {
   leadId: string
