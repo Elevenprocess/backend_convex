@@ -5,14 +5,13 @@ import { buildEvolutionTicks, computeEvolutionDomain } from './evolutionAxis'
 const NOW_AFTER = Date.parse('2026-07-01T00:00:00.000Z') // bien après toutes les plages testées → pas de troncature live
 
 describe('computeEvolutionDomain', () => {
-  it('hour granularity spans 8h→21h of the range start day (hors live)', () => {
+  it('hour granularity : journée pleine 00h→minuit du jour de début (hors live)', () => {
     const domain = computeEvolutionDomain({ from: '2026-06-08T00:00:00.000Z', to: '2026-06-08T23:59:59.999Z' }, 'hour', NOW_AFTER)
     const start = new Date(domain.start)
-    const end = new Date(domain.end)
-    expect(start.getHours()).toBe(8)
-    expect(end.getHours()).toBe(21)
+    expect(start.getHours()).toBe(0)
     expect(start.getFullYear()).toBe(2026)
-    expect(end.getTime()).toBeGreaterThan(start.getTime())
+    // 00h → minuit = 24 h pleines
+    expect(domain.end - domain.start).toBe(24 * 60 * 60 * 1000)
   })
 
   it('day granularity spans from start-of-from to end-of-to', () => {
@@ -29,10 +28,10 @@ describe('computeEvolutionDomain', () => {
 })
 
 describe('buildEvolutionTicks', () => {
-  it('hour (hors live) : exactement 8/11/14/17/20h, sans tick 21h superflu', () => {
+  it('hour (hors live) : graduations toutes les 4h de 0h à 20h + bord droit 24h', () => {
     const domain = computeEvolutionDomain({ from: '2026-06-08T00:00:00.000Z', to: '2026-06-08T23:59:59.999Z' }, 'hour', NOW_AFTER)
     const ticks = buildEvolutionTicks(domain, 'hour')
-    expect(ticks.map((t) => t.label)).toEqual(['8h', '11h', '14h', '17h', '20h'])
+    expect(ticks.map((t) => t.label)).toEqual(['0h', '4h', '8h', '12h', '16h', '20h', '24h'])
     ticks.forEach((tick) => {
       expect(tick.t).toBeGreaterThanOrEqual(domain.start)
       expect(tick.t).toBeLessThanOrEqual(domain.end)
