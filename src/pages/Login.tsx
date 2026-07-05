@@ -60,7 +60,18 @@ export function Login() {
       if (err instanceof ApiError) {
         setError(err.status === 401 ? 'E-mail ou mot de passe incorrect.' : err.message)
       } else {
-        setError((err as Error).message)
+        // Convex Auth expurge les erreurs serveur (« Server Error … InvalidAccountId ») :
+        // on remappe vers un message utilisateur au lieu d'afficher la stack.
+        const raw = (err as Error).message ?? ''
+        if (/InvalidAccountId|InvalidSecret|Server Error/i.test(raw)) {
+          setError(
+            createAccount
+              ? "Impossible de créer le compte. L'e-mail est peut-être déjà utilisé."
+              : 'E-mail ou mot de passe incorrect.',
+          )
+        } else {
+          setError(raw || 'La connexion a échoué.')
+        }
       }
     } finally {
       setSubmitting(false)
