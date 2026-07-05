@@ -1,8 +1,9 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
-import { leadStatusValidator } from "./model/enums";
+import { leadStatusValidator, adChannelValidator } from "./model/enums";
 import { requireUser, requireRole } from "./model/access";
+import { normalizeSource } from "./model/acquisitionChannel";
 import { insertStageHistory } from "./model/stageHistory";
 
 export const get = query({
@@ -125,5 +126,82 @@ export const qualify = mutation({
       source: "manual",
     });
     return null;
+  },
+});
+
+// ─── Sources à classer (portage SourceMapService, Tranche 8a) ─────────────────
+
+export const sourceMapUpsert = mutation({
+  args: {
+    rawSource: v.string(),
+    channel: adChannelValidator,
+    label: v.string(),
+    reapply: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, ["admin"]);
+    const normalized = normalizeSource(args.rawSource);
+
+    const existing = await ctx.db
+      .query("acquisitionSourceMap")
+      .withIndex("by_rawSource", (q) => q.eq("rawSource", normalized))
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        channel: args.channel, label: args.label, updatedAt: Date.now(),
+      });
+    } else {
+      await ctx.db.insert("acquisitionSourceMap", {
+        rawSource: normalized, channel: args.channel, label: args.label,
+      });
+    }
+
+    // Reclasse les leads en fallback (`other`/absent) UNIQUEMENT — ne jamais
+    // écraser une classification utm/fbclid prioritaire (parité NestJS).
+    let reapplied = 0;
+    if (args.reapply) {
+      const all = await ctx.db.query("leads").collect();
+      for (const lead of all) {
+        const raw = normalizeSource(lead.canalAcquisition);
+        const isFallback =
+          lead.acquisitionChannel === undefined || lead.acquisitionChannel === "other";
+        if (raw === normalized && isFallback) {
+          await ctx.db.patch(lead._id, { acquisitionChannel: args.channel });
+          reapplied += 1;
+        }
+      }
+    }
+    return { reapplied };
+  },
+});
+
+export const sourceMapList = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireRole(ctx, ["admin"]);
+    return await ctx.db.query("acquisitionSourceMap").collect();
+  },
+});
+
+export const sourceMapUnmapped = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireRole(ctx, ["admin"]);
+    const mapped = new Set(
+      (await ctx.db.query("acquisitionSourceMap").collect()).map((r) => r.rawSource),
+    );
+    const counts = new Map();
+    const leads = await ctx.db
+      .query("leads")
+      .withIndex("by_acquisitionChannel", (q) => q.eq("acquisitionChannel", "other"))
+      .collect();
+    for (const lead of leads) {
+      const raw = normalizeSource(lead.canalAcquisition);
+      if (!raw || mapped.has(raw)) continue;
+      counts.set(raw, (counts.get(raw) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([raw, n]) => ({ raw, n }))
+      .sort((a, b) => b.n - a.n);
   },
 });
