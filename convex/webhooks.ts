@@ -11,6 +11,7 @@ import type { MutationCtx } from "./_generated/server";
 import { webhookProviderValidator } from "./model/enums";
 import { mapGhlStageToStatus } from "./model/ghl/stageMapper";
 import { ensureDossier } from "./model/ensureDossier";
+import { deriveAcquisitionChannel } from "./model/acquisitionChannel";
 
 export const recordEvent = internalMutation({
   args: {
@@ -217,5 +218,66 @@ export const applyGhlStageChange = internalMutation({
       leadId, created, statusChanged, historyAppended,
       ...(mapped.sideEffect !== undefined ? { sideEffect: mapped.sideEffect } : {}),
     };
+  },
+});
+
+const leadDataValidator = v.object({
+  firstName: v.optional(v.string()), lastName: v.optional(v.string()),
+  email: v.optional(v.string()), phone: v.optional(v.string()),
+  addressLine: v.optional(v.string()), city: v.optional(v.string()),
+  postalCode: v.optional(v.string()),
+  utmSource: v.optional(v.string()), utmMedium: v.optional(v.string()),
+  utmCampaign: v.optional(v.string()), campaign: v.optional(v.string()),
+  adset: v.optional(v.string()), ad: v.optional(v.string()),
+  canalAcquisition: v.optional(v.string()), campaignId: v.optional(v.string()),
+  adsetId: v.optional(v.string()), adId: v.optional(v.string()),
+  attributionMedium: v.optional(v.string()),
+  attributionSessionSource: v.optional(v.string()),
+});
+
+function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, value]) => value !== undefined),
+  ) as Partial<T>;
+}
+
+/**
+ * Création lead depuis contact.created. Dédup par externalId : lead existant
+ * → aucune écriture (parité du TODO reclassify NestJS non résolu). La
+ * sourceMap est chargée DANS la transaction (cohérence classification).
+ */
+export const createLeadFromWebhook = internalMutation({
+  args: {
+    externalId: v.optional(v.string()),
+    data: leadDataValidator,
+    signals: v.object({
+      fbclid: v.optional(v.string()), gclid: v.optional(v.string()),
+      utmSource: v.optional(v.string()), medium: v.optional(v.string()),
+      sessionSource: v.optional(v.string()), canalAcquisition: v.optional(v.string()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    if (args.externalId !== undefined) {
+      const externalId = args.externalId;
+      const candidates = await ctx.db
+        .query("leads")
+        .withIndex("by_externalId", (q) => q.eq("externalId", externalId))
+        .collect();
+      const existing = candidates.find((l) => l.source === "ghl");
+      if (existing) return { leadId: existing._id, duplicate: true };
+    }
+
+    const rows = await ctx.db.query("acquisitionSourceMap").collect();
+    const sourceMap = new Map(rows.map((r) => [r.rawSource, r.channel as string]));
+    const channel = deriveAcquisitionChannel(args.signals, sourceMap);
+
+    const leadId = await ctx.db.insert("leads", {
+      ...(args.externalId !== undefined ? { externalId: args.externalId } : {}),
+      source: "ghl",
+      status: "nouveau",
+      ...stripUndefined(args.data),
+      acquisitionChannel: channel,
+    });
+    return { leadId, duplicate: false };
   },
 });
