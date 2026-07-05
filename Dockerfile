@@ -6,7 +6,11 @@ WORKDIR /app
 # Le glob tolère un package-lock.json supprimé localement (dérive fréquente
 # des clones) ; sans lockfile, npm ci échoue et on retombe sur npm install.
 COPY package.json package-lock.json* ./
-RUN npm ci || npm install
+# Retries généreux : le registre npm est parfois coupé en cours de route
+# (ECONNRESET) sur les connexions lentes ; --no-audit/--no-fund évitent
+# des allers-retours inutiles.
+RUN npm ci --no-audit --no-fund --fetch-retries=5 --fetch-retry-maxtimeout=120000 \
+    || npm install --no-audit --no-fund --fetch-retries=5 --fetch-retry-maxtimeout=120000
 
 # ─── dev ── serveur Vite + HMR pour le poste local ──────────
 # Usage : docker compose up   (voir compose.yaml)
