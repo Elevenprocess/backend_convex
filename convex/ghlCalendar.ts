@@ -4,7 +4,8 @@
  * model/ghl/, fetch API dans ghlClient.ts, écritures ici en mutations internes.
  */
 import { v } from "convex/values";
-import { action, internalMutation, internalQuery } from "./_generated/server";
+import type { Infer } from "convex/values";
+import { action, internalAction, internalMutation, internalQuery } from "./_generated/server";
 import type { ActionCtx, MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
@@ -477,5 +478,86 @@ export const mySector = action({
       primaryCalendarId: primary?.calendarId ?? null,
       sectors: candidates,
     };
+  },
+});
+
+// ─── Sync (manuelle + cron) ───────────────────────────────────────────────────
+
+const PERSIST_CHUNK_SIZE = 25;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+async function persistInChunks(
+  ctx: ActionCtx,
+  events: GhlCalendarEvent[],
+  now: number,
+): Promise<{ created: number; updated: number; skipped: number }> {
+  let created = 0, updated = 0, skipped = 0;
+  const payload = events as unknown as Array<Infer<typeof ghlEventValidator>>;
+  for (let i = 0; i < payload.length; i += PERSIST_CHUNK_SIZE) {
+    const r = await ctx.runMutation(internal.ghlCalendar.persistGhlEvents, {
+      events: payload.slice(i, i + PERSIST_CHUNK_SIZE), now,
+    });
+    created += r.created; updated += r.updated; skipped += r.skipped;
+  }
+  return { created, updated, skipped };
+}
+
+export const syncEvents = action({
+  args: {
+    from: v.number(), to: v.number(),
+    sector: v.optional(v.string()), calendarId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireViewer(ctx, SETTER_VIEW);
+    const bounded = boundRdvEventsRange(args.from, args.to);
+    if (!bounded || !isGhlConfigured()) {
+      return { configured: isGhlConfigured(), created: 0, updated: 0, skipped: 0, events: [] as GhlCalendarEvent[] };
+    }
+    const result = await loadEventsImpl(ctx, { ...bounded, sector: args.sector, calendarId: args.calendarId });
+    if (!result.configured) return { configured: false, created: 0, updated: 0, skipped: 0, events: [] as GhlCalendarEvent[] };
+    const synced = await persistInChunks(ctx, result.events, Date.now());
+    return { configured: true, ...synced, events: result.events };
+  },
+});
+
+export const syncLeadEvents = action({
+  args: { leadId: v.id("leads") },
+  handler: async (ctx, args) => {
+    await requireViewer(ctx, SETTER_VIEW);
+    if (!isGhlConfigured()) return { configured: false, created: 0, updated: 0, skipped: 0, matched: 0, events: [] as GhlCalendarEvent[] };
+    const lead = await ctx.runQuery(internal.ghlCalendar.leadSyncInfo, { leadId: args.leadId });
+    if (!lead?.externalId) return { configured: true, created: 0, updated: 0, skipped: 0, matched: 0, events: [] as GhlCalendarEvent[] };
+
+    const now = Date.now();
+    const result = await loadEventsImpl(ctx, { fromMs: now - DAY_MS, toMs: now + 45 * DAY_MS });
+    if (!result.configured) return { configured: false, created: 0, updated: 0, skipped: 0, matched: 0, events: [] as GhlCalendarEvent[] };
+    const matching = result.events.filter((event) => event.contactId === lead.externalId);
+    const synced = await persistInChunks(ctx, matching, now);
+    return { configured: true, ...synced, matched: matching.length, events: matching };
+  },
+});
+
+/**
+ * Synchro périodique 15 min (portage syncEventsScheduled l.745-763).
+ * DÉBRANCHÉE par défaut : ne tourne que si GHL_SYNC_ENABLED === "true".
+ * Fenêtre glissante [−3 j ; +60 j]. Best-effort : ne throw jamais.
+ */
+export const syncScheduled = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    if (process.env.GHL_SYNC_ENABLED !== "true") return null;
+    if (!isGhlConfigured()) return null;
+    const now = Date.now();
+    try {
+      const result = await loadEventsImpl(ctx, { fromMs: now - 3 * DAY_MS, toMs: now + 60 * DAY_MS });
+      if (!result.configured) return null;
+      const synced = await persistInChunks(ctx, result.events, now);
+      if (synced.created || synced.updated) {
+        console.log(`Sync calendrier GHL auto : ${synced.created} créé(s), ${synced.updated} mis à jour, ${synced.skipped} ignoré(s)`);
+      }
+    } catch (error) {
+      console.warn(`Sync calendrier GHL auto échouée : ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return null;
   },
 });
