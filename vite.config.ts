@@ -33,5 +33,18 @@ export default defineConfig({
       usePolling: true,
       interval: 100,
     },
+    // Les pages sont lazy : sans warmup, la PREMIÈRE visite de chaque page paie
+    // la transformation à la demande — très lent à travers le bind-mount Docker
+    // (2-3 s ressenties). On préchauffe le chemin chaud dès le boot du serveur.
+    warmup: {
+      clientFiles: [
+        './src/main.tsx',
+        './src/pages/Login.tsx',
+        './src/pages/leads/LeadsList.tsx',
+        './src/pages/leads/LeadsSplit.tsx',
+        './src/pages/leads/LeadDetail.tsx',
+        './src/pages/Overview.tsx',
+      ],
+    },
   },
 })

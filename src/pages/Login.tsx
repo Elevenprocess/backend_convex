@@ -21,7 +21,10 @@ export function Login() {
   const signIn = useAuth((s) => s.signIn)
 
   const fromState = (location.state as { from?: string } | null)?.from
-  const redirectTo = fromState && fromState !== '/login' ? fromState : '/overview'
+  // Mode Convex (tranche 1) : Overview n'est pas encore câblée sur Convex, on
+  // atterrit sur Leads qui l'est — évite une page d'erreurs lente au login.
+  const defaultLanding = convexAuthEnabled ? '/leads' : '/overview'
+  const redirectTo = fromState && fromState !== '/login' ? fromState : defaultLanding
 
   // Retour d'un échec OAuth Google : better-auth redirige vers /login?error=...
   useEffect(() => {
