@@ -10,6 +10,27 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // Pré-bundle des grosses dépendances au démarrage. Sinon Vite les découvre à
+  // la première navigation qui les importe (pages lazy) → re-optimisation à
+  // chaud → RECHARGEMENT COMPLET de la page en plein usage. Les lister ici
+  // évite ce « redémarrage automatique » (surtout les deps Convex récentes).
+  optimizeDeps: {
+    include: [
+      'convex/react',
+      'convex/server',
+      '@convex-dev/auth/react',
+      'react',
+      'react-dom',
+      'react-router-dom',
+      'zustand',
+      'recharts',
+      'socket.io-client',
+      'ogl',
+      'ai',
+      '@ai-sdk/react',
+      'ldrs',
+    ],
+  },
   build: {
     rollupOptions: {
       output: {
