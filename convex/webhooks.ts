@@ -8,10 +8,11 @@ import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
-import { webhookProviderValidator } from "./model/enums";
+import { webhookProviderValidator, leadStatusValidator } from "./model/enums";
 import { mapGhlStageToStatus } from "./model/ghl/stageMapper";
 import { ensureDossier } from "./model/ensureDossier";
 import { deriveAcquisitionChannel } from "./model/acquisitionChannel";
+import { syncProjectFromLeadStatus } from "./model/ghl/projectSync";
 
 export const recordEvent = internalMutation({
   args: {
@@ -279,5 +280,18 @@ export const createLeadFromWebhook = internalMutation({
       acquisitionChannel: channel,
     });
     return { leadId, duplicate: false };
+  },
+});
+
+/**
+ * Sync GHL → projets, appelé best-effort par la http action APRÈS
+ * applyGhlStageChange (mutation séparée : son échec ne doit pas faire
+ * échouer le webhook — parité NestJS .catch(warn)).
+ */
+export const syncProjectFromLead = internalMutation({
+  args: { leadId: v.id("leads"), leadStatus: leadStatusValidator },
+  handler: async (ctx, args) => {
+    await syncProjectFromLeadStatus(ctx, args.leadId, args.leadStatus);
+    return null;
   },
 });
