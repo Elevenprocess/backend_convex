@@ -152,6 +152,15 @@ export default defineSchema({
     updatedAt: v.optional(v.number()),
   }).index("by_rawSource", ["rawSource"]),
 
+  // Cache des lectures calendrier GHL (TTL 60 s) — remplace la Map mémoire
+  // NestJS qui ne survit pas aux isolates Convex. Évite de marteler GHL
+  // quand plusieurs agendas sont ouverts.
+  ghlEventsCache: defineTable({
+    key: v.string(),
+    payload: v.string(), // JSON.stringify(GhlCalendarEvent[])
+    expiresAt: v.number(),
+  }).index("by_key", ["key"]),
+
   leadCustomFields: defineTable({
     leadId: v.id("leads"),
     fieldKey: v.string(),
