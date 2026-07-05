@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import type { LeadResponse, UserResponse, ProjectResponse, ProjectDetailResponse } from '../lib/types'
 
@@ -14,6 +14,8 @@ const useUsersMock = vi.fn()
 const useLeadDebriefsMock = vi.fn()
 const useClientsMock = vi.fn()
 const useSubstepsMock = vi.fn()
+// Section SAV (InterventionsSection) : liste vide suffit pour la fiche.
+const useInterventionsMock = vi.fn(() => ({ data: [], loading: false, error: null, refetch: vi.fn() }))
 vi.mock('../lib/hooks', () => ({
   useLead: (...a: unknown[]) => useLeadMock(...a),
   useRdvList: (...a: unknown[]) => useRdvListMock(...a),
@@ -21,6 +23,7 @@ vi.mock('../lib/hooks', () => ({
   useLeadDebriefs: (...a: unknown[]) => useLeadDebriefsMock(...a),
   useClients: (...a: unknown[]) => useClientsMock(...a),
   useSubsteps: (...a: unknown[]) => useSubstepsMock(...a),
+  useInterventions: () => useInterventionsMock(),
 }))
 
 const listProjectsByLeadMock = vi.fn()
@@ -29,6 +32,8 @@ vi.mock('../lib/api', () => ({
   listProjectsByLead: (...a: unknown[]) => listProjectsByLeadMock(...a),
   getProjectDetail: (...a: unknown[]) => getProjectDetailMock(...a),
   attachmentRawUrl: (id: string) => `/raw/${id}`,
+  interventionFileRawUrl: (id: string) => `/raw/${id}`,
+  uploadInterventionFiles: vi.fn(),
   downloadDevisPdf: vi.fn(),
   bootstrapClient: vi.fn(),
   updateSubstep: vi.fn(),
@@ -108,26 +113,18 @@ beforeEach(() => {
 })
 
 describe('FicheCompletePage', () => {
-  it('affiche la fiche client et les projets repliés, puis déploie pièces + workflow', async () => {
+  it('affiche la fiche client et des cartes projet liant vers la page dédiée', async () => {
+    // Depuis le redesign fiche, les projets sont des ProjectCard qui naviguent
+    // vers /suivi/:id/projet/:pid (pièces + workflow vivent sur cette page).
     renderAt('/suivi/lead-1/fiche')
 
     expect(await screen.findByText('Jean Dupont')).toBeInTheDocument()
     const projectHeading = await screen.findByText('Installation 8 kWc')
     expect(projectHeading).toBeInTheDocument()
 
-    // Replié par défaut : les pièces ne sont pas visibles, mais le bouton « Développer » l'est.
-    expect(screen.queryByText('2605-0393')).not.toBeInTheDocument()
-    const toggle = await screen.findByText('Développer')
-
-    // Au déploiement, les pièces du projet s'affichent (le workflow reste dans son pop-up).
-    fireEvent.click(toggle)
-    expect(await screen.findByText('2605-0393')).toBeInTheDocument()
-    expect(await screen.findByText('Mandat')).toBeInTheDocument()
-    expect(screen.queryByText('Workflow délivrabilité')).not.toBeInTheDocument()
-
-    // Le workflow s'ouvre dans un pop-up via « Voir workflow ».
-    fireEvent.click(screen.getAllByText('Voir workflow')[0])
-    expect(await screen.findByText('Workflow délivrabilité')).toBeInTheDocument()
+    const link = projectHeading.closest('a')
+    expect(link).not.toBeNull()
+    expect(link!.getAttribute('href')).toBe('/suivi/lead-1/projet/proj-1')
   })
 
   it('affiche « Dossier introuvable » pour un id inconnu', async () => {
@@ -137,7 +134,9 @@ describe('FicheCompletePage', () => {
   })
 
   it('redirige un rôle non autorisé vers /overview', async () => {
-    authStateRef.user = { id: 'com-1', name: 'Alice', role: 'commercial', active: true } as UserResponse
+    // `commercial` a désormais accès à la fiche (feead92) — le rôle interdit
+    // représentatif est `setter`.
+    authStateRef.user = { id: 'set-1', name: 'Sam', role: 'setter', active: true } as UserResponse
     renderAt('/suivi/lead-1/fiche')
     expect(await screen.findByText('OVERVIEW')).toBeInTheDocument()
   })
