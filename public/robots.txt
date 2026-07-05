@@ -1,0 +1,25 @@
+User-agent: *
+Allow: /
+Disallow: /overview
+Disallow: /leads
+Disallow: /client
+Disallow: /projects
+Disallow: /rdv
+Disallow: /analytics
+Disallow: /ads
+Disallow: /suivi
+Disallow: /finances
+Disallow: /interventions
+Disallow: /mes-interventions
+Disallow: /fiche-vt
+Disallow: /team
+Disallow: /settings
+Disallow: /profile
+Disallow: /notifications
+Disallow: /call
+Disallow: /planning
+Disallow: /mes-dossiers
+Disallow: /debrief
+Disallow: /accept-invitation
+
+Sitemap: https://crm.electroconceptoi.com/sitemap.xml
