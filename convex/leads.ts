@@ -55,6 +55,12 @@ export const create = mutation({
     revenuFiscal: v.optional(v.number()),
     typeLogement: v.optional(v.string()),
     referrerId: v.optional(v.id("referrers")),
+    // Saisie manuelle (prospect ou client) : statut initial, commercial assigné
+    // et canal d'acquisition proviennent du formulaire.
+    status: v.optional(leadStatusValidator),
+    assignedToId: v.optional(v.id("users")),
+    canalAcquisition: v.optional(v.string()),
+    acquisitionChannel: v.optional(adChannelValidator),
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, [
@@ -63,7 +69,7 @@ export const create = mutation({
     return await ctx.db.insert("leads", {
       ...args,
       source: "manual",
-      status: "nouveau",
+      status: args.status ?? "nouveau",
       setterId: user._id,
     });
   },
