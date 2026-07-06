@@ -11,8 +11,8 @@
 import type * as analytics from "../analytics.js";
 import type * as auth from "../auth.js";
 import type * as callLogs from "../callLogs.js";
-import type * as commercialObjectives from "../commercialObjectives.js";
 import type * as clients from "../clients.js";
+import type * as commercialObjectives from "../commercialObjectives.js";
 import type * as crons from "../crons.js";
 import type * as debriefs from "../debriefs.js";
 import type * as devTools from "../devTools.js";
@@ -86,8 +86,8 @@ declare const fullApi: ApiFromModules<{
   analytics: typeof analytics;
   auth: typeof auth;
   callLogs: typeof callLogs;
-  commercialObjectives: typeof commercialObjectives;
   clients: typeof clients;
+  commercialObjectives: typeof commercialObjectives;
   crons: typeof crons;
   debriefs: typeof debriefs;
   devTools: typeof devTools;
