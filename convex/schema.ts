@@ -152,6 +152,28 @@ export default defineSchema({
     updatedAt: v.optional(v.number()),
   }).index("by_rawSource", ["rawSource"]),
 
+  // Invitations d'onboarding (ajout/réactivation de commerciaux & équipiers).
+  // Portage de userInvitations (NestJS) adapté à Convex Auth : l'invité s'inscrit
+  // via le flux auth, puis `accept` applique rôle/équipe/activation. Token stocké
+  // en clair (écart assumé vs hash NestJS — outil interne, table role-gated).
+  userInvitations: defineTable({
+    email: v.string(),
+    name: v.string(),
+    role: roleValidator,
+    team: v.optional(teamValidator),
+    phone: v.optional(v.string()),
+    token: v.string(),
+    status: v.union(v.literal("pending"), v.literal("accepted"), v.literal("revoked"), v.literal("expired")),
+    invitedById: v.optional(v.id("users")),
+    expiresAt: v.number(),
+    acceptedUserId: v.optional(v.id("users")),
+    acceptedAt: v.optional(v.number()),
+    targetUserId: v.optional(v.id("users")), // réactivation (renew)
+  })
+    .index("by_token", ["token"])
+    .index("by_email", ["email"])
+    .index("by_status", ["status"]),
+
   // Objectifs commerciaux par mois (une ligne par commercial × période YYYY-MM).
   // Portage de commercialObjectives (NestJS) — pilotage des business managers.
   commercialObjectives: defineTable({
