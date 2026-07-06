@@ -228,6 +228,41 @@ export function mapConvexDevis(doc: import('./convexApi').ConvexDevisDoc): impor
   }
 }
 
+export function mapConvexSubstepDocument(d: { id: string; type: string; filename: string; mimeType: string; sizeBytes: number; uploadedAt: number }): import('./types').SubstepDocument {
+  return { id: d.id, type: d.type, filename: d.filename, mimeType: d.mimeType, sizeBytes: d.sizeBytes, uploadedAt: new Date(d.uploadedAt).toISOString() }
+}
+
+export function mapConvexSubstep(doc: import('./convexApi').ConvexSubstepDoc): import('./types').SubstepResponse {
+  return {
+    id: doc._id,
+    stepId: doc.stepId,
+    clientId: doc.clientId,
+    key: doc.key as import('./types').WorkflowSubstepKey,
+    position: doc.position,
+    label: doc.label,
+    actionLabel: doc.actionLabel,
+    phase: doc.phase as WorkflowPhase,
+    status: doc.status as WorkflowStatus,
+    optional: doc.optional,
+    dateRealisee: doc.dateRealisee ?? null,
+    heure: doc.heure ?? null,
+    deadline: doc.deadline ?? null,
+    responsableId: doc.responsableId ?? null,
+    notes: doc.notes ?? null,
+    problemReason: doc.problemReason ?? null,
+    problemNotes: doc.problemNotes ?? null,
+    problemResolvedAt: iso(doc.problemResolvedAt),
+    metadata: doc.metadata ?? null,
+    unlocked: doc.unlocked,
+    missingDocument: doc.missingDocument,
+    expectedDocs: doc.expectedDocs ?? [],
+    depositOnly: doc.depositOnly,
+    documents: (doc.documents ?? []).map(mapConvexSubstepDocument),
+    createdAt: new Date(doc._creationTime).toISOString(),
+    updatedAt: new Date(doc._creationTime).toISOString(),
+  }
+}
+
 export function mapConvexAcompte(doc: import('./convexApi').ConvexAcompteDoc): import('./types').AcompteResponse {
   const s = (n: number | null): string | null => (n === null ? null : String(n))
   return {

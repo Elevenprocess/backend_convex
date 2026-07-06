@@ -47,6 +47,7 @@ import {
   useConvexLeadDebriefs,
   useConvexLeads,
   useConvexRdvList,
+  useConvexSubsteps,
   useConvexUsers,
 } from './convexHooks'
 
@@ -525,7 +526,7 @@ export const useClients: typeof useClientsRest = convexAuthEnabled
   ? (useConvexClients as unknown as typeof useClientsRest)
   : useClientsRest
 
-export function useSubsteps(
+function useSubstepsRest(
   filters?: { clientId?: string } | null,
 ): Async<SubstepResponse[]> {
   const query = filters === null ? undefined : { clientId: filters?.clientId }
@@ -534,6 +535,10 @@ export function useSubsteps(
     query,
   )
 }
+
+export const useSubsteps: typeof useSubstepsRest = convexAuthEnabled
+  ? (useConvexSubsteps as unknown as typeof useSubstepsRest)
+  : useSubstepsRest
 
 function useAcomptesRest(enabled = true): Async<AcompteResponse[]> {
   return useFetch<AcompteResponse[]>(enabled ? '/payments/acomptes' : null)

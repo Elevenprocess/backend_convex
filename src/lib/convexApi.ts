@@ -282,6 +282,76 @@ export const paymentsSetEcheancier = makeFunctionReference<
 
 export const paymentsResetEcheancier = makeFunctionReference<'mutation', { debriefId: string }, unknown>('payments:resetEcheancier')
 
+// workflowSubsteps : decorate serveur ajoute label/actionLabel/phase/expectedDocs/
+// depositOnly/unlocked/documents/missingDocument au doc brut.
+export type ConvexSubstepDoc = {
+  _id: string
+  _creationTime: number
+  stepId: string
+  clientId: string
+  key: string
+  position: number
+  status: string
+  optional: boolean
+  dateRealisee?: string
+  deadline?: string
+  heure?: string
+  responsableId?: string
+  notes?: string
+  problemReason?: string
+  problemNotes?: string
+  problemResolvedAt?: number
+  metadata?: unknown
+  label: string
+  actionLabel: string
+  phase: string
+  expectedDocs: string[]
+  depositOnly: boolean
+  unlocked: boolean
+  missingDocument: boolean
+  documents: { id: string; type: string; filename: string; mimeType: string; sizeBytes: number; uploadedAt: number }[]
+  [k: string]: unknown
+}
+
+export const substepsList = makeFunctionReference<
+  'query',
+  { clientId?: string; status?: string; responsableId?: string; phase?: string },
+  ConvexSubstepDoc[]
+>('workflowSubsteps:list')
+
+export const substepsGet = makeFunctionReference<'query', { substepId: string }, ConvexSubstepDoc | null>('workflowSubsteps:get')
+
+export const substepsUpdate = makeFunctionReference<
+  'mutation',
+  { substepId: string; status?: string; dateRealisee?: string | null; heure?: string | null; responsableId?: string | null; notes?: string | null; problemReason?: string | null; problemNotes?: string | null; metadata?: unknown },
+  unknown
+>('workflowSubsteps:update')
+
+export const substepsResolveProblem = makeFunctionReference<'mutation', { substepId: string; status: string }, unknown>('workflowSubsteps:resolveProblem')
+
+// documents (pièces de sous-étape) : storage Convex + rattachement substep.
+export const documentsGenerateUploadUrl = makeFunctionReference<'mutation', Record<string, never>, string>('documents:generateUploadUrl')
+
+export const documentsAttachToSubstep = makeFunctionReference<
+  'mutation',
+  { substepId: string; files: Array<{ storageId: string; filename: string; mimeType: string; sizeBytes: number }> },
+  unknown
+>('documents:attachToSubstep')
+
+export const documentsListBySubstep = makeFunctionReference<
+  'query',
+  { substepId: string },
+  { id: string; type: string; filename: string; mimeType: string; sizeBytes: number; uploadedAt: number }[]
+>('documents:listBySubstep')
+
+export const documentsGetUrl = makeFunctionReference<
+  'query',
+  { documentId: string },
+  { url: string; filename: string; mimeType: string } | null
+>('documents:getUrl')
+
+export const documentsRemove = makeFunctionReference<'mutation', { documentId: string }, { ok: true }>('documents:remove')
+
 type PaginationOptsArg = { numItems: number; cursor: string | null }
 
 export const usersMe = makeFunctionReference<'query', Record<string, never>, ConvexUserDoc | null>('users:me')

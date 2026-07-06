@@ -1,13 +1,14 @@
 import { useEffect, useMemo } from 'react'
 import { usePaginatedQuery, useQuery } from 'convex/react'
-import { analyticsDebriefStats, analyticsFunnel, analyticsSummary, clientsList, debriefsListByLead, leadsGet, leadsList, paymentsListAcomptes, rdvList, usersList } from './convexApi'
-import { mapConvexAcompte, mapConvexClient, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexUser } from './convexMappers'
+import { analyticsDebriefStats, analyticsFunnel, analyticsSummary, clientsList, debriefsListByLead, leadsGet, leadsList, paymentsListAcomptes, rdvList, substepsList, usersList } from './convexApi'
+import { mapConvexAcompte, mapConvexClient, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexSubstep, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
 import type {
   AcompteResponse,
   AnalyticsFunnelResponse,
   AnalyticsSummaryResponse,
   ClientResponse,
+  SubstepResponse,
   DebriefResponse,
   LeadResponse,
   LeadStatus,
@@ -193,6 +194,25 @@ export function useConvexDebriefAnalytics(filters?: {
     error: null,
     refetch: noop,
   }
+}
+
+// workflowSubsteps.list exige un rôle « vue workflow » → skip (vide) sinon crash.
+const WORKFLOW_VIEW_ROLES = new Set<Role>([
+  'admin', 'delivrabilite', 'responsable_technique', 'back_office',
+  'technicien', 'finances', 'commercial', 'commercial_lead',
+])
+
+export function useConvexSubsteps(filters?: { clientId?: string } | null): Async<SubstepResponse[]> {
+  const role = useAuth((s) => s.user?.role)
+  const clientId = filters === null ? undefined : filters?.clientId
+  const allowed = filters !== null && !!clientId && !!role && WORKFLOW_VIEW_ROLES.has(role)
+  const rows = useQuery(substepsList, allowed ? { clientId } : 'skip')
+  const data = useMemo(() => {
+    if (!allowed) return filters === null || !clientId ? null : []
+    if (rows === undefined) return null
+    return rows.map(mapConvexSubstep)
+  }, [allowed, rows, filters, clientId])
+  return { data, loading: allowed && rows === undefined, error: null, refetch: noop }
 }
 
 // payments.listAcomptes exige un rôle finances côté serveur → skip (liste vide)

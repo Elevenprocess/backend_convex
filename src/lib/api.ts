@@ -29,8 +29,8 @@ import type {
 } from './types'
 import { notifyRealtimeRefresh } from './realtime'
 import { convexAuthEnabled, convexClient } from './convex'
-import { debriefsCreate, debriefsCreateForLead, debriefsGet, debriefsListByLead, debriefsListByProject, devisCreate, devisGenerateUploadUrl, devisGetById, devisListByLead, devisMarkAsSigned, devisRemove, devisRetryOcr, devisUpdate, paymentsGetAcompte, paymentsListAcomptes, paymentsRecordEcheance, paymentsResetEcheancier, paymentsSetEcheancier, paymentsUpdateFinancing, projectAttachmentsCreate, projectAttachmentsGenerateUploadUrl, projectAttachmentsGetUrl, projectAttachmentsListByProject, projectAttachmentsRemove, projectsCreate, projectsGet, projectsListByLead, type ConvexAttachmentSummary } from './convexApi'
-import { mapConvexAcompte, mapConvexDebrief, mapConvexDevis, mapConvexProject } from './convexMappers'
+import { debriefsCreate, debriefsCreateForLead, debriefsGet, debriefsListByLead, debriefsListByProject, devisCreate, devisGenerateUploadUrl, devisGetById, devisListByLead, devisMarkAsSigned, devisRemove, devisRetryOcr, devisUpdate, documentsAttachToSubstep, documentsGenerateUploadUrl, documentsGetUrl, documentsListBySubstep, documentsRemove, paymentsGetAcompte, paymentsListAcomptes, paymentsRecordEcheance, paymentsResetEcheancier, paymentsSetEcheancier, paymentsUpdateFinancing, projectAttachmentsCreate, projectAttachmentsGenerateUploadUrl, projectAttachmentsGetUrl, projectAttachmentsListByProject, projectAttachmentsRemove, projectsCreate, projectsGet, projectsListByLead, substepsGet, substepsList, substepsResolveProblem, substepsUpdate, type ConvexAttachmentSummary } from './convexApi'
+import { mapConvexAcompte, mapConvexDebrief, mapConvexDevis, mapConvexProject, mapConvexSubstep, mapConvexSubstepDocument } from './convexMappers'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
 
@@ -334,15 +334,35 @@ export function createManualClient(payload: ManualClientPayload): Promise<Client
   return api<ClientResponse>('/clients/manual', { method: 'POST', body: payload })
 }
 
-export function getSubsteps(clientId: string): Promise<SubstepResponse[]> {
+export async function getSubsteps(clientId: string): Promise<SubstepResponse[]> {
+  if (convexAuthEnabled && convexClient) {
+    const rows = await convexClient.query(substepsList, { clientId })
+    return rows.map(mapConvexSubstep)
+  }
   return api<SubstepResponse[]>('/substeps', { query: { clientId } })
+}
+
+async function convexGetSubstep(substepId: string): Promise<SubstepResponse> {
+  const doc = await convexClient!.query(substepsGet, { substepId })
+  if (!doc) throw new ApiError(404, 'Sous-étape introuvable')
+  return mapConvexSubstep(doc)
 }
 
 export async function updateSubstep(
   substepId: string,
   patch: UpdateSubstepPatch,
 ): Promise<SubstepResponse> {
-  const res = await api<SubstepResponse>(`/substeps/${substepId}`, { method: 'PATCH', body: patch })
+  let res: SubstepResponse
+  if (convexAuthEnabled && convexClient) {
+    // workflowSubsteps.update accepte null (effacement) → on transmet tel quel
+    // les champs présents (undefined = non fourni).
+    const args: Record<string, unknown> = { substepId }
+    for (const [k, v] of Object.entries(patch)) if (v !== undefined) args[k] = v
+    await convexClient.mutation(substepsUpdate, args as { substepId: string })
+    res = await convexGetSubstep(substepId) // update renvoie le doc brut → on redécore
+  } else {
+    res = await api<SubstepResponse>(`/substeps/${substepId}`, { method: 'PATCH', body: patch })
+  }
   bustWorkflowCaches()
   return res
 }
@@ -351,7 +371,13 @@ export async function resolveSubstepProblem(
   substepId: string,
   status: SubstepResponse['status'],
 ): Promise<SubstepResponse> {
-  const res = await api<SubstepResponse>(`/substeps/${substepId}/resolve-problem`, { method: 'POST', body: { status } })
+  let res: SubstepResponse
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(substepsResolveProblem, { substepId, status })
+    res = await convexGetSubstep(substepId)
+  } else {
+    res = await api<SubstepResponse>(`/substeps/${substepId}/resolve-problem`, { method: 'POST', body: { status } })
+  }
   bustWorkflowCaches()
   return res
 }
@@ -887,6 +913,19 @@ export async function uploadSubstepDocuments(
   substepId: string,
   files: File[],
 ): Promise<SubstepDocument[]> {
+  if (convexAuthEnabled && convexClient) {
+    // Upload storage par fichier, puis un seul attachToSubstep(files[]).
+    const uploaded = await Promise.all(files.map(async (file) => {
+      const uploadUrl = await convexClient!.mutation(documentsGenerateUploadUrl, {})
+      const up = await fetch(uploadUrl, { method: 'POST', headers: file.type ? { 'Content-Type': file.type } : undefined, body: file })
+      if (!up.ok) throw new ApiError(up.status, `Upload document (storage) échoué : ${up.status}`)
+      const { storageId } = (await up.json()) as { storageId: string }
+      return { storageId, filename: file.name, mimeType: file.type || 'application/octet-stream', sizeBytes: file.size }
+    }))
+    await convexClient.mutation(documentsAttachToSubstep, { substepId, files: uploaded })
+    const rows = await convexClient.query(documentsListBySubstep, { substepId })
+    return rows.map(mapConvexSubstepDocument)
+  }
   const fd = new FormData()
   for (const file of files) fd.append('files', file)
   const res = await fetch(buildApiUrl(`/substeps/${substepId}/documents`), {
@@ -901,7 +940,10 @@ export async function uploadSubstepDocuments(
   return res.json() as Promise<SubstepDocument[]>
 }
 
-export function deleteSubstepDocument(documentId: string): Promise<{ ok: true }> {
+export async function deleteSubstepDocument(documentId: string): Promise<{ ok: true }> {
+  if (convexAuthEnabled && convexClient) {
+    return await convexClient.mutation(documentsRemove, { documentId })
+  }
   return api<{ ok: true }>(`/documents/${documentId}`, { method: 'DELETE' })
 }
 
@@ -935,9 +977,16 @@ function sniffMimeFromBytes(b: Uint8Array): string | null {
 export async function fetchSubstepDocumentObjectUrl(
   documentId: string,
 ): Promise<{ url: string; mimeType: string | null }> {
-  const res = await fetch(buildApiUrl(`/documents/${documentId}/raw`), {
-    credentials: 'include',
-  })
+  let res: Response
+  if (convexAuthEnabled && convexClient) {
+    const meta = await convexClient.query(documentsGetUrl, { documentId })
+    if (!meta) throw new ApiError(404, 'Document introuvable')
+    res = await fetch(meta.url)
+  } else {
+    res = await fetch(buildApiUrl(`/documents/${documentId}/raw`), {
+      credentials: 'include',
+    })
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw new ApiError(res.status, text || `Chargement du document échoué : ${res.status}`)
