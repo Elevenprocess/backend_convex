@@ -192,6 +192,42 @@ export function mapConvexDebrief(doc: ConvexDebriefDoc): DebriefResponse {
   }
 }
 
+export function mapConvexDevis(doc: import('./convexApi').ConvexDevisDoc): import('./types').Devis {
+  const numStr = (n: number | undefined): string | null => (n === undefined ? null : String(n))
+  return {
+    id: doc._id,
+    leadId: doc.leadId,
+    projectId: doc.projectId ?? null,
+    rdvId: doc.rdvId ?? null,
+    commercialId: doc.commercialId,
+    status: doc.status as import('./types').DevisStatus,
+    filename: doc.filename,
+    storageKey: doc.storageId ?? '',
+    ocrStatus: doc.ocrStatus as import('./types').OcrStatus,
+    ocrError: doc.ocrError ?? null,
+    devisNumber: doc.devisNumber ?? null,
+    devisDate: doc.devisDate ?? null,
+    dateExpiration: doc.dateExpiration ?? null,
+    delaiExecution: doc.delaiExecution ?? null,
+    montantHt: numStr(doc.montantHt),
+    montantTva: numStr(doc.montantTva),
+    montantTtc: numStr(doc.montantTtc),
+    montantNet: numStr(doc.montantNet),
+    puissanceKwc: numStr(doc.puissanceKwc),
+    nbPanneaux: doc.nbPanneaux ?? null,
+    kits: doc.kits ?? null,
+    financingType: doc.financingType ?? null,
+    primeAutoconsommation: numStr(doc.primeAutoconsommation),
+    primeTarifKwc: numStr(doc.primeTarifKwc),
+    primeZone: doc.primeZone ?? null,
+    lignes: (doc.lignes ?? []) as import('./types').DevisLigne[],
+    echeancier: (doc.echeancier ?? []) as import('./types').DevisEcheance[],
+    extracted: (doc.extracted ?? null) as import('./types').DevisExtraction | null,
+    signedAt: iso(doc.signedAt),
+    createdAt: new Date(doc._creationTime).toISOString(),
+  }
+}
+
 export function mapConvexClient(doc: ConvexClientDoc): ClientResponse {
   const steps: Partial<Record<WorkflowPhase, ClientPhaseStep>> = {}
   for (const [phase, s] of Object.entries(doc.steps ?? {})) {

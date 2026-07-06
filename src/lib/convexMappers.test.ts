@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { mapConvexClient, mapConvexDebrief, mapConvexLead, mapConvexProject, mapConvexRdv, mapConvexUser } from './convexMappers'
-import type { ConvexClientDoc, ConvexDebriefDoc, ConvexLeadDoc, ConvexProjectDoc, ConvexRdvDoc, ConvexUserDoc } from './convexApi'
+import { mapConvexClient, mapConvexDebrief, mapConvexDevis, mapConvexLead, mapConvexProject, mapConvexRdv, mapConvexUser } from './convexMappers'
+import type { ConvexClientDoc, ConvexDebriefDoc, ConvexDevisDoc, ConvexLeadDoc, ConvexProjectDoc, ConvexRdvDoc, ConvexUserDoc } from './convexApi'
 
 const T0 = 1783181401517 // _creationTime de référence (ms)
 
@@ -62,6 +62,26 @@ describe('mapConvexRdv', () => {
   it('scheduledAt absent → retombe sur _creationTime (le type REST est non-null)', () => {
     const r = mapConvexRdv({ _id: 'r2', _creationTime: T0, leadId: 'l1', locationType: 'visio', status: 'planifie' })
     expect(r.scheduledAt).toBe(new Date(T0).toISOString())
+  })
+})
+
+describe('mapConvexDevis', () => {
+  it('convertit montants number→string, storageId→storageKey, timestamps→ISO', () => {
+    const d = mapConvexDevis({
+      _id: 'dv1', _creationTime: T0, leadId: 'l1', commercialId: 'u1',
+      status: 'brouillon', filename: 'devis.pdf', sizeBytes: 1024, storageId: 'stor_1',
+      ocrStatus: 'done', montantTtc: 24000, montantHt: 20000, puissanceKwc: 6, nbPanneaux: 12,
+      lignes: [], echeancier: [], signedAt: T0 + 1000,
+    } as ConvexDevisDoc)
+    expect(d.id).toBe('dv1')
+    expect(d.storageKey).toBe('stor_1')
+    expect(d.montantTtc).toBe('24000')
+    expect(d.puissanceKwc).toBe('6')
+    expect(d.nbPanneaux).toBe(12)
+    expect(d.montantTva).toBeNull()
+    expect(d.projectId).toBeNull()
+    expect(d.signedAt).toBe(new Date(T0 + 1000).toISOString())
+    expect(d.createdAt).toBe(new Date(T0).toISOString())
   })
 })
 

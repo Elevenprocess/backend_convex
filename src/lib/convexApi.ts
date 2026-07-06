@@ -146,6 +146,68 @@ export type ConvexDebriefDoc = {
   [k: string]: unknown
 }
 
+// devis : toResponse serveur renvoie le doc quasi brut (montants en number,
+// storageId, timestamps ms) → mapConvexDevis convertit vers le type REST Devis.
+export type ConvexDevisDoc = {
+  _id: string
+  _creationTime: number
+  leadId: string
+  projectId?: string
+  rdvId?: string
+  commercialId: string
+  status: string
+  storageId?: string
+  filename: string
+  sizeBytes: number
+  ocrStatus: string
+  ocrError?: string
+  ocrCompletedAt?: number
+  devisNumber?: string
+  devisDate?: string
+  dateExpiration?: string
+  delaiExecution?: string
+  montantHt?: number
+  montantTva?: number
+  montantTtc?: number
+  montantNet?: number
+  puissanceKwc?: number
+  nbPanneaux?: number
+  kits?: string
+  financingType?: string
+  primeAutoconsommation?: number
+  primeTarifKwc?: number
+  primeZone?: string
+  lignes: unknown[]
+  echeancier: unknown[]
+  extracted?: unknown
+  signedAt?: number
+  [k: string]: unknown
+}
+
+export const devisGenerateUploadUrl = makeFunctionReference<'mutation', Record<string, never>, string>('devis:generateUploadUrl')
+
+export const devisCreate = makeFunctionReference<
+  'mutation',
+  { leadId: string; storageId: string; filename: string; sizeBytes: number; rdvId?: string; projectId?: string; commercialId?: string },
+  string
+>('devis:create')
+
+export const devisGetById = makeFunctionReference<'query', { devisId: string }, ConvexDevisDoc | null>('devis:getById')
+
+export const devisListByLead = makeFunctionReference<'query', { leadId: string }, ConvexDevisDoc[]>('devis:listByLead')
+
+export const devisMarkAsSigned = makeFunctionReference<'mutation', { devisId: string }, unknown>('devis:markAsSigned')
+
+export const devisRetryOcr = makeFunctionReference<'mutation', { devisId: string }, unknown>('devis:retryOcr')
+
+export const devisRemove = makeFunctionReference<'mutation', { devisId: string }, unknown>('devis:remove')
+
+export const devisUpdate = makeFunctionReference<
+  'mutation',
+  { devisId: string } & Record<string, unknown>,
+  unknown
+>('devis:update')
+
 type PaginationOptsArg = { numItems: number; cursor: string | null }
 
 export const usersMe = makeFunctionReference<'query', Record<string, never>, ConvexUserDoc | null>('users:me')

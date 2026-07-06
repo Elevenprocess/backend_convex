@@ -29,8 +29,8 @@ import type {
 } from './types'
 import { notifyRealtimeRefresh } from './realtime'
 import { convexAuthEnabled, convexClient } from './convex'
-import { debriefsCreate, debriefsCreateForLead, debriefsGet, debriefsListByLead, debriefsListByProject, projectsCreate, projectsGet, projectsListByLead } from './convexApi'
-import { mapConvexDebrief, mapConvexProject } from './convexMappers'
+import { debriefsCreate, debriefsCreateForLead, debriefsGet, debriefsListByLead, debriefsListByProject, devisCreate, devisGenerateUploadUrl, devisGetById, devisListByLead, devisMarkAsSigned, devisRemove, devisRetryOcr, devisUpdate, projectsCreate, projectsGet, projectsListByLead } from './convexApi'
+import { mapConvexDebrief, mapConvexDevis, mapConvexProject } from './convexMappers'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
 
@@ -205,7 +205,29 @@ export async function uploadDevis(
   const renamed = parts.length
     ? new File([file], `${parts.join(' — ')} — ${file.name}`, { type: file.type })
     : file
-  fd.append('file', renamed)
+  if (convexAuthEnabled && convexClient) {
+    // Flux Convex : 1) URL d'upload signée, 2) POST du fichier vers le storage
+    // Convex, 3) devis.create avec le storageId (déclenche l'OCR côté serveur).
+    const uploadUrl = await convexClient.mutation(devisGenerateUploadUrl, {})
+    const up = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: renamed.type ? { 'Content-Type': renamed.type } : undefined,
+      body: renamed,
+    })
+    if (!up.ok) throw new ApiError(up.status, `Upload devis (storage) échoué : ${up.status}`)
+    const { storageId } = (await up.json()) as { storageId: string }
+    const devisId = await convexClient.mutation(devisCreate, {
+      leadId,
+      storageId,
+      filename: renamed.name,
+      sizeBytes: renamed.size,
+      rdvId: rdvId ?? undefined,
+      projectId: meta?.projectId ?? undefined,
+    })
+    const doc = await convexClient.query(devisGetById, { devisId })
+    if (!doc) throw new ApiError(500, 'Devis créé mais introuvable')
+    return mapConvexDevis(doc)
+  }
   const url = buildApiUrl('/devis')
   const res = await fetch(url, {
     method: 'POST',
@@ -373,31 +395,62 @@ export function resetEcheancier(debriefId: string): Promise<AcompteResponse> {
   return api<AcompteResponse>(`/payments/acomptes/${debriefId}/echeancier`, { method: 'DELETE' })
 }
 
-export function getDevis(devisId: string): Promise<Devis> {
+async function convexDevisById(devisId: string): Promise<Devis> {
+  const doc = await convexClient!.query(devisGetById, { devisId })
+  if (!doc) throw new ApiError(404, 'Devis introuvable')
+  return mapConvexDevis(doc)
+}
+
+export async function getDevis(devisId: string): Promise<Devis> {
+  if (convexAuthEnabled && convexClient) return convexDevisById(devisId)
   return api<Devis>(`/devis/${devisId}`)
 }
 
-export function listDevisByLead(leadId: string): Promise<Devis[]> {
+export async function listDevisByLead(leadId: string): Promise<Devis[]> {
+  if (convexAuthEnabled && convexClient) {
+    const rows = await convexClient.query(devisListByLead, { leadId })
+    return rows.map(mapConvexDevis)
+  }
   return api<Devis[]>(`/devis/lead/${leadId}`)
 }
 
-export function markDevisSigned(devisId: string): Promise<Devis> {
+export async function markDevisSigned(devisId: string): Promise<Devis> {
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(devisMarkAsSigned, { devisId })
+    return convexDevisById(devisId)
+  }
   return api<Devis>(`/devis/${devisId}/mark-signed`, { method: 'POST' })
 }
 
 // Patch partiel. Tous les champs sont optionnels ; `null` efface une valeur.
-export function updateDevis(
+export async function updateDevis(
   devisId: string,
   patch: import('./types').UpdateDevisPatch,
 ): Promise<Devis> {
+  if (convexAuthEnabled && convexClient) {
+    // devis.update accepte null (v.union(x, v.null())) → on transmet tel quel,
+    // en retirant seulement les champs absents (undefined).
+    const args: Record<string, unknown> = { devisId }
+    for (const [k, v] of Object.entries(patch)) if (v !== undefined) args[k] = v
+    await convexClient.mutation(devisUpdate, args as { devisId: string })
+    return convexDevisById(devisId)
+  }
   return api<Devis>(`/devis/${devisId}`, { method: 'PATCH', body: patch })
 }
 
-export function retryDevisOcr(devisId: string): Promise<Devis> {
+export async function retryDevisOcr(devisId: string): Promise<Devis> {
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(devisRetryOcr, { devisId })
+    return convexDevisById(devisId)
+  }
   return api<Devis>(`/devis/${devisId}/retry-ocr`, { method: 'POST' })
 }
 
-export function deleteDevis(devisId: string): Promise<{ id: string; deleted: true }> {
+export async function deleteDevis(devisId: string): Promise<{ id: string; deleted: true }> {
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(devisRemove, { devisId })
+    return { id: devisId, deleted: true }
+  }
   return api(`/devis/${devisId}`, { method: 'DELETE' })
 }
 
@@ -528,9 +581,12 @@ export async function getProjectDetail(projectId: string): Promise<ProjectDetail
       convexClient.query(debriefsListByProject, { projectId }),
     ])
     if (!project) throw new ApiError(404, 'Projet introuvable')
+    // Devis du projet : listByLead puis filtre sur projectId (pas de listByProject
+    // côté serveur). Les pièces (project_attachments) restent à porter.
+    const leadDevis = await convexClient.query(devisListByLead, { leadId: project.leadId })
     return {
       ...mapConvexProject(project),
-      devis: [],
+      devis: leadDevis.map(mapConvexDevis).filter((d) => d.projectId === projectId),
       debriefs: debriefs.map(mapConvexDebrief),
       attachments: [],
     }
