@@ -152,6 +152,21 @@ export default defineSchema({
     updatedAt: v.optional(v.number()),
   }).index("by_rawSource", ["rawSource"]),
 
+  // Objectifs commerciaux par mois (une ligne par commercial × période YYYY-MM).
+  // Portage de commercialObjectives (NestJS) — pilotage des business managers.
+  commercialObjectives: defineTable({
+    commercialId: v.id("users"),
+    period: v.string(), // "YYYY-MM"
+    caTarget: v.optional(v.number()),
+    ventesTarget: v.optional(v.number()),
+    rdvTarget: v.optional(v.number()),
+    closingTarget: v.optional(v.number()),
+    createdById: v.optional(v.id("users")),
+    updatedById: v.optional(v.id("users")),
+  })
+    .index("by_period", ["period"])
+    .index("by_commercial_period", ["commercialId", "period"]),
+
   // Cache des lectures calendrier GHL (TTL 60 s) — remplace la Map mémoire
   // NestJS qui ne survit pas aux isolates Convex. Évite de marteler GHL
   // quand plusieurs agendas sont ouverts.
