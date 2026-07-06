@@ -176,6 +176,17 @@ export const clientsList = makeFunctionReference<
 
 export const leadsGet = makeFunctionReference<'query', { leadId: string }, ConvexLeadDoc | null>('leads:get')
 
+export const leadsCreate = makeFunctionReference<
+  'mutation',
+  {
+    firstName?: string; lastName?: string; email?: string; phone?: string
+    addressLine?: string; city?: string; postalCode?: string
+    revenuFiscal?: number; typeLogement?: string; referrerId?: string
+    status?: string; assignedToId?: string; canalAcquisition?: string; acquisitionChannel?: string
+  },
+  string
+>('leads:create')
+
 export const projectsListByLead = makeFunctionReference<'query', { leadId: string }, ConvexProjectDoc[]>('projects:listByLead')
 
 export const projectsGet = makeFunctionReference<'query', { projectId: string }, ConvexProjectDoc | null>('projects:get')

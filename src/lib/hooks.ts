@@ -33,7 +33,9 @@ import type {
 } from './types'
 import { fetchCache, type FetchCacheEntry } from './fetchCacheStore'
 import { persistEntry, loadAllEntries, migrateLegacyLocalStorage } from './cachePersist'
-import { convexAuthEnabled } from './convex'
+import { convexAuthEnabled, convexClient } from './convex'
+import { leadsCreate, leadsGet } from './convexApi'
+import { mapConvexLead } from './convexMappers'
 import {
   useConvexAnalyticsFunnel,
   useConvexAnalyticsSummary,
@@ -368,7 +370,22 @@ export type CreateLeadInput = {
 }
 
 export async function createLead(input: CreateLeadInput): Promise<LeadResponse> {
-  const created = await api<LeadResponse>('/leads', { method: 'POST', body: input })
+  let created: LeadResponse
+  if (convexAuthEnabled && convexClient) {
+    // Convex n'accepte pas null en arg optionnel → on ne garde que les valeurs
+    // définies et non nulles.
+    const args: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(input)) {
+      if (k === 'source') continue // toujours 'manual' côté serveur
+      if (v !== null && v !== undefined) args[k] = v
+    }
+    const newId = await convexClient.mutation(leadsCreate, args)
+    const doc = await convexClient.query(leadsGet, { leadId: newId })
+    if (!doc) throw new Error('Création du lead échouée')
+    created = mapConvexLead(doc)
+  } else {
+    created = await api<LeadResponse>('/leads', { method: 'POST', body: input })
+  }
   updateLeadCaches(created)
   notifyRealtimeRefresh({
     event: 'lead:created',
