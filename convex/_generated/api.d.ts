@@ -11,6 +11,7 @@
 import type * as analytics from "../analytics.js";
 import type * as auth from "../auth.js";
 import type * as callLogs from "../callLogs.js";
+import type * as commercialObjectives from "../commercialObjectives.js";
 import type * as clients from "../clients.js";
 import type * as crons from "../crons.js";
 import type * as debriefs from "../debriefs.js";
@@ -21,6 +22,7 @@ import type * as ghlCalendar from "../ghlCalendar.js";
 import type * as ghlClient from "../ghlClient.js";
 import type * as ghlDebriefLink from "../ghlDebriefLink.js";
 import type * as http from "../http.js";
+import type * as invitations from "../invitations.js";
 import type * as leads from "../leads.js";
 import type * as migration from "../migration.js";
 import type * as model_access from "../model/access.js";
@@ -38,6 +40,7 @@ import type * as model_deriveLeadStatus from "../model/deriveLeadStatus.js";
 import type * as model_deriveLeadStatusFromDebrief from "../model/deriveLeadStatusFromDebrief.js";
 import type * as model_devisExtraction from "../model/devisExtraction.js";
 import type * as model_devisStatusSync from "../model/devisStatusSync.js";
+import type * as model_enrichLead from "../model/enrichLead.js";
 import type * as model_ensureDossier from "../model/ensureDossier.js";
 import type * as model_ensureProject from "../model/ensureProject.js";
 import type * as model_enums from "../model/enums.js";
@@ -83,6 +86,7 @@ declare const fullApi: ApiFromModules<{
   analytics: typeof analytics;
   auth: typeof auth;
   callLogs: typeof callLogs;
+  commercialObjectives: typeof commercialObjectives;
   clients: typeof clients;
   crons: typeof crons;
   debriefs: typeof debriefs;
@@ -93,6 +97,7 @@ declare const fullApi: ApiFromModules<{
   ghlClient: typeof ghlClient;
   ghlDebriefLink: typeof ghlDebriefLink;
   http: typeof http;
+  invitations: typeof invitations;
   leads: typeof leads;
   migration: typeof migration;
   "model/access": typeof model_access;
@@ -110,6 +115,7 @@ declare const fullApi: ApiFromModules<{
   "model/deriveLeadStatusFromDebrief": typeof model_deriveLeadStatusFromDebrief;
   "model/devisExtraction": typeof model_devisExtraction;
   "model/devisStatusSync": typeof model_devisStatusSync;
+  "model/enrichLead": typeof model_enrichLead;
   "model/ensureDossier": typeof model_ensureDossier;
   "model/ensureProject": typeof model_ensureProject;
   "model/enums": typeof model_enums;
