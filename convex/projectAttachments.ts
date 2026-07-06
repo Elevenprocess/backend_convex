@@ -18,16 +18,20 @@ const MANAGE_ROLES: Role[] = ["admin", "commercial", "commercial_lead", "delivra
 // Lecture : + setters + finances.
 const READ_ROLES: Role[] = ["admin", "setter", "setter_lead", "commercial", "commercial_lead", "delivrabilite", "responsable_technique", "back_office", "finances"];
 
-function toSummary(row: Doc<"projectAttachments">) {
+function toSummary(row: Doc<"projectAttachments">, url?: string) {
   return {
     id: row._id,
     projectId: row.projectId,
+    uploadedById: row.uploadedById,
     kind: row.kind,
     label: row.label,
     filename: row.filename,
     contentType: row.contentType,
     sizeBytes: row.sizeBytes,
     uploadedAt: row._creationTime,
+    // URL signée du storage (utilisable direct en <img src>, remplace /raw+CORS).
+    // Absente si le blob migré a été perdu.
+    url,
   };
 }
 
@@ -69,7 +73,9 @@ export const create = mutation({
       sizeBytes: args.sizeBytes,
       storageId: args.storageId,
     });
-    return toSummary((await ctx.db.get(id))!);
+    const row = (await ctx.db.get(id))!;
+    const url = (await ctx.storage.getUrl(args.storageId)) ?? undefined;
+    return toSummary(row, url);
   },
 });
 
@@ -81,7 +87,13 @@ export const listByProject = query({
       .query("projectAttachments")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
-    return rows.filter((a) => a.deletedAt === undefined).map(toSummary);
+    const active = rows.filter((a) => a.deletedAt === undefined);
+    return await Promise.all(
+      active.map(async (a) => {
+        const url = a.storageId ? ((await ctx.storage.getUrl(a.storageId)) ?? undefined) : undefined;
+        return toSummary(a, url);
+      }),
+    );
   },
 });
 
