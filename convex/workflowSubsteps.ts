@@ -33,7 +33,20 @@ async function decorate(ctx: QueryCtx, row: Doc<"workflowSubsteps">) {
   );
   const docs = await activeDocsOfSubstep(ctx, row._id);
   const missingDocument = missingDocuments(row.key, docs.map((d) => d.type));
-  return { ...row, unlocked, documents: docs.map(toDocumentSummary), missingDocument };
+  // Champs catalogue (label/actionLabel/phase/expectedDocs/depositOnly) : le
+  // frontend (SubstepResponse) les attend sur chaque sous-étape.
+  const cat = catalogByKey(row.key);
+  return {
+    ...row,
+    label: cat?.label ?? row.key,
+    actionLabel: cat?.actionLabel ?? "",
+    phase: cat?.phase ?? "vt",
+    expectedDocs: cat?.expectedDocs ?? [],
+    depositOnly: cat?.depositOnly ?? false,
+    unlocked,
+    documents: docs.map(toDocumentSummary),
+    missingDocument,
+  };
 }
 
 export const list = query({
