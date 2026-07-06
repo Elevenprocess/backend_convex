@@ -29,7 +29,7 @@ import type {
 } from './types'
 import { notifyRealtimeRefresh } from './realtime'
 import { convexAuthEnabled, convexClient } from './convex'
-import { debriefsListByLead, debriefsListByProject, projectsGet, projectsListByLead } from './convexApi'
+import { debriefsCreate, debriefsCreateForLead, debriefsGet, debriefsListByLead, debriefsListByProject, projectsCreate, projectsGet, projectsListByLead } from './convexApi'
 import { mapConvexDebrief, mapConvexProject } from './convexMappers'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
@@ -472,7 +472,7 @@ export async function fetchDevisPdfObjectUrl(devisId: string): Promise<string> {
 }
 
 // ─── Projects ─────────────────────────────────────────────
-export function createProject(input: {
+export async function createProject(input: {
   leadId: string
   name: string
   addressLine?: string | null
@@ -480,7 +480,34 @@ export function createProject(input: {
   city?: string | null
   notes?: string | null
 }): Promise<ProjectResponse> {
+  if (convexAuthEnabled && convexClient) {
+    const args = dropNullish({ leadId: input.leadId, name: input.name, addressLine: input.addressLine, postalCode: input.postalCode, city: input.city, notes: input.notes })
+    const id = await convexClient.mutation(projectsCreate, args as { leadId: string })
+    const doc = await convexClient.query(projectsGet, { projectId: id })
+    if (!doc) throw new ApiError(500, 'Création du projet échouée')
+    return mapConvexProject(doc)
+  }
   return api<ProjectResponse>('/projects', { method: 'POST', body: input })
+}
+
+// Convex refuse null/undefined dans les args optionnels : on ne garde que les
+// valeurs définies et non nulles.
+function dropNullish(obj: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(obj)) if (v !== null && v !== undefined) out[k] = v
+  return out
+}
+
+// Débrief REST (montants string, dates ISO) → args Convex (montants number,
+// dates ms), en ne transmettant que le sous-ensemble de champs accepté.
+function debriefArgsForConvex(input: Record<string, unknown>): Record<string, unknown> {
+  const KEYS = ['outcome', 'rdvId', 'nonSaleReason', 'reflexionReason', 'suiviReason', 'objection', 'acceptanceFactors', 'notes', 'financingType', 'kits', 'paymentSubMethod', 'financingOrg', 'acomptePercent', 'customEcheancier', 'projectId', 'commercialId']
+  const args = dropNullish(Object.fromEntries(KEYS.map((k) => [k, input[k]])))
+  const num = (v: unknown) => (v === null || v === undefined || v === '' ? undefined : Number(v))
+  const money = num(input.montantTotal); if (money !== undefined && !Number.isNaN(money)) args.montantTotal = money
+  const acompte = num(input.acompteAmount); if (acompte !== undefined && !Number.isNaN(acompte)) args.acompteAmount = acompte
+  if (input.signedAt) { const t = Date.parse(String(input.signedAt)); if (!Number.isNaN(t)) args.signedAt = t }
+  return args
 }
 
 export async function listProjectsByLead(leadId: string): Promise<ProjectResponse[]> {
@@ -523,10 +550,22 @@ export function deleteProject(projectId: string): Promise<{ ok: true }> {
 }
 
 // ─── Debriefs ─────────────────────────────────────────────
+async function fetchConvexDebrief(debriefId: string): Promise<DebriefResponse> {
+  const doc = await convexClient!.query(debriefsGet, { debriefId })
+  if (!doc) throw new ApiError(500, 'Création du débrief échouée')
+  return mapConvexDebrief(doc)
+}
+
 export async function createDebrief(
   projectId: string,
   input: Partial<Omit<DebriefResponse, 'id' | 'projectId' | 'commercialId' | 'createdAt' | 'updatedAt'>> & { outcome: DebriefResponse['outcome'] },
 ): Promise<DebriefResponse> {
+  if (convexAuthEnabled && convexClient) {
+    const id = await convexClient.mutation(debriefsCreate, { ...debriefArgsForConvex(input as Record<string, unknown>), projectId } as { projectId: string; outcome: string })
+    const res = await fetchConvexDebrief(id)
+    bustDebriefCaches()
+    return res
+  }
   const res = await api<DebriefResponse>(`/projects/${projectId}/debriefs`, { method: 'POST', body: input })
   bustDebriefCaches()
   return res
@@ -536,6 +575,12 @@ export async function createLeadDebrief(
   leadId: string,
   input: Partial<Omit<DebriefResponse, 'id' | 'commercialId' | 'createdAt' | 'updatedAt'>> & { outcome: DebriefResponse['outcome'] },
 ): Promise<DebriefResponse> {
+  if (convexAuthEnabled && convexClient) {
+    const id = await convexClient.mutation(debriefsCreateForLead, { ...debriefArgsForConvex(input as Record<string, unknown>), leadId } as { leadId: string; outcome: string })
+    const res = await fetchConvexDebrief(id)
+    bustDebriefCaches()
+    return res
+  }
   const res = await api<DebriefResponse>(`/leads/${leadId}/debriefs`, { method: 'POST', body: input })
   bustDebriefCaches()
   return res

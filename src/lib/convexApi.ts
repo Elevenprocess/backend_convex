@@ -191,6 +191,35 @@ export const projectsListByLead = makeFunctionReference<'query', { leadId: strin
 
 export const projectsGet = makeFunctionReference<'query', { projectId: string }, ConvexProjectDoc | null>('projects:get')
 
+export const projectsCreate = makeFunctionReference<
+  'mutation',
+  { leadId: string; name?: string; commercialId?: string; addressLine?: string; postalCode?: string; city?: string; notes?: string },
+  string
+>('projects:create')
+
+type DebriefMutationFields = {
+  outcome: string
+  rdvId?: string; nonSaleReason?: string; reflexionReason?: string; suiviReason?: string
+  objection?: string; acceptanceFactors?: string[]; notes?: string
+  montantTotal?: number; financingType?: string; kits?: string; signedAt?: number
+  paymentSubMethod?: string; financingOrg?: string; acomptePercent?: number
+  acompteAmount?: number; customEcheancier?: boolean
+}
+
+export const debriefsCreateForLead = makeFunctionReference<
+  'mutation',
+  DebriefMutationFields & { leadId: string; commercialId?: string; projectId?: string },
+  string
+>('debriefs:createForLead')
+
+export const debriefsCreate = makeFunctionReference<
+  'mutation',
+  DebriefMutationFields & { projectId: string; commercialId?: string },
+  string
+>('debriefs:create')
+
+export const debriefsGet = makeFunctionReference<'query', { debriefId: string }, ConvexDebriefDoc | null>('debriefs:get')
+
 export const debriefsListByLead = makeFunctionReference<'query', { leadId: string }, ConvexDebriefDoc[]>('debriefs:listByLead')
 
 export const debriefsListByProject = makeFunctionReference<'query', { projectId: string }, ConvexDebriefDoc[]>('debriefs:listByProject')
