@@ -187,6 +187,31 @@ export const leadsCreate = makeFunctionReference<
   string
 >('leads:create')
 
+export const leadsUpdate = makeFunctionReference<
+  'mutation',
+  {
+    leadId: string; status?: string; firstName?: string; lastName?: string; email?: string
+    phone?: string; addressLine?: string; city?: string; postalCode?: string
+    localisationMap?: string; revenuFiscal?: number; typeLogement?: string
+    datePassageRelance?: number; assignedToId?: string
+  },
+  ConvexLeadDoc | null
+>('leads:update')
+
+export const rdvCreate = makeFunctionReference<
+  'mutation',
+  { leadId: string; commercialId?: string; scheduledAt?: number; locationType?: string; externalId?: string; notes?: string },
+  string
+>('rdv:create')
+
+export const rdvGet = makeFunctionReference<'query', { rdvId: string }, ConvexRdvDoc | null>('rdv:get')
+
+export const callLogsLogCall = makeFunctionReference<
+  'mutation',
+  { leadId: string; result: string; durationSec?: number; notes?: string; nextCallbackAt?: number },
+  string
+>('callLogs:logCall')
+
 export const projectsListByLead = makeFunctionReference<'query', { leadId: string }, ConvexProjectDoc[]>('projects:listByLead')
 
 export const projectsGet = makeFunctionReference<'query', { projectId: string }, ConvexProjectDoc | null>('projects:get')

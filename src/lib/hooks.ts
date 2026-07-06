@@ -34,8 +34,8 @@ import type {
 import { fetchCache, type FetchCacheEntry } from './fetchCacheStore'
 import { persistEntry, loadAllEntries, migrateLegacyLocalStorage } from './cachePersist'
 import { convexAuthEnabled, convexClient } from './convex'
-import { leadsCreate, leadsGet } from './convexApi'
-import { mapConvexLead } from './convexMappers'
+import { callLogsLogCall, leadsCreate, leadsGet, leadsUpdate, rdvCreate, rdvGet } from './convexApi'
+import { mapConvexLead, mapConvexRdv } from './convexMappers'
 import {
   useConvexAnalyticsFunnel,
   useConvexAnalyticsSummary,
@@ -832,6 +832,21 @@ export type CreateCallLogInput = {
 }
 
 export async function createCallLog(input: CreateCallLogInput): Promise<CallLogResponse> {
+  if (convexAuthEnabled && convexClient) {
+    const id = await convexClient.mutation(callLogsLogCall, {
+      leadId: input.leadId,
+      result: input.result,
+      notes: input.notes ?? undefined,
+      nextCallbackAt: input.nextCallbackAt ? Date.parse(input.nextCallbackAt) : undefined,
+    })
+    // Le retour n'est consommé par aucun appelant (fire-and-forget) : on renvoie
+    // une réponse minimale cohérente plutôt que de re-fetcher le call log.
+    return {
+      id, leadId: input.leadId, setterId: '', calledAt: new Date().toISOString(),
+      result: input.result, nextCallbackAt: input.nextCallbackAt ?? null,
+      notes: input.notes ?? null, createdAt: new Date().toISOString(),
+    }
+  }
   return api<CallLogResponse>('/call-logs', { method: 'POST', body: input })
 }
 
@@ -877,8 +892,29 @@ function updateLeadCaches(updated: LeadResponse) {
   writeCache(`/leads/${updated.id}?{}`, { data: updated, timestamp: now })
 }
 
+// Convertit un UpdateLeadInput REST (null pour effacer, dates ISO) en args
+// Convex (champs optionnels sans null, datePassageRelance en ms). Convex refuse
+// null → un champ mis à null est simplement omis (pas d'effacement en tranche 1).
+function leadUpdateArgsForConvex(id: string, input: UpdateLeadInput): Record<string, unknown> {
+  const args: Record<string, unknown> = { leadId: id }
+  const STR: (keyof UpdateLeadInput)[] = ['status', 'firstName', 'lastName', 'email', 'phone', 'addressLine', 'city', 'postalCode', 'localisationMap', 'typeLogement', 'assignedToId']
+  for (const k of STR) { const v = input[k]; if (v !== null && v !== undefined) args[k] = v }
+  if (input.revenuFiscal !== null && input.revenuFiscal !== undefined) args.revenuFiscal = Number(input.revenuFiscal)
+  if (input.datePassageRelance) { const t = Date.parse(String(input.datePassageRelance)); if (!Number.isNaN(t)) args.datePassageRelance = t }
+  return args
+}
+
 export async function updateLead(id: string, input: UpdateLeadInput): Promise<LeadResponse> {
-  const updated = await api<LeadResponse>(`/leads/${id}`, { method: 'PATCH', body: input })
+  let updated: LeadResponse
+  if (convexAuthEnabled && convexClient) {
+    const doc = await convexClient.mutation(leadsUpdate, leadUpdateArgsForConvex(id, input) as { leadId: string })
+    if (!doc) throw new Error('Lead introuvable')
+    updated = mapConvexLead(doc)
+    updateLeadCaches(updated)
+    // Pas de sync GHL en mode Convex (calendrier GHL non porté sur le read-path).
+    return updated
+  }
+  updated = await api<LeadResponse>(`/leads/${id}`, { method: 'PATCH', body: input })
   updateLeadCaches(updated)
   if (input.status === 'qualifie') {
     void syncLeadGhlCalendarEvents(id)
@@ -1146,6 +1182,19 @@ export async function updateGhlAppointment(rdvId: string, input: UpdateGhlAppoin
 }
 
 export async function createRdv(input: CreateRdvInput): Promise<RdvResponse> {
+  if (convexAuthEnabled && convexClient) {
+    const scheduledAt = input.scheduledAt ? Date.parse(input.scheduledAt) : undefined
+    const id = await convexClient.mutation(rdvCreate, {
+      leadId: input.leadId,
+      commercialId: input.commercialId ?? undefined,
+      scheduledAt: scheduledAt !== undefined && !Number.isNaN(scheduledAt) ? scheduledAt : undefined,
+      locationType: input.locationType,
+      notes: input.notes ?? undefined,
+    })
+    const doc = await convexClient.query(rdvGet, { rdvId: id })
+    if (!doc) throw new Error('Création du RDV échouée')
+    return mapConvexRdv(doc)
+  }
   return api<RdvResponse>('/rdv', { method: 'POST', body: input })
 }
 
