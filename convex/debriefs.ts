@@ -18,6 +18,7 @@ import {
   syncFromCommercial,
   commercialSaleActiveFromLeadStatus,
 } from "./model/syncFromCommercial";
+import { notifyDebriefCreated } from "./model/notify";
 
 const COMMERCIAL = ["admin", "commercial", "commercial_lead"] as const;
 
@@ -209,6 +210,10 @@ export const createForLead = mutation({
       financingType: args.financingType ?? null,
       kits: args.kits ?? null,
     });
+    await notifyDebriefCreated(ctx, {
+      leadId: args.leadId, commercialId, outcome: args.outcome,
+      montantTotal: args.montantTotal, rdvId: args.rdvId,
+    });
     return debriefId;
   },
 });
@@ -257,6 +262,10 @@ export const create = mutation({
       montantTotal: args.montantTotal ?? null,
       financingType: args.financingType ?? null,
       kits: args.kits ?? null,
+    });
+    await notifyDebriefCreated(ctx, {
+      leadId: project.leadId, commercialId, outcome: args.outcome,
+      montantTotal: args.montantTotal, rdvId: args.rdvId,
     });
     return debriefId;
   },
@@ -351,6 +360,10 @@ export const submitViaLink = internalMutation({
     await syncDeliveryFromDebrief(ctx, {
       leadId, outcome: args.outcome, nonSaleReason: args.nonSaleReason ?? null,
       montantTotal: args.montantTotal ?? null, financingType: args.financingType ?? null, kits: args.kits ?? null,
+    });
+    await notifyDebriefCreated(ctx, {
+      leadId, commercialId, outcome: args.outcome,
+      montantTotal: args.montantTotal, rdvId: args.rdvId,
     });
 
     const now = Date.now();

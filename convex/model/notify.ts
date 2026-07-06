@@ -5,8 +5,41 @@
 
 import type { MutationCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
-import { acompte40Message, acompteSoldeMessage, vtDateChangedMessage } from "./notifMessages";
+import { acompte40Message, acompteSoldeMessage, debriefCreatedMessage, vtDateChangedMessage } from "./notifMessages";
 import { roleOf } from "./access";
+
+// Notifie chaque responsable commercial (commercial_lead actif) à la création
+// d'un débrief. Best-effort, in-app (remplace le WhatsApp NestJS).
+export async function notifyDebriefCreated(
+  ctx: MutationCtx,
+  input: {
+    leadId?: Id<"leads">;
+    commercialId: Id<"users">;
+    outcome: string;
+    montantTotal?: number;
+    rdvId?: Id<"rdv">;
+  },
+): Promise<void> {
+  const managers = (await ctx.db.query("users").collect()).filter(
+    (u) => u.role === "commercial_lead" && u.active !== false && u.deletedAt === undefined,
+  );
+  if (managers.length === 0) return;
+  const commercial = await ctx.db.get(input.commercialId);
+  const commercialName = commercial?.name ?? "Un commercial";
+  const msg = debriefCreatedMessage({ commercialName, outcome: input.outcome, montantTotal: input.montantTotal });
+  for (const manager of managers) {
+    await createNotification(ctx, {
+      userId: manager._id,
+      type: msg.type,
+      title: msg.title,
+      body: msg.body,
+      payload: {
+        ...(input.leadId !== undefined ? { leadId: input.leadId } : {}),
+        ...(input.rdvId !== undefined ? { rdvId: input.rdvId } : {}),
+      },
+    });
+  }
+}
 
 export async function createNotification(
   ctx: MutationCtx,

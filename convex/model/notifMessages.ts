@@ -38,6 +38,26 @@ export function acompte40Message(input: {
   };
 }
 
+// Alerte immédiate au responsable commercial à chaque débrief créé.
+// Portage de DebriefAlertsService.notifyDebriefCreated (WhatsApp NestJS →
+// notification in-app Convex).
+export function debriefCreatedMessage(input: {
+  commercialName: string;
+  outcome: string;
+  montantTotal?: number;
+}): { type: "debrief_created"; title: string; body: string } {
+  const issue = input.outcome === "vente" ? "VENTE" : input.outcome === "non_vente" ? "non-vente" : input.outcome;
+  const montant =
+    input.outcome === "vente" && input.montantTotal !== undefined && input.montantTotal > 0
+      ? ` — ${input.montantTotal.toLocaleString("fr-FR")} €`
+      : "";
+  return {
+    type: "debrief_created",
+    title: "Nouveau débrief",
+    body: `${input.commercialName} a saisi un débrief (${issue})${montant}.`,
+  };
+}
+
 export function acompteSoldeMessage(input: {
   leadName: string;
 }): { type: "acompte_a_encaisser"; title: string; body: string } {
