@@ -9,6 +9,7 @@ import {
 } from "./model/ghl/opportunityWebhook";
 import { mapGhlStageToStatus } from "./model/ghl/stageMapper";
 import { checkWebhookSecret, clientIp, importsDisabled } from "./model/ghl/webhookAuth";
+import { verifyDebriefToken } from "./model/debriefLinkToken";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);
@@ -155,6 +156,83 @@ http.route({
       }
       return json({ message }, 500);
     }
+  }),
+});
+
+function debriefLinkSecret(): string {
+  return process.env.DEBRIEF_LINK_SECRET || process.env.BETTER_AUTH_SECRET || "";
+}
+
+function frontendBase(): string {
+  return (process.env.FRONTEND_URL ?? "https://crm.electroconceptoi.com")
+    .split(",")[0].trim().replace(/\/$/, "");
+}
+
+// Redirect court /d/<token> → page publique débrief. Aucune vérif (le token
+// signé porte l'autorisation, vérifiée aux appels API /debrief-link).
+http.route({
+  pathPrefix: "/d/",
+  method: "GET",
+  handler: httpAction(async (_ctx, req) => {
+    const token = new URL(req.url).pathname.slice("/d/".length);
+    const location = `${frontendBase()}/#/debrief/${encodeURIComponent(decodeURIComponent(token))}`;
+    return new Response(null, { status: 302, headers: { Location: location } });
+  }),
+});
+
+// Lecture publique du débrief via lien magique.
+http.route({
+  pathPrefix: "/debrief-link/",
+  method: "GET",
+  handler: httpAction(async (ctx, req) => {
+    const token = decodeURIComponent(new URL(req.url).pathname.slice("/debrief-link/".length));
+    const payload = await verifyDebriefToken(token, debriefLinkSecret());
+    if (!payload) return json({ message: "Lien invalide ou expiré." }, 410);
+    const data = await ctx.runQuery(internal.debriefs.linkReadData, { rdvId: payload.rdvId as any });
+    if (!data) return json({ message: "Rendez-vous introuvable." }, 404);
+    return json(data);
+  }),
+});
+
+// Écriture publique : submit débrief OU reschedule (suffixe /reschedule).
+http.route({
+  pathPrefix: "/debrief-link/",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    const suffix = decodeURIComponent(new URL(req.url).pathname.slice("/debrief-link/".length));
+    const isReschedule = suffix.endsWith("/reschedule");
+    const token = isReschedule ? suffix.slice(0, -"/reschedule".length) : suffix;
+    const payload = await verifyDebriefToken(token, debriefLinkSecret());
+    if (!payload) return json({ message: "Lien invalide ou expiré." }, 410);
+    const rdvId = payload.rdvId as any;
+
+    let body: Record<string, unknown>;
+    try {
+      body = (await req.json()) as Record<string, unknown>;
+    } catch {
+      return json({ message: "Body JSON invalide" }, 400);
+    }
+
+    if (isReschedule) {
+      const when = typeof body.scheduledAt === "string" ? Date.parse(body.scheduledAt) : NaN;
+      if (Number.isNaN(when)) return json({ message: "Date de report invalide." }, 400);
+      if (when <= Date.now()) return json({ message: "La nouvelle date doit être dans le futur." }, 400);
+      try {
+        await ctx.runMutation(internal.debriefs.rescheduleViaLink, { rdvId, scheduledAt: when });
+      } catch (err) {
+        return json({ message: err instanceof Error ? err.message : "Report impossible." }, 404);
+      }
+      return json({ ok: true });
+    }
+
+    try {
+      await ctx.runMutation(internal.debriefs.submitViaLink, { rdvId, ...(body as any) });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Enregistrement impossible.";
+      const status = /introuvable/i.test(msg) ? 404 : 400;
+      return json({ message: msg }, status);
+    }
+    return json({ ok: true });
   }),
 });
 
