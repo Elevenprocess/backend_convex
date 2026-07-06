@@ -131,6 +131,20 @@ export const listByLead = query({
   },
 });
 
+// Feed d'activité d'appels d'un setter (Overview « suivi »). Limité, ordre récent.
+export const listBySetter = query({
+  args: { setterId: v.id("users"), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    await requireUser(ctx);
+    const rows = await ctx.db
+      .query("callLogs")
+      .withIndex("by_setter_calledAt", (q) => q.eq("setterId", args.setterId))
+      .order("desc")
+      .take(args.limit ?? 500);
+    return rows;
+  },
+});
+
 export const upcomingCallbacks = query({
   args: {
     now: v.number(),
