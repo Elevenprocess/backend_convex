@@ -7,4 +7,11 @@ const crons = cronJobs();
 // (bascule) — le cron tourne mais sort immédiatement.
 crons.interval("ghl-calendar-sync", { minutes: 15 }, internal.ghlCalendar.syncScheduled, {});
 
+// Backfill du lien débrief dans le champ contact GHL. No-op tant que
+// GHL_SYNC_ENABLED !== "true" (bascule).
+crons.interval(
+  "ghl-debrief-link-backfill", { minutes: 2 },
+  internal.ghlDebriefLink.syncDebriefLinksScheduled, {},
+);
+
 export default crons;
