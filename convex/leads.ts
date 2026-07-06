@@ -2,7 +2,8 @@ import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { leadStatusValidator, adChannelValidator } from "./model/enums";
-import { requireUser, requireRole } from "./model/access";
+import { requireUser, requireRole, roleOf } from "./model/access";
+import type { Role } from "./model/enums";
 import { normalizeSource } from "./model/acquisitionChannel";
 import { insertStageHistory } from "./model/stageHistory";
 
@@ -266,5 +267,111 @@ export const sourceMapUnmapped = query({
     return [...counts.entries()]
       .map(([raw, n]) => ({ raw, n }))
       .sort((a, b) => b.n - a.n);
+  },
+});
+
+// ─── Vues stats / dashboards (portage leads.service.ts) ───────────────────────
+
+const DAY_MS = 86_400_000;
+const SALES_MANAGER_ROLES: Role[] = ["admin", "commercial", "commercial_lead"];
+
+async function daysSinceLastStageChange(
+  ctx: Parameters<typeof requireUser>[0],
+  leadId: import("./_generated/dataModel").Id<"leads">,
+  now: number,
+): Promise<number | undefined> {
+  const latest = await ctx.db
+    .query("leadStageHistory")
+    .withIndex("by_lead_changedAt", (q) => q.eq("leadId", leadId))
+    .order("desc")
+    .first();
+  if (!latest) return undefined;
+  return Math.floor((now - latest.changedAt) / DAY_MS);
+}
+
+// Stats globales leads (commercial scopé à ses leads assignés).
+export const stats = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    const all = await ctx.db.query("leads").collect();
+    const scoped = all.filter((l) => {
+      if (l.deletedAt !== undefined) return false;
+      if (roleOf(user) === "commercial") return l.assignedToId === user._id;
+      return true;
+    });
+    const byStatus: Record<string, number> = {};
+    const bySource: Record<string, number> = {};
+    for (const l of scoped) {
+      byStatus[l.status] = (byStatus[l.status] ?? 0) + 1;
+      bySource[l.source] = (bySource[l.source] ?? 0) + 1;
+    }
+    return {
+      total: scoped.length,
+      byStatus,
+      bySource,
+      imported: (bySource.ghl ?? 0) + (bySource.airtable_migration ?? 0),
+      directGhl: bySource.ghl ?? 0,
+    };
+  },
+});
+
+// Devis en attente du commercial connecté (status rdv_honore), drapeau stale.
+export const pendingQuotes = query({
+  args: { now: v.number(), staleDays: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, SALES_MANAGER_ROLES);
+    const staleDays = args.staleDays ?? 14;
+    const rows = (await ctx.db.query("leads").collect()).filter(
+      (l) => l.deletedAt === undefined && l.assignedToId === user._id && l.status === "rdv_honore",
+    );
+    const list = await Promise.all(
+      rows.map(async (l) => {
+        const days = await daysSinceLastStageChange(ctx, l._id, args.now);
+        return {
+          id: l._id,
+          firstName: l.firstName,
+          lastName: l.lastName,
+          email: l.email,
+          phone: l.phone,
+          monetaryValue: l.monetaryValue,
+          ghlStageName: l.ghlStageName,
+          daysSinceLastStageChange: days,
+          isStale: (days ?? 0) >= staleDays,
+        };
+      }),
+    );
+    list.sort((a, b) => (b.daysSinceLastStageChange ?? 0) - (a.daysSinceLastStageChange ?? 0));
+    return { total: list.length, stale: list.filter((l) => l.isStale).length, staleDays, leads: list };
+  },
+});
+
+// Dashboard commercial : compteurs par statut + KPIs + alertes.
+export const dashboard = query({
+  args: { now: v.number() },
+  handler: async (ctx, args) => {
+    const user = await requireRole(ctx, SALES_MANAGER_ROLES);
+    const rows = (await ctx.db.query("leads").collect()).filter(
+      (l) => l.deletedAt === undefined && l.assignedToId === user._id,
+    );
+    const counters: Record<string, number> = {
+      nouveau: 0, qualifie: 0, rdv_pris: 0, rdv_honore: 0, signe: 0, perdu: 0, relance: 0, a_rappeler: 0,
+    };
+    let ca = 0, signed = 0, lost = 0, staleQuotes = 0, stuckLeads = 0;
+    for (const l of rows) {
+      if (l.status in counters) counters[l.status] += 1;
+      if (l.status === "signe") { signed += 1; ca += l.monetaryValue ?? 0; }
+      if (l.status === "perdu") lost += 1;
+      const days = (await daysSinceLastStageChange(ctx, l._id, args.now)) ?? 0;
+      if (l.status === "rdv_honore" && days >= 14) staleQuotes += 1;
+      if (l.status !== "signe" && l.status !== "perdu" && days >= 30) stuckLeads += 1;
+    }
+    const openLeads = rows.filter((l) => l.status !== "signe" && l.status !== "perdu").length;
+    const denom = signed + lost;
+    return {
+      counters,
+      totals: { openLeads, ca, signed, lost, closingRate: denom > 0 ? signed / denom : 0 },
+      alerts: { staleQuotes, stuckLeads },
+    };
   },
 });
