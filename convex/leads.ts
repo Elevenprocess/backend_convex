@@ -135,6 +135,50 @@ export const qualify = mutation({
   },
 });
 
+// Édition d'un lead (fiche + statut). Miroir de LeadsController.update : patch
+// partiel des champs identité/adresse + statut, avec historique de stage sur
+// changement de statut (comme updateStatus/qualify).
+export const update = mutation({
+  args: {
+    leadId: v.id("leads"),
+    status: v.optional(leadStatusValidator),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    addressLine: v.optional(v.string()),
+    city: v.optional(v.string()),
+    postalCode: v.optional(v.string()),
+    localisationMap: v.optional(v.string()),
+    revenuFiscal: v.optional(v.number()),
+    typeLogement: v.optional(v.string()),
+    datePassageRelance: v.optional(v.number()),
+    assignedToId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    await requireUser(ctx);
+    const { leadId, ...rest } = args;
+    const lead = await ctx.db.get(leadId);
+    if (!lead) throw new Error("Lead introuvable");
+    // Ne patche que les champs réellement transmis (undefined = non fourni).
+    const patch: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(rest)) if (val !== undefined) patch[k] = val;
+    const statusChanged = args.status !== undefined && args.status !== lead.status;
+    if (Object.keys(patch).length > 0) await ctx.db.patch(leadId, patch);
+    if (statusChanged) {
+      await insertStageHistory(ctx, {
+        leadId,
+        ghlStageName: args.status!,
+        saasStatus: args.status!,
+        assignedToId: args.assignedToId ?? lead.assignedToId,
+        changedAt: Date.now(),
+        source: "manual",
+      });
+    }
+    return await ctx.db.get(leadId);
+  },
+});
+
 // ─── Sources à classer (portage SourceMapService, Tranche 8a) ─────────────────
 
 export const sourceMapUpsert = mutation({

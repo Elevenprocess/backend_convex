@@ -14,6 +14,36 @@ test("create() pose source=manual et status=nouveau", async () => {
   expect(lead?.status).toBe("nouveau");
 });
 
+test("update() patche fiche + statut (re-qualification d'un lead perdu) et écrit l'historique", async () => {
+  const t = makeT();
+  const setterId = await insertUser(t, { role: "setter" });
+  const leadId = await asUser(t, setterId).mutation(api.leads.create, { firstName: "Mario" });
+  // Un débrief l'avait passé perdu ; on le remet qualifié via la fiche.
+  await t.run((ctx) => ctx.db.patch(leadId, { status: "perdu" }));
+
+  const updated = await asUser(t, setterId).mutation(api.leads.update, {
+    leadId, status: "qualifie", lastName: "Ratiarivony", city: "Tana", postalCode: "101",
+  });
+  expect(updated?.status).toBe("qualifie");
+  expect(updated?.lastName).toBe("Ratiarivony");
+  expect(updated?.city).toBe("Tana");
+  const hist = await t.run((ctx) =>
+    ctx.db.query("leadStageHistory").withIndex("by_lead_changedAt", (q) => q.eq("leadId", leadId)).collect());
+  expect(hist.some((h) => h.saasStatus === "qualifie")).toBe(true);
+});
+
+test("update() sans changement de statut ne crée pas d'historique", async () => {
+  const t = makeT();
+  const setterId = await insertUser(t, { role: "setter" });
+  const leadId = await asUser(t, setterId).mutation(api.leads.create, { firstName: "Jo" });
+  await asUser(t, setterId).mutation(api.leads.update, { leadId, email: "jo@ecoi.fr" });
+  const hist = await t.run((ctx) =>
+    ctx.db.query("leadStageHistory").withIndex("by_lead_changedAt", (q) => q.eq("leadId", leadId)).collect());
+  expect(hist.length).toBe(0);
+  const lead = await t.run((ctx) => ctx.db.get(leadId));
+  expect(lead?.email).toBe("jo@ecoi.fr");
+});
+
 test("updateStatus() change le statut ET écrit l'historique (sans doublon)", async () => {
   const t = makeT();
   const setterId = await insertUser(t, { role: "setter" });
