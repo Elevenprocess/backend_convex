@@ -67,6 +67,7 @@ import type * as model_syncFromCommercial from "../model/syncFromCommercial.js";
 import type * as model_vtCalendar from "../model/vtCalendar.js";
 import type * as notifications from "../notifications.js";
 import type * as payments from "../payments.js";
+import type * as projectAttachments from "../projectAttachments.js";
 import type * as projects from "../projects.js";
 import type * as rdv from "../rdv.js";
 import type * as referrers from "../referrers.js";
@@ -142,6 +143,7 @@ declare const fullApi: ApiFromModules<{
   "model/vtCalendar": typeof model_vtCalendar;
   notifications: typeof notifications;
   payments: typeof payments;
+  projectAttachments: typeof projectAttachments;
   projects: typeof projects;
   rdv: typeof rdv;
   referrers: typeof referrers;
