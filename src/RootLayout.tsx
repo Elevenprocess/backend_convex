@@ -7,6 +7,7 @@ import { SidebarRevealPill } from './components/call/SidebarRevealPill'
 import { PersistentLeadSidebar } from './components/leads/PersistentLeadSidebar'
 import { ClipboardToast } from './components/ClipboardToast'
 import { useAuth, impersonationIsReadOnly } from './lib/auth'
+import { convexAuthEnabled } from './lib/convex'
 import { useLeads, useRdvList } from './lib/hooks'
 import { useRealtimeSocket } from './lib/realtime'
 import { useTheme } from './lib/theme'
@@ -31,7 +32,9 @@ export function RootLayout() {
       <PersistentCallSidebar />
       <SidebarRevealPill />
       <CallBubble />
-      <ChatPanel />
+      {/* Assistant IA (endpoints /assistant/*) : NestJS only, pas encore porté
+          sur Convex → masqué en mode Convex pour ne pas spammer le backend. */}
+      {!convexAuthEnabled && <ChatPanel />}
       <ClipboardToast />
     </>
   )

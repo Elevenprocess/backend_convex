@@ -29,7 +29,7 @@ import type {
 } from './types'
 import { notifyRealtimeRefresh } from './realtime'
 import { convexAuthEnabled, convexClient } from './convex'
-import { debriefsListByProject, projectsGet, projectsListByLead } from './convexApi'
+import { debriefsListByLead, debriefsListByProject, projectsGet, projectsListByLead } from './convexApi'
 import { mapConvexDebrief, mapConvexProject } from './convexMappers'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
@@ -93,6 +93,13 @@ type FetchOpts = {
 }
 
 export async function api<T>(path: string, opts: FetchOpts = {}): Promise<T> {
+  // Mode Convex : le backend NestJS n'est pas le nôtre. Les fonctions câblées
+  // Convex court-circuitent AVANT d'arriver ici ; tout ce qui atteint api() est
+  // non porté → on rejette sans requête réseau (plus de 500 sur
+  // api.electroconceptoi.com). Les appelants impératifs .catch() déjà.
+  if (convexAuthEnabled) {
+    throw new ApiError(0, `Indisponible en mode Convex (endpoint NestJS non porté : ${path})`, 'CONVEX_MODE')
+  }
   const { method = 'GET', body, query, signal, skipViewAs = false } = opts
 
   const url = new URL(buildApiUrl(path))
@@ -534,11 +541,19 @@ export async function createLeadDebrief(
   return res
 }
 
-export function listDebriefsByProject(projectId: string): Promise<DebriefResponse[]> {
+export async function listDebriefsByProject(projectId: string): Promise<DebriefResponse[]> {
+  if (convexAuthEnabled && convexClient) {
+    const rows = await convexClient.query(debriefsListByProject, { projectId })
+    return rows.map(mapConvexDebrief)
+  }
   return api<DebriefResponse[]>(`/projects/${projectId}/debriefs`)
 }
 
-export function listDebriefsByLead(leadId: string): Promise<DebriefResponse[]> {
+export async function listDebriefsByLead(leadId: string): Promise<DebriefResponse[]> {
+  if (convexAuthEnabled && convexClient) {
+    const rows = await convexClient.query(debriefsListByLead, { leadId })
+    return rows.map(mapConvexDebrief)
+  }
   return api<DebriefResponse[]>(`/leads/${leadId}/debriefs`)
 }
 

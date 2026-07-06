@@ -181,6 +181,11 @@ function useFetch<T>(
   query?: Record<string, string | number | undefined | null>,
   options?: { refreshCachedOnMount?: boolean; silentInitialLoading?: boolean; noRealtimeRefresh?: boolean },
 ): Async<T> {
+  // Mode Convex : aucun endpoint NestJS n'est appelé. Les hooks CÂBLÉS Convex
+  // n'utilisent pas useFetch (ils sont swappés) ; ceux qui arrivent ici sont
+  // NON câblés → on force path=null (= fetch désactivé, état vide null-safe
+  // déjà géré partout) au lieu de taper api.electroconceptoi.com et 500.
+  if (convexAuthEnabled) path = null
   // Opt-out du rafraîchissement temps réel : la donnée n'est PAS re-fetchée
   // automatiquement sur les events realtime (utile pour une page qu'on ne veut
   // pas voir clignoter/recharger en continu, ex. /suivi).
