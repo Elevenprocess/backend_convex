@@ -10,7 +10,20 @@ export const get = query({
   args: { leadId: v.id("leads") },
   handler: async (ctx, args) => {
     await requireUser(ctx);
-    return await ctx.db.get(args.leadId);
+    const lead = await ctx.db.get(args.leadId);
+    if (!lead || lead.deletedAt !== undefined) return null;
+    return lead;
+  },
+});
+
+export const softDelete = mutation({
+  args: { leadId: v.id("leads") },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, ["admin"]);
+    const existing = await ctx.db.get(args.leadId);
+    if (!existing || existing.deletedAt !== undefined) throw new Error("Lead introuvable");
+    await ctx.db.patch(args.leadId, { deletedAt: Date.now() });
+    return null;
   },
 });
 
@@ -35,7 +48,7 @@ export const list = query({
     } else {
       q = ctx.db.query("leads");
     }
-    const ordered = q.order("desc");
+    const ordered = q.order("desc").filter((f) => f.eq(f.field("deletedAt"), undefined));
     if (args.city !== undefined) {
       return await ordered.filter((f) => f.eq(f.field("city"), args.city!)).paginate(args.paginationOpts);
     }
