@@ -1,4 +1,4 @@
-import { mutation, query, MutationCtx } from "./_generated/server";
+import { mutation, query, internalMutation, internalQuery, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
 import {
@@ -253,6 +253,64 @@ export const create = mutation({
       kits: args.kits ?? null,
     });
     return debriefId;
+  },
+});
+
+// Portage verbatim de outcomeToResult (debrief-link.controller.ts).
+export function outcomeToResult(
+  outcome: string,
+  reason: string | undefined,
+): "signe" | "reflexion" | "perdu" | "no_show" | undefined {
+  if (outcome === "vente") return "signe";
+  if (outcome === "non_vente") {
+    if (reason === "no_show") return "no_show";
+    if (reason === "suivi_prevu") return "reflexion";
+    return "perdu";
+  }
+  return undefined;
+}
+
+// Données du formulaire de débrief via lien magique (public, lu par l'httpAction
+// après vérif du token). null si RDV introuvable ou supprimé.
+export const linkReadData = internalQuery({
+  args: { rdvId: v.id("rdv") },
+  handler: async (ctx, args) => {
+    const rdvRow = await ctx.db.get(args.rdvId);
+    if (!rdvRow || rdvRow.deletedAt !== undefined) return null;
+    const lead = rdvRow.leadId ? await ctx.db.get(rdvRow.leadId) : null;
+    const commercial = rdvRow.commercialId ? await ctx.db.get(rdvRow.commercialId) : null;
+    const existing = await ctx.db
+      .query("debriefs")
+      .withIndex("by_rdv", (q) => q.eq("rdvId", args.rdvId))
+      .order("desc")
+      .first();
+    return {
+      client: lead
+        ? { firstName: lead.firstName, lastName: lead.lastName, email: lead.email, phone: lead.phone }
+        : null,
+      commercialName: commercial?.name ?? null,
+      rdv: {
+        id: rdvRow._id,
+        scheduledAt: rdvRow.scheduledAt,
+        status: rdvRow.status,
+        alreadyDebriefed: rdvRow.debriefFilledAt !== undefined,
+      },
+      debrief: existing
+        ? {
+            outcome: existing.outcome,
+            nonSaleReason: existing.nonSaleReason,
+            reflexionReason: existing.reflexionReason,
+            suiviReason: existing.suiviReason,
+            objection: existing.objection,
+            acceptanceFactors: existing.acceptanceFactors ?? [],
+            notes: existing.notes,
+            montantTotal: existing.montantTotal,
+            financingType: existing.financingType,
+            signedAt: existing.signedAt,
+            kits: existing.kits,
+          }
+        : null,
+    };
   },
 });
 
