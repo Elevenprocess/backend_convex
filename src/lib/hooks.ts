@@ -34,9 +34,10 @@ import type {
 import { fetchCache, type FetchCacheEntry } from './fetchCacheStore'
 import { persistEntry, loadAllEntries, migrateLegacyLocalStorage } from './cachePersist'
 import { convexAuthEnabled, convexClient } from './convex'
-import { callLogsLogCall, leadsCreate, leadsGet, leadsUpdate, rdvCreate, rdvGet } from './convexApi'
+import { callLogsLogCall, leadsCreate, leadsGet, leadsUpdate, rdvCreate, rdvGet, rdvUpdate } from './convexApi'
 import { mapConvexLead, mapConvexRdv } from './convexMappers'
 import {
+  useConvexAcomptes,
   useConvexAnalyticsFunnel,
   useConvexAnalyticsSummary,
   useConvexClients,
@@ -459,7 +460,27 @@ export type UpdateRdvPayload = {
 }
 
 export async function updateRdv(id: string, input: UpdateRdvPayload): Promise<RdvResponse> {
-  const updated = await api<RdvResponse>(`/rdv/${id}`, { method: 'PATCH', body: input })
+  let updated: RdvResponse
+  if (convexAuthEnabled && convexClient) {
+    // rdv.update ne gère pas commercialId/locationType → on les ignore.
+    const args: Record<string, unknown> = { rdvId: id }
+    for (const k of ['status', 'financingType', 'objections', 'nonSaleReason', 'kits', 'notes'] as const) {
+      const v = input[k]; if (v !== null && v !== undefined) args[k] = v
+    }
+    if (input.result !== undefined) args.result = input.result // union null accepté
+    if (input.montantTotal !== null && input.montantTotal !== undefined) {
+      const n = Number(input.montantTotal); if (!Number.isNaN(n)) args.montantTotal = n
+    }
+    for (const [k, val] of [['scheduledAt', input.scheduledAt], ['signatureAt', input.signatureAt], ['debriefFilledAt', input.debriefFilledAt]] as const) {
+      if (val) { const t = Date.parse(String(val)); if (!Number.isNaN(t)) args[k] = t }
+    }
+    await convexClient.mutation(rdvUpdate, args as { rdvId: string })
+    const doc = await convexClient.query(rdvGet, { rdvId: id })
+    if (!doc) throw new Error('RDV introuvable')
+    updated = mapConvexRdv(doc)
+  } else {
+    updated = await api<RdvResponse>(`/rdv/${id}`, { method: 'PATCH', body: input })
+  }
   notifyRealtimeRefresh({ event: 'rdv:updated', paths: ['/rdv', '/leads', '/analytics/summary', '/analytics/funnel', '/ghl-calendar/events'] })
   return updated
 }
@@ -514,9 +535,13 @@ export function useSubsteps(
   )
 }
 
-export function useAcomptes(enabled = true): Async<AcompteResponse[]> {
+function useAcomptesRest(enabled = true): Async<AcompteResponse[]> {
   return useFetch<AcompteResponse[]>(enabled ? '/payments/acomptes' : null)
 }
+
+export const useAcomptes: typeof useAcomptesRest = convexAuthEnabled
+  ? (useConvexAcomptes as unknown as typeof useAcomptesRest)
+  : useAcomptesRest
 
 export function useInvitations(enabled = true): Async<InvitationResponse[]> {
   return useFetch<InvitationResponse[]>(enabled ? '/users/invitations' : null)

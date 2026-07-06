@@ -241,6 +241,47 @@ export const projectAttachmentsGetUrl = makeFunctionReference<
 
 export const projectAttachmentsRemove = makeFunctionReference<'mutation', { attachmentId: string }, { ok: true }>('projectAttachments:remove')
 
+// payments/acomptes : le serveur renvoie déjà la forme AcompteResponse mais avec
+// montants en number et signedAt en ms → mapConvexAcompte convertit.
+export type ConvexEcheanceLine = {
+  ordre: number; label: string; jalonKey: string | null; jalonAtteint: boolean
+  percent: number | null; montantPrevu: number | null; statut: string
+  montantReel: number | null; dateEcheance: string | null; dateEncaissement: string | null
+  notes: string | null; recordedById: string | null; updatedAt: string | null
+}
+export type ConvexAcompteDoc = {
+  debriefId: string; leadId: string | null; projectId: string | null
+  projectName: string | null; clientName: string | null; commercialName: string | null
+  montantTotal: number | null; financingType: string | null; paymentSubMethod: string | null
+  financingOrg: string | null; acomptePercent: number | null; acompteAmount: number | null
+  customEcheancier: boolean; signedAt: number | null; edfRecepisse: boolean
+  echeances: ConvexEcheanceLine[]; totalEncaisse: number | null; resteAPayer: number | null
+}
+
+export const paymentsListAcomptes = makeFunctionReference<'query', { today: string }, ConvexAcompteDoc[]>('payments:listAcomptes')
+
+export const paymentsGetAcompte = makeFunctionReference<'query', { debriefId: string; today: string }, ConvexAcompteDoc | null>('payments:getAcompte')
+
+export const paymentsRecordEcheance = makeFunctionReference<
+  'mutation',
+  { debriefId: string; ordre: number; statut: string; montantReel?: number; dateEncaissement?: string; dateEcheance?: string; notes?: string },
+  unknown
+>('payments:recordEcheance')
+
+export const paymentsUpdateFinancing = makeFunctionReference<
+  'mutation',
+  { debriefId: string; montantTotal?: number; financingType?: string; paymentSubMethod?: string; financingOrg?: string; acomptePercent?: number; acompteAmount?: number },
+  unknown
+>('payments:updateFinancing')
+
+export const paymentsSetEcheancier = makeFunctionReference<
+  'mutation',
+  { debriefId: string; tranches: Array<Record<string, unknown>> },
+  unknown
+>('payments:setEcheancier')
+
+export const paymentsResetEcheancier = makeFunctionReference<'mutation', { debriefId: string }, unknown>('payments:resetEcheancier')
+
 type PaginationOptsArg = { numItems: number; cursor: string | null }
 
 export const usersMe = makeFunctionReference<'query', Record<string, never>, ConvexUserDoc | null>('users:me')

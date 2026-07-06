@@ -29,8 +29,8 @@ import type {
 } from './types'
 import { notifyRealtimeRefresh } from './realtime'
 import { convexAuthEnabled, convexClient } from './convex'
-import { debriefsCreate, debriefsCreateForLead, debriefsGet, debriefsListByLead, debriefsListByProject, devisCreate, devisGenerateUploadUrl, devisGetById, devisListByLead, devisMarkAsSigned, devisRemove, devisRetryOcr, devisUpdate, projectAttachmentsCreate, projectAttachmentsGenerateUploadUrl, projectAttachmentsGetUrl, projectAttachmentsListByProject, projectAttachmentsRemove, projectsCreate, projectsGet, projectsListByLead, type ConvexAttachmentSummary } from './convexApi'
-import { mapConvexDebrief, mapConvexDevis, mapConvexProject } from './convexMappers'
+import { debriefsCreate, debriefsCreateForLead, debriefsGet, debriefsListByLead, debriefsListByProject, devisCreate, devisGenerateUploadUrl, devisGetById, devisListByLead, devisMarkAsSigned, devisRemove, devisRetryOcr, devisUpdate, paymentsGetAcompte, paymentsListAcomptes, paymentsRecordEcheance, paymentsResetEcheancier, paymentsSetEcheancier, paymentsUpdateFinancing, projectAttachmentsCreate, projectAttachmentsGenerateUploadUrl, projectAttachmentsGetUrl, projectAttachmentsListByProject, projectAttachmentsRemove, projectsCreate, projectsGet, projectsListByLead, type ConvexAttachmentSummary } from './convexApi'
+import { mapConvexAcompte, mapConvexDebrief, mapConvexDevis, mapConvexProject } from './convexMappers'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
 
@@ -357,41 +357,107 @@ export async function resolveSubstepProblem(
 }
 
 // ─── Finances : acomptes ─────────────────────────────────────
-export function listAcomptes(): Promise<AcompteResponse[]> {
+// listAcomptes/getAcompte serveur exigent `today` (YYYY-MM-DD) pour dériver
+// jalonAtteint/statut « à venir ». On le calcule au moment de l'appel.
+function todayStr(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+const toNum = (v: string | number | null | undefined): number | undefined => {
+  if (v === null || v === undefined || v === '') return undefined
+  const n = Number(v); return Number.isNaN(n) ? undefined : n
+}
+
+// Après une écriture, on renvoie l'acompte fraîchement réassemblé (comme le NestJS).
+async function convexGetAcompte(debriefId: string): Promise<AcompteResponse> {
+  const doc = await convexClient!.query(paymentsGetAcompte, { debriefId, today: todayStr() })
+  if (!doc) throw new ApiError(404, 'Échéancier introuvable')
+  return mapConvexAcompte(doc)
+}
+
+export async function listAcomptes(): Promise<AcompteResponse[]> {
+  if (convexAuthEnabled && convexClient) {
+    const rows = await convexClient.query(paymentsListAcomptes, { today: todayStr() })
+    return rows.map(mapConvexAcompte)
+  }
   return api<AcompteResponse[]>('/payments/acomptes')
 }
 
 // L'échéancier d'UNE vente (par débrief) — onglet « Mode de paiement ».
-export function getAcompte(debriefId: string): Promise<AcompteResponse> {
+export async function getAcompte(debriefId: string): Promise<AcompteResponse> {
+  if (convexAuthEnabled && convexClient) return convexGetAcompte(debriefId)
   return api<AcompteResponse>(`/payments/acomptes/${debriefId}`)
 }
 
 // Enregistre l'encaissement d'une tranche de l'échéancier (ordre dans le body).
-export function recordEcheance(
+export async function recordEcheance(
   debriefId: string,
   patch: RecordEcheancePatch,
 ): Promise<AcompteResponse> {
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(paymentsRecordEcheance, {
+      debriefId, ordre: patch.ordre, statut: patch.statut,
+      montantReel: toNum(patch.montantReel),
+      dateEncaissement: patch.dateEncaissement ?? undefined,
+      dateEcheance: patch.dateEcheance ?? undefined,
+      notes: patch.notes ?? undefined,
+    })
+    return convexGetAcompte(debriefId)
+  }
   return api<AcompteResponse>(`/payments/acomptes/${debriefId}/echeances`, { method: 'PATCH', body: patch })
 }
 
 // Édite les données financières d'une vente (back-office finances).
-export function updateFinancing(
+export async function updateFinancing(
   debriefId: string,
   patch: UpdateFinancingPatch,
 ): Promise<AcompteResponse> {
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(paymentsUpdateFinancing, {
+      debriefId,
+      montantTotal: toNum(patch.montantTotal),
+      financingType: patch.financingType ?? undefined,
+      paymentSubMethod: patch.paymentSubMethod ?? undefined,
+      financingOrg: patch.financingOrg ?? undefined,
+      acomptePercent: patch.acomptePercent ?? undefined,
+      acompteAmount: toNum(patch.acompteAmount),
+    })
+    return convexGetAcompte(debriefId)
+  }
   return api<AcompteResponse>(`/payments/acomptes/${debriefId}/financing`, { method: 'PATCH', body: patch })
 }
 
 // Remplace l'échéancier d'une vente par un échéancier personnalisé (tranches/%).
-export function setEcheancier(
+export async function setEcheancier(
   debriefId: string,
   tranches: EcheancierTranchePatch[],
 ): Promise<AcompteResponse> {
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(paymentsSetEcheancier, {
+      debriefId,
+      tranches: tranches.map((t) => {
+        const o: Record<string, unknown> = {}
+        if (t.label != null) o.label = t.label
+        if (t.percent != null) o.percent = t.percent
+        if (toNum(t.montantPrevu) !== undefined) o.montantPrevu = toNum(t.montantPrevu)
+        if (t.jalonKey != null) o.jalonKey = t.jalonKey
+        if (t.dateEcheance != null) o.dateEcheance = t.dateEcheance
+        if (t.statut != null) o.statut = t.statut
+        if (toNum(t.montantReel) !== undefined) o.montantReel = toNum(t.montantReel)
+        if (t.dateEncaissement != null) o.dateEncaissement = t.dateEncaissement
+        return o
+      }),
+    })
+    return convexGetAcompte(debriefId)
+  }
   return api<AcompteResponse>(`/payments/acomptes/${debriefId}/echeancier`, { method: 'PATCH', body: { tranches } })
 }
 
 // Revient à l'échéancier standard (template dérivé du type de financement).
-export function resetEcheancier(debriefId: string): Promise<AcompteResponse> {
+export async function resetEcheancier(debriefId: string): Promise<AcompteResponse> {
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(paymentsResetEcheancier, { debriefId })
+    return convexGetAcompte(debriefId)
+  }
   return api<AcompteResponse>(`/payments/acomptes/${debriefId}/echeancier`, { method: 'DELETE' })
 }
 

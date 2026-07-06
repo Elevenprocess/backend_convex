@@ -1,9 +1,10 @@
 import { useEffect, useMemo } from 'react'
 import { usePaginatedQuery, useQuery } from 'convex/react'
-import { analyticsDebriefStats, analyticsFunnel, analyticsSummary, clientsList, debriefsListByLead, leadsGet, leadsList, rdvList, usersList } from './convexApi'
-import { mapConvexClient, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexUser } from './convexMappers'
+import { analyticsDebriefStats, analyticsFunnel, analyticsSummary, clientsList, debriefsListByLead, leadsGet, leadsList, paymentsListAcomptes, rdvList, usersList } from './convexApi'
+import { mapConvexAcompte, mapConvexClient, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
 import type {
+  AcompteResponse,
   AnalyticsFunnelResponse,
   AnalyticsSummaryResponse,
   ClientResponse,
@@ -192,6 +193,24 @@ export function useConvexDebriefAnalytics(filters?: {
     error: null,
     refetch: noop,
   }
+}
+
+// payments.listAcomptes exige un rôle finances côté serveur → skip (liste vide)
+// pour les autres rôles, sinon la query throw au rendu.
+const FINANCES_ROLES = new Set<Role>(['admin', 'finances', 'delivrabilite', 'responsable_technique', 'back_office'])
+
+export function useConvexAcomptes(enabled = true): Async<AcompteResponse[]> {
+  const role = useAuth((s) => s.user?.role)
+  const allowed = enabled && !!role && FINANCES_ROLES.has(role)
+  // today figé au jour (bucket 24 h) pour éviter des refetch inutiles.
+  const today = useMemo(() => new Date(Math.floor(Date.now() / 86_400_000) * 86_400_000).toISOString().slice(0, 10), [])
+  const rows = useQuery(paymentsListAcomptes, allowed ? { today } : 'skip')
+  const data = useMemo(() => {
+    if (!allowed) return enabled ? [] : []
+    if (rows === undefined) return null
+    return rows.map(mapConvexAcompte)
+  }, [allowed, rows, enabled])
+  return { data, loading: allowed && rows === undefined, error: null, refetch: noop }
 }
 
 // Hooks sans équivalent Convex (tranche 1) : renvoient vide au lieu de taper le

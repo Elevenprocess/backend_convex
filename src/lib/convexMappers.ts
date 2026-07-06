@@ -228,6 +228,44 @@ export function mapConvexDevis(doc: import('./convexApi').ConvexDevisDoc): impor
   }
 }
 
+export function mapConvexAcompte(doc: import('./convexApi').ConvexAcompteDoc): import('./types').AcompteResponse {
+  const s = (n: number | null): string | null => (n === null ? null : String(n))
+  return {
+    debriefId: doc.debriefId,
+    leadId: doc.leadId,
+    projectId: doc.projectId,
+    projectName: doc.projectName,
+    clientName: doc.clientName,
+    commercialName: doc.commercialName,
+    montantTotal: s(doc.montantTotal),
+    financingType: doc.financingType,
+    paymentSubMethod: doc.paymentSubMethod,
+    financingOrg: doc.financingOrg,
+    acomptePercent: doc.acomptePercent,
+    acompteAmount: s(doc.acompteAmount),
+    customEcheancier: doc.customEcheancier,
+    signedAt: iso(doc.signedAt ?? undefined),
+    edfRecepisse: doc.edfRecepisse,
+    echeances: doc.echeances.map((e) => ({
+      ordre: e.ordre,
+      label: e.label,
+      jalonKey: e.jalonKey,
+      jalonAtteint: e.jalonAtteint,
+      percent: e.percent,
+      montantPrevu: s(e.montantPrevu),
+      statut: e.statut as import('./types').AcompteStatut,
+      montantReel: s(e.montantReel),
+      dateEcheance: e.dateEcheance,
+      dateEncaissement: e.dateEncaissement,
+      notes: e.notes,
+      recordedById: e.recordedById,
+      updatedAt: e.updatedAt,
+    })),
+    totalEncaisse: s(doc.totalEncaisse),
+    resteAPayer: s(doc.resteAPayer),
+  }
+}
+
 export function mapConvexClient(doc: ConvexClientDoc): ClientResponse {
   const steps: Partial<Record<WorkflowPhase, ClientPhaseStep>> = {}
   for (const [phase, s] of Object.entries(doc.steps ?? {})) {
