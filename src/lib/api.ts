@@ -28,6 +28,9 @@ import type {
   UpsertCommercialObjectivePayload,
 } from './types'
 import { notifyRealtimeRefresh } from './realtime'
+import { convexAuthEnabled, convexClient } from './convex'
+import { debriefsListByProject, projectsGet, projectsListByLead } from './convexApi'
+import { mapConvexDebrief, mapConvexProject } from './convexMappers'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
 
@@ -473,11 +476,31 @@ export function createProject(input: {
   return api<ProjectResponse>('/projects', { method: 'POST', body: input })
 }
 
-export function listProjectsByLead(leadId: string): Promise<ProjectResponse[]> {
+export async function listProjectsByLead(leadId: string): Promise<ProjectResponse[]> {
+  if (convexAuthEnabled && convexClient) {
+    const rows = await convexClient.query(projectsListByLead, { leadId })
+    return rows.map(mapConvexProject)
+  }
   return api<ProjectResponse[]>(`/projects/lead/${leadId}`)
 }
 
-export function getProjectDetail(projectId: string): Promise<ProjectDetailResponse> {
+export async function getProjectDetail(projectId: string): Promise<ProjectDetailResponse> {
+  if (convexAuthEnabled && convexClient) {
+    // Détail projet en mode Convex : projet + débriefs. Devis et pièces
+    // (project_attachments) pas encore portés → tableaux vides (dégradation
+    // assumée : la carte s'affiche sans erreur, pièces/devis à câbler).
+    const [project, debriefs] = await Promise.all([
+      convexClient.query(projectsGet, { projectId }),
+      convexClient.query(debriefsListByProject, { projectId }),
+    ])
+    if (!project) throw new ApiError(404, 'Projet introuvable')
+    return {
+      ...mapConvexProject(project),
+      devis: [],
+      debriefs: debriefs.map(mapConvexDebrief),
+      attachments: [],
+    }
+  }
   return api<ProjectDetailResponse>(`/projects/${projectId}`)
 }
 

@@ -40,6 +40,8 @@ import {
   useConvexClients,
   useConvexDebriefAnalytics,
   useConvexEmptyList,
+  useConvexLead,
+  useConvexLeadDebriefs,
   useConvexLeads,
   useConvexRdvList,
   useConvexUsers,
@@ -327,9 +329,13 @@ export const useLeadsProgressive: typeof useLeadsProgressiveRest = convexAuthEna
   ? (useConvexLeads as unknown as typeof useLeadsProgressiveRest)
   : useLeadsProgressiveRest
 
-export function useLead(id: string | undefined): Async<LeadResponse> {
+function useLeadRest(id: string | undefined): Async<LeadResponse> {
   return useFetch<LeadResponse>(id ? `/leads/${id}` : null)
 }
+
+export const useLead: typeof useLeadRest = convexAuthEnabled
+  ? (useConvexLead as unknown as typeof useLeadRest)
+  : useLeadRest
 
 export function useLeadStats(): Async<LeadStatsResponse> {
   return useFetch<LeadStatsResponse>('/leads/stats', undefined, {
@@ -446,9 +452,13 @@ export const useUsers: typeof useUsersRest = convexAuthEnabled
   : useUsersRest
 
 // ─── Débriefs d'un lead ────────────────────────────────────
-export function useLeadDebriefs(leadId?: string | null): Async<DebriefResponse[]> {
+function useLeadDebriefsRest(leadId?: string | null): Async<DebriefResponse[]> {
   return useFetch<DebriefResponse[]>(leadId ? `/leads/${leadId}/debriefs` : null)
 }
+
+export const useLeadDebriefs: typeof useLeadDebriefsRest = convexAuthEnabled
+  ? (useConvexLeadDebriefs as unknown as typeof useLeadDebriefsRest)
+  : useLeadDebriefsRest
 
 // ─── Clients ───────────────────────────────────────────────
 function useClientsRest(filters?: {

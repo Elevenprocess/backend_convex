@@ -1,11 +1,27 @@
-import type { ConvexClientDoc, ConvexLeadDoc, ConvexRdvDoc, ConvexUserDoc } from './convexApi'
+import type {
+  ConvexClientDoc,
+  ConvexDebriefDoc,
+  ConvexLeadDoc,
+  ConvexProjectDoc,
+  ConvexRdvDoc,
+  ConvexUserDoc,
+} from './convexApi'
 import type {
   ClientPhaseStep,
   ClientResponse,
+  DebriefNonSaleReason,
+  DebriefOutcome,
+  DebriefReflexionReason,
+  DebriefResponse,
+  DebriefSuiviReason,
+  FinancingOrg,
   FinancingType,
   LeadResponse,
   LeadSource,
   LeadStatus,
+  PaymentSubMethod,
+  ProjectResponse,
+  ProjectStatus,
   RdvLocation,
   RdvResponse,
   RdvResult,
@@ -130,6 +146,49 @@ export function mapConvexRdv(doc: ConvexRdvDoc): RdvResponse {
     createdAt: new Date(doc._creationTime).toISOString(),
     updatedAt: new Date(doc._creationTime).toISOString(),
     lead: null,
+  }
+}
+
+export function mapConvexProject(doc: ConvexProjectDoc): ProjectResponse {
+  return {
+    id: doc._id,
+    leadId: doc.leadId,
+    commercialId: doc.commercialId,
+    name: doc.name,
+    addressLine: doc.addressLine ?? null,
+    postalCode: doc.postalCode ?? null,
+    city: doc.city ?? null,
+    status: doc.status as ProjectStatus,
+    notes: doc.notes ?? null,
+    createdAt: new Date(doc._creationTime).toISOString(),
+    updatedAt: new Date(doc._creationTime).toISOString(),
+  }
+}
+
+export function mapConvexDebrief(doc: ConvexDebriefDoc): DebriefResponse {
+  return {
+    id: doc._id,
+    projectId: doc.projectId ?? null,
+    leadId: doc.leadId ?? null,
+    rdvId: doc.rdvId ?? null,
+    commercialId: doc.commercialId,
+    outcome: doc.outcome as DebriefOutcome,
+    nonSaleReason: (doc.nonSaleReason ?? null) as DebriefNonSaleReason | null,
+    reflexionReason: (doc.reflexionReason ?? null) as DebriefReflexionReason | null,
+    suiviReason: (doc.suiviReason ?? null) as DebriefSuiviReason | null,
+    objection: doc.objection ?? null,
+    acceptanceFactors: doc.acceptanceFactors ?? [],
+    notes: doc.notes ?? null,
+    montantTotal: doc.montantTotal === undefined ? null : String(doc.montantTotal),
+    financingType: (doc.financingType ?? null) as FinancingType | null,
+    kits: doc.kits ?? null,
+    paymentSubMethod: (doc.paymentSubMethod ?? null) as PaymentSubMethod | null,
+    financingOrg: (doc.financingOrg ?? null) as FinancingOrg | null,
+    acomptePercent: doc.acomptePercent ?? null,
+    acompteAmount: doc.acompteAmount === undefined ? null : String(doc.acompteAmount),
+    signedAt: iso(doc.signedAt),
+    createdAt: new Date(doc._creationTime).toISOString(),
+    updatedAt: new Date(doc._creationTime).toISOString(),
   }
 }
 

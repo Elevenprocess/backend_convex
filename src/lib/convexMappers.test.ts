@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { mapConvexClient, mapConvexLead, mapConvexRdv, mapConvexUser } from './convexMappers'
-import type { ConvexClientDoc, ConvexLeadDoc, ConvexRdvDoc, ConvexUserDoc } from './convexApi'
+import { mapConvexClient, mapConvexDebrief, mapConvexLead, mapConvexProject, mapConvexRdv, mapConvexUser } from './convexMappers'
+import type { ConvexClientDoc, ConvexDebriefDoc, ConvexLeadDoc, ConvexProjectDoc, ConvexRdvDoc, ConvexUserDoc } from './convexApi'
 
 const T0 = 1783181401517 // _creationTime de référence (ms)
 
@@ -97,5 +97,34 @@ describe('mapConvexClient', () => {
     expect(c.projectId).toBeNull()
     expect(c.signedAt).toBeNull()
     expect(c.blocked).toBe(true)
+  })
+})
+
+describe('mapConvexProject', () => {
+  it('mappe le doc projet et nullifie les optionnels', () => {
+    const p = mapConvexProject({
+      _id: 'p1', _creationTime: T0, leadId: 'l1', commercialId: 'u1',
+      name: 'Installation 8 kWc', status: 'signe', city: 'Lyon',
+    } as ConvexProjectDoc)
+    expect(p.id).toBe('p1')
+    expect(p.addressLine).toBeNull()
+    expect(p.city).toBe('Lyon')
+    expect(p.status).toBe('signe')
+  })
+})
+
+describe('mapConvexDebrief', () => {
+  it('sérialise montants en string et nullifie les optionnels', () => {
+    const d = mapConvexDebrief({
+      _id: 'd1', _creationTime: T0, commercialId: 'u1', outcome: 'vente',
+      acceptanceFactors: ['prix'], montantTotal: 15000, acompteAmount: 6000, acomptePercent: 40,
+    } as ConvexDebriefDoc)
+    expect(d.id).toBe('d1')
+    expect(d.outcome).toBe('vente')
+    expect(d.montantTotal).toBe('15000')
+    expect(d.acompteAmount).toBe('6000')
+    expect(d.acomptePercent).toBe(40)
+    expect(d.nonSaleReason).toBeNull()
+    expect(d.projectId).toBeNull()
   })
 })

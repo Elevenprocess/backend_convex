@@ -107,6 +107,45 @@ export type ConvexClientDoc = {
   [k: string]: unknown
 }
 
+export type ConvexProjectDoc = {
+  _id: string
+  _creationTime: number
+  leadId: string
+  commercialId: string
+  name: string
+  addressLine?: string
+  postalCode?: string
+  city?: string
+  status: string
+  notes?: string
+  [k: string]: unknown
+}
+
+export type ConvexDebriefDoc = {
+  _id: string
+  _creationTime: number
+  projectId?: string
+  leadId?: string
+  rdvId?: string
+  commercialId: string
+  outcome: string
+  nonSaleReason?: string
+  reflexionReason?: string
+  suiviReason?: string
+  objection?: string
+  acceptanceFactors: string[]
+  notes?: string
+  montantTotal?: number
+  financingType?: string
+  kits?: string
+  signedAt?: number
+  paymentSubMethod?: string
+  financingOrg?: string
+  acomptePercent?: number
+  acompteAmount?: number
+  [k: string]: unknown
+}
+
 type PaginationOptsArg = { numItems: number; cursor: string | null }
 
 export const usersMe = makeFunctionReference<'query', Record<string, never>, ConvexUserDoc | null>('users:me')
@@ -134,6 +173,16 @@ export const clientsList = makeFunctionReference<
   { leadId?: string; projectId?: string; phase?: string; statusGlobal?: string; blocked?: boolean; technicienVtId?: string; unassignedVt?: boolean },
   ConvexClientDoc[]
 >('clients:list')
+
+export const leadsGet = makeFunctionReference<'query', { leadId: string }, ConvexLeadDoc | null>('leads:get')
+
+export const projectsListByLead = makeFunctionReference<'query', { leadId: string }, ConvexProjectDoc[]>('projects:listByLead')
+
+export const projectsGet = makeFunctionReference<'query', { projectId: string }, ConvexProjectDoc | null>('projects:get')
+
+export const debriefsListByLead = makeFunctionReference<'query', { leadId: string }, ConvexDebriefDoc[]>('debriefs:listByLead')
+
+export const debriefsListByProject = makeFunctionReference<'query', { projectId: string }, ConvexDebriefDoc[]>('debriefs:listByProject')
 
 // Analytics. Les fonctions Convex renvoient volontairement les mêmes shapes que
 // les réponses REST (parité), au champ `engine` près (`convex-*` vs `backend-*`).

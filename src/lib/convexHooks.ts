@@ -1,12 +1,13 @@
 import { useEffect, useMemo } from 'react'
 import { usePaginatedQuery, useQuery } from 'convex/react'
-import { analyticsDebriefStats, analyticsFunnel, analyticsSummary, clientsList, leadsList, rdvList, usersList } from './convexApi'
-import { mapConvexClient, mapConvexLead, mapConvexRdv, mapConvexUser } from './convexMappers'
+import { analyticsDebriefStats, analyticsFunnel, analyticsSummary, clientsList, debriefsListByLead, leadsGet, leadsList, rdvList, usersList } from './convexApi'
+import { mapConvexClient, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
 import type {
   AnalyticsFunnelResponse,
   AnalyticsSummaryResponse,
   ClientResponse,
+  DebriefResponse,
   LeadResponse,
   LeadStatus,
   RdvResponse,
@@ -93,6 +94,18 @@ export function useConvexRdvList(filters?: {
     error: null,
     refetch: noop,
   }
+}
+
+export function useConvexLead(id: string | undefined): Async<LeadResponse> {
+  const res = useQuery(leadsGet, id ? { leadId: id } : 'skip')
+  const data = useMemo(() => (res ? mapConvexLead(res) : (res === null ? null : null)), [res])
+  return { data, loading: !!id && res === undefined, error: null, refetch: noop }
+}
+
+export function useConvexLeadDebriefs(leadId?: string | null): Async<DebriefResponse[]> {
+  const rows = useQuery(debriefsListByLead, leadId ? { leadId } : 'skip')
+  const data = useMemo(() => (rows ? rows.map(mapConvexDebrief) : null), [rows])
+  return { data, loading: !!leadId && rows === undefined, error: null, refetch: noop }
 }
 
 // ─── Analytics ──────────────────────────────────────────────
