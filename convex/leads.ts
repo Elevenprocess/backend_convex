@@ -6,6 +6,7 @@ import { requireUser, requireRole, roleOf } from "./model/access";
 import type { Role } from "./model/enums";
 import { normalizeSource } from "./model/acquisitionChannel";
 import { insertStageHistory } from "./model/stageHistory";
+import { enrichLead } from "./model/enrichLead";
 
 export const get = query({
   args: { leadId: v.id("leads") },
@@ -373,5 +374,42 @@ export const dashboard = query({
       totals: { openLeads, ca, signed, lost, closingRate: denom > 0 ? signed / denom : 0 },
       alerts: { staleQuotes, stuckLeads },
     };
+  },
+});
+
+// ─── Lecture enrichie (portage withLatestCalls) ──────────────────────────────
+
+export const getEnriched = query({
+  args: { leadId: v.id("leads"), now: v.number() },
+  handler: async (ctx, args) => {
+    await requireUser(ctx);
+    const lead = await ctx.db.get(args.leadId);
+    if (!lead || lead.deletedAt !== undefined) return null;
+    return await enrichLead(ctx, lead, args.now);
+  },
+});
+
+export const listEnriched = query({
+  args: {
+    status: v.optional(leadStatusValidator),
+    setterId: v.optional(v.id("users")),
+    now: v.number(),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    await requireUser(ctx);
+    let q;
+    if (args.status !== undefined && args.setterId !== undefined) {
+      q = ctx.db.query("leads").withIndex("by_status_setter", (ix) => ix.eq("status", args.status!).eq("setterId", args.setterId!));
+    } else if (args.status !== undefined) {
+      q = ctx.db.query("leads").withIndex("by_status_setter", (ix) => ix.eq("status", args.status!));
+    } else if (args.setterId !== undefined) {
+      q = ctx.db.query("leads").withIndex("by_setter", (ix) => ix.eq("setterId", args.setterId!));
+    } else {
+      q = ctx.db.query("leads");
+    }
+    const page = await q.order("desc").filter((f) => f.eq(f.field("deletedAt"), undefined)).paginate(args.paginationOpts);
+    const enriched = await Promise.all(page.page.map((lead) => enrichLead(ctx, lead, args.now)));
+    return { ...page, page: enriched };
   },
 });
