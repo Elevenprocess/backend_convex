@@ -228,6 +228,32 @@ export function mapConvexDevis(doc: import('./convexApi').ConvexDevisDoc): impor
   }
 }
 
+export function mapConvexCallLog(d: import('./convexApi').ConvexCallLogDoc): import('./types').CallLogResponse {
+  return {
+    id: d._id,
+    leadId: d.leadId,
+    setterId: d.setterId,
+    calledAt: new Date(d.calledAt).toISOString(),
+    result: d.result as import('./types').CallResult,
+    nextCallbackAt: iso(d.nextCallbackAt),
+    notes: d.notes ?? null,
+    createdAt: new Date(d._creationTime).toISOString(),
+  }
+}
+
+export function mapConvexCommercialObjective(d: import('./convexApi').ConvexCommercialObjectiveDoc): import('./types').CommercialObjectiveResponse {
+  return {
+    id: d._id,
+    commercialId: d.commercialId,
+    period: d.period,
+    caTarget: d.caTarget ?? null,
+    ventesTarget: d.ventesTarget ?? null,
+    rdvTarget: d.rdvTarget ?? null,
+    closingTarget: d.closingTarget ?? null,
+    updatedAt: new Date(d._creationTime).toISOString(),
+  }
+}
+
 export function mapConvexSubstepDocument(d: { id: string; type: string; filename: string; mimeType: string; sizeBytes: number; uploadedAt: number }): import('./types').SubstepDocument {
   return { id: d.id, type: d.type, filename: d.filename, mimeType: d.mimeType, sizeBytes: d.sizeBytes, uploadedAt: new Date(d.uploadedAt).toISOString() }
 }

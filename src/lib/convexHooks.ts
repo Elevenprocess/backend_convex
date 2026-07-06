@@ -1,13 +1,15 @@
 import { useEffect, useMemo } from 'react'
 import { usePaginatedQuery, useQuery } from 'convex/react'
-import { analyticsDebriefStats, analyticsFunnel, analyticsSummary, clientsList, debriefsListByLead, leadsGet, leadsList, paymentsListAcomptes, rdvList, substepsList, usersList } from './convexApi'
-import { mapConvexAcompte, mapConvexClient, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexSubstep, mapConvexUser } from './convexMappers'
+import { analyticsDebriefStats, analyticsFunnel, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsGet, leadsList, paymentsListAcomptes, rdvList, substepsList, usersList } from './convexApi'
+import { mapConvexAcompte, mapConvexCallLog, mapConvexClient, mapConvexCommercialObjective, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexSubstep, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
 import type {
   AcompteResponse,
   AnalyticsFunnelResponse,
   AnalyticsSummaryResponse,
+  CallLogResponse,
   ClientResponse,
+  CommercialObjectiveResponse,
   SubstepResponse,
   DebriefResponse,
   LeadResponse,
@@ -194,6 +196,35 @@ export function useConvexDebriefAnalytics(filters?: {
     error: null,
     refetch: noop,
   }
+}
+
+export function useConvexCallLogs(filters?: {
+  leadId?: string; setterId?: string; limit?: number; offset?: number
+} | null): Async<CallLogResponse[]> {
+  // Overview : feed d'appels d'un setter. Sans setterId → vide (pas de list globale).
+  const setterId = filters === null ? undefined : filters?.setterId
+  const rows = useQuery(callLogsListBySetter, setterId ? { setterId, limit: filters?.limit } : 'skip')
+  const data = useMemo(() => {
+    if (!setterId) return filters === null ? null : []
+    if (rows === undefined) return null
+    return rows.map(mapConvexCallLog)
+  }, [setterId, rows, filters])
+  return { data, loading: !!setterId && rows === undefined, error: null, refetch: noop }
+}
+
+// commercialObjectives.listByPeriod exige admin/commercial_lead → skip sinon.
+const OBJECTIVES_ROLES = new Set<Role>(['admin', 'commercial_lead'])
+
+export function useConvexCommercialObjectives(period: string | null): Async<CommercialObjectiveResponse[]> {
+  const role = useAuth((s) => s.user?.role)
+  const allowed = !!period && !!role && OBJECTIVES_ROLES.has(role)
+  const rows = useQuery(commercialObjectivesListByPeriod, allowed ? { period: period! } : 'skip')
+  const data = useMemo(() => {
+    if (!allowed) return period ? [] : null
+    if (rows === undefined) return null
+    return rows.map(mapConvexCommercialObjective)
+  }, [allowed, rows, period])
+  return { data, loading: allowed && rows === undefined, error: null, refetch: noop }
 }
 
 // workflowSubsteps.list exige un rôle « vue workflow » → skip (vide) sinon crash.

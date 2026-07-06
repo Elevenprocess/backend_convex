@@ -352,6 +352,18 @@ export const documentsGetUrl = makeFunctionReference<
 
 export const documentsRemove = makeFunctionReference<'mutation', { documentId: string }, { ok: true }>('documents:remove')
 
+export type ConvexCallLogDoc = {
+  _id: string; _creationTime: number; leadId: string; setterId: string
+  calledAt: number; result: string; durationSec?: number; notes?: string; nextCallbackAt?: number
+}
+export const callLogsListBySetter = makeFunctionReference<'query', { setterId: string; limit?: number }, ConvexCallLogDoc[]>('callLogs:listBySetter')
+
+export type ConvexCommercialObjectiveDoc = {
+  _id: string; _creationTime: number; commercialId: string; period: string
+  caTarget?: number; ventesTarget?: number; rdvTarget?: number; closingTarget?: number
+}
+export const commercialObjectivesListByPeriod = makeFunctionReference<'query', { period: string }, ConvexCommercialObjectiveDoc[]>('commercialObjectives:listByPeriod')
+
 type PaginationOptsArg = { numItems: number; cursor: string | null }
 
 export const usersMe = makeFunctionReference<'query', Record<string, never>, ConvexUserDoc | null>('users:me')
@@ -381,6 +393,20 @@ export const clientsList = makeFunctionReference<
 >('clients:list')
 
 export const leadsGet = makeFunctionReference<'query', { leadId: string }, ConvexLeadDoc | null>('leads:get')
+
+export const clientsAssignTechniciens = makeFunctionReference<
+  'mutation',
+  { clientId: string; technicienVtIds?: string[]; technicienVtId?: string | null },
+  unknown
+>('clients:assignTechniciens')
+
+export const clientsBootstrap = makeFunctionReference<'mutation', { leadId?: string; projectId?: string }, string>('clients:bootstrap')
+
+export const clientsCreateManualDossier = makeFunctionReference<
+  'mutation',
+  { firstName: string; lastName: string; phone?: string; email?: string; addressLine?: string; city?: string; postalCode?: string; montantTotal?: number; typeFinancement?: string; signedAt?: number },
+  string
+>('clients:createManualDossier')
 
 export const leadsCreate = makeFunctionReference<
   'mutation',

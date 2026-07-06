@@ -29,8 +29,8 @@ import type {
 } from './types'
 import { notifyRealtimeRefresh } from './realtime'
 import { convexAuthEnabled, convexClient } from './convex'
-import { debriefsCreate, debriefsCreateForLead, debriefsGet, debriefsListByLead, debriefsListByProject, devisCreate, devisGenerateUploadUrl, devisGetById, devisListByLead, devisMarkAsSigned, devisRemove, devisRetryOcr, devisUpdate, documentsAttachToSubstep, documentsGenerateUploadUrl, documentsGetUrl, documentsListBySubstep, documentsRemove, paymentsGetAcompte, paymentsListAcomptes, paymentsRecordEcheance, paymentsResetEcheancier, paymentsSetEcheancier, paymentsUpdateFinancing, projectAttachmentsCreate, projectAttachmentsGenerateUploadUrl, projectAttachmentsGetUrl, projectAttachmentsListByProject, projectAttachmentsRemove, projectsCreate, projectsGet, projectsListByLead, substepsGet, substepsList, substepsResolveProblem, substepsUpdate, type ConvexAttachmentSummary } from './convexApi'
-import { mapConvexAcompte, mapConvexDebrief, mapConvexDevis, mapConvexProject, mapConvexSubstep, mapConvexSubstepDocument } from './convexMappers'
+import { clientsAssignTechniciens, clientsBootstrap, clientsCreateManualDossier, clientsList, debriefsCreate, debriefsCreateForLead, debriefsGet, debriefsListByLead, debriefsListByProject, devisCreate, devisGenerateUploadUrl, devisGetById, devisListByLead, devisMarkAsSigned, devisRemove, devisRetryOcr, devisUpdate, documentsAttachToSubstep, documentsGenerateUploadUrl, documentsGetUrl, documentsListBySubstep, documentsRemove, paymentsGetAcompte, paymentsListAcomptes, paymentsRecordEcheance, paymentsResetEcheancier, paymentsSetEcheancier, paymentsUpdateFinancing, projectAttachmentsCreate, projectAttachmentsGenerateUploadUrl, projectAttachmentsGetUrl, projectAttachmentsListByProject, projectAttachmentsRemove, projectsCreate, projectsGet, projectsListByLead, substepsGet, substepsList, substepsResolveProblem, substepsUpdate, type ConvexAttachmentSummary } from './convexApi'
+import { mapConvexAcompte, mapConvexClient, mapConvexDebrief, mapConvexDevis, mapConvexProject, mapConvexSubstep, mapConvexSubstepDocument } from './convexMappers'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
 
@@ -265,10 +265,23 @@ export function assignLeadToCommercial(leadId: string, commercialId: string): Pr
   return api<LeadResponse>(`/leads/${leadId}/assign`, { method: 'POST', body: { commercialId } })
 }
 
-export function assignTechnicienVt(
+// Récupère le client décoré par son id (clients.list ne filtre pas par id → on
+// liste et on retrouve). Utilisé pour renvoyer un ClientResponse après mutation.
+async function convexClientById(clientId: string): Promise<ClientResponse> {
+  const rows = await convexClient!.query(clientsList, {})
+  const found = rows.find((c) => c._id === clientId)
+  if (!found) throw new ApiError(404, 'Dossier client introuvable')
+  return mapConvexClient(found)
+}
+
+export async function assignTechnicienVt(
   clientId: string,
   technicienVtId: string | null,
 ): Promise<ClientResponse> {
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(clientsAssignTechniciens, { clientId, technicienVtId })
+    return convexClientById(clientId)
+  }
   return api<ClientResponse>(`/clients/${clientId}`, {
     method: 'PATCH',
     body: { technicienVtId },
@@ -279,10 +292,14 @@ export function assignTechnicienVt(
  * Assigne une liste de techniciens VT à un client (multi-assign).
  * Remplace l'intégralité de la liste ; passer [] pour tout retirer.
  */
-export function assignTechniciens(
+export async function assignTechniciens(
   clientId: string,
   technicienVtIds: string[],
 ): Promise<ClientResponse> {
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(clientsAssignTechniciens, { clientId, technicienVtIds })
+    return convexClientById(clientId)
+  }
   return api<ClientResponse>(`/clients/${clientId}`, {
     method: 'PATCH',
     body: { technicienVtIds },
@@ -290,7 +307,11 @@ export function assignTechniciens(
 }
 
 /** Initialise un dossier (client + workflow) pour un lead signé sans client. */
-export function bootstrapClient(leadId: string): Promise<ClientResponse> {
+export async function bootstrapClient(leadId: string): Promise<ClientResponse> {
+  if (convexAuthEnabled && convexClient) {
+    const clientId = await convexClient.mutation(clientsBootstrap, { leadId })
+    return convexClientById(clientId)
+  }
   return api<ClientResponse>('/clients/bootstrap', {
     method: 'POST',
     body: { leadId },
@@ -301,7 +322,11 @@ export function bootstrapClient(leadId: string): Promise<ClientResponse> {
  * Initialise un dossier indépendant scopé à un PROJET précis (workflow propre
  * à ce projet, distinct des autres projets du même lead).
  */
-export function bootstrapClientForProject(projectId: string): Promise<ClientResponse> {
+export async function bootstrapClientForProject(projectId: string): Promise<ClientResponse> {
+  if (convexAuthEnabled && convexClient) {
+    const clientId = await convexClient.mutation(clientsBootstrap, { projectId })
+    return convexClientById(clientId)
+  }
   return api<ClientResponse>('/clients/bootstrap', {
     method: 'POST',
     body: { projectId },
@@ -330,7 +355,22 @@ export type DuplicateLeadInfo = {
 }
 
 /** Création manuelle d'un dossier client (lead 'manual' + projet + client). 409 → ApiError.data.lead. */
-export function createManualClient(payload: ManualClientPayload): Promise<ClientResponse> {
+export async function createManualClient(payload: ManualClientPayload): Promise<ClientResponse> {
+  if (convexAuthEnabled && convexClient) {
+    const clientId = await convexClient.mutation(clientsCreateManualDossier, {
+      firstName: payload.firstName,
+      lastName: payload.lastName,
+      phone: payload.phone || undefined,
+      email: payload.email || undefined,
+      addressLine: payload.addressLine || undefined,
+      city: payload.city || undefined,
+      postalCode: payload.postalCode || undefined,
+      montantTotal: toNum(payload.montantTotal),
+      typeFinancement: payload.typeFinancement || undefined,
+      signedAt: payload.signedAt ? Date.parse(payload.signedAt) || undefined : undefined,
+    })
+    return convexClientById(clientId)
+  }
   return api<ClientResponse>('/clients/manual', { method: 'POST', body: payload })
 }
 

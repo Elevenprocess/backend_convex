@@ -40,9 +40,10 @@ import {
   useConvexAcomptes,
   useConvexAnalyticsFunnel,
   useConvexAnalyticsSummary,
+  useConvexCallLogs,
   useConvexClients,
+  useConvexCommercialObjectives,
   useConvexDebriefAnalytics,
-  useConvexEmptyList,
   useConvexLead,
   useConvexLeadDebriefs,
   useConvexLeads,
@@ -672,7 +673,7 @@ function useCommercialObjectivesRest(period: string | null): Async<CommercialObj
 // Pas d'objectifs commerciaux côté Convex (tranche 1) → liste vide plutôt que
 // de taper le NestJS de prod.
 export const useCommercialObjectives: typeof useCommercialObjectivesRest = convexAuthEnabled
-  ? (useConvexEmptyList as unknown as typeof useCommercialObjectivesRest)
+  ? (useConvexCommercialObjectives as unknown as typeof useCommercialObjectivesRest)
   : useCommercialObjectivesRest
 
 function useAnalyticsFunnelRest(filters?: {
@@ -844,7 +845,7 @@ function useCallLogsRest(filters?: {
 // Pas de liste globale d'appels côté Convex (tranche 1) → vide (stoppe les
 // requêtes NestJS échouées ; l'activité setter est dégradée en attendant).
 export const useCallLogs: typeof useCallLogsRest = convexAuthEnabled
-  ? (useConvexEmptyList as unknown as typeof useCallLogsRest)
+  ? (useConvexCallLogs as unknown as typeof useCallLogsRest)
   : useCallLogsRest
 
 export type CreateCallLogInput = {
