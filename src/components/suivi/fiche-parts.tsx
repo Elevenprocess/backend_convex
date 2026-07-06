@@ -2,7 +2,7 @@ import { useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } fr
 import { Icon } from '../Icon'
 import { DocumentPreviewModal } from './DocumentPreviewModal'
 import { formatDate } from '../../lib/suivi'
-import { attachmentRawUrl, downloadDevisPdf, updateDevis } from '../../lib/api'
+import { attachmentDisplayUrl, downloadDevisPdf, updateDevis } from '../../lib/api'
 import { DevisScanLoader } from '../devis/DevisScanLoader'
 import {
   DEBRIEF_OUTCOME_LABEL,
@@ -909,7 +909,7 @@ export function AttachmentRow({
       )}
       {open && (
         <DocumentPreviewModal
-          doc={{ url: attachmentRawUrl(attachment.id), filename: attachment.filename, mimeType: attachment.contentType, label: attachment.label }}
+          doc={{ url: attachmentDisplayUrl(attachment), filename: attachment.filename, mimeType: attachment.contentType, label: attachment.label }}
           onClose={() => setOpen(false)}
         />
       )}

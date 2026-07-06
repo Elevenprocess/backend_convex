@@ -3,6 +3,9 @@ import { attachmentRawUrl } from '../../lib/api'
 
 type Props = {
   attachmentId: string
+  // URL d'affichage directe (storage Convex signé) si disponible ; sinon on
+  // retombe sur /attachments/:id/raw (mode NestJS).
+  url?: string
   alt: string
   className?: string
 }
@@ -16,7 +19,7 @@ type Props = {
  * StreamableFile du endpoint raw ne porte pas les en-têtes CORS — un fetch().blob()
  * échouait donc (image cassée), alors qu'une <img> n'a pas besoin de CORS.
  */
-export function AuthImage({ attachmentId, alt, className }: Props) {
+export function AuthImage({ attachmentId, url, alt, className }: Props) {
   const [failed, setFailed] = useState(false)
 
   if (failed) {
@@ -29,7 +32,7 @@ export function AuthImage({ attachmentId, alt, className }: Props) {
 
   return (
     <img
-      src={attachmentRawUrl(attachmentId)}
+      src={url ?? attachmentRawUrl(attachmentId)}
       alt={alt}
       className={className}
       loading="lazy"

@@ -674,14 +674,24 @@ function mapConvexAttachment(s: ConvexAttachmentSummary): ProjectAttachmentRespo
   return {
     id: s.id,
     projectId: s.projectId,
-    uploadedById: '',
+    uploadedById: s.uploadedById ?? '',
     kind: s.kind as ProjectAttachmentKind,
     label: s.label ?? null,
     filename: s.filename,
     contentType: s.contentType,
     sizeBytes: s.sizeBytes,
     createdAt: new Date(s.uploadedAt).toISOString(),
+    url: s.url,
   }
+}
+
+/**
+ * URL d'affichage synchrone d'une pièce jointe : privilégie l'URL signée du
+ * storage Convex embarquée dans la réponse (mode Convex, utilisable direct en
+ * <img src>/window.open), et retombe sur le endpoint /raw NestJS sinon.
+ */
+export function attachmentDisplayUrl(a: { id: string; url?: string }): string {
+  return a.url ?? attachmentRawUrl(a.id)
 }
 
 export async function uploadProjectAttachment(

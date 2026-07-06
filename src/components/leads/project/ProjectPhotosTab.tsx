@@ -3,7 +3,7 @@ import { Icon } from '../../Icon'
 import { FileDropzone } from '../../FileDropzone'
 import {
   ApiError,
-  attachmentRawUrl,
+  attachmentDisplayUrl,
   deleteProjectAttachment,
   uploadProjectAttachment,
 } from '../../../lib/api'
@@ -40,8 +40,8 @@ export function ProjectPhotosTab({ project, attachments, onChanged }: Props) {
     }
   }
 
-  function openPhoto(id: string) {
-    window.open(attachmentRawUrl(id), '_blank', 'noopener')
+  function openPhoto(photo: ProjectAttachmentResponse) {
+    window.open(attachmentDisplayUrl(photo), '_blank', 'noopener')
   }
 
   async function handleDelete(id: string) {
@@ -78,12 +78,12 @@ export function ProjectPhotosTab({ project, attachments, onChanged }: Props) {
             <li key={p.id} className="relative rounded-xl overflow-hidden border border-line bg-white">
               <button
                 type="button"
-                onClick={() => openPhoto(p.id)}
+                onClick={() => openPhoto(p)}
                 className="group relative block w-full aspect-square bg-cream overflow-hidden"
                 title="Ouvrir en grand"
               >
                 <img
-                  src={attachmentRawUrl(p.id)}
+                  src={attachmentDisplayUrl(p)}
                   alt={p.label || p.filename}
                   loading="lazy"
                   className="h-full w-full object-cover transition-transform group-hover:scale-105"

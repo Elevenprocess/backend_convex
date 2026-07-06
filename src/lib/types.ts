@@ -924,6 +924,9 @@ export interface ProjectAttachmentResponse {
   contentType: string;
   sizeBytes: number;
   createdAt: string;
+  // URL d'affichage directe (storage Convex signé). Absente en mode NestJS :
+  // les composants retombent alors sur attachmentRawUrl(id).
+  url?: string;
 }
 
 // Détail complet renvoyé par GET /projects/:id (le projet + ses sous-ressources)

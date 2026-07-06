@@ -40,7 +40,7 @@ export function PhotoLightbox({ photos, index, onIndexChange, onClose }: Props) 
         >‹</button>
       )}
       <figure className="fiche-lightbox-figure" onClick={(e) => e.stopPropagation()}>
-        <AuthImage attachmentId={photo.id} alt={photo.label || photo.filename} className="fiche-lightbox-img" />
+        <AuthImage attachmentId={photo.id} url={photo.url} alt={photo.label || photo.filename} className="fiche-lightbox-img" />
         <figcaption className="fiche-lightbox-caption">
           <span className="truncate">{photo.label || photo.filename}</span>
           <span className="fiche-lightbox-meta">{index + 1} / {photos.length} · {formatDate(photo.createdAt)}</span>

@@ -208,16 +208,19 @@ export const devisUpdate = makeFunctionReference<
   unknown
 >('devis:update')
 
-// projectAttachments : toSummary serveur (uploadedAt en ms, pas d'uploadedById).
+// projectAttachments : toSummary serveur (uploadedAt en ms ; url = lien storage
+// signé embarqué par listByProject/create pour l'affichage <img> direct).
 export type ConvexAttachmentSummary = {
   id: string
   projectId: string
+  uploadedById?: string
   kind: string
   label?: string
   filename: string
   contentType: string
   sizeBytes: number
   uploadedAt: number
+  url?: string
 }
 
 export const projectAttachmentsGenerateUploadUrl = makeFunctionReference<'mutation', Record<string, never>, string>('projectAttachments:generateUploadUrl')
@@ -297,6 +300,16 @@ export const rdvCreate = makeFunctionReference<
 >('rdv:create')
 
 export const rdvGet = makeFunctionReference<'query', { rdvId: string }, ConvexRdvDoc | null>('rdv:get')
+
+export const rdvUpdate = makeFunctionReference<
+  'mutation',
+  {
+    rdvId: string; status?: string; result?: string | null; scheduledAt?: number
+    montantTotal?: number; financingType?: string; objections?: string; nonSaleReason?: string
+    kits?: string; notes?: string; debriefFilledAt?: number; signatureAt?: number
+  },
+  unknown
+>('rdv:update')
 
 export const callLogsLogCall = makeFunctionReference<
   'mutation',

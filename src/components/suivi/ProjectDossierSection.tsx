@@ -279,7 +279,7 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
                     className="fiche-photo-tile"
                     title={p.label || p.filename}
                   >
-                    <AuthImage attachmentId={p.id} alt={p.label || p.filename} className="fiche-photo-img" />
+                    <AuthImage attachmentId={p.id} url={p.url} alt={p.label || p.filename} className="fiche-photo-img" />
                   </button>
                   {!readOnly && (
                     <button

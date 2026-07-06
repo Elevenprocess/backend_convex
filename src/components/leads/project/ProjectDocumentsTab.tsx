@@ -4,7 +4,7 @@ import { FileDropzone } from '../../FileDropzone'
 import { DocumentPreviewModal, type DocPreview } from '../../suivi/DocumentPreviewModal'
 import {
   ApiError,
-  attachmentRawUrl,
+  attachmentDisplayUrl,
   deleteProjectAttachment,
   uploadProjectAttachment,
 } from '../../../lib/api'
@@ -47,7 +47,7 @@ export function ProjectDocumentsTab({ project, attachments, onChanged }: Props) 
   }
 
   function openDoc(d: ProjectAttachmentResponse) {
-    setPreview({ url: attachmentRawUrl(d.id), filename: d.filename, mimeType: d.contentType, label: d.label })
+    setPreview({ url: attachmentDisplayUrl(d), filename: d.filename, mimeType: d.contentType, label: d.label })
   }
 
   async function handleDelete(id: string) {
