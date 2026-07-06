@@ -31,7 +31,7 @@ async function hmac16(payload: Uint8Array, secret: string): Promise<Uint8Array> 
   const key = await subtle().importKey(
     "raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
   );
-  const sig = await subtle().sign("HMAC", key, payload);
+  const sig = await subtle().sign("HMAC", key, payload as BufferSource);
   return new Uint8Array(sig).subarray(0, 16);
 }
 

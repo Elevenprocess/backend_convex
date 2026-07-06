@@ -31,6 +31,26 @@ test("createForLead vente crée le projet signe + lead signe + stage history", a
   expect(hist.some((h: any) => h.saasStatus === "signe")).toBe(true);
 });
 
+test("createForLead vente avec projectId fourni signe CE projet et crée le dossier délivrabilité", async () => {
+  const t = makeT();
+  const { comId, leadId } = await seed(t);
+  // Le front pré-crée le projet (status qualification) puis passe son id.
+  const projectId = await asUser(t, comId).mutation(api.projects.create, { leadId, name: "Pré-créé" });
+  const before = await t.run((ctx: any) => ctx.db.get(projectId));
+  expect(before.status).toBe("qualification");
+
+  await asUser(t, comId).mutation(api.debriefs.createForLead, {
+    leadId, outcome: "vente", projectId, montantTotal: 12000,
+  });
+
+  const after = await t.run((ctx: any) => ctx.db.get(projectId));
+  expect(after.status).toBe("signe");
+  // Le dossier délivrabilité (clients) doit exister pour ce projet.
+  const dossier = await t.run((ctx: any) =>
+    ctx.db.query("clients").withIndex("by_project", (q: any) => q.eq("projectId", projectId)).first());
+  expect(dossier).not.toBeNull();
+});
+
 test("createForLead vente réutilise un projet ouvert existant (pas de doublon)", async () => {
   const t = makeT();
   const { comId, leadId } = await seed(t);

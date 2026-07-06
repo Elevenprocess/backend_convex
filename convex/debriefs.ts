@@ -11,7 +11,7 @@ import { requireRole, requireUser, assertCommercialRole } from "./model/access";
 import { insertStageHistory } from "./model/stageHistory";
 import { deriveLeadStatusFromDebrief } from "./model/deriveLeadStatusFromDebrief";
 import { deriveLeadStatus } from "./model/deriveLeadStatus";
-import { ensureProjectForLead } from "./model/ensureProject";
+import { ensureProjectForLead, markProjectSigned } from "./model/ensureProject";
 import { internal } from "./_generated/api";
 import { ensureDossier } from "./model/ensureDossier";
 import {
@@ -124,6 +124,10 @@ async function ensureDossierForVente(
   },
 ): Promise<void> {
   if (args.outcome !== "vente") return;
+  // Le débrief peut arriver avec un projectId déjà créé (front) : ensureProjectForLead
+  // n'a alors PAS tourné, donc le projet est encore en "qualification". On le signe
+  // ici pour qu'il bascule en délivrabilité (ensureDossier ci-dessous crée le dossier).
+  if (args.projectId !== undefined) await markProjectSigned(ctx, args.projectId);
   await ensureDossier(ctx, {
     leadId: args.leadId,
     projectId: args.projectId,
@@ -328,8 +332,10 @@ export const submitViaLink = internalMutation({
     const leadId = rdvRow.leadId;
     const commercialId = rdvRow.commercialId;
 
-    let projectId = args.projectId;
-    if (args.outcome === "vente" && !projectId) {
+    // Un débrief via lien magique ne porte jamais de projectId pré-créé : on
+    // bootstrappe (crée/réutilise + signe) le projet pour une vente.
+    let projectId: Id<"projects"> | undefined;
+    if (args.outcome === "vente") {
       projectId = await ensureProjectForLead(ctx, { leadId, commercialId });
     }
 

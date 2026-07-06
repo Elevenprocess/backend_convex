@@ -39,3 +39,17 @@ export async function ensureProjectForLead(
     status: "signe",
   });
 }
+
+// Marque un projet EXISTANT comme signé (vente). Utilisé quand le débrief est
+// créé avec un projectId déjà fourni (le front pré-crée le projet) : sans ça,
+// le projet resterait en "qualification" et ne basculerait pas en délivrabilité.
+// No-op si le projet est déjà fermé (perdu/abandonné) ou déjà signé.
+export async function markProjectSigned(
+  ctx: MutationCtx,
+  projectId: Id<"projects">,
+): Promise<void> {
+  const project = await ctx.db.get(projectId);
+  if (!project || project.deletedAt !== undefined) return;
+  if ((CLOSED_PROJECT_STATUSES as readonly string[]).includes(project.status)) return;
+  if (project.status !== "signe") await ctx.db.patch(projectId, { status: "signe" });
+}
