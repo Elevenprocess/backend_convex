@@ -12,6 +12,7 @@ import type { QueryCtx } from "./_generated/server";
 import {
   clientStatusValidator,
   workflowPhaseValidator,
+  financingTypeValidator,
   type DocumentType,
   type Role,
 } from "./model/enums";
@@ -510,6 +511,74 @@ export const bootstrap = mutation({
     return await ensureDossier(ctx, {
       leadId: leadId!,
       projectId: args.projectId,
+      actorId: actor._id,
+    });
+  },
+});
+
+/**
+ * Création manuelle d'un dossier complet (lead `manual`/`signe` + projet + client)
+ * pour une vente absente de GHL. Portage de ClientsService.createManualDossier.
+ * Anti-doublon : téléphone (9 derniers chiffres, absorbe +262/0) ou email
+ * (casse ignorée). Le projet est rattaché à son créateur (pas de commercial).
+ */
+export const createManualDossier = mutation({
+  args: {
+    firstName: v.string(),
+    lastName: v.string(),
+    phone: v.optional(v.string()),
+    email: v.optional(v.string()),
+    addressLine: v.optional(v.string()),
+    city: v.optional(v.string()),
+    postalCode: v.optional(v.string()),
+    montantTotal: v.optional(v.number()),
+    typeFinancement: v.optional(financingTypeValidator),
+    signedAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<Id<"clients">> => {
+    const actor = await requireRole(ctx, BOOTSTRAP_ROLES);
+
+    // Anti-doublon (téléphone : 9 derniers chiffres ; email : casse ignorée).
+    const phoneTail = (args.phone ?? "").replace(/\D/g, "").slice(-9);
+    const email = args.email?.trim().toLowerCase();
+    if (phoneTail.length === 9 || email) {
+      const leadsRows = await ctx.db.query("leads").collect();
+      const dup = leadsRows.find((l) => {
+        if (l.deletedAt !== undefined) return false;
+        const lPhoneTail = (l.phone ?? "").replace(/\D/g, "").slice(-9);
+        const phoneMatch = phoneTail.length === 9 && lPhoneTail === phoneTail;
+        const emailMatch = Boolean(email) && (l.email ?? "").trim().toLowerCase() === email;
+        return phoneMatch || emailMatch;
+      });
+      if (dup) {
+        const name = [dup.firstName, dup.lastName].filter(Boolean).join(" ") || dup._id;
+        throw new Error(`Un lead existe déjà : ${name}`);
+      }
+    }
+
+    const leadId = await ctx.db.insert("leads", {
+      source: "manual",
+      status: "signe",
+      firstName: args.firstName,
+      lastName: args.lastName,
+      ...(args.phone !== undefined ? { phone: args.phone } : {}),
+      ...(args.email !== undefined ? { email: args.email } : {}),
+      ...(args.addressLine !== undefined ? { addressLine: args.addressLine } : {}),
+      ...(args.city !== undefined ? { city: args.city } : {}),
+      ...(args.postalCode !== undefined ? { postalCode: args.postalCode } : {}),
+    });
+    const projectId = await ctx.db.insert("projects", {
+      leadId,
+      commercialId: actor._id,
+      name: `Projet ${args.firstName} ${args.lastName}`,
+      status: "signe",
+    });
+    return await ensureDossier(ctx, {
+      leadId,
+      projectId,
+      montantTotal: args.montantTotal,
+      typeFinancement: args.typeFinancement,
+      signedAt: args.signedAt,
       actorId: actor._id,
     });
   },
