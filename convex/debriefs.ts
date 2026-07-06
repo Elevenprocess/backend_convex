@@ -10,7 +10,9 @@ import {
 import { requireRole, requireUser, assertCommercialRole } from "./model/access";
 import { insertStageHistory } from "./model/stageHistory";
 import { deriveLeadStatusFromDebrief } from "./model/deriveLeadStatusFromDebrief";
+import { deriveLeadStatus } from "./model/deriveLeadStatus";
 import { ensureProjectForLead } from "./model/ensureProject";
+import { internal } from "./_generated/api";
 import { ensureDossier } from "./model/ensureDossier";
 import {
   syncFromCommercial,
@@ -311,6 +313,85 @@ export const linkReadData = internalQuery({
           }
         : null,
     };
+  },
+});
+
+// Enregistre un débrief via lien magique (public, autorisé par le token vérifié
+// dans l'httpAction). Miroir de createForLead(rdvId) + du patch RDV in-app, avec
+// dérivation du statut lead (que le contrôleur NestJS oubliait).
+export const submitViaLink = internalMutation({
+  args: { outcome: debriefOutcomeValidator, ...DEBRIEF_FIELDS, rdvId: v.id("rdv") },
+  handler: async (ctx, args) => {
+    const rdvRow = await ctx.db.get(args.rdvId);
+    if (!rdvRow || rdvRow.deletedAt !== undefined) throw new Error("Rendez-vous introuvable.");
+    if (!rdvRow.leadId || !rdvRow.commercialId) throw new Error("Rendez-vous sans lead ou commercial associé.");
+    const leadId = rdvRow.leadId;
+    const commercialId = rdvRow.commercialId;
+
+    let projectId = args.projectId;
+    if (args.outcome === "vente" && !projectId) {
+      projectId = await ensureProjectForLead(ctx, { leadId, commercialId });
+    }
+
+    await ctx.db.insert(
+      "debriefs",
+      buildDebriefDoc({ ...args, rdvId: args.rdvId }, { leadId, projectId, commercialId }) as any,
+    );
+    await ensureDossierForVente(ctx, {
+      outcome: args.outcome, leadId, projectId, rdvId: args.rdvId,
+      montantTotal: args.montantTotal, financingType: args.financingType,
+      kits: args.kits, signedAt: args.signedAt, actorId: commercialId,
+    });
+    await syncDeliveryFromDebrief(ctx, {
+      leadId, outcome: args.outcome, nonSaleReason: args.nonSaleReason ?? null,
+      montantTotal: args.montantTotal ?? null, financingType: args.financingType ?? null, kits: args.kits ?? null,
+    });
+
+    const now = Date.now();
+    const result = outcomeToResult(args.outcome, args.nonSaleReason);
+    const isVente = args.outcome === "vente";
+    const rdvPatch: Record<string, unknown> = {
+      result,
+      debriefFilledAt: now,
+      objections: args.objection,
+      notes: args.notes,
+      ...(args.outcome === "non_vente" ? { nonSaleReason: args.nonSaleReason } : {}),
+      ...(isVente ? { montantTotal: args.montantTotal, kits: args.kits, financingType: args.financingType, signatureAt: args.signedAt } : {}),
+    };
+    await ctx.db.patch(args.rdvId, rdvPatch);
+
+    // Dérive le statut du lead comme rdv.update (amélioration vs NestJS).
+    const derived = deriveLeadStatus(rdvRow.status, result ?? null);
+    if (derived) {
+      const lead = await ctx.db.get(leadId);
+      if (lead && lead.status !== derived) {
+        await ctx.db.patch(leadId, { status: derived });
+        await insertStageHistory(ctx, {
+          leadId, ghlStageName: derived, saasStatus: derived,
+          assignedToId: lead.assignedToId, changedAt: now, source: "manual",
+        });
+      }
+    }
+
+    await ctx.scheduler.runAfter(0, internal.ghlDebriefLink.pushRdvDebriefScheduled, { rdvId: args.rdvId });
+    return { ok: true };
+  },
+});
+
+// Reporte le RDV vers une date future (déclenché depuis le débrief non-vente).
+export const rescheduleViaLink = internalMutation({
+  args: { rdvId: v.id("rdv"), scheduledAt: v.number() },
+  handler: async (ctx, args) => {
+    const rdvRow = await ctx.db.get(args.rdvId);
+    if (!rdvRow || rdvRow.deletedAt !== undefined) throw new Error("Rendez-vous introuvable.");
+    await ctx.db.patch(args.rdvId, {
+      scheduledAt: args.scheduledAt,
+      status: "reporte",
+      result: "reporte",
+      debriefFilledAt: undefined,
+      debriefDueAt: undefined,
+    });
+    return { ok: true };
   },
 });
 
