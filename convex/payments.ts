@@ -233,17 +233,63 @@ export const setEcheancier = mutation({
 });
 
 // ─── ensureImportedProjectDebriefs ───────────────────────────────────────────
-// NO-OP — la table `clients` (délivrabilité) n'est pas encore portée en Convex.
-// TODO(délivrabilité): câbler la vraie matérialisation depuis projects + clients
-// quand la tranche délivrabilité arrive. Cf. NestJS payments.service.ts
-// ensureImportedProjectDebriefs (~ligne 267) : INSERT INTO debriefs depuis la
-// jointure projects × clients × devis, idempotent (WHERE NOT EXISTS debrief vente).
+// Matérialise un débrief vente pour chaque dossier délivrabilité importé sans
+// débrief (ventes Airtable). Portage de payments.service.ts (WITH latest_devis /
+// finance_sources) : montant = devis signé/valorisé le plus récent du projet,
+// sinon montant du dossier ; financement idem ; signedAt = devis > dossier >
+// création projet. Idempotent (skip si un débrief vente existe déjà pour le projet).
 export const ensureImportedProjectDebriefs = internalMutation({
   args: {},
-  handler: async (_ctx, _args): Promise<{ created: number }> => {
-    // Boucle vide : aucune table `clients` portée → aucune vente importée
-    // à matérialiser. Retourne 0 créations sans rien écrire.
-    return { created: 0 };
+  handler: async (ctx, _args): Promise<{ created: number }> => {
+    let created = 0;
+    const clientsRows = await ctx.db.query("clients").collect();
+    for (const client of clientsRows) {
+      if (client.deletedAt !== undefined || client.projectId === undefined) continue;
+      const project = await ctx.db.get(client.projectId);
+      if (!project || project.deletedAt !== undefined) continue;
+
+      // Devis le plus récent du projet, valorisé (signé prioritaire).
+      const devisRows = await ctx.db
+        .query("devis")
+        .withIndex("by_project", (q) => q.eq("projectId", client.projectId))
+        .collect();
+      const valued = devisRows
+        .filter((d) => d.deletedAt === undefined && (d.status === "signe" || d.montantNet !== undefined || d.montantTtc !== undefined))
+        .sort((a, b) => {
+          const sa = a.status === "signe" ? 1 : 0;
+          const sb = b.status === "signe" ? 1 : 0;
+          if (sa !== sb) return sb - sa;
+          return b._creationTime - a._creationTime;
+        });
+      const latestDevis = valued[0];
+
+      const montantTotal = latestDevis?.montantNet ?? latestDevis?.montantTtc ?? client.montantTotal;
+      if (montantTotal === undefined || montantTotal <= 0) continue;
+
+      // Déjà un débrief vente pour ce projet ? (idempotence)
+      const existing = await ctx.db
+        .query("debriefs")
+        .withIndex("by_project", (q) => q.eq("projectId", client.projectId))
+        .collect();
+      if (existing.some((d) => d.outcome === "vente" && d.deletedAt === undefined)) continue;
+
+      const financingType = latestDevis?.financingType ?? client.typeFinancement;
+      const signedAt = latestDevis?.signedAt ?? client.signedAt ?? project._creationTime;
+
+      await ctx.db.insert("debriefs", {
+        projectId: client.projectId,
+        leadId: project.leadId,
+        commercialId: project.commercialId,
+        outcome: "vente",
+        acceptanceFactors: [],
+        customEcheancier: false,
+        montantTotal,
+        ...(financingType !== undefined ? { financingType } : {}),
+        signedAt,
+      });
+      created++;
+    }
+    return { created };
   },
 });
 
