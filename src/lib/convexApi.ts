@@ -208,6 +208,36 @@ export const devisUpdate = makeFunctionReference<
   unknown
 >('devis:update')
 
+// projectAttachments : toSummary serveur (uploadedAt en ms, pas d'uploadedById).
+export type ConvexAttachmentSummary = {
+  id: string
+  projectId: string
+  kind: string
+  label?: string
+  filename: string
+  contentType: string
+  sizeBytes: number
+  uploadedAt: number
+}
+
+export const projectAttachmentsGenerateUploadUrl = makeFunctionReference<'mutation', Record<string, never>, string>('projectAttachments:generateUploadUrl')
+
+export const projectAttachmentsCreate = makeFunctionReference<
+  'mutation',
+  { projectId: string; kind: string; label?: string; filename: string; contentType: string; sizeBytes: number; storageId: string },
+  ConvexAttachmentSummary
+>('projectAttachments:create')
+
+export const projectAttachmentsListByProject = makeFunctionReference<'query', { projectId: string }, ConvexAttachmentSummary[]>('projectAttachments:listByProject')
+
+export const projectAttachmentsGetUrl = makeFunctionReference<
+  'query',
+  { attachmentId: string },
+  { url: string; filename: string; contentType: string } | null
+>('projectAttachments:getUrl')
+
+export const projectAttachmentsRemove = makeFunctionReference<'mutation', { attachmentId: string }, { ok: true }>('projectAttachments:remove')
+
 type PaginationOptsArg = { numItems: number; cursor: string | null }
 
 export const usersMe = makeFunctionReference<'query', Record<string, never>, ConvexUserDoc | null>('users:me')

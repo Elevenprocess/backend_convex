@@ -29,7 +29,7 @@ import type {
 } from './types'
 import { notifyRealtimeRefresh } from './realtime'
 import { convexAuthEnabled, convexClient } from './convex'
-import { debriefsCreate, debriefsCreateForLead, debriefsGet, debriefsListByLead, debriefsListByProject, devisCreate, devisGenerateUploadUrl, devisGetById, devisListByLead, devisMarkAsSigned, devisRemove, devisRetryOcr, devisUpdate, projectsCreate, projectsGet, projectsListByLead } from './convexApi'
+import { debriefsCreate, debriefsCreateForLead, debriefsGet, debriefsListByLead, debriefsListByProject, devisCreate, devisGenerateUploadUrl, devisGetById, devisListByLead, devisMarkAsSigned, devisRemove, devisRetryOcr, devisUpdate, projectAttachmentsCreate, projectAttachmentsGenerateUploadUrl, projectAttachmentsGetUrl, projectAttachmentsListByProject, projectAttachmentsRemove, projectsCreate, projectsGet, projectsListByLead, type ConvexAttachmentSummary } from './convexApi'
 import { mapConvexDebrief, mapConvexDevis, mapConvexProject } from './convexMappers'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
@@ -582,13 +582,16 @@ export async function getProjectDetail(projectId: string): Promise<ProjectDetail
     ])
     if (!project) throw new ApiError(404, 'Projet introuvable')
     // Devis du projet : listByLead puis filtre sur projectId (pas de listByProject
-    // côté serveur). Les pièces (project_attachments) restent à porter.
-    const leadDevis = await convexClient.query(devisListByLead, { leadId: project.leadId })
+    // côté serveur). Pièces : projectAttachments.listByProject.
+    const [leadDevis, attachments] = await Promise.all([
+      convexClient.query(devisListByLead, { leadId: project.leadId }),
+      convexClient.query(projectAttachmentsListByProject, { projectId }),
+    ])
     return {
       ...mapConvexProject(project),
       devis: leadDevis.map(mapConvexDevis).filter((d) => d.projectId === projectId),
       debriefs: debriefs.map(mapConvexDebrief),
-      attachments: [],
+      attachments: attachments.map(mapConvexAttachment),
     }
   }
   return api<ProjectDetailResponse>(`/projects/${projectId}`)
@@ -665,11 +668,49 @@ export async function deleteDebrief(debriefId: string): Promise<{ ok: true }> {
 }
 
 // ─── Project attachments ──────────────────────────────────
+// toSummary Convex → ProjectAttachmentResponse REST (uploadedAt ms → ISO ;
+// uploadedById absent du summary serveur → '' , non affiché).
+function mapConvexAttachment(s: ConvexAttachmentSummary): ProjectAttachmentResponse {
+  return {
+    id: s.id,
+    projectId: s.projectId,
+    uploadedById: '',
+    kind: s.kind as ProjectAttachmentKind,
+    label: s.label ?? null,
+    filename: s.filename,
+    contentType: s.contentType,
+    sizeBytes: s.sizeBytes,
+    createdAt: new Date(s.uploadedAt).toISOString(),
+  }
+}
+
 export async function uploadProjectAttachment(
   projectId: string,
   file: File,
   opts: { kind: ProjectAttachmentKind; label?: string | null },
 ): Promise<ProjectAttachmentResponse> {
+  if (convexAuthEnabled && convexClient) {
+    // Convex n'autorise que photo|document ; 'autre' retombe sur 'document'.
+    const kind = opts.kind === 'photo' ? 'photo' : 'document'
+    const uploadUrl = await convexClient.mutation(projectAttachmentsGenerateUploadUrl, {})
+    const up = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: file.type ? { 'Content-Type': file.type } : undefined,
+      body: file,
+    })
+    if (!up.ok) throw new ApiError(up.status, `Upload pièce (storage) échoué : ${up.status}`)
+    const { storageId } = (await up.json()) as { storageId: string }
+    const summary = await convexClient.mutation(projectAttachmentsCreate, {
+      projectId,
+      kind,
+      label: opts.label?.trim() || undefined,
+      filename: file.name,
+      contentType: file.type || 'application/octet-stream',
+      sizeBytes: file.size,
+      storageId,
+    })
+    return mapConvexAttachment(summary)
+  }
   const fd = new FormData()
   fd.append('file', file)
   fd.append('kind', opts.kind)
@@ -686,15 +727,24 @@ export async function uploadProjectAttachment(
   return res.json() as Promise<ProjectAttachmentResponse>
 }
 
-export function listAttachmentsByProject(
+export async function listAttachmentsByProject(
   projectId: string,
 ): Promise<ProjectAttachmentResponse[]> {
+  if (convexAuthEnabled && convexClient) {
+    const rows = await convexClient.query(projectAttachmentsListByProject, { projectId })
+    return rows.map(mapConvexAttachment)
+  }
   return api<ProjectAttachmentResponse[]>(`/projects/${projectId}/attachments`)
 }
 
-export function getAttachmentSignedUrl(
+export async function getAttachmentSignedUrl(
   attachmentId: string,
 ): Promise<{ url: string; filename: string; contentType: string }> {
+  if (convexAuthEnabled && convexClient) {
+    const res = await convexClient.query(projectAttachmentsGetUrl, { attachmentId })
+    if (!res) throw new ApiError(404, 'Pièce jointe introuvable')
+    return res
+  }
   return api<{ url: string; filename: string; contentType: string }>(
     `/attachments/${attachmentId}/url`,
   )
@@ -728,6 +778,15 @@ export function attachmentRawUrl(attachmentId: string): string {
  * en src échouerait (401/403). À révoquer (URL.revokeObjectURL) au démontage.
  */
 export async function fetchAttachmentObjectUrl(attachmentId: string): Promise<string> {
+  if (convexAuthEnabled && convexClient) {
+    // Le storage Convex renvoie une URL publique signée : on la récupère puis on
+    // fetch le binaire pour rester cohérent avec le contrat (object URL révocable).
+    const meta = await convexClient.query(projectAttachmentsGetUrl, { attachmentId })
+    if (!meta) throw new ApiError(404, 'Pièce jointe introuvable')
+    const res = await fetch(meta.url)
+    if (!res.ok) throw new ApiError(res.status, `Chargement du fichier échoué : ${res.status}`)
+    return URL.createObjectURL(await res.blob())
+  }
   const res = await fetch(buildApiUrl(`/attachments/${attachmentId}/raw`), {
     credentials: 'include',
   })
@@ -739,7 +798,10 @@ export async function fetchAttachmentObjectUrl(attachmentId: string): Promise<st
   return URL.createObjectURL(blob)
 }
 
-export function deleteProjectAttachment(attachmentId: string): Promise<{ ok: true }> {
+export async function deleteProjectAttachment(attachmentId: string): Promise<{ ok: true }> {
+  if (convexAuthEnabled && convexClient) {
+    return await convexClient.mutation(projectAttachmentsRemove, { attachmentId })
+  }
   return api<{ ok: true }>(`/attachments/${attachmentId}`, { method: 'DELETE' })
 }
 
