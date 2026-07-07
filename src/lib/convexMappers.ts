@@ -102,8 +102,9 @@ export function mapConvexLead(doc: ConvexLeadDoc): LeadResponse {
     latestRdvCommercialId: null,
     jauge11Jours: null,
     datePassageRelance: null,
-    createdAt: new Date(doc._creationTime).toISOString(),
-    updatedAt: new Date(doc._creationTime).toISOString(),
+    // Date réelle Render posée par la migration ; repli _creationTime (webhooks live).
+    createdAt: new Date(doc.createdAt ?? doc._creationTime).toISOString(),
+    updatedAt: new Date(doc.createdAt ?? doc._creationTime).toISOString(),
     joursSansContact: null,
     joursRelance: null,
     callCount: 0,
@@ -143,8 +144,9 @@ export function mapConvexRdv(doc: ConvexRdvDoc): RdvResponse {
     debriefFilledAt: iso(doc.debriefFilledAt),
     debriefDueAt: iso(doc.debriefDueAt),
     hasDevisEnAttente: false,
-    createdAt: new Date(doc._creationTime).toISOString(),
-    updatedAt: new Date(doc._creationTime).toISOString(),
+    // Date de prise du RDV : createdAt migré (réel Render) sinon insertion Convex.
+    createdAt: new Date(doc.createdAt ?? doc._creationTime).toISOString(),
+    updatedAt: new Date(doc.createdAt ?? doc._creationTime).toISOString(),
     lead: null,
   }
 }

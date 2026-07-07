@@ -50,6 +50,45 @@ describe('buildLeadEvolutionPoints — données réelles par jour', () => {
   })
 })
 
+describe('buildLeadEvolutionPoints — liste par bucket + comptage réel horaire', () => {
+  const at = (h: number, m: number) =>
+    new Date(`2026-06-03T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`).getTime()
+
+  it('vue horaire : qualified/signed comptés en réel et items rattachés à la bonne heure', () => {
+    const daily = [day('2026-06-03', 10, 8, 3)] // totaux prorata volontairement ignorés
+    const range = { from: '2026-06-03', to: '2026-06-03', days: 1 }
+    expect(chooseGranularity(range)).toBe('hour')
+    const events = {
+      qualified: [
+        { id: 'q1', t: at(9, 30), name: 'Alice', agent: 'Setter A' },
+        { id: 'q2', t: at(9, 45), name: 'Bob', agent: 'Setter B' },
+        { id: 'q3', t: at(14, 5), name: 'Carla', agent: null },
+      ],
+      signed: [{ id: 's1', t: at(14, 15), name: 'Client X', agent: 'Com Z' }],
+    }
+    const points = buildLeadEvolutionPoints(daily, [], range, 'hour', HUGE_TOTALS, undefined, events)
+    const h9 = points.find((p) => p.t === at(9, 0))!
+    const h14 = points.find((p) => p.t === at(14, 0))!
+    expect(h9.qualified).toBe(2)
+    expect(h9.qualifiedItems?.map((i) => i.name)).toEqual(['Alice', 'Bob'])
+    expect(h14.qualified).toBe(1)
+    expect(h14.signed).toBe(1)
+    expect(h14.signedItems?.[0].agent).toBe('Com Z')
+    // le badge horaire ne provient plus du prorata des totaux (999)
+    expect(h9.signed).toBe(0)
+  })
+
+  it('vue jour : garde les agrégats backend mais rattache la liste au bucket', () => {
+    const daily = [day('2026-06-03', 4, 2, 1)]
+    const events = { qualified: [{ id: 'q1', t: at(11, 0), name: 'Alice', agent: 'Setter A' }] }
+    // granularité 'day' forcée (ex. plage multi-jours) : comptage backend inchangé.
+    const points = buildLeadEvolutionPoints(daily, [], { from: '2026-06-01', to: '2026-06-03', days: 3 }, 'day', HUGE_TOTALS, undefined, events)
+    const p = points.find((pt) => pt.date === '2026-06-03')!
+    expect(p.qualified).toBe(2) // agrégat backend, PAS la longueur de la liste
+    expect(p.qualifiedItems?.map((i) => i.name)).toEqual(['Alice'])
+  })
+})
+
 describe('chooseGranularity', () => {
   it('reste en jours pour une plage courte de 2-3 jours', () => {
     expect(chooseGranularity({ from: '2026-06-01', to: '2026-06-03' })).toBe('day')

@@ -4,7 +4,13 @@ import type { EvolutionGranularity } from './evolutionAxis'
 // Logique d'entonnoir : Nouveau Lead → RDV planifiés → Ventes. La série du
 // milieu est alimentée par la donnée « qualifiés » (clé historique `qualified`).
 export type LeadEvolutionSeriesKey = 'leads' | 'qualified' | 'signed'
-export type LeadEvolutionPoint = { key: string; t: number; date: string; label: string; leads: number; qualified: number; signed: number }
+// Un lead/client rattaché à un bucket, avec l'agent qui lui est associé
+// (setter pour les qualifiés, commercial pour les ventes). `t` = horodatage
+// réel de l'événement (arrivée / 1re prise de RDV / signature).
+export type LeadEvolutionItem = { id: string; t: number; name: string; sub?: string | null; agent?: string | null }
+// Événements datés fournis par la page pour lister les leads/clients d'un bucket.
+export type LeadEvolutionEvents = { qualified?: LeadEvolutionItem[]; signed?: LeadEvolutionItem[] }
+export type LeadEvolutionPoint = { key: string; t: number; date: string; label: string; leads: number; qualified: number; signed: number; qualifiedItems?: LeadEvolutionItem[]; signedItems?: LeadEvolutionItem[] }
 export type EvolutionDailyInput = { date: string; label: string; calls: number; rdv: number; signed: number; ca: number; classified: number; qualified?: number; newLeads?: number }
 export type EvolutionHourlyInput = { date: string; hour: number; label: string; calls: number }
 export type EvolutionRange = { from: string; to: string; days: number }
@@ -42,12 +48,16 @@ export function buildLeadEvolutionPoints(
   // dans chaque bucket (heure/jour/…) → le graph montre l'arrivée des leads,
   // y compris par heure, au lieu d'une répartition au prorata des appels.
   newLeadMs?: number[],
+  // Événements datés (leads qualifiés / ventes) avec l'agent associé : rattachés
+  // à chaque bucket pour la liste au survol. En vue horaire, ils remplacent aussi
+  // le comptage prorata par un comptage réel (badge = longueur de la liste).
+  events?: LeadEvolutionEvents,
 ): LeadEvolutionPoint[] {
   // Le backend pré-remplit tous les buckets de la plage à 0, y compris ceux PAS ENCORE COMMENCÉS
   // (heures à venir d'aujourd'hui…). On les exclut : sinon ils s'empilent à 0 contre le bord droit
   // de l'axe live et la courbe plonge verticalement au lieu de s'arrêter au dernier point réel.
   const nowMs = Date.now()
-  const withArrival = (points: LeadEvolutionPoint[]) => applyLeadArrival(points, granularity, newLeadMs)
+  const withArrival = (points: LeadEvolutionPoint[]) => applyEventItems(applyLeadArrival(points, granularity, newLeadMs), granularity, events)
 
   if (granularity === 'hour') {
     // Journée pleine 00h→23h : on génère les 24 buckets du jour (le backend ne
@@ -124,6 +134,30 @@ function applyLeadArrival(points: LeadEvolutionPoint[], granularity: EvolutionGr
     let leads = 0
     for (const t of newLeadMs) if (t >= start && t < end) leads += 1
     return { ...point, leads }
+  })
+}
+
+/**
+ * Rattache à chaque bucket la liste des leads qualifiés / ventes qui y tombent
+ * (par horodatage réel de l'événement) pour l'affichage au survol. En vue
+ * HORAIRE, où le comptage backend est réparti au prorata des appels (synthétique),
+ * on remplace `qualified`/`signed` par le comptage RÉEL → le badge du tooltip
+ * égale toujours la longueur de la liste montrée. Les autres granularités gardent
+ * les agrégats backend (source de vérité, événementiels) mais reçoivent la liste.
+ */
+function applyEventItems(points: LeadEvolutionPoint[], granularity: EvolutionGranularity, events?: LeadEvolutionEvents): LeadEvolutionPoint[] {
+  if (!events || (!events.qualified && !events.signed)) return points
+  return points.map((point) => {
+    const [start, end] = bucketRangeMs(point, granularity)
+    const inBucket = (arr: LeadEvolutionItem[]) => arr.filter((e) => e.t >= start && e.t < end).sort((a, b) => a.t - b.t)
+    const qualifiedItems = events.qualified ? inBucket(events.qualified) : undefined
+    const signedItems = events.signed ? inBucket(events.signed) : undefined
+    const next: LeadEvolutionPoint = { ...point, qualifiedItems, signedItems }
+    if (granularity === 'hour') {
+      if (qualifiedItems) next.qualified = qualifiedItems.length
+      if (signedItems) next.signed = signedItems.length
+    }
+    return next
   })
 }
 

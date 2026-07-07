@@ -46,6 +46,7 @@ import {
   useConvexDebriefAnalytics,
   useConvexLead,
   useConvexLeadDebriefs,
+  useConvexLeadStats,
   useConvexLeads,
   useConvexRdvList,
   useConvexSubsteps,
@@ -60,8 +61,13 @@ type Async<T> = {
 }
 
 // `backgroundLoading` = phase 2 (full hydration) still running, phase 1 data is already on screen.
+// `loadMore`/`canLoadMore` = chargement fenêtré piloté par le scroll (mode Convex) :
+//   la liste ne charge la fenêtre suivante que quand on approche du bas. Absents/no-op
+//   sur le chemin REST (qui reste sur son fetch en deux temps).
 type AsyncProgressive<T> = Async<T> & {
   backgroundLoading: boolean
+  loadMore?: () => void
+  canLoadMore?: boolean
 }
 
 const FETCH_CACHE_TTL_MS = 10 * 60 * 1000
@@ -347,12 +353,18 @@ export const useLead: typeof useLeadRest = convexAuthEnabled
   ? (useConvexLead as unknown as typeof useLeadRest)
   : useLeadRest
 
-export function useLeadStats(): Async<LeadStatsResponse> {
+function useLeadStatsRest(): Async<LeadStatsResponse> {
   return useFetch<LeadStatsResponse>('/leads/stats', undefined, {
     refreshCachedOnMount: true,
     silentInitialLoading: true,
   })
 }
+
+// En mode Convex, les compteurs viennent de la query agrégée leads:stats (comptes
+// exacts) : indispensable maintenant que la liste ne charge plus qu'une fenêtre.
+export const useLeadStats: typeof useLeadStatsRest = convexAuthEnabled
+  ? (useConvexLeadStats as unknown as typeof useLeadStatsRest)
+  : useLeadStatsRest
 
 export type CreateLeadInput = {
   source: 'manual'

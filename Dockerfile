@@ -3,19 +3,12 @@
 # ─── deps ───────────────────────────────────────────────────
 FROM node:22-alpine AS deps
 WORKDIR /app
-# Le glob tolère un package-lock.json supprimé localement (dérive fréquente
-# des clones) ; sans lockfile, npm ci échoue et on retombe sur npm install.
+
 COPY package.json package-lock.json* ./
-# Retries généreux : le registre npm est parfois coupé en cours de route
-# (ECONNRESET) sur les connexions lentes ; --no-audit/--no-fund évitent
-# des allers-retours inutiles.
+
 RUN npm ci --no-audit --no-fund --fetch-retries=5 --fetch-retry-maxtimeout=120000 \
     || npm install --no-audit --no-fund --fetch-retries=5 --fetch-retry-maxtimeout=120000
 
-# ─── dev ── serveur Vite + HMR pour le poste local ──────────
-# Usage : docker compose up   (voir compose.yaml)
-# Le code est bind-mounté à l'exécution ; la copie ci-dessous ne
-# sert que de fallback si on lance l'image sans volume.
 FROM node:22-alpine AS dev
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
@@ -23,7 +16,7 @@ COPY . .
 EXPOSE 5173
 CMD ["npm", "run", "dev"]
 
-# ─── build ──────────────────────────────────────────────────
+# ─── build ─────────────────────────────────────────
 FROM node:22-alpine AS builder
 WORKDIR /app
 # Vite bakes VITE_* vars at build time, so they must be ARGs, not runtime env.

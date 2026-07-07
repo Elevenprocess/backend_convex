@@ -300,7 +300,13 @@ export type AnalyticsAdminSummary = {
   dailyEvolution: AnalyticsDailyPoint[]
   setters: AnalyticsSetterPerf[]
   commercials: AnalyticsCommercialPerf[]
+  // Événements datés (dates serveur) pour la liste au survol de la courbe :
+  // qualifiés → setter crédité, ventes → commercial. Absents des vues non-admin.
+  qualifiedEvents?: AnalyticsEvolutionEvent[]
+  signedEvents?: AnalyticsEvolutionEvent[]
 }
+
+export type AnalyticsEvolutionEvent = { id: string; t: number; name: string; city: string | null; agent: string | null }
 
 
 

@@ -18,7 +18,7 @@ import { buildDeliveryPipeline, selectDeliveryPriorities, selectRecentDeliveries
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
 import { previousRange } from '../lib/period'
 import { buildEvolutionTicks, computeEvolutionDomain, type EvolutionGranularity } from '../lib/evolutionAxis'
-import { buildLeadEvolutionPoints, chooseGranularity, type LeadEvolutionPoint, type LeadEvolutionSeriesKey } from '../lib/leadEvolution'
+import { buildLeadEvolutionPoints, chooseGranularity, type LeadEvolutionItem, type LeadEvolutionPoint, type LeadEvolutionSeriesKey } from '../lib/leadEvolution'
 
 type FunnelPeriodMode = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'last_n_days' | 'custom'
 type FunnelPeriodState = { mode: FunnelPeriodMode; customFrom: string; customTo: string; lastN?: number; includeToday?: boolean }
@@ -890,11 +890,20 @@ function OverviewAdmin() {
   // s'il concorde exactement avec l'agrégat backend. Sinon, le backend newLeads reste
   // source de vérité — jamais fallback vers `classified` / leads traités.
   const reliableNewLeadMs = newLeadMs.length === newLeadTotal ? newLeadMs : undefined
+  // Événements datés pour la liste au survol de la courbe : leads qualifiés (→ setter
+  // qui a qualifié) et ventes (→ commercial). Fournis PAR LE BACKEND (analytics.summary),
+  // datés côté serveur (rdv.createdAt / signatureAt) → pas de biais scheduledAt ni de
+  // coupe à 200 lignes de la liste /rdv. En vue horaire, ils donnent le comptage réel.
+  const evolutionEvents = useMemo(() => {
+    const toItems = (evts?: { id: string; t: number; name: string; city: string | null; agent: string | null }[]): LeadEvolutionItem[] =>
+      (evts ?? []).map((e) => ({ id: e.id, t: e.t, name: e.name, sub: e.city, agent: e.agent }))
+    return { qualified: toItems(adminSummary?.qualifiedEvents), signed: toItems(adminSummary?.signedEvents) }
+  }, [adminSummary])
   const evolutionPoints = useMemo(() => buildLeadEvolutionPoints(adminSummary?.dailyEvolution ?? [], adminSummary?.hourlyCalls ?? [], funnelRange, evolutionGranularity, {
     leads: newLeadTotal,
     qualified: adminSummary?.qualified ?? funnelTotals.qualified,
     signed: adminSummary?.signed ?? 0,
-  }, reliableNewLeadMs), [adminSummary, funnelRange, evolutionGranularity, newLeadTotal, funnelTotals, reliableNewLeadMs])
+  }, reliableNewLeadMs, evolutionEvents), [adminSummary, funnelRange, evolutionGranularity, newLeadTotal, funnelTotals, reliableNewLeadMs, evolutionEvents])
 
   const prevRange = previousRange(funnelRange)
   const { data: prevFunnel } = useAnalyticsFunnel({ from: prevRange.from, to: prevRange.to })
@@ -1417,6 +1426,24 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
             {hoverCompare ? (
               <em>{hoverCompare.label} · {fmtCompact(prevVal)}</em>
             ) : null}
+            {(activeKey === 'qualified' || activeKey === 'signed') ? (() => {
+              const items = activeKey === 'qualified' ? hoverPoint.qualifiedItems : hoverPoint.signedItems
+              if (!items || items.length === 0) return null
+              const agentLabel = activeKey === 'qualified' ? 'Setter' : 'Commercial'
+              const shown = items.slice(0, 6)
+              return (
+                <div className="lead-evolution-tooltip-list">
+                  <span className="let-head">{activeKey === 'qualified' ? 'Leads qualifiés' : 'Ventes'} · {agentLabel}</span>
+                  {shown.map((item) => (
+                    <div key={item.id} className="let-row">
+                      <span className="let-name">{item.name}{item.sub ? <small> · {item.sub}</small> : null}</span>
+                      <span className="let-agent">{item.agent ? item.agent : <i>non assigné</i>}</span>
+                    </div>
+                  ))}
+                  {items.length > shown.length ? <div className="let-more">+{items.length - shown.length} autres</div> : null}
+                </div>
+              )
+            })() : null}
           </div>
         ) : null}
       </div>

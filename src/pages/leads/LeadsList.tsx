@@ -237,6 +237,8 @@ function LeadsSetter() {
   const loading = searchTerm ? searchLeadsState.loading : baseLeadsState.loading
   const error = searchTerm ? searchLeadsState.error : baseLeadsState.error
   const backgroundLoading = searchTerm ? searchLeadsState.backgroundLoading : baseLeadsState.backgroundLoading
+  const canLoadMore = searchTerm ? searchLeadsState.canLoadMore : baseLeadsState.canLoadMore
+  const loadMore = searchTerm ? searchLeadsState.loadMore : baseLeadsState.loadMore
   const { data: usersList } = useUsers()
   const mine = data ?? []
   const userMap = useMemo(() => {
@@ -334,6 +336,7 @@ function LeadsSetter() {
   )
   const tableScrollRef = useRememberedLeadTableScroll('ecoi.leads.setter.tableScroll.v1', filtered, selectedId)
   const virtualizer = useLeadRowVirtualizer(tableScrollRef, filtered.length)
+  useInfiniteLeadLoad(virtualizer, filtered.length, canLoadMore, loadMore)
   const selectedRowIndex = useMemo(
     () => (selectedId ? filtered.findIndex((l) => l.id === selectedId) : -1),
     [filtered, selectedId],
@@ -508,17 +511,26 @@ function LeadsAdmin() {
   const [searchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('search') ?? '')
 
-  // Recherche backend (même pattern que le setter) : quand un terme est saisi,
-  // on bascule sur une requête /leads?search=… au lieu du lot de base. Les
-  // filtres setter/commercial/statut s'appliquent ensuite en mémoire dessus.
-  const searchTerm = query.trim()
-  const baseLeadsState = useLeadsProgressive({ quickLimit: 100, fullLimit: 500 })
-  const searchLeadsState = useLeadsProgressive(searchTerm ? { quickLimit: 100, fullLimit: 500, search: searchTerm } : null)
-  const leadsData = searchTerm ? searchLeadsState.data : baseLeadsState.data
-  const loading = searchTerm ? searchLeadsState.loading : baseLeadsState.loading
-  const error = searchTerm ? searchLeadsState.error : baseLeadsState.error
-  const backgroundLoading = searchTerm ? searchLeadsState.backgroundLoading : baseLeadsState.backgroundLoading
-  const refetch = searchTerm ? searchLeadsState.refetch : baseLeadsState.refetch
+  // Recherche + filtres setter/commercial exécutés CÔTÉ SERVEUR (searchIndex +
+  // index Convex) : on n'interroge plus une fenêtre en mémoire mais toute la base.
+  // La recherche est débouncée pour ne pas relancer une requête à chaque frappe ;
+  // changer un filtre réinitialise la pagination du curseur.
+  const searchTerm = useDebouncedValue(query.trim(), 300)
+  const serverFilters = useMemo(() => ({
+    quickLimit: 100,
+    fullLimit: 500,
+    search: searchTerm || undefined,
+    setterId: setterFilter !== 'all' ? setterFilter : undefined,
+    assignedToId: commercialFilter !== 'all' ? commercialFilter : undefined,
+  }), [searchTerm, setterFilter, commercialFilter])
+  const baseLeadsState = useLeadsProgressive(serverFilters)
+  const leadsData = baseLeadsState.data
+  const loading = baseLeadsState.loading
+  const error = baseLeadsState.error
+  const backgroundLoading = baseLeadsState.backgroundLoading
+  const refetch = baseLeadsState.refetch
+  const canLoadMore = baseLeadsState.canLoadMore
+  const loadMore = baseLeadsState.loadMore
   const { data: leadStats } = useLeadStats()
   const { data: users = [] } = useUsers()
   const leads = leadsData ?? []
@@ -532,9 +544,9 @@ function LeadsAdmin() {
   }, [users])
 
   const filtered = useMemo(() => {
+    // setter/commercial déjà filtrés côté serveur (serverFilters). Ne restent ici
+    // que les filtres pas encore portés serveur (statut groupé, dernier appel, etc.).
     let list = leads ?? []
-    if (setterFilter !== 'all') list = list.filter((l) => l.setterId === setterFilter)
-    if (commercialFilter !== 'all') list = list.filter((l) => l.assignedToId === commercialFilter)
     list = applyLeadFilters(list, leadFilters)
     // Tri explicite par clic sur l'en-tête « prochain rappel » : prioritaire sur le tri par défaut.
     if (callbackSort) {
@@ -544,7 +556,7 @@ function LeadsAdmin() {
       list = sortCallbackLeadsByNextCallback(list)
     }
     return list
-  }, [leads, setterFilter, commercialFilter, leadFilters, callbackSort])
+  }, [leads, leadFilters, callbackSort])
 
   const stats = useMemo(() => {
     const byStatus = leadStats?.byStatus
@@ -569,6 +581,10 @@ function LeadsAdmin() {
       perdus: (leads ?? []).filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie').length,
     }
   }, [leadStats, leads])
+  // Tant que les compteurs autoritatifs (leads:stats) ne sont pas arrivés, on
+  // affiche un skeleton plutôt que des 0 (le fallback ne verrait que la fenêtre
+  // chargée, ce qui donnait « 0 partout » avant l'arrivée des vrais chiffres).
+  const statsLoading = !leadStats
   const selectedFilteredIds = useMemo(() => {
     const visibleIds = new Set(filtered.map((lead) => lead.id))
     return selectedLeadIds.filter((id) => visibleIds.has(id))
@@ -577,6 +593,7 @@ function LeadsAdmin() {
   const someFilteredSelected = selectedFilteredIds.length > 0 && !allFilteredSelected
   const tableScrollRef = useRememberedLeadTableScroll('ecoi.leads.admin.tableScroll.v1', filtered, selectedId)
   const virtualizer = useLeadRowVirtualizer(tableScrollRef, filtered.length)
+  useInfiniteLeadLoad(virtualizer, filtered.length, canLoadMore, loadMore)
   const selectedRowIndex = useMemo(
     () => (selectedId ? filtered.findIndex((l) => l.id === selectedId) : -1),
     [filtered, selectedId],
@@ -685,7 +702,7 @@ function LeadsAdmin() {
               </button>
             ) : null}
             <ColumnVisibilityMenu columns={ADMIN_COLUMNS} visible={visibleColumns} onChange={setVisibleColumns} />
-            {(loading || backgroundLoading) && leads.length > 0 && <span className="text-xs text-faint">{backgroundLoading ? `100 premiers affichés, hydratation du reste (${leads.length.toLocaleString('fr-FR')} visibles)…` : 'Actualisation…'}</span>}
+            {(loading || backgroundLoading) && leads.length > 0 && <span className="text-xs text-faint">{backgroundLoading ? `${leads.length.toLocaleString('fr-FR')} leads chargés, chargement de la suite…` : 'Actualisation…'}</span>}
             <div className="ml-auto flex items-center gap-2">
               {selectedFilteredIds.length > 0 && (
                 <button
@@ -704,10 +721,10 @@ function LeadsAdmin() {
 
       <main className="p-4 sm:p-8 pt-3 flex-grow flex flex-col min-h-0 overflow-hidden">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3 flex-shrink-0">
-          <StatCard label="TOTAL IMPORTÉ" value={stats.total.toLocaleString('fr-FR')} />
-          <StatCard label="IMPORT DIRECT GHL" value={stats.directGhl.toLocaleString('fr-FR')} />
-          <StatCard label="QUALIFIÉS" value={stats.qualifies.toLocaleString('fr-FR')} />
-          <StatCard label="NON QUALIFIÉS" value={stats.perdus.toLocaleString('fr-FR')} />
+          <StatCard label="TOTAL IMPORTÉ" value={stats.total.toLocaleString('fr-FR')} loading={statsLoading} />
+          <StatCard label="IMPORT DIRECT GHL" value={stats.directGhl.toLocaleString('fr-FR')} loading={statsLoading} />
+          <StatCard label="QUALIFIÉS" value={stats.qualifies.toLocaleString('fr-FR')} loading={statsLoading} />
+          <StatCard label="NON QUALIFIÉS" value={stats.perdus.toLocaleString('fr-FR')} loading={statsLoading} />
         </div>
 
         {loading && leads.length === 0 ? (
@@ -1739,6 +1756,35 @@ function useLeadRowVirtualizer(
   })
 }
 
+// Débounce une valeur (ex. terme de recherche) : évite de relancer une requête
+// serveur à chaque frappe. Renvoie la dernière valeur stabilisée depuis `delay` ms.
+function useDebouncedValue<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebounced(value), delay)
+    return () => window.clearTimeout(t)
+  }, [value, delay])
+  return debounced
+}
+
+// Chargement fenêtré : dès que la dernière ligne montée approche du bas de la
+// fenêtre déjà chargée, on demande la fenêtre suivante (mode Convex). Évite de
+// charger 10k–50k leads d'un coup ; la RAM reste bornée, le scroll fluide.
+const LEAD_LOAD_MORE_THRESHOLD = 20
+function useInfiniteLeadLoad(
+  virtualizer: Virtualizer<HTMLDivElement, Element>,
+  count: number,
+  canLoadMore: boolean | undefined,
+  loadMore: (() => void) | undefined,
+) {
+  const items = virtualizer.getVirtualItems()
+  const lastIndex = items.length ? items[items.length - 1].index : 0
+  useEffect(() => {
+    if (!canLoadMore || !loadMore || count === 0) return
+    if (lastIndex >= count - LEAD_LOAD_MORE_THRESHOLD) loadMore()
+  }, [lastIndex, count, canLoadMore, loadMore])
+}
+
 // Centre la ligne du lead sélectionné dans le viewport virtualisé.
 function useScrollSelectedLeadIntoView(
   virtualizer: Virtualizer<HTMLDivElement, Element>,
@@ -2047,12 +2093,14 @@ function Td({
   return <td className={`px-4 py-3 align-middle whitespace-nowrap ${className}`} title={title} onClick={onClick}>{children}</td>
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function StatCard({ label, value, loading }: { label: string; value: string; loading?: boolean }) {
   return (
     <div className="glass-card !p-3 min-h-[58px]">
       <div className="flex items-center justify-between gap-3">
         <span className="eyebrow text-[10px] leading-none truncate">{label}</span>
-        <div className="text-xl font-bold leading-none tabular-nums">{value}</div>
+        {loading
+          ? <div className="h-5 w-10 rounded bg-black/10 animate-pulse" aria-hidden="true" />
+          : <div className="text-xl font-bold leading-none tabular-nums">{value}</div>}
       </div>
     </div>
   )

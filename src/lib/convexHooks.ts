@@ -1,6 +1,6 @@
-import { useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { usePaginatedQuery, useQuery } from 'convex/react'
-import { analyticsDebriefStats, analyticsFunnel, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsGet, leadsList, paymentsListAcomptes, rdvList, substepsList, usersList } from './convexApi'
+import { analyticsDebriefStats, analyticsFunnel, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsGet, leadsList, leadsStats, paymentsListAcomptes, rdvList, substepsList, usersList } from './convexApi'
 import { mapConvexAcompte, mapConvexCallLog, mapConvexClient, mapConvexCommercialObjective, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexSubstep, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
 import type {
@@ -25,10 +25,16 @@ import type {
 // réactifs, la donnée arrive toute seule.
 
 type Async<T> = { data: T | null; loading: boolean; error: string | null; refetch: () => void }
-type AsyncProgressive<T> = Async<T> & { backgroundLoading: boolean }
+type AsyncProgressive<T> = Async<T> & {
+  backgroundLoading: boolean
+  loadMore?: () => void
+  canLoadMore?: boolean
+}
 
 const noop = () => {}
 const PAGE_SIZE = 200
+// Leads : fenêtre plus petite car chargée à la demande (scroll), pas d'un bloc.
+const LEADS_PAGE_SIZE = 100
 
 export function useConvexLeads(filters?: {
   status?: LeadStatus
@@ -44,25 +50,51 @@ export function useConvexLeads(filters?: {
   notInAirtable?: boolean
   scope?: 'clients'
 } | null): AsyncProgressive<LeadResponse[]> {
+  // status/setterId/assignedToId/city/search sont exécutés CÔTÉ SERVEUR (index +
+  // searchIndex Convex). Changer un de ces args réinitialise la pagination du curseur.
+  const search = filters?.search?.trim()
   const args = filters === null
     ? ('skip' as const)
-    : { status: filters?.status, setterId: filters?.setterId, city: filters?.city }
-  const { results, status, loadMore } = usePaginatedQuery(leadsList, args, { initialNumItems: PAGE_SIZE })
+    : {
+        status: filters?.status,
+        setterId: filters?.setterId,
+        assignedToId: filters?.assignedToId,
+        city: filters?.city,
+        search: search ? search : undefined,
+      }
+  const { results, status, loadMore } = usePaginatedQuery(leadsList, args, { initialNumItems: LEADS_PAGE_SIZE })
 
-  // La page attend le tableau complet (liste virtualisée) : on déroule
-  // automatiquement la pagination jusqu'à épuisement.
-  useEffect(() => {
-    if (status === 'CanLoadMore') loadMore(PAGE_SIZE)
+  // Chargement fenêtré : on NE déroule PAS toute la pagination (10k–50k leads
+  // saturent la RAM et crashent l'onglet). On expose loadMore/canLoadMore et la
+  // liste virtualisée déclenche la fenêtre suivante quand on approche du bas.
+  const canLoadMore = status === 'CanLoadMore'
+  const doLoadMore = useCallback(() => {
+    if (status === 'CanLoadMore') loadMore(LEADS_PAGE_SIZE)
   }, [status, loadMore])
 
   const data = useMemo(() => results.map(mapConvexLead), [results])
   return {
     data: filters === null ? null : data,
     loading: status === 'LoadingFirstPage' && filters !== null,
-    backgroundLoading: status === 'LoadingMore' || status === 'CanLoadMore',
+    // backgroundLoading = fenêtre suivante en cours (pas d'hydratation de fond globale).
+    backgroundLoading: status === 'LoadingMore',
+    canLoadMore,
+    loadMore: doLoadMore,
     error: null,
     refetch: noop,
   }
+}
+
+// Compteurs des stat cards : servis par la query agrégée leads:stats (comptes
+// exacts sur toute la base), et non par le comptage des leads chargés — qui, en
+// mode fenêtré, ne verrait que la fenêtre courante.
+export function useConvexLeadStats(): Async<import('./types').LeadStatsResponse> {
+  const res = useQuery(leadsStats, {})
+  const data = useMemo(
+    () => (res ? (res as unknown as import('./types').LeadStatsResponse) : null),
+    [res],
+  )
+  return { data, loading: res === undefined, error: null, refetch: noop }
 }
 
 export function useConvexRdvList(filters?: {

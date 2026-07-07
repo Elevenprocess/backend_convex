@@ -53,6 +53,8 @@ export type ConvexLeadDoc = {
   firstCallAt?: number
   latestCallComment?: string
   latestCallSetterId?: string
+  // Date réelle Render posée par la migration (repli _creationTime si absente).
+  createdAt?: number
   [k: string]: unknown
 }
 
@@ -76,6 +78,9 @@ export type ConvexRdvDoc = {
   debriefFilledAt?: number
   debriefDueAt?: number
   deletedAt?: number
+  // Date de PRISE de RDV (booking) réelle Render posée par la migration ; repli
+  // _creationTime pour les RDV live. Sert d'horodatage « première prise de RDV ».
+  createdAt?: number
 }
 
 // Décor renvoyé par clients.list/getByProject/getByLead (decorateClient côté
@@ -376,7 +381,7 @@ export const usersList = makeFunctionReference<
 
 export const leadsList = makeFunctionReference<
   'query',
-  { status?: string; setterId?: string; city?: string; paginationOpts: PaginationOptsArg },
+  { status?: string; setterId?: string; assignedToId?: string; city?: string; search?: string; paginationOpts: PaginationOptsArg },
   PaginationResult<ConvexLeadDoc>
 >('leads:list')
 
@@ -393,6 +398,12 @@ export const clientsList = makeFunctionReference<
 >('clients:list')
 
 export const leadsGet = makeFunctionReference<'query', { leadId: string }, ConvexLeadDoc | null>('leads:get')
+
+export const leadsStats = makeFunctionReference<
+  'query',
+  Record<string, never>,
+  { total: number; byStatus: Record<string, number>; bySource: Record<string, number>; imported: number; directGhl: number }
+>('leads:stats')
 
 export const clientsAssignTechniciens = makeFunctionReference<
   'mutation',
