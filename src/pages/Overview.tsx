@@ -13,8 +13,11 @@ import { CommercialLeaderboard, type LeaderboardRow } from '../components/overvi
 import { ObjectivesEditorModal } from '../components/overview/ObjectivesEditorModal'
 import { TerrainMonthlyChart } from '../components/overview/TerrainMonthlyChart'
 import { computeTechnicienStats, computeTerrainPipeline, selectUnassignedVt, type TechnicienStat } from '../lib/technicienStats'
-import { PHASE_LABEL, PHASE_ICON } from '../lib/suivi-board'
-import { buildDeliveryPipeline, selectDeliveryPriorities, selectRecentDeliveries, DELIVERY_PHASES } from '../lib/deliveryOverview'
+import { PHASE_LABEL } from '../lib/suivi-board'
+import { buildDeliveryPipeline, selectDeliveryPriorities, selectRecentDeliveries } from '../lib/deliveryOverview'
+import { DeliveryFunnel } from '../components/delivery/DeliveryFunnel'
+import { DeliveryTrendChart } from '../components/delivery/DeliveryTrendChart'
+import { CountUp } from '../components/delivery/CountUp'
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
 import { previousRange } from '../lib/period'
 import { buildEvolutionTicks, computeEvolutionDomain, type EvolutionGranularity } from '../lib/evolutionAxis'
@@ -131,37 +134,36 @@ function OverviewSuivi() {
           <DateRangePicker value={period} onChange={setPeriod} align="right" />
         </div>
 
-        {/* Zone 1 — Tunnel des 6 phases (cliquable) */}
-        <section className="overview-delivery-funnel">
-          {DELIVERY_PHASES.map((phase, i) => {
-            const c = pipeline.phases[phase]
-            return (
-              <div key={phase} className="overview-delivery-funnel-step">
-                <button type="button" onClick={() => navigate(`/suivi?phase=${phase}`)} className="overview-delivery-phase">
-                  <Icon name={PHASE_ICON[phase]} size={16} />
-                  <strong>{fmtCompact(c.count)}</strong>
-                  <small>{PHASE_LABEL[phase]}</small>
-                  <span className="overview-delivery-phase-mini">
-                    {c.late > 0 && <em className="text-danger">{c.late} ret.</em>}
-                    {c.missingDocs > 0 && <em className="text-warning">{c.missingDocs} doc</em>}
-                  </span>
-                </button>
-                {i < DELIVERY_PHASES.length - 1 && <span className="overview-delivery-arrow" aria-hidden>›</span>}
+        {/* Zone 1 — Tunnel de livraison graphique (cliquable) + 3 chiffres clés */}
+        <section className="overview-delivery-top dfx-fade">
+          <div className="dfx-funnel-card">
+            <div className="dfx-chart-head">
+              <div>
+                <span className="dfx-eyebrow">Tunnel de livraison</span>
+                <h3 className="dfx-chart-title">Où en sont les dossiers</h3>
               </div>
-            )
-          })}
+              <span className="dfx-funnel-total">{fmtCompact(pipeline.activeCount)} actifs</span>
+            </div>
+            <DeliveryFunnel pipeline={pipeline} onSelect={(phase) => navigate(`/suivi?phase=${phase}`)} />
+          </div>
+          <div className="overview-delivery-kpis">
+            <DeliveryKpi icon="grid" label="Dossiers actifs" value={pipeline.activeCount} sub="en livraison" />
+            <DeliveryKpi icon="shield" label="Retards SLA" value={pipeline.lateCount} sub="à débloquer" tone={pipeline.lateCount > 0 ? 'danger' : undefined} />
+            <DeliveryKpi icon="check" label="À livrer" value={pipeline.toDeliverCount} sub="installation / MES" />
+          </div>
         </section>
 
-        {/* Zone 2 — KPIs de santé */}
-        <section className="overview-air-grid overview-delivery-kpis">
-          <AirKpi icon="grid" label="Dossiers actifs" value={fmtCompact(pipeline.activeCount)} sub="en livraison" />
-          <AirKpi icon="shield" label="Retards SLA" value={fmtCompact(pipeline.lateCount)} sub="à débloquer" />
-          <AirKpi icon="inbox" label="Docs manquants" value={fmtCompact(pipeline.missingDocsCount)} sub="à compléter" />
-          <AirKpi icon="check" label="À livrer (phase finale)" value={fmtCompact(pipeline.toDeliverCount)} sub="installation / MES" />
-          <AirKpi icon="tag" label="CA en livraison" value={fmtKEur(caEnLivraison)} sub="base RDV signés" />
+        {/* Zone 2 — Courbe de tendance des livraisons */}
+        <section className="dfx-fade dfx-fade-2">
+          <DeliveryTrendChart
+            clients={clients}
+            now={now}
+            subtitle={funnelRange.label}
+            headStat={{ label: 'CA en livraison', value: fmtKEur(caEnLivraison) }}
+          />
         </section>
 
-        <div className="overview-delivery-lists">
+        <div className="overview-delivery-lists dfx-fade dfx-fade-3">
           {/* Zone 3 — File de priorités */}
           <div className="overview-air-card">
             <CardHead title="À traiter en priorité" icon="bell" />
@@ -249,11 +251,11 @@ function OverviewResponsableTechnique() {
           <DateRangePicker value={period} onChange={setPeriod} align="right" />
         </div>
 
-        <section className="overview-air-grid overview-tech-grid">
-          <AirKpi icon="inbox" label="VT à attribuer" value={fmtCompact(unassigned.length)} sub="sans technicien" />
-          <AirKpi icon="settings" label="VT en cours" value={fmtCompact(totalCharge)} sub="charge active" />
-          <AirKpi icon="shield" label="VT en retard / problème" value={fmtCompact(totalRetard)} sub="à débloquer" />
-          <AirKpi icon="check" label="Installations à venir" value={fmtCompact(installAVenir)} sub="à faire + planifiées" />
+        <section className="overview-air-grid overview-tech-grid dfx-fade">
+          <DeliveryKpi icon="inbox" label="VT à attribuer" value={unassigned.length} sub="sans technicien" tone={unassigned.length > 0 ? 'danger' : undefined} />
+          <DeliveryKpi icon="settings" label="VT en cours" value={totalCharge} sub="charge active" />
+          <DeliveryKpi icon="shield" label="VT en retard / problème" value={totalRetard} sub="à débloquer" tone={totalRetard > 0 ? 'danger' : undefined} />
+          <DeliveryKpi icon="check" label="Installations à venir" value={installAVenir} sub="à faire + planifiées" />
 
           <div className="overview-air-card overview-role-side">
             <CardHead title="VT à attribuer" icon="bell" />
@@ -1077,6 +1079,19 @@ function AirKpi({ icon, label, value, sub }: { icon: ShotIcon; label: string; va
       <div>
         <small>{label}</small>
         <strong>{value}</strong>
+        <p>{sub}</p>
+      </div>
+    </div>
+  )
+}
+
+function DeliveryKpi({ icon, label, value, sub, format, tone }: { icon: ShotIcon; label: string; value: number; sub: string; format?: (n: number) => string; tone?: 'danger' }) {
+  return (
+    <div className={`overview-air-kpi dfx-kpi ${tone === 'danger' ? 'dfx-kpi--danger' : ''}`}>
+      <span><Icon name={icon} size={18} /></span>
+      <div>
+        <small>{label}</small>
+        <strong><CountUp value={value} format={format} /></strong>
         <p>{sub}</p>
       </div>
     </div>

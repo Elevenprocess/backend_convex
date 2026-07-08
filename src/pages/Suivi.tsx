@@ -19,6 +19,10 @@ import { DossierCard } from '../components/suivi/DossierCard'
 import { workflowPhaseProgress, PHASE_LABEL } from '../lib/suivi-board'
 import { parseDeliveryPhase, clientMatchesPhase } from '../lib/deliveryOverview'
 import { useCardGridVirtualizer } from '../lib/virtualGrid'
+import { PhaseDonut } from '../components/delivery/PhaseDonut'
+import { DeliveryTrendChart } from '../components/delivery/DeliveryTrendChart'
+import { CountUp } from '../components/delivery/CountUp'
+import type { Dossier } from '../lib/suivi'
 
 type ProgressFilter = 'all' | 'todo' | 'running' | 'advanced' | 'blocked' | 'delivered'
 
@@ -30,6 +34,22 @@ const PROGRESS_FILTERS: { id: ProgressFilter; label: string }[] = [
   { id: 'blocked', label: 'Bloqués' },
   { id: 'delivered', label: 'Livrés' },
 ]
+
+/** Le dossier appartient-il au bucket de progression demandé ? (source unique
+ * pour la liste filtrée ET les compteurs de chips). */
+function matchesProgress(filter: ProgressFilter, dossier: Dossier, client: ClientResponse | undefined): boolean {
+  const pct = workflowPhaseProgress(client)?.pct ?? 0
+  const delivered = client?.steps?.mes?.status === 'fait'
+  const blocked = Boolean(client?.blocked || dossier.state.statuses[dossier.activeStep] === 'blocked')
+  switch (filter) {
+    case 'all': return true
+    case 'todo': return pct <= 0 && !delivered
+    case 'running': return pct > 0 && pct < 67 && !delivered && !blocked
+    case 'advanced': return pct >= 67 && !delivered && !blocked
+    case 'blocked': return blocked
+    case 'delivered': return Boolean(delivered)
+  }
+}
 
 export function Suivi() {
   const role = useAuth((s) => s.user?.role)
@@ -65,6 +85,7 @@ export function Suivi() {
   const [query, setQuery] = useState('')
   const [progressFilter, setProgressFilter] = useState<ProgressFilter>('all')
   const [states, setStates] = useState<Record<string, SuiviState>>({})
+  const now = useMemo(() => new Date(), [])
   const [period, setPeriod] = useState<PeriodState>(() => defaultPeriod('this_year'))
   const periodRange = useMemo(() => buildPeriodRange(period), [period])
   const periodFrom = useMemo(() => new Date(periodRange.from), [periodRange.from])
@@ -77,7 +98,9 @@ export function Suivi() {
     () => allSignedDossiers.filter((d) => isDateInRange(d.signedAt, periodFrom, periodTo)),
     [allSignedDossiers, periodFrom, periodTo],
   )
-  const filtered = useMemo(() => {
+  // Base commune (phase + recherche appliquées, PAS le filtre de progression) :
+  // sert à la fois à la liste finale et aux compteurs des chips.
+  const searched = useMemo(() => {
     const q = query.trim().toLowerCase()
     // Filtre phase actif → base NON bornée par la période : le funnel Overview
     // compte tous les dossiers actifs quelle que soit leur date de signature,
@@ -86,14 +109,6 @@ export function Suivi() {
     return base.filter((d) => {
       const client = clientByLead.get(d.id)
       if (phaseFilter && !clientMatchesPhase(client, phaseFilter)) return false
-      const pct = workflowPhaseProgress(client)?.pct ?? 0
-      const delivered = client?.steps?.mes?.status === 'fait'
-      const blocked = client?.blocked || d.state.statuses[d.activeStep] === 'blocked'
-      if (progressFilter === 'todo' && (pct > 0 || delivered)) return false
-      if (progressFilter === 'running' && (pct <= 0 || pct >= 67 || delivered || blocked)) return false
-      if (progressFilter === 'advanced' && (pct < 67 || delivered || blocked)) return false
-      if (progressFilter === 'blocked' && !blocked) return false
-      if (progressFilter === 'delivered' && !delivered) return false
       if (!q) return true
       return [fullName(d.lead), d.lead.phone, d.lead.email, d.lead.city, d.commercial?.name]
         .filter(Boolean)
@@ -101,7 +116,21 @@ export function Suivi() {
         .toLowerCase()
         .includes(q)
     })
-  }, [signedDossiers, allSignedDossiers, query, progressFilter, phaseFilter, clientByLead])
+  }, [signedDossiers, allSignedDossiers, query, phaseFilter, clientByLead])
+
+  const filtered = useMemo(
+    () => searched.filter((d) => matchesProgress(progressFilter, d, clientByLead.get(d.id))),
+    [searched, progressFilter, clientByLead],
+  )
+
+  // Compteurs par bucket de progression (sur la base recherchée, filtre courant exclu).
+  const filterCounts = useMemo(() => {
+    const counts = {} as Record<ProgressFilter, number>
+    for (const f of PROGRESS_FILTERS) {
+      counts[f.id] = f.id === 'all' ? searched.length : searched.filter((d) => matchesProgress(f.id, d, clientByLead.get(d.id))).length
+    }
+    return counts
+  }, [searched, clientByLead])
 
   // Compat redirect : /suivi?lead=X → fiche client complète.
   const legacyLead = params.get('lead')
@@ -166,6 +195,8 @@ export function Suivi() {
     .filter((v): v is number => typeof v === 'number')
   const progressAvg = Math.round(avg(realProgressValues))
   const deliveredCount = signedDossiers.filter((d) => clientByLead.get(d.id)?.steps?.mes?.status === 'fait').length
+  const deliveryRate = signedDossiers.length ? Math.round((deliveredCount / signedDossiers.length) * 100) : 0
+  const clientList = clients ?? []
 
   return (
     <AppShell flat>
@@ -189,11 +220,32 @@ export function Suivi() {
           </div>
         </header>
 
-        <section className="suivi-kpis">
-          <div className="kpi-card suivi-kpi"><strong>{signedDossiers.length}</strong><span>Dossiers signés</span></div>
-          <div className="kpi-card suivi-kpi"><strong>{progressAvg}%</strong><span>Progression moyenne</span></div>
-          <div className="kpi-card suivi-kpi"><strong>{blockedCount}</strong><span>Bloqués</span></div>
-          <div className="kpi-card suivi-kpi"><strong>{deliveredCount}</strong><span>Livrés</span></div>
+        <section className="suivi-insights dfx-fade">
+          <div className="suivi-stat-panel">
+            <div className="suivi-stat-ring" style={{ ['--p' as string]: progressAvg }}>
+              <div className="suivi-stat-ring-inner">
+                <CountUp className="suivi-stat-ring-val" value={progressAvg} format={(n) => `${n}%`} />
+                <small>progression</small>
+              </div>
+            </div>
+            <div className="suivi-stat-figures">
+              <div className="suivi-stat-fig">
+                <CountUp className="suivi-stat-num" value={signedDossiers.length} />
+                <span>Dossiers signés</span>
+              </div>
+              <div className="suivi-stat-fig">
+                <CountUp className="suivi-stat-num suivi-stat-num--ok" value={deliveredCount} />
+                <span>Livrés · {deliveryRate}%</span>
+              </div>
+              {blockedCount > 0 && (
+                <button type="button" className="suivi-stat-alert" onClick={() => setProgressFilter('blocked')}>
+                  <CountUp value={blockedCount} /> bloqué{blockedCount > 1 ? 's' : ''}
+                </button>
+              )}
+            </div>
+          </div>
+          <PhaseDonut clients={clientList} />
+          <DeliveryTrendChart clients={clientList} now={now} subtitle={periodRange.label} />
         </section>
 
         <section className="suivi-filters" aria-label="Filtres de progression">
@@ -205,6 +257,7 @@ export function Suivi() {
               onClick={() => setProgressFilter(filter.id)}
             >
               {filter.label}
+              <span className="suivi-filter-count">{filterCounts[filter.id]}</span>
             </button>
           ))}
           {phaseFilter && (
