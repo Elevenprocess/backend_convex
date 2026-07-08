@@ -253,12 +253,14 @@ export function useConvexCallLogs(filters?: {
 } | null): Async<CallLogResponse[]> {
   // Overview : feed d'appels d'un setter. Sans setterId → vide (pas de list globale).
   const setterId = filters === null ? undefined : filters?.setterId
-  const rows = useQuery(callLogsListBySetter, setterId ? { setterId, limit: filters?.limit } : 'skip')
+  const filtersIsNull = filters === null
+  const limit = filters === null ? undefined : filters?.limit
+  const rows = useQuery(callLogsListBySetter, setterId ? { setterId, limit } : 'skip')
   const data = useMemo(() => {
-    if (!setterId) return filters === null ? null : []
+    if (!setterId) return filtersIsNull ? null : []
     if (rows === undefined) return null
     return rows.map(mapConvexCallLog)
-  }, [setterId, rows, filters])
+  }, [setterId, rows, filtersIsNull])
   return { data, loading: !!setterId && rows === undefined, error: null, refetch: noop }
 }
 
@@ -286,13 +288,17 @@ const WORKFLOW_VIEW_ROLES = new Set<Role>([
 export function useConvexSubsteps(filters?: { clientId?: string } | null): Async<SubstepResponse[]> {
   const role = useAuth((s) => s.user?.role)
   const clientId = filters === null ? undefined : filters?.clientId
-  const allowed = filters !== null && !!clientId && !!role && WORKFLOW_VIEW_ROLES.has(role)
+  const filtersIsNull = filters === null
+  const allowed = !filtersIsNull && !!clientId && !!role && WORKFLOW_VIEW_ROLES.has(role)
   const rows = useQuery(substepsList, allowed ? { clientId } : 'skip')
+  // Deps primitives uniquement : `filters` est un objet littéral recréé à chaque
+  // render côté appelant ({ clientId }), donc l'inclure ferait recalculer `data`
+  // (nouvelle référence) en boucle → setLocalSubsteps en boucle → React #185.
   const data = useMemo(() => {
-    if (!allowed) return filters === null || !clientId ? null : []
+    if (!allowed) return filtersIsNull || !clientId ? null : []
     if (rows === undefined) return null
     return rows.map(mapConvexSubstep)
-  }, [allowed, rows, filters, clientId])
+  }, [allowed, rows, filtersIsNull, clientId])
   return { data, loading: allowed && rows === undefined, error: null, refetch: noop }
 }
 
@@ -336,7 +342,8 @@ export function useConvexClients(filters?: {
   unassignedVt?: boolean
 } | null): Async<ClientResponse[]> {
   const role = useAuth((s) => s.user?.role)
-  const allowed = filters !== null && !!role && CLIENTS_VIEW_ROLES.has(role)
+  const filtersIsNull = filters === null
+  const allowed = !filtersIsNull && !!role && CLIENTS_VIEW_ROLES.has(role)
   const rows = useQuery(
     clientsList,
     allowed
@@ -349,11 +356,13 @@ export function useConvexClients(filters?: {
         }
       : 'skip',
   )
+  // filtersIsNull (primitive) plutôt que `filters` (objet recréé à chaque render
+  // par l'appelant) : évite de recalculer `data` en boucle (cf. useConvexSubsteps).
   const data = useMemo(() => {
-    if (!allowed) return filters === null ? null : []
+    if (!allowed) return filtersIsNull ? null : []
     if (rows === undefined) return null
     return rows.map(mapConvexClient)
-  }, [allowed, rows, filters])
+  }, [allowed, rows, filtersIsNull])
   return { data, loading: allowed && rows === undefined, error: null, refetch: noop }
 }
 
