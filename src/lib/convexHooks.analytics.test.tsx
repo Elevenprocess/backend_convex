@@ -5,10 +5,13 @@ import { renderHook } from '@testing-library/react'
 // (un rôle non autorisé DOIT produire 'skip', sinon la query Convex throw au
 // rendu et fait planter/redémarrer la page) et la stabilité de `now`.
 const useQueryCalls: unknown[] = []
+// Valeur retournée par le mock useQuery — `undefined` = chargement. Contrôlable
+// pour tester le stale-while-revalidate (on la fait passer valeur → undefined).
+const queryReturn: { value: unknown } = { value: undefined }
 vi.mock('convex/react', () => ({
   useQuery: (_ref: unknown, args: unknown) => {
     useQueryCalls.push(args)
-    return undefined // état "chargement"
+    return args === 'skip' ? undefined : queryReturn.value
   },
   usePaginatedQuery: () => ({ results: [], status: 'LoadingFirstPage', loadMore: vi.fn() }),
 }))
@@ -26,6 +29,7 @@ const lastArg = () => useQueryCalls[useQueryCalls.length - 1]
 beforeEach(() => {
   useQueryCalls.length = 0
   roleRef.role = 'admin'
+  queryReturn.value = undefined
 })
 
 describe('gating des analytics Convex par rôle', () => {
@@ -58,6 +62,30 @@ describe('gating des analytics Convex par rôle', () => {
     roleRef.role = 'finances'
     renderHook(() => useConvexDebriefAnalytics({}))
     expect(lastArg()).toBe('skip')
+  })
+
+  it('stale-while-revalidate : la donnée précédente reste affichée pendant le rechargement (pas de flash à 0)', () => {
+    roleRef.role = 'admin'
+    const prev = { admin: { calls: 1130 } } as unknown
+    queryReturn.value = prev
+    const { result, rerender } = renderHook(() => useConvexAnalyticsSummary({ from: 'a', to: 'b' }))
+    expect(result.current.data).toBe(prev)
+    expect(result.current.loading).toBe(false)
+
+    // Changement de période → Convex renvoie undefined le temps de recharger.
+    queryReturn.value = undefined
+    rerender()
+    // La donnée précédente est conservée (au lieu de retomber à null/0)…
+    expect(result.current.data).toBe(prev)
+    // …mais `loading` passe à true pour signaler le rafraîchissement.
+    expect(result.current.loading).toBe(true)
+
+    // La nouvelle plage arrive → bascule sur la nouvelle valeur.
+    const next = { admin: { calls: 990 } } as unknown
+    queryReturn.value = next
+    rerender()
+    expect(result.current.data).toBe(next)
+    expect(result.current.loading).toBe(false)
   })
 
   it('now est stable entre deux rendus (pas de refetch en boucle)', () => {

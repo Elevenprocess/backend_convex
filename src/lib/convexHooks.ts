@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 import { analyticsDebriefStats, analyticsFunnel, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsGet, leadsList, leadsStats, paymentsListAcomptes, rdvList, substepsList, usersList } from './convexApi'
 import { mapConvexAcompte, mapConvexCallLog, mapConvexClient, mapConvexCommercialObjective, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexSubstep, mapConvexUser } from './convexMappers'
@@ -153,6 +153,20 @@ function useStableNow(): number {
   return useMemo(() => Math.floor(Date.now() / 300_000) * 300_000, [])
 }
 
+// Stale-while-revalidate : quand les args d'un useQuery changent (ex. nouvelle
+// période), Convex renvoie `undefined` le temps de recharger. On conserve la
+// dernière valeur connue pour que l'UI affiche les anciens chiffres pendant ce
+// laps (~1-2 s) au lieu de tout remettre à zéro, puis bascule d'un coup sur les
+// nouveaux. Pattern React officiel « ajuster l'état pendant le rendu » (guardé)
+// → pas d'effet ni de ref lus au rendu.
+function useSticky<T>(value: T | undefined): T | undefined {
+  const [held, setHeld] = useState<T | undefined>(value)
+  if (value !== undefined && !Object.is(value, held)) {
+    setHeld(value)
+  }
+  return value === undefined ? held : value
+}
+
 // Rôles autorisés côté serveur (analytics.ts). Une query Convex lancée par un
 // rôle non autorisé THROW au rendu (→ crash/remount). On skip donc la query
 // pour ces rôles et on renvoie null, comme un 403 REST capté silencieusement.
@@ -179,8 +193,10 @@ export function useConvexAnalyticsSummary(filters?: {
     analyticsSummary,
     allowed ? { now, days: filters?.days, from: filters?.from, to: filters?.to } : 'skip',
   )
+  // On garde la valeur précédente le temps que la nouvelle période charge (pas de flash à 0).
+  const sticky = useSticky(res)
   return {
-    data: allowed ? ((res ?? null) as AnalyticsSummaryResponse | null) : null,
+    data: allowed ? ((sticky ?? null) as AnalyticsSummaryResponse | null) : null,
     loading: allowed && res === undefined,
     error: null,
     refetch: noop,
@@ -203,8 +219,9 @@ export function useConvexAnalyticsFunnel(filters?: {
       ? { now, days: filters?.days, from: filters?.from, to: filters?.to, setterId: filters?.setterId, sector: filters?.sector }
       : 'skip',
   )
+  const sticky = useSticky(res)
   return {
-    data: allowed ? ((res ?? null) as AnalyticsFunnelResponse | null) : null,
+    data: allowed ? ((sticky ?? null) as AnalyticsFunnelResponse | null) : null,
     loading: allowed && res === undefined,
     error: null,
     refetch: noop,
@@ -222,8 +239,9 @@ export function useConvexDebriefAnalytics(filters?: {
     analyticsDebriefStats,
     allowed ? { from: filters?.from, to: filters?.to, commercialId: filters?.commercialId } : 'skip',
   )
+  const sticky = useSticky(res)
   return {
-    data: allowed ? ((res ?? null) as DebriefStats | null) : null,
+    data: allowed ? ((sticky ?? null) as DebriefStats | null) : null,
     loading: allowed && res === undefined,
     error: null,
     refetch: noop,
