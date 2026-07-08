@@ -43,10 +43,19 @@ type Props = {
   headStat?: { label: string; value: string }
 }
 
-/** Courbe combinée : installations posées (barres) + mises en service (ligne). */
-export function DeliveryTrendChart({ clients, now, monthsBack = 6, title = 'Livraisons par mois', subtitle, headStat }: Props) {
-  const data = useMemo(() => deliveriesByMonth(clients, monthsBack, now), [clients, monthsBack, now])
-  const hasData = data.some((d) => d.installed > 0 || d.delivered > 0)
+/**
+ * Tendance délivrabilité : dossiers signés par mois (barres) + cumul (ligne).
+ * On trace la signature (seule date fiable de la source) et non les
+ * installations/MES, dont la date n'existe pas côté NestJS (suivi par statut).
+ */
+export function DeliveryTrendChart({ clients, now, monthsBack = 12, title = 'Dossiers signés par mois', subtitle, headStat }: Props) {
+  const data = useMemo(() => {
+    const rows = deliveriesByMonth(clients, monthsBack, now)
+    let cumul = 0
+    return rows.map((r) => ({ ...r, cumul: (cumul += r.signed) }))
+  }, [clients, monthsBack, now])
+  const total = data.length ? data[data.length - 1].cumul : 0
+  const hasData = data.some((d) => d.signed > 0)
 
   return (
     <div className="dfx-chart-card">
@@ -64,23 +73,25 @@ export function DeliveryTrendChart({ clients, now, monthsBack = 6, title = 'Livr
             </div>
           )}
           <div className="dfx-legend">
-            <span className="dfx-legend-item"><i style={{ background: COLOR_INSTALL }} />Installations</span>
-            <span className="dfx-legend-item"><i style={{ background: COLOR_MES }} />Mises en service</span>
+            <span className="dfx-legend-item"><i style={{ background: COLOR_INSTALL }} />Signés / mois</span>
+            <span className="dfx-legend-item"><i style={{ background: COLOR_MES }} />Cumul ({total})</span>
           </div>
         </div>
       </div>
       {hasData ? (
         <ResponsiveContainer width="100%" height={196}>
-          <ComposedChart data={data} margin={{ top: 6, right: 6, left: -18, bottom: 0 }} barCategoryGap="30%">
+          <ComposedChart data={data} margin={{ top: 6, right: -18, left: -18, bottom: 0 }} barCategoryGap="30%">
             <CartesianGrid strokeDasharray="3 3" stroke={COLOR_GRID} vertical={false} />
             <XAxis dataKey="label" tick={{ fontSize: 11, fill: COLOR_TICK }} tickLine={false} axisLine={false} />
-            <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: COLOR_TICK }} tickLine={false} axisLine={false} width={34} />
+            <YAxis yAxisId="left" allowDecimals={false} tick={{ fontSize: 11, fill: COLOR_TICK }} tickLine={false} axisLine={false} width={34} />
+            <YAxis yAxisId="right" orientation="right" allowDecimals={false} tick={{ fontSize: 11, fill: COLOR_TICK }} tickLine={false} axisLine={false} width={34} />
             <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(31,120,87,0.05)' }} />
-            <Bar dataKey="installed" name="Installations" fill={COLOR_INSTALL} radius={[5, 5, 0, 0]} maxBarSize={34} animationDuration={700} />
+            <Bar yAxisId="left" dataKey="signed" name="Dossiers signés" fill={COLOR_INSTALL} radius={[5, 5, 0, 0]} maxBarSize={34} animationDuration={700} />
             <Line
+              yAxisId="right"
               type="monotone"
-              dataKey="delivered"
-              name="Mises en service"
+              dataKey="cumul"
+              name="Cumul signés"
               stroke={COLOR_MES}
               strokeWidth={3}
               dot={{ r: 3, fill: COLOR_MES, strokeWidth: 0 }}
@@ -90,7 +101,7 @@ export function DeliveryTrendChart({ clients, now, monthsBack = 6, title = 'Livr
           </ComposedChart>
         </ResponsiveContainer>
       ) : (
-        <div className="dfx-chart-empty">Aucune installation ni mise en service sur la période.</div>
+        <div className="dfx-chart-empty">Aucun dossier signé sur la période.</div>
       )}
     </div>
   )

@@ -91,6 +91,12 @@ export function Suivi() {
   const now = useMemo(() => new Date(), [])
   const [period, setPeriod] = useState<PeriodState>(() => defaultPeriod('this_year'))
   const periodRange = useMemo(() => buildPeriodRange(period), [period])
+  // Le sélecteur de période pilote la fenêtre du graphe de tendance (nombre de
+  // mois depuis le début de la période jusqu'à maintenant), pas la liste.
+  const trendMonths = useMemo(() => {
+    const from = new Date(periodRange.from)
+    return Math.max(1, (now.getFullYear() - from.getFullYear()) * 12 + (now.getMonth() - from.getMonth()) + 1)
+  }, [periodRange, now])
   const allSignedDossiers = useMemo(
     () => buildDossiers(leads ?? [], rdvs ?? [], users ?? [], states),
     [leads, rdvs, users, states],
@@ -247,7 +253,7 @@ export function Suivi() {
             </div>
           </div>
           <PhaseDonut clients={clientList} />
-          <DeliveryTrendChart clients={clientList} now={now} subtitle={periodRange.label} />
+          <DeliveryTrendChart clients={clientList} now={now} monthsBack={trendMonths} subtitle={periodRange.label} />
         </section>
 
         <section className="suivi-filters" aria-label="Filtres de progression">

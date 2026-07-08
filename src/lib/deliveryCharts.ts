@@ -42,7 +42,7 @@ export function currentPhaseDistribution(clients: ClientResponse[]): PhaseSlice[
   }))
 }
 
-export type MonthlyDelivery = { month: string; label: string; installed: number; delivered: number }
+export type MonthlyDelivery = { month: string; label: string; installed: number; delivered: number; signed: number }
 
 function monthKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -69,10 +69,10 @@ export function deliveriesByMonth(
   for (let i = monthsBack - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
     const key = monthKey(d)
-    buckets.set(key, { month: key, label: monthLabel(d), installed: 0, delivered: 0 })
+    buckets.set(key, { month: key, label: monthLabel(d), installed: 0, delivered: 0, signed: 0 })
     order.push(key)
   }
-  const bump = (value: string | null | undefined, field: 'installed' | 'delivered') => {
+  const bump = (value: string | null | undefined, field: 'installed' | 'delivered' | 'signed') => {
     const d = parseDate(value)
     if (!d) return
     const bucket = buckets.get(monthKey(d))
@@ -81,6 +81,10 @@ export function deliveriesByMonth(
   for (const c of clients) {
     bump(c.steps?.installation?.dateRealisee, 'installed')
     bump(c.steps?.mes?.dateRealisee, 'delivered')
+    // Les dates d'installation/MES n'existent pas dans la source (NestJS suivait
+    // par statut sans dater). La signature (signedAt) est la seule date fiable →
+    // c'est la vraie série temporelle exploitable pour la tendance délivrabilité.
+    bump(c.signedAt, 'signed')
   }
   return order.map((k) => buckets.get(k)!)
 }
