@@ -33,6 +33,14 @@ async function decorate(ctx: QueryCtx, row: Doc<"workflowSubsteps">) {
   );
   const docs = await activeDocsOfSubstep(ctx, row._id);
   const missingDocument = missingDocuments(row.key, docs.map((d) => d.type));
+  // URL storage signée par pièce : l'app Convex ne peut pas servir les fichiers
+  // via l'ancien endpoint NestJS (401 → aperçu cassé). Cf. documents:listBySubstep.
+  const documents = await Promise.all(
+    docs.map(async (d) => ({
+      ...toDocumentSummary(d),
+      url: d.storageId ? ((await ctx.storage.getUrl(d.storageId)) ?? undefined) : undefined,
+    })),
+  );
   // Champs catalogue (label/actionLabel/phase/expectedDocs/depositOnly) : le
   // frontend (SubstepResponse) les attend sur chaque sous-étape.
   const cat = catalogByKey(row.key);
@@ -44,7 +52,7 @@ async function decorate(ctx: QueryCtx, row: Doc<"workflowSubsteps">) {
     expectedDocs: cat?.expectedDocs ?? [],
     depositOnly: cat?.depositOnly ?? false,
     unlocked,
-    documents: docs.map(toDocumentSummary),
+    documents,
     missingDocument,
   };
 }

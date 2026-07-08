@@ -143,7 +143,16 @@ export const listBySubstep = query({
     if (!substep) return [];
     const visible = await visibleClientIds(ctx, user);
     if (visible !== null && !visible.has(substep.clientId)) return [];
-    return (await activeDocsOfSubstep(ctx, args.substepId)).map(toDocumentSummary);
+    // URL storage signée embarquée : l'app Convex ne peut pas servir les pièces
+    // via l'ancien endpoint NestJS (auth différente → 401 / image cassée). On
+    // fournit directement le lien Convex, comme projectAttachments:listByProject.
+    const docs = await activeDocsOfSubstep(ctx, args.substepId);
+    return await Promise.all(
+      docs.map(async (d) => ({
+        ...toDocumentSummary(d),
+        url: d.storageId ? ((await ctx.storage.getUrl(d.storageId)) ?? undefined) : undefined,
+      })),
+    );
   },
 });
 
