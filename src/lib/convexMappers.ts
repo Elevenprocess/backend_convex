@@ -144,6 +144,9 @@ export function mapConvexRdv(doc: ConvexRdvDoc): RdvResponse {
     debriefFilledAt: iso(doc.debriefFilledAt),
     debriefDueAt: iso(doc.debriefDueAt),
     hasDevisEnAttente: false,
+    cancelReason: doc.cancelReason ?? null,
+    receptionAlertAt: iso(doc.receptionAlertAt),
+    receptionAlertKind: (doc.receptionAlertKind ?? null) as 'annule' | 'reporte' | null,
     // Date de prise du RDV : createdAt migré (réel Render) sinon insertion Convex.
     createdAt: new Date(doc.createdAt ?? doc._creationTime).toISOString(),
     updatedAt: new Date(doc.createdAt ?? doc._creationTime).toISOString(),

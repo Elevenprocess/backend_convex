@@ -528,6 +528,10 @@ export type RdvResponse = {
   debriefFilledAt: string | null
   debriefDueAt: string | null
   hasDevisEnAttente: boolean
+  // Signalement annulation/report par l'accueil (numéro central) → alerte commercial.
+  cancelReason: string | null
+  receptionAlertAt: string | null
+  receptionAlertKind: 'annule' | 'reporte' | null
   createdAt: string
   updatedAt: string
   lead: RdvLeadSummary | null

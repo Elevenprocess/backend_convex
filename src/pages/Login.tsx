@@ -13,9 +13,6 @@ export function Login() {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
-  // Mode Convex : création de compte via le flow signUp du provider Password
-  // (les comptes seed n'ont pas de mot de passe connu en dev).
-  const [createAccount, setCreateAccount] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const signIn = useAuth((s) => s.signIn)
@@ -57,7 +54,7 @@ export function Login() {
     setSubmitting(true)
     setError(null)
     try {
-      await signIn(email, password, createAccount ? { signUp: true } : undefined)
+      await signIn(email, password)
       navigate(redirectTo, { replace: true })
     } catch (err) {
       if (err instanceof ApiError) {
@@ -67,11 +64,7 @@ export function Login() {
         // on remappe vers un message utilisateur au lieu d'afficher la stack.
         const raw = (err as Error).message ?? ''
         if (/InvalidAccountId|InvalidSecret|Server Error/i.test(raw)) {
-          setError(
-            createAccount
-              ? "Impossible de créer le compte. L'e-mail est peut-être déjà utilisé."
-              : 'E-mail ou mot de passe incorrect.',
-          )
+          setError('E-mail ou mot de passe incorrect.')
         } else {
           setError(raw || 'La connexion a échoué.')
         }
@@ -185,15 +178,12 @@ export function Login() {
               >
                 {submitting ? (
                   <Spinner size={16} stroke={3} label="Connexion…" />
-                ) : createAccount ? (
-                  'Créer le compte'
                 ) : (
                   'Se connecter'
                 )}
               </button>
 
-              {!convexAuthEnabled && (
-              <><div className="flex items-center gap-3 py-1">
+              <div className="flex items-center gap-3 py-1">
                 <div className="h-px flex-1 bg-white/10" />
                 <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/35">ou</span>
                 <div className="h-px flex-1 bg-white/10" />
@@ -218,26 +208,12 @@ export function Login() {
                     Continuer avec Google
                   </>
                 )}
-              </button></>
-              )}
+              </button>
             </form>
 
-            {convexAuthEnabled ? (
-              <p className="mt-7 text-center text-[11px] text-white/40">
-                {createAccount ? 'Déjà un compte ? ' : 'Pas de compte ? '}
-                <button
-                  type="button"
-                  onClick={() => { setCreateAccount((v) => !v); setError(null) }}
-                  className="font-semibold text-white/70 transition hover:text-white"
-                >
-                  {createAccount ? 'Se connecter' : 'Créer un compte'}
-                </button>
-              </p>
-            ) : (
-              <p className="mt-7 text-center text-[11px] text-white/40">
-                Pas de compte ? <a href="#" className="font-semibold text-white/70 transition hover:text-white">Contacter votre admin</a>
-              </p>
-            )}
+            <p className="mt-7 text-center text-[11px] text-white/40">
+              Pas de compte ? <a href="#" className="font-semibold text-white/70 transition hover:text-white">Contacter votre admin</a>
+            </p>
           </div>
         </div>
       </section>

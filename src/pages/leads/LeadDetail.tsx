@@ -29,6 +29,7 @@ import { leadListPath } from '../../lib/leadPaths'
 import { CommercialDebriefSidebar } from '../../components/leads/CommercialDebriefSidebar'
 import { DebriefRow } from '../../components/leads/project/ProjectDebriefsTab'
 import { AssignCommercialModal } from '../../components/leads/AssignCommercialModal'
+import { RdvReceptionFlagModal } from '../../components/rdv/RdvReceptionFlagModal'
 import { CollapsibleSection } from '../../components/CollapsibleSection'
 
 type TimelineItem = {
@@ -69,6 +70,8 @@ export function LeadDetail() {
   // Modale « Historique des débriefs » (lecture des débriefs déjà enregistrés
   // pour ce client — permet de vérifier d'un coup d'œil qu'ils sont bien sauvés).
   const [historyOpen, setHistoryOpen] = useState(false)
+  // Modale « Signaler annulation / report » (accueil : appel/WhatsApp du prospect).
+  const [flagOpen, setFlagOpen] = useState(false)
   // RDV ciblé par ?debrief=<rdvId> (ou null = laisser le sidebar choisir le plus pertinent).
   const [debriefRdvId, setDebriefRdvId] = useState<string | null>(null)
   const [assignOpen, setAssignOpen] = useState(false)
@@ -203,6 +206,14 @@ export function LeadDetail() {
 
   const timeline = buildTimeline(rdvs ?? [], calls ?? [], userMap)
 
+  // Accueil : signalement d'une annulation/report reçue sur le numéro central.
+  // Cible le RDV ouvert (planifié/reporté) le plus récent de ce prospect.
+  const canFlagRdv = role === 'admin' || role === 'responsable_technique' || role === 'back_office'
+  const flagTargetRdv = [...(rdvs ?? [])]
+    .filter((r) => r.status === 'planifie' || r.status === 'reporte')
+    .sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime())[0]
+  const flagCommercial = flagTargetRdv?.commercialId ? userMap.get(flagTargetRdv.commercialId) : commercial
+
   return (
     <AppShell>
       <Topbar
@@ -234,6 +245,17 @@ export function LeadDetail() {
             <Icon name="phone" size={12} />
             Débrief RDV
           </button>
+          {canFlagRdv && flagTargetRdv && (
+            <button
+              onClick={() => setFlagOpen(true)}
+              title="Signaler au commercial une annulation ou un report transmis par le prospect"
+              className="px-3 sm:px-4 py-2 rounded-[14px] text-xs sm:text-sm font-semibold border border-rouille/50 text-rouille bg-rouille-tint hover:bg-rouille/15 flex items-center gap-2 whitespace-nowrap"
+            >
+              <Icon name="bell" size={12} />
+              <span className="hidden sm:inline">Signaler annulation / report</span>
+              <span className="sm:hidden">Signaler</span>
+            </button>
+          )}
           <button
             onClick={() => setHistoryOpen(true)}
             title="Voir les débriefs déjà enregistrés pour ce client"
@@ -486,6 +508,16 @@ export function LeadDetail() {
             </div>
           </div>
         </div>
+      )}
+
+      {flagOpen && flagTargetRdv && (
+        <RdvReceptionFlagModal
+          rdvId={flagTargetRdv.id}
+          leadName={fullName(lead)}
+          commercialName={flagCommercial?.name ?? null}
+          onClose={() => setFlagOpen(false)}
+          onDone={() => setFlagOpen(false)}
+        />
       )}
 
     </AppShell>

@@ -78,6 +78,11 @@ export type ConvexRdvDoc = {
   debriefFilledAt?: number
   debriefDueAt?: number
   deletedAt?: number
+  // Signalement annulation/report par l'accueil (numéro central).
+  cancelReason?: string
+  receptionAlertAt?: number
+  receptionAlertKind?: 'annule' | 'reporte'
+  receptionAlertBy?: string
   // Date de PRISE de RDV (booking) réelle Render posée par la migration ; repli
   // _creationTime pour les RDV live. Sert d'horodatage « première prise de RDV ».
   createdAt?: number
@@ -458,6 +463,14 @@ export const rdvUpdate = makeFunctionReference<
   },
   unknown
 >('rdv:update')
+
+// Accueil : signale une annulation/report reçue sur le numéro central et alerte
+// le commercial concerné.
+export const rdvFlagByReception = makeFunctionReference<
+  'mutation',
+  { rdvId: string; kind: 'annule' | 'reporte'; reason?: string; newScheduledAt?: number },
+  unknown
+>('rdv:flagByReception')
 
 export const callLogsLogCall = makeFunctionReference<
   'mutation',

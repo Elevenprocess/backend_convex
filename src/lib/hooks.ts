@@ -34,7 +34,7 @@ import type {
 import { fetchCache, type FetchCacheEntry } from './fetchCacheStore'
 import { persistEntry, loadAllEntries, migrateLegacyLocalStorage } from './cachePersist'
 import { convexAuthEnabled, convexClient } from './convex'
-import { callLogsLogCall, leadsCreate, leadsGet, leadsUpdate, rdvCreate, rdvGet, rdvUpdate } from './convexApi'
+import { callLogsLogCall, leadsCreate, leadsGet, leadsUpdate, rdvCreate, rdvFlagByReception, rdvGet, rdvUpdate } from './convexApi'
 import { mapConvexLead, mapConvexRdv } from './convexMappers'
 import {
   useConvexAcomptes,
@@ -497,6 +497,26 @@ export async function updateRdv(id: string, input: UpdateRdvPayload): Promise<Rd
   }
   notifyRealtimeRefresh({ event: 'rdv:updated', paths: ['/rdv', '/leads', '/analytics/summary', '/analytics/funnel', '/ghl-calendar/events'] })
   return updated
+}
+
+// Accueil : signale une annulation/report reçue sur le numéro central. Met à
+// jour le RDV et alerte le commercial concerné (Convex uniquement).
+export async function flagRdvByReception(
+  rdvId: string,
+  input: { kind: 'annule' | 'reporte'; reason?: string; newScheduledAt?: string | number | null },
+): Promise<void> {
+  if (!(convexAuthEnabled && convexClient)) {
+    throw new Error('Signalement RDV : disponible uniquement en mode Convex')
+  }
+  const args: { rdvId: string; kind: 'annule' | 'reporte'; reason?: string; newScheduledAt?: number } = { rdvId, kind: input.kind }
+  const reason = input.reason?.trim()
+  if (reason) args.reason = reason
+  if (input.kind === 'reporte' && input.newScheduledAt) {
+    const t = typeof input.newScheduledAt === 'number' ? input.newScheduledAt : Date.parse(String(input.newScheduledAt))
+    if (!Number.isNaN(t)) args.newScheduledAt = t
+  }
+  await convexClient.mutation(rdvFlagByReception, args)
+  notifyRealtimeRefresh({ event: 'rdv:updated', paths: ['/rdv', '/leads', '/notifications'] })
 }
 
 // ─── Users ─────────────────────────────────────────────────

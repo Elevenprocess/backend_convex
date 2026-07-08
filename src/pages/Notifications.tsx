@@ -318,6 +318,44 @@ export function buildCommercialNotifications(leads: LeadResponse[], rdvs: RdvRes
     const name = summary ? fullName(summary) : 'Prospect'
     const scheduled = new Date(rdv.scheduledAt).getTime()
 
+    // 0) Signalement accueil : annulation / report transmis par le prospect sur
+    // le numéro central (appel / WhatsApp). Alerte prioritaire, 7 jours.
+    const alertAt = rdv.receptionAlertAt ? new Date(rdv.receptionAlertAt).getTime() : null
+    if (alertAt && alertAt >= now - 7 * 24 * 60 * 60 * 1000) {
+      const reason = rdv.cancelReason ? ` — ${rdv.cancelReason}` : ''
+      const isCancel = rdv.receptionAlertKind === 'annule' || rdv.status === 'annule'
+      if (isCancel) {
+        notifications.push({
+          id: `commercial-rdv-annule-${rdv.id}`,
+          group: 'RDV ANNULÉS',
+          icon: 'x',
+          ...NOTIF_COLOR.late,
+          title: 'RDV annulé par le prospect',
+          body: <><strong>{name}</strong> · RDV du {formatDateTime(rdv.scheduledAt)} annulé{reason}</>,
+          time: relativeTime(rdv.receptionAlertAt!),
+          sortAt: alertAt,
+          urgency: 'now',
+          to: `/rdv/${rdv.id}`,
+        })
+      } else {
+        const replanned = rdv.status === 'planifie'
+        notifications.push({
+          id: `commercial-rdv-report-accueil-${rdv.id}`,
+          group: 'RDV REPORTÉS',
+          icon: 'calendar',
+          ...NOTIF_COLOR.rdvUpcoming,
+          title: 'RDV reporté par le prospect',
+          body: replanned
+            ? <><strong>{name}</strong> · reporté au {formatDateTime(rdv.scheduledAt)}{reason}</>
+            : <><strong>{name}</strong> · à replanifier{reason}</>,
+          time: relativeTime(rdv.receptionAlertAt!),
+          sortAt: alertAt,
+          urgency: 'now',
+          to: `/rdv/${rdv.id}`,
+        })
+      }
+    }
+
     // 2) Rappel de RDV reporté — à l'approche de la nouvelle date (<24h).
     if (rdv.status === 'reporte' && scheduled > now && scheduled <= in24h) {
       notifications.push({

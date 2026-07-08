@@ -12,6 +12,9 @@ const VIEW_AS_KEY = 'ecoi.viewAsUserId'
 // dans le store via useAuth.setState au fil des changements de session.
 export type AuthBackend = {
   signIn: (email: string, password: string, flow: 'signIn' | 'signUp') => Promise<void>
+  // OAuth Google via Convex Auth (redirige le navigateur). Optionnel : les
+  // mocks de test n'ont pas à le fournir.
+  signInGoogle?: () => Promise<void>
   signOut: () => Promise<void>
 }
 let convexBackend: AuthBackend | null = null
@@ -190,6 +193,15 @@ export const useAuth = create<AuthState>((set, get) => ({
 // hydrate() prend le relais. En cas d'échec (ex. email sans compte ECOI →
 // signup_disabled), Google renvoie vers errorCallbackURL=/login?error=...
 export async function signInWithGoogle(): Promise<void> {
+  // Mode Convex : le OAuth Google passe par Convex Auth (le pont redirige le
+  // navigateur vers Google puis vers SITE_URL). La session est ensuite poussée
+  // par <ConvexAuthBridge>, comme pour le login mot de passe.
+  if (convexAuthEnabled) {
+    const backend = requireConvexBackend()
+    if (!backend.signInGoogle) throw new ApiError(500, 'OAuth Google Convex indisponible')
+    await backend.signInGoogle()
+    return
+  }
   const origin = window.location.origin
   const res = await api<{ url?: string; redirect?: boolean }>('/api/auth/sign-in/social', {
     method: 'POST',

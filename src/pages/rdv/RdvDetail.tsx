@@ -1,9 +1,12 @@
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
 import { LoadingScreen } from '../../components/Spinner'
 import { useRdv, useLead, useUsers, useCallLogs } from '../../lib/hooks'
+import { useRole } from '../../lib/role'
+import { RdvReceptionFlagModal } from '../../components/rdv/RdvReceptionFlagModal'
 import {
   fullName,
   initials as leadInitials,
@@ -43,6 +46,9 @@ export function RdvDetail() {
   const { data: lead } = useLead(rdv?.leadId)
   const { data: callLogs } = useCallLogs(rdv?.leadId ? { leadId: rdv.leadId, limit: 200 } : null)
   const { data: users } = useUsers()
+  const role = useRole((s) => s.role)
+  const [showFlag, setShowFlag] = useState(false)
+  const canFlag = role === 'admin' || role === 'responsable_technique' || role === 'back_office'
 
   if (rdvLoading) {
     return (
@@ -90,6 +96,15 @@ export function RdvDetail() {
         </button>
         <div className="flex items-center gap-3 ml-auto">
           <span className={`status-badge ${RDV_STATUS_BADGE[rdv.status]}`}>{RDV_STATUS_LABEL[rdv.status]}</span>
+          {canFlag && (
+            <button
+              onClick={() => setShowFlag(true)}
+              className="btn-secondary px-4 py-2 rounded-xl text-sm flex items-center gap-1.5"
+            >
+              <Icon name="bell" size={15} />
+              Signaler annulation / report
+            </button>
+          )}
           <button className="btn-secondary px-4 py-2 rounded-xl text-sm">Reprogrammer</button>
           <button
             onClick={() => lead && navigate(`/leads/${lead.id}?debrief=${rdv.id}`)}
@@ -175,6 +190,15 @@ export function RdvDetail() {
         </div>
       </main>
 
+      {showFlag && (
+        <RdvReceptionFlagModal
+          rdvId={rdv.id}
+          leadName={lead ? fullName(lead) : 'Prospect'}
+          commercialName={commercial?.name ?? null}
+          onClose={() => setShowFlag(false)}
+          onDone={() => setShowFlag(false)}
+        />
+      )}
     </AppShell>
   )
 }

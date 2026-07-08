@@ -59,4 +59,28 @@ describe('buildCommercialNotifications — 3 notifs commerciales', () => {
   it('ignore un RDV honoré déjà débriefé', () => {
     expect(ids([], [rdv({ id: 'r4', status: 'honore', debriefFilledAt: '2026-06-14T13:00:00.000Z', scheduledAt: '2026-06-14T12:00:00.000Z' })])).toHaveLength(0)
   })
+
+  it('alerte le commercial d\'une annulation signalée par l\'accueil', () => {
+    const notifs = buildCommercialNotifications([], [rdv({
+      id: 'a1', status: 'annule', receptionAlertKind: 'annule',
+      receptionAlertAt: '2026-06-15T11:30:00.000Z', cancelReason: 'Empêchement',
+    })])
+    const card = notifs.find((n) => n.id === 'commercial-rdv-annule-a1')
+    expect(card).toBeTruthy()
+    expect(card?.urgency).toBe('now') // déclenche le push navigateur
+  })
+
+  it('alerte le commercial d\'un report signalé par l\'accueil (replanifié)', () => {
+    expect(ids([], [rdv({
+      id: 'a2', status: 'planifie', receptionAlertKind: 'reporte',
+      receptionAlertAt: '2026-06-15T11:30:00.000Z', scheduledAt: '2026-06-18T09:00:00.000Z',
+    })])).toContain('commercial-rdv-report-accueil-a2')
+  })
+
+  it('ignore un signalement réception de plus de 7 jours', () => {
+    expect(ids([], [rdv({
+      id: 'a3', status: 'annule', receptionAlertKind: 'annule',
+      receptionAlertAt: '2026-06-01T11:30:00.000Z',
+    })])).not.toContain('commercial-rdv-annule-a3')
+  })
 })

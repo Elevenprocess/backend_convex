@@ -14,7 +14,8 @@ const baseRdv = (over: Partial<RdvResponse>): RdvResponse => ({
   status: 'honore', result: null, signatureAt: null, montantTotal: null,
   financingType: null, objections: null, nonSaleReason: null, kits: null,
   notes: null, debriefFilledAt: '2026-06-10T07:00:00.000Z', debriefDueAt: null,
-  hasDevisEnAttente: false, createdAt: '2026-06-10T05:00:00.000Z',
+  hasDevisEnAttente: false, cancelReason: null, receptionAlertAt: null, receptionAlertKind: null,
+  createdAt: '2026-06-10T05:00:00.000Z',
   updatedAt: '2026-06-10T05:00:00.000Z', lead: null,
   ...over,
 })

@@ -11,7 +11,8 @@ function rdv(over: Partial<RdvResponse>): RdvResponse {
     status: 'honore', result: null, signatureAt: null, montantTotal: null,
     financingType: null, objections: null, nonSaleReason: null, kits: null,
     notes: null, debriefFilledAt: null, debriefDueAt: null,
-    hasDevisEnAttente: false, createdAt: NOW, updatedAt: NOW, lead: null,
+    hasDevisEnAttente: false, cancelReason: null, receptionAlertAt: null, receptionAlertKind: null,
+    createdAt: NOW, updatedAt: NOW, lead: null,
     ...over,
   }
 }
