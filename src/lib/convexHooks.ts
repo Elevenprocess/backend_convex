@@ -159,12 +159,43 @@ function useStableNow(): number {
 // laps (~1-2 s) au lieu de tout remettre à zéro, puis bascule d'un coup sur les
 // nouveaux. Pattern React officiel « ajuster l'état pendant le rendu » (guardé)
 // → pas d'effet ni de ref lus au rendu.
-function useSticky<T>(value: T | undefined): T | undefined {
-  const [held, setHeld] = useState<T | undefined>(value)
-  if (value !== undefined && !Object.is(value, held)) {
-    setHeld(value)
+function lsRead<T>(key: string | null): T | undefined {
+  if (!key || typeof localStorage === 'undefined') return undefined
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? (JSON.parse(raw) as T) : undefined
+  } catch {
+    return undefined
   }
-  return value === undefined ? held : value
+}
+
+// Stale-while-revalidate persistant : hydrate la valeur initiale depuis
+// localStorage et l'y persiste. Au 1er rendu (onglet ouvert / refresh), Convex renvoie `undefined`
+// le temps de se connecter + s'authentifier + répondre (~2-3 s cold) : on affiche
+// alors INSTANTANÉMENT les derniers chiffres mémorisés (0 s d'attente perçue),
+// puis on bascule sur la valeur fraîche dès qu'elle arrive. La clé exclut `now`
+// (bucketé 5 min) pour survivre aux revalidations, et inclut l'utilisateur pour
+// ne pas fuiter des chiffres entre comptes sur un navigateur partagé.
+function usePersistentSticky<T>(key: string | null, value: T | undefined): T | undefined {
+  const [held, setHeld] = useState<{ k: string | null; v: T | undefined }>(() => ({ k: key, v: lsRead<T>(key) }))
+  let current = held
+  if (key !== held.k) {
+    // Période/utilisateur changé → réhydrate depuis le cache de la nouvelle clé.
+    current = { k: key, v: lsRead<T>(key) }
+    setHeld(current)
+  } else if (value !== undefined && !Object.is(value, held.v)) {
+    current = { k: key, v: value }
+    setHeld(current)
+  }
+  useEffect(() => {
+    if (!key || value === undefined || typeof localStorage === 'undefined') return
+    try {
+      localStorage.setItem(key, JSON.stringify(value))
+    } catch {
+      /* quota / mode privé : le cache mémoire prend le relais */
+    }
+  }, [key, value])
+  return value === undefined ? current.v : value
 }
 
 // Rôles autorisés côté serveur (analytics.ts). Une query Convex lancée par un
@@ -188,13 +219,16 @@ export function useConvexAnalyticsSummary(filters?: {
 }): Async<AnalyticsSummaryResponse> {
   const now = useStableNow()
   const role = useAuth((s) => s.user?.role)
+  const uid = useAuth((s) => s.user?.id)
   const allowed = !!role && SUMMARY_ROLES.has(role)
   const res = useQuery(
     analyticsSummary,
     allowed ? { now, days: filters?.days, from: filters?.from, to: filters?.to } : 'skip',
   )
-  // On garde la valeur précédente le temps que la nouvelle période charge (pas de flash à 0).
-  const sticky = useSticky(res)
+  // Cache persistant (localStorage) : au cold load on affiche les derniers
+  // chiffres connus instantanément, puis Convex revalide. Clé sans `now`.
+  const key = allowed ? `kpi:summary:${uid ?? '?'}:${filters?.days ?? ''}:${filters?.from ?? ''}:${filters?.to ?? ''}` : null
+  const sticky = usePersistentSticky(key, res)
   return {
     data: allowed ? ((sticky ?? null) as AnalyticsSummaryResponse | null) : null,
     loading: allowed && res === undefined,
@@ -212,6 +246,7 @@ export function useConvexAnalyticsFunnel(filters?: {
 }): Async<AnalyticsFunnelResponse> {
   const now = useStableNow()
   const role = useAuth((s) => s.user?.role)
+  const uid = useAuth((s) => s.user?.id)
   const allowed = !!role && FUNNEL_ROLES.has(role)
   const res = useQuery(
     analyticsFunnel,
@@ -219,7 +254,10 @@ export function useConvexAnalyticsFunnel(filters?: {
       ? { now, days: filters?.days, from: filters?.from, to: filters?.to, setterId: filters?.setterId, sector: filters?.sector }
       : 'skip',
   )
-  const sticky = useSticky(res)
+  const key = allowed
+    ? `kpi:funnel:${uid ?? '?'}:${filters?.days ?? ''}:${filters?.from ?? ''}:${filters?.to ?? ''}:${filters?.setterId ?? ''}:${filters?.sector ?? ''}`
+    : null
+  const sticky = usePersistentSticky(key, res)
   return {
     data: allowed ? ((sticky ?? null) as AnalyticsFunnelResponse | null) : null,
     loading: allowed && res === undefined,
@@ -234,12 +272,16 @@ export function useConvexDebriefAnalytics(filters?: {
   commercialId?: string
 }): Async<DebriefStats> {
   const role = useAuth((s) => s.user?.role)
+  const uid = useAuth((s) => s.user?.id)
   const allowed = !!role && DEBRIEF_ROLES.has(role)
   const res = useQuery(
     analyticsDebriefStats,
     allowed ? { from: filters?.from, to: filters?.to, commercialId: filters?.commercialId } : 'skip',
   )
-  const sticky = useSticky(res)
+  const key = allowed
+    ? `kpi:debrief:${uid ?? '?'}:${filters?.from ?? ''}:${filters?.to ?? ''}:${filters?.commercialId ?? ''}`
+    : null
+  const sticky = usePersistentSticky(key, res)
   return {
     data: allowed ? ((sticky ?? null) as DebriefStats | null) : null,
     loading: allowed && res === undefined,
