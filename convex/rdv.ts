@@ -7,9 +7,14 @@ import {
 import { requireRole, assertCommercialRole, requireUser } from "./model/access";
 import { insertStageHistory } from "./model/stageHistory";
 import { deriveLeadStatus } from "./model/deriveLeadStatus";
+import { notifyRdvReceptionFlag } from "./model/notify";
 
 export const OPEN_RDV_STATUSES = ["planifie", "reporte"] as const;
 export const COMMERCIAL = ["admin", "commercial", "commercial_lead"] as const;
+// Accueil : reçoit les annulations/reports par appel ou WhatsApp sur le numéro
+// central et les signale au commercial. Distinct des rôles commerciaux qui, eux,
+// gèrent le débrief via rdv.update.
+export const RECEPTION = ["admin", "responsable_technique", "back_office"] as const;
 
 export const create = mutation({
   args: {
@@ -70,6 +75,83 @@ export const create = mutation({
     }
 
     return rdvId;
+  },
+});
+
+/**
+ * Signalement par l'accueil (RECEPTION) d'une annulation ou d'un report de RDV
+ * transmis par le prospect sur le numéro central (appel / WhatsApp). Met à jour
+ * le statut du RDV ET alerte immédiatement le commercial concerné (notification
+ * in-app + push côté front). N'exige PAS un rôle commercial : c'est justement
+ * l'accueil qui déclenche à la place du commercial.
+ */
+export const flagByReception = mutation({
+  args: {
+    rdvId: v.id("rdv"),
+    kind: v.union(v.literal("annule"), v.literal("reporte")),
+    reason: v.optional(v.string()),
+    // Report vers une nouvelle date (ms). Optionnel : un report sans date connue
+    // laisse le RDV en statut « reporte » (à replanifier).
+    newScheduledAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireRole(ctx, [...RECEPTION]);
+    const existing = await ctx.db.get(args.rdvId);
+    if (!existing) throw new Error("RDV introuvable");
+    if (existing.deletedAt !== undefined) throw new Error("RDV supprimé");
+
+    const now = Date.now();
+    const patch: Record<string, unknown> = {
+      cancelReason: args.reason,
+      receptionAlertAt: now,
+      receptionAlertKind: args.kind,
+      receptionAlertBy: actor._id,
+    };
+
+    // Report vers une date future → on replanifie (RDV ré-ouvert à la nouvelle date).
+    const replan = args.kind === "reporte" && args.newScheduledAt !== undefined && args.newScheduledAt > now;
+    if (args.kind === "annule") {
+      patch.status = "annule";
+    } else if (replan) {
+      patch.status = "planifie";
+      patch.scheduledAt = args.newScheduledAt;
+      patch.result = undefined;
+      patch.debriefFilledAt = undefined;
+      patch.debriefDueAt = undefined;
+    } else {
+      patch.status = "reporte";
+    }
+
+    await ctx.db.patch(args.rdvId, patch);
+
+    // Dérive le statut du lead (annule → perdu ; reporte sans date → a_rappeler).
+    // On ne touche pas au lead lors d'une replanification (le RDV reste ouvert).
+    if (!replan && existing.leadId) {
+      const derived = deriveLeadStatus(patch.status as "annule" | "reporte", null);
+      if (derived) {
+        const lead = await ctx.db.get(existing.leadId);
+        if (lead && lead.status !== derived) {
+          await ctx.db.patch(existing.leadId, { status: derived });
+          await insertStageHistory(ctx, {
+            leadId: existing.leadId,
+            ghlStageName: derived,
+            saasStatus: derived,
+            assignedToId: lead.assignedToId,
+            changedAt: now,
+            source: "manual",
+          });
+        }
+      }
+    }
+
+    // Alerte le commercial concerné (best-effort, ne bloque pas le signalement).
+    await notifyRdvReceptionFlag(ctx, {
+      rdvId: args.rdvId,
+      kind: args.kind,
+      reason: args.reason,
+      newScheduledAt: replan ? args.newScheduledAt : undefined,
+    });
+    return null;
   },
 });
 
@@ -194,7 +276,31 @@ export const list = query({
     if (args.result !== undefined) ordered = ordered.filter((f) => f.eq(f.field("result"), args.result!));
     if (args.from !== undefined) ordered = ordered.filter((f) => f.gte(f.field("scheduledAt"), args.from!));
     if (args.to !== undefined) ordered = ordered.filter((f) => f.lte(f.field("scheduledAt"), args.to!));
-    return await ordered.paginate(args.paginationOpts);
+    const page = await ordered.paginate(args.paginationOpts);
+    // Résumé lead embarqué : l'Overview affiche nom/ville/téléphone/setter du
+    // prospect sans dépendre de la liste /leads (bornée à 500 côté client). Sans
+    // ça, un lead qualifié hors du top-500 s'affichait « Prospect qualifié »
+    // sans coordonnées. get ciblé par RDV de la page (volume borné à paginationOpts).
+    const withLead = await Promise.all(
+      page.page.map(async (r) => {
+        const lead = await ctx.db.get(r.leadId);
+        return {
+          ...r,
+          lead: lead
+            ? {
+                id: lead._id,
+                firstName: lead.firstName ?? null,
+                lastName: lead.lastName ?? null,
+                city: lead.city ?? null,
+                phone: lead.phone ?? null,
+                email: lead.email ?? null,
+                setterId: lead.setterId ?? null,
+              }
+            : null,
+        };
+      }),
+    );
+    return { ...page, page: withLead };
   },
 });
 

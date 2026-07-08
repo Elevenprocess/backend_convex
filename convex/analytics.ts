@@ -39,13 +39,23 @@ const SUMMARY_ROLES: Role[] = ["admin", "setter", "setter_lead", "commercial", "
 const SETTER_STATS_ROLES: Role[] = ["admin", "setter", "setter_lead", "commercial", "commercial_lead"];
 const COMMERCIAL_STATS_ROLES: Role[] = ["admin", "commercial", "commercial_lead"];
 
+/**
+ * Date de création MÉTIER d'une ligne. Sur les lignes migrées de Render, la vraie
+ * date est dans `createdAt` ; `_creationTime` (auto-généré, non antidatable) vaut
+ * le jour de migration et empilerait faussement tout l'historique ce jour-là. Les
+ * lignes live n'ont pas de `createdAt` → repli sur `_creationTime` (= vraie date).
+ */
+function bizCreatedAt(doc: { createdAt?: number; _creationTime: number }): number {
+  return doc.createdAt ?? doc._creationTime;
+}
+
 function toLeadRow(l: Doc<"leads">): LeadRow {
   return {
     id: l._id,
     source: l.source,
     status: l.status,
     setterId: l.setterId ?? undefined,
-    createdAt: l._creationTime,
+    createdAt: bizCreatedAt(l),
     lastContactAt: l.lastContactAt ?? undefined,
     city: l.city ?? undefined,
     canalAcquisition: l.canalAcquisition ?? undefined,
@@ -74,31 +84,48 @@ function toRdvRow(r: Doc<"rdv">): RdvRow {
     result: r.result ?? undefined,
     montantTotal: r.montantTotal ?? null,
     financingType: r.financingType ?? undefined,
-    createdAt: r._creationTime,
+    createdAt: bizCreatedAt(r),
   };
+}
+
+/** Map leadId → source, construite en UN scan (partagée par les helpers pour
+ * éviter les N+1 `ctx.db.get(lead)` de résolution de source). */
+function buildSourceByLead(leadDocs: Doc<"leads">[]): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const l of leadDocs) m.set(l._id, l.source);
+  return m;
 }
 
 /**
  * Débriefs DÉTACHÉS d'un RDV → lignes RDV synthétiques (période + hors imports
  * historiques). Pas de double-comptage : rdvId absent uniquement.
+ * `sourceByLead` (optionnel) évite un `ctx.db.get` par débrief : fourni par les
+ * vues agrégées (leads déjà chargés), fallback get pour le fast-path commercial.
  */
 export async function loadDetachedDebriefRdvRows(
   ctx: QueryCtx,
   range: RangeMs,
   commercialId?: Doc<"users">["_id"],
+  sourceByLead?: Map<string, string>,
 ): Promise<RdvRow[]> {
+  // Filtrage sur la date MÉTIER (createdAt) et non _creationTime : les débriefs
+  // migrés partagent tous le _creationTime du jour de migration, donc l'index
+  // by_creation_time les regrouperait à tort sur cette seule journée. Scan complet
+  // (table petite) + filtre bizCreatedAt → répartition sur les vraies dates Render.
   const rows = (await ctx.db.query("debriefs").collect()).filter(
     (d) =>
       d.deletedAt === undefined &&
       d.rdvId === undefined &&
-      isInRange(d._creationTime, range) &&
+      isInRange(bizCreatedAt(d), range) &&
       (commercialId === undefined || d.commercialId === commercialId),
   );
   const out: RdvRow[] = [];
   for (const d of rows) {
     if (!d.leadId) continue;
-    const lead = await ctx.db.get(d.leadId);
-    if (HISTORICAL_LEAD_SOURCES.has(lead?.source ?? "")) continue;
+    const source = sourceByLead
+      ? (sourceByLead.get(d.leadId) ?? "")
+      : ((await ctx.db.get(d.leadId))?.source ?? "");
+    if (HISTORICAL_LEAD_SOURCES.has(source)) continue;
     out.push({
       leadId: d.leadId,
       commercialId: d.commercialId,
@@ -107,7 +134,7 @@ export async function loadDetachedDebriefRdvRows(
       result: mapDebriefOutcomeToRdvResult(d.outcome, d.nonSaleReason ?? null),
       montantTotal: d.montantTotal ?? null,
       financingType: d.financingType ?? undefined,
-      createdAt: d._creationTime,
+      createdAt: bizCreatedAt(d),
     });
   }
   return out;
@@ -119,22 +146,19 @@ export async function loadDetachedDebriefRdvRows(
  * re-prises (reports, 2e visite) sont l'agenda des commerciaux, pas une nouvelle
  * qualification. Les leads airtable_migration sont exclus — leurs RDV importés
  * portent une date de création = jour d'import.
+ * PUR : consomme les rdv/leads déjà chargés (plus de scan rdv ni de N+1 get).
  */
-async function loadFirstRdvByLead(ctx: QueryCtx): Promise<Map<string, number>> {
-  const rows = await ctx.db.query("rdv").collect();
+function loadFirstRdvByLead(
+  rdvDocs: Doc<"rdv">[],
+  sourceByLead: Map<string, string>,
+): Map<string, number> {
   const map = new Map<string, number>();
-  const sourceByLead = new Map<string, string>();
-  for (const r of rows) {
+  for (const r of rdvDocs) {
     if (r.deletedAt !== undefined || !r.leadId) continue;
-    let source = sourceByLead.get(r.leadId);
-    if (source === undefined) {
-      const lead = await ctx.db.get(r.leadId);
-      source = lead?.source ?? "";
-      sourceByLead.set(r.leadId, source);
-    }
-    if (source === "airtable_migration") continue;
+    if (sourceByLead.get(r.leadId) === "airtable_migration") continue;
+    const t = bizCreatedAt(r);
     const current = map.get(r.leadId);
-    if (current === undefined || r._creationTime < current) map.set(r.leadId, r._creationTime);
+    if (current === undefined || t < current) map.set(r.leadId, t);
   }
   return map;
 }
@@ -142,19 +166,18 @@ async function loadFirstRdvByLead(ctx: QueryCtx): Promise<Map<string, number>> {
 /**
  * Leads « actifs dans la période » (transposition de leadsActiveInRangeWhere) :
  * créés dans la période OU lastContactAt dans la période OU appelés dans la
- * période. Les imports historiques restent exclus des KPI en aval.
+ * période. PUR : consomme les leads déjà chargés.
  */
-async function loadActiveLeads(
-  ctx: QueryCtx,
+function filterActiveLeads(
+  leadDocs: Doc<"leads">[],
   range: RangeMs,
   calledLeadIds: Set<string>,
-): Promise<LeadRow[]> {
-  const rows = await ctx.db.query("leads").collect();
-  return rows
+): LeadRow[] {
+  return leadDocs
     .filter((l) => l.deletedAt === undefined)
     .filter(
       (l) =>
-        isInRange(l._creationTime, range) ||
+        isInRange(bizCreatedAt(l), range) ||
         isInRange(l.lastContactAt ?? null, range) ||
         calledLeadIds.has(l._id),
     )
@@ -215,16 +238,19 @@ export const summary = query({
       .collect();
     const calls = callDocs.map(toCallRow);
     const calledLeadIds = new Set<string>(calls.map((c) => c.leadId as string).filter(Boolean));
-    const [leadRows, rdvDocs, userDocs, detached, firstRdvByLead] = await Promise.all([
-      loadActiveLeads(ctx, range, calledLeadIds),
+    // leads / rdv / users chargés UNE fois ; helpers purs derrière (0 N+1, 0 rescan).
+    const [leadDocs, rdvDocs, userDocs] = await Promise.all([
+      ctx.db.query("leads").collect(),
       ctx.db.query("rdv").collect(),
       ctx.db.query("users").collect(),
-      loadDetachedDebriefRdvRows(ctx, range),
-      loadFirstRdvByLead(ctx),
     ]);
+    const sourceByLead = buildSourceByLead(leadDocs);
+    const leadRows = filterActiveLeads(leadDocs, range, calledLeadIds);
+    const detached = await loadDetachedDebriefRdvRows(ctx, range, undefined, sourceByLead);
+    const firstRdvByLead = loadFirstRdvByLead(rdvDocs, sourceByLead);
     const rdvRows = rdvDocs
       .filter((r) => r.deletedAt === undefined)
-      .filter((r) => isInRange(r.scheduledAt ?? null, range) || isInRange(r._creationTime, range))
+      .filter((r) => isInRange(r.scheduledAt ?? null, range) || isInRange(bizCreatedAt(r), range))
       .map(toRdvRow);
     const rdvAll = [...rdvRows, ...detached];
     const userRows: UserRow[] = userDocs
@@ -295,16 +321,18 @@ export const setterStats = query({
       .collect();
     const calls = callDocs.map(toCallRow);
     const calledLeadIds = new Set<string>(calls.map((c) => c.leadId as string).filter(Boolean));
-    const [leadRows, rdvDocs, detached, firstRdvByLead] = await Promise.all([
-      loadActiveLeads(ctx, range, calledLeadIds),
+    const [leadDocs, rdvDocs] = await Promise.all([
+      ctx.db.query("leads").collect(),
       ctx.db.query("rdv").collect(),
-      loadDetachedDebriefRdvRows(ctx, range),
-      loadFirstRdvByLead(ctx),
     ]);
+    const sourceByLead = buildSourceByLead(leadDocs);
+    const leadRows = filterActiveLeads(leadDocs, range, calledLeadIds);
+    const detached = await loadDetachedDebriefRdvRows(ctx, range, undefined, sourceByLead);
+    const firstRdvByLead = loadFirstRdvByLead(rdvDocs, sourceByLead);
     const rdvAll = [
       ...rdvDocs
         .filter((r) => r.deletedAt === undefined)
-        .filter((r) => isInRange(r.scheduledAt ?? null, range) || isInRange(r._creationTime, range))
+        .filter((r) => isInRange(r.scheduledAt ?? null, range) || isInRange(bizCreatedAt(r), range))
         .map(toRdvRow),
       ...detached,
     ];
@@ -380,14 +408,19 @@ export const debriefStats = query({
     const fromMs = args.from ? new Date(args.from).getTime() : undefined;
     const toMs = args.to ? new Date(args.to).getTime() : undefined;
 
+    // Filtrage sur la date MÉTIER (createdAt Render) et non _creationTime : sinon
+    // les débriefs migrés se regrouperaient tous sur le jour de migration. Scan
+    // complet (table petite) + repli _creationTime pour les débriefs live.
     const all = await ctx.db.query("debriefs").collect();
-    const rows = all.filter(
-      (d) =>
+    const rows = all.filter((d) => {
+      const created = bizCreatedAt(d);
+      return (
         d.deletedAt === undefined &&
         (!commercialId || d.commercialId === commercialId) &&
-        (fromMs === undefined || d._creationTime >= fromMs) &&
-        (toMs === undefined || d._creationTime <= toMs),
-    );
+        (fromMs === undefined || created >= fromMs) &&
+        (toMs === undefined || created <= toMs)
+      );
+    });
 
     const outcomeCounts = { vente: 0, non_vente: 0, en_reflexion: 0, suivi_prevu: 0 };
     const acceptanceFactorCounts: Record<string, number> = {};
@@ -437,23 +470,30 @@ export const funnel = query({
       .withIndex("by_calledAt", (q) => q.gte("calledAt", range.fromMs).lte("calledAt", range.toMs))
       .collect();
     const calls = callDocs.map(toCallRow);
-    const [allLeads, rdvDocs, userDocs, detached] = await Promise.all([
+    // Funnel = leads/rdv CRÉÉS dans la plage, filtrés sur la date MÉTIER
+    // (createdAt Render) et non _creationTime : l'index by_creation_time
+    // regrouperait tout l'historique migré sur le jour de migration (bug du pic
+    // « 1.2k prospects arrivés »). Scan complet + filtre bizCreatedAt (repli
+    // _creationTime pour les lignes live) → répartition sur les vraies dates.
+    const [allLeadDocs, allRdvDocs, userDocs] = await Promise.all([
       ctx.db.query("leads").collect(),
       ctx.db.query("rdv").collect(),
       ctx.db.query("users").collect(),
-      loadDetachedDebriefRdvRows(ctx, range),
     ]);
-    const activeLeads = allLeads.filter((l) => l.deletedAt === undefined);
-    const leadRows = activeLeads
-      .filter((l) => isInRange(l._creationTime, range))
-      .map(toLeadRow);
-    const rdvRows = rdvDocs
-      .filter((r) => r.deletedAt === undefined && isInRange(r._creationTime, range))
+    const rangeLeadDocs = allLeadDocs.filter((l) => isInRange(bizCreatedAt(l), range));
+    const rangeRdvDocs = allRdvDocs.filter((r) => isInRange(bizCreatedAt(r), range));
+    // Détachés : le lead peut être créé HORS plage → get ciblé (volume borné à la
+    // plage) plutôt que la map de sources, sinon on raterait l'exclusion historique.
+    const detached = await loadDetachedDebriefRdvRows(ctx, range, undefined);
+    const activeLeads = rangeLeadDocs.filter((l) => l.deletedAt === undefined);
+    const leadRows = activeLeads.map(toLeadRow);
+    const rdvRows = rangeRdvDocs
+      .filter((r) => r.deletedAt === undefined)
       .map(toRdvRow);
     const userRows: UserRow[] = userDocs
       .filter((u) => u.active !== false)
       .map((u) => ({ id: u._id, name: u.name ?? "", role: roleOf(u) }));
-    // Liste globale des secteurs (toutes périodes) pour le dropdown.
+    // Secteurs présents DANS la période (dropdown scopé à la plage choisie).
     const sectorList = [
       ...new Set(
         activeLeads
@@ -638,7 +678,7 @@ export const pipelineStuck = query({
       if (l.deletedAt !== undefined) continue;
       // Pas de stuck pour les états « finis ».
       if (l.status === "signe" || l.status === "perdu") continue;
-      const effective = lastChangeByLead.get(l._id) ?? l._creationTime;
+      const effective = lastChangeByLead.get(l._id) ?? bizCreatedAt(l);
       if (effective > threshold) continue;
       const assignedTo = l.assignedToId ? await ctx.db.get(l.assignedToId) : null;
       stuck.push({

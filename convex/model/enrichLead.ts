@@ -16,6 +16,12 @@ function daysSince(ts: number | undefined, now: number): number | undefined {
   return ts === undefined ? undefined : Math.floor((now - ts) / DAY_MS);
 }
 
+/** Date de création MÉTIER : createdAt (vraie date Render migrée) prime sur
+ * _creationTime (= jour de migration, uniforme et non antidatable). */
+function bizCreatedAt(doc: { createdAt?: number; _creationTime: number }): number {
+  return doc.createdAt ?? doc._creationTime;
+}
+
 export type EnrichedLead = Doc<"leads"> & {
   latestCallAt?: number;
   firstCallAt?: number;
@@ -88,7 +94,7 @@ export async function enrichLead(
   for (const r of rdvs) {
     if (r.deletedAt !== undefined) continue;
     if (!latestRdv || (r.scheduledAt ?? 0) > (latestRdv.scheduledAt ?? 0)) latestRdv = r;
-    transferredAt = transferredAt === undefined ? r._creationTime : Math.min(transferredAt, r._creationTime);
+    transferredAt = transferredAt === undefined ? bizCreatedAt(r) : Math.min(transferredAt, bizCreatedAt(r));
     if (r.debriefFilledAt !== undefined) {
       latestDebriefAt = latestDebriefAt === undefined ? r.debriefFilledAt : Math.max(latestDebriefAt, r.debriefFilledAt);
     }
@@ -139,8 +145,8 @@ export async function enrichLead(
     hasDebrief: latestDebriefAt !== undefined,
     latestDebriefAt,
     lastStageChangeAt: lastStageAt,
-    arrivalAt: firstStageAt ?? lead._creationTime,
-    daysSinceLastStageChange: daysSince(lastStageAt ?? lead._creationTime, now),
+    arrivalAt: firstStageAt ?? bizCreatedAt(lead),
+    daysSinceLastStageChange: daysSince(lastStageAt ?? bizCreatedAt(lead), now),
     delivrabiliteStatus: dossier?.statusGlobal,
   };
 }

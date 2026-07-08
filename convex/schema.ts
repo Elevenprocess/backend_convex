@@ -45,7 +45,9 @@ export default defineSchema({
     createdById: v.optional(v.id("users")),
     deletedAt: v.optional(v.number()),
   })
-    .index("by_email", ["email"])
+    // Convex Auth exige un index littéralement nommé "email" (rattachement par
+    // email vérifié au login OAuth Google → pas de doublon de compte).
+    .index("email", ["email"])
     .index("by_externalId", ["externalId"])
     .index("by_ghlUserId", ["ghlUserId"])
     .index("by_role", ["role"]),
@@ -107,6 +109,9 @@ export default defineSchema({
     // webhooks live laissent _creationTime faire foi. Lu en priorité par les
     // KPI datés une fois la migration branchée (cf. risque _creationTime).
     createdAt: v.optional(v.number()),
+    // Champ de recherche dénormalisé legacy (import GHL/migration) : plus alimenté
+    // ni lu par le code, conservé optionnel pour tolérer les documents existants.
+    searchText: v.optional(v.string()),
   })
     .index("by_status_setter", ["status", "setterId"])
     .index("by_setter", ["setterId"])
@@ -226,7 +231,8 @@ export default defineSchema({
     .index("by_setter_calledAt", ["setterId", "calledAt"])
     .index("by_callback", ["nextCallbackAt"])
     .index("by_calledAt", ["calledAt"])
-    .index("by_ringoverCallId", ["ringoverCallId"]),
+    .index("by_ringoverCallId", ["ringoverCallId"])
+    .index("by_externalId", ["externalId"]),
 
   rdv: defineTable({
     externalId: v.optional(v.string()),
@@ -247,6 +253,15 @@ export default defineSchema({
     debriefFilledAt: v.optional(v.number()),
     debriefDueAt: v.optional(v.number()),
     deletedAt: v.optional(v.number()),
+    // Signalement d'annulation/report par l'accueil (responsable_technique /
+    // back_office) reçu par appel ou WhatsApp sur le numéro central. Alimente
+    // l'alerte immédiate au commercial concerné (carte Rappels + push).
+    cancelReason: v.optional(v.string()),
+    receptionAlertAt: v.optional(v.number()),
+    receptionAlertKind: v.optional(v.union(v.literal("annule"), v.literal("reporte"))),
+    receptionAlertBy: v.optional(v.id("users")),
+    // Timestamp de migration legacy (non alimenté/lu par le code), toléré optionnel.
+    createdAt: v.optional(v.number()),
   })
     .index("by_commercial_scheduled", ["commercialId", "scheduledAt"])
     .index("by_lead", ["leadId"])
@@ -296,6 +311,10 @@ export default defineSchema({
     acompteAmount: v.optional(v.number()),
     customEcheancier: v.boolean(),
     deletedAt: v.optional(v.number()),
+    // Vraie date de création Render (debriefs.created_at). Posé par la migration ;
+    // les débriefs live laissent _creationTime faire foi. Lu en priorité par les
+    // KPI datés (mêmes raisons que leads.createdAt : _creationTime non antidatable).
+    createdAt: v.optional(v.number()),
   })
     .index("by_project", ["projectId"])
     .index("by_lead", ["leadId"])

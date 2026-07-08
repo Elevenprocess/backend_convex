@@ -16,7 +16,8 @@
     "@auth/core": "0.37.0",
     "@convex-dev/auth": "^0.0.81",
     "@noble/hashes": "^2.2.0",
-    "convex": "^1.17.0"
+    "convex": "^1.17.0",
+    "pg": "^8.22.0"
   },
   "devDependencies": {
     "@edge-runtime/vm": "^4.0.0",
