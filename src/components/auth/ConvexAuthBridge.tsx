@@ -19,12 +19,10 @@ export function ConvexAuthBridge() {
         await signIn('password', { email, password, flow, name: email.split('@')[0] })
       },
       signInGoogle: async () => {
-        // Redirige vers Google puis revient dans l'app. IMPORTANT : l'app utilise
-        // un HashRouter (createHashRouter) → la route vit dans le fragment `#/…`.
-        // Sans `#`, le retour OAuth (`/overview`) est vu comme la route `/` = la
-        // page vitrine. Convex ajoute `?code=…` AVANT le `#`, donc l'échange de
-        // session et le routage hash fonctionnent tous les deux.
-        await signIn('google', { redirectTo: `${window.location.origin}/#/overview` })
+        // Retour OAuth sur l'origine (route `/`). Convex y ajoute `?code=…` que
+        // ConvexAuthProvider échange en session ; <Landing> renvoie ensuite tout
+        // utilisateur authentifié vers /overview (ou /planning pour un technicien).
+        await signIn('google', { redirectTo: window.location.origin })
       },
       signOut: async () => {
         await signOut()
