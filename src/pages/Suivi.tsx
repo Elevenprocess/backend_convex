@@ -8,7 +8,6 @@ import { useClients, useLeads, useRdvList, useUsers } from '../lib/hooks'
 import { fullName, type ClientResponse } from '../lib/types'
 import {
   buildDossiers,
-  isDateInRange,
   readWorkflowState,
   type SuiviState,
   avg,
@@ -67,7 +66,11 @@ export function Suivi() {
   // Pas de rafraîchissement temps réel sur cette page : elle ne doit pas se
   // recharger/clignoter en continu au fil des events realtime (lead/rdv/appel).
   const NO_RT = { noRealtimeRefresh: true }
-  const { data: leads, loading: leadsLoading } = useLeads({ limit: 500 }, NO_RT)
+  // Source = leads SIGNÉS (pas le top-500 récent) : la page suit les dossiers
+  // délivrabilité, dont beaucoup ont été signés les mois/années précédents et
+  // tombaient donc hors du cap 500 → dossiers invisibles. `status:'signe'` charge
+  // exactement les ~120 dossiers signés (index by_status), quelle que soit la date.
+  const { data: leads, loading: leadsLoading } = useLeads({ status: 'signe', limit: 500 }, NO_RT)
   const { data: rdvs, loading: rdvLoading } = useRdvList({ limit: 200 }, NO_RT)
   const { data: users } = useUsers(NO_RT)
   const { data: clients } = useClients(undefined, NO_RT)
@@ -88,16 +91,15 @@ export function Suivi() {
   const now = useMemo(() => new Date(), [])
   const [period, setPeriod] = useState<PeriodState>(() => defaultPeriod('this_year'))
   const periodRange = useMemo(() => buildPeriodRange(period), [period])
-  const periodFrom = useMemo(() => new Date(periodRange.from), [periodRange.from])
-  const periodTo = useMemo(() => new Date(periodRange.to), [periodRange.to])
   const allSignedDossiers = useMemo(
     () => buildDossiers(leads ?? [], rdvs ?? [], users ?? [], states),
     [leads, rdvs, users, states],
   )
-  const signedDossiers = useMemo(
-    () => allSignedDossiers.filter((d) => isDateInRange(d.signedAt, periodFrom, periodTo)),
-    [allSignedDossiers, periodFrom, periodTo],
-  )
+  // Un dossier signé se suit jusqu'à la livraison, même signé une année
+  // précédente : la liste montre TOUS les dossiers actifs (parité Render). Le
+  // sélecteur de période ne borne plus la liste (il reste pour le graphe de
+  // tendance), sinon les dossiers signés hors période disparaissaient à tort.
+  const signedDossiers = allSignedDossiers
   // Base commune (phase + recherche appliquées, PAS le filtre de progression) :
   // sert à la fois à la liste finale et aux compteurs des chips.
   const searched = useMemo(() => {
