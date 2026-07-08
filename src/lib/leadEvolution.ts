@@ -146,13 +146,22 @@ function applyLeadArrival(points: LeadEvolutionPoint[], granularity: EvolutionGr
  * les agrégats backend (source de vérité, événementiels) mais reçoivent la liste.
  */
 function applyEventItems(points: LeadEvolutionPoint[], granularity: EvolutionGranularity, events?: LeadEvolutionEvents): LeadEvolutionPoint[] {
-  if (!events || (!events.qualified && !events.signed)) return points
+  // Événements RÉELLEMENT fournis = tableau non vide. Un tableau vide (backend qui
+  // ne renvoie pas encore qualifiedEvents/signedEvents) NE doit pas déclencher le
+  // remplacement : sinon en vue horaire on écrasait `qualified`/`signed` à 0
+  // (`[].length`), rendant la courbe plate alors que le KPI est > 0.
+  const hasQualified = !!events?.qualified?.length
+  const hasSigned = !!events?.signed?.length
+  if (!hasQualified && !hasSigned) return points
   return points.map((point) => {
     const [start, end] = bucketRangeMs(point, granularity)
     const inBucket = (arr: LeadEvolutionItem[]) => arr.filter((e) => e.t >= start && e.t < end).sort((a, b) => a.t - b.t)
-    const qualifiedItems = events.qualified ? inBucket(events.qualified) : undefined
-    const signedItems = events.signed ? inBucket(events.signed) : undefined
+    const qualifiedItems = hasQualified ? inBucket(events!.qualified!) : undefined
+    const signedItems = hasSigned ? inBucket(events!.signed!) : undefined
     const next: LeadEvolutionPoint = { ...point, qualifiedItems, signedItems }
+    // Vue horaire : le comptage backend est réparti au prorata des appels
+    // (synthétique) ; avec de vrais événements datés on le remplace par le
+    // comptage réel de l'heure. Sans événements, on garde la répartition.
     if (granularity === 'hour') {
       if (qualifiedItems) next.qualified = qualifiedItems.length
       if (signedItems) next.signed = signedItems.length
