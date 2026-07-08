@@ -16,6 +16,13 @@ export function SubstepDocPreviewModal({ doc, onClose }: { doc: SubstepDocument;
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    // URL storage Convex signée (embarquée) : directement affichable inline, pas
+    // besoin de la récupérer en blob authentifié via l'ancien endpoint NestJS.
+    if (doc.url) {
+      setObjectUrl(doc.url)
+      setDetectedMime(doc.mimeType)
+      return
+    }
     let url: string | null = null
     let cancelled = false
     fetchSubstepDocumentObjectUrl(doc.id)
@@ -35,7 +42,7 @@ export function SubstepDocPreviewModal({ doc, onClose }: { doc: SubstepDocument;
       cancelled = true
       if (url) URL.revokeObjectURL(url)
     }
-  }, [doc.id])
+  }, [doc.id, doc.url, doc.mimeType])
 
   if (error) {
     return (

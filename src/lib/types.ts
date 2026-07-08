@@ -991,6 +991,9 @@ export type SubstepDocument = {
   mimeType: string
   sizeBytes: number
   uploadedAt: string
+  // URL storage Convex signée (embarquée par le backend). Absente si le blob
+  // n'a pas été migré → repli sur l'ancien endpoint (substepDocumentRawUrl).
+  url?: string
 }
 
 export type SubstepResponse = {

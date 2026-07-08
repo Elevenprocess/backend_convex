@@ -330,7 +330,7 @@ export type ConvexSubstepDoc = {
   depositOnly: boolean
   unlocked: boolean
   missingDocument: boolean
-  documents: { id: string; type: string; filename: string; mimeType: string; sizeBytes: number; uploadedAt: number }[]
+  documents: { id: string; type: string; filename: string; mimeType: string; sizeBytes: number; uploadedAt: number; url?: string }[]
   [k: string]: unknown
 }
 

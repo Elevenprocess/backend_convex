@@ -269,8 +269,8 @@ export function mapConvexCommercialObjective(d: import('./convexApi').ConvexComm
   }
 }
 
-export function mapConvexSubstepDocument(d: { id: string; type: string; filename: string; mimeType: string; sizeBytes: number; uploadedAt: number }): import('./types').SubstepDocument {
-  return { id: d.id, type: d.type, filename: d.filename, mimeType: d.mimeType, sizeBytes: d.sizeBytes, uploadedAt: new Date(d.uploadedAt).toISOString() }
+export function mapConvexSubstepDocument(d: { id: string; type: string; filename: string; mimeType: string; sizeBytes: number; uploadedAt: number; url?: string }): import('./types').SubstepDocument {
+  return { id: d.id, type: d.type, filename: d.filename, mimeType: d.mimeType, sizeBytes: d.sizeBytes, uploadedAt: new Date(d.uploadedAt).toISOString(), url: d.url }
 }
 
 export function mapConvexSubstep(doc: import('./convexApi').ConvexSubstepDoc): import('./types').SubstepResponse {

@@ -91,7 +91,7 @@ export function DocumentsHub({ substeps, onDocsChanged }: Props) {
                     items.push(
                       <li key={d.id} className="dochub-doc">
                         <span className={`dochub-thumb kind-${fileKind(d.mimeType)}`}>{KIND_LABEL[fileKind(d.mimeType)]}</span>
-                        <button type="button" className="dochub-doc-name" onClick={() => setPreview({ url: substepDocumentRawUrl(d.id), filename: displayFilename(d.filename), mimeType: d.mimeType })} title={displayFilename(d.filename)}>
+                        <button type="button" className="dochub-doc-name" onClick={() => setPreview({ url: d.url ?? substepDocumentRawUrl(d.id), filename: displayFilename(d.filename), mimeType: d.mimeType })} title={displayFilename(d.filename)}>
                           <span>{displayFilename(d.filename)}</span>
                         </button>
                         <span className="dochub-doc-meta">{s.label} · {Math.max(1, Math.round(d.sizeBytes / 1024))} Ko</span>
