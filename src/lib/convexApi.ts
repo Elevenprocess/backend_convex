@@ -86,6 +86,17 @@ export type ConvexRdvDoc = {
   // Date de PRISE de RDV (booking) réelle Render posée par la migration ; repli
   // _creationTime pour les RDV live. Sert d'horodatage « première prise de RDV ».
   createdAt?: number
+  // Résumé lead embarqué par rdv:list (nom/ville/téléphone/setter) → l'Overview
+  // affiche le prospect sans dépendre de la liste /leads bornée à 500.
+  lead?: {
+    id: string
+    firstName?: string | null
+    lastName?: string | null
+    city?: string | null
+    phone?: string | null
+    email?: string | null
+    setterId?: string | null
+  } | null
 }
 
 // Décor renvoyé par clients.list/getByProject/getByLead (decorateClient côté

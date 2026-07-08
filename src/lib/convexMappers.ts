@@ -150,7 +150,17 @@ export function mapConvexRdv(doc: ConvexRdvDoc): RdvResponse {
     // Date de prise du RDV : createdAt migré (réel Render) sinon insertion Convex.
     createdAt: new Date(doc.createdAt ?? doc._creationTime).toISOString(),
     updatedAt: new Date(doc.createdAt ?? doc._creationTime).toISOString(),
-    lead: null,
+    lead: doc.lead
+      ? {
+          id: doc.lead.id,
+          firstName: doc.lead.firstName ?? null,
+          lastName: doc.lead.lastName ?? null,
+          city: doc.lead.city ?? null,
+          phone: doc.lead.phone ?? null,
+          email: doc.lead.email ?? null,
+          setterId: doc.lead.setterId ?? null,
+        }
+      : null,
   }
 }
 
