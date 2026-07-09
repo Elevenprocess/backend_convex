@@ -301,6 +301,29 @@ http.route({
   }),
 });
 
+// CORS des routes publiques /debrief-link/* : la page débrief (SPA sur Vercel)
+// les appelle cross-origin. Origine * : endpoints publics, l'autorisation est
+// portée par le token signé dans l'URL, pas par l'origine.
+const CORS_HEADERS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET, POST, OPTIONS",
+  "access-control-allow-headers": "Content-Type",
+  "access-control-max-age": "86400",
+};
+
+const corsJson = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json", ...CORS_HEADERS },
+  });
+
+// Preflight des POST JSON (content-type: application/json → OPTIONS d'abord).
+http.route({
+  pathPrefix: "/debrief-link/",
+  method: "OPTIONS",
+  handler: httpAction(async () => new Response(null, { status: 204, headers: CORS_HEADERS })),
+});
+
 // Lecture publique du débrief via lien magique.
 http.route({
   pathPrefix: "/debrief-link/",
@@ -308,10 +331,10 @@ http.route({
   handler: httpAction(async (ctx, req) => {
     const token = decodeURIComponent(new URL(req.url).pathname.slice("/debrief-link/".length));
     const payload = await verifyDebriefToken(token, debriefLinkSecret());
-    if (!payload) return json({ message: "Lien invalide ou expiré." }, 410);
+    if (!payload) return corsJson({ message: "Lien invalide ou expiré." }, 410);
     const data = await ctx.runQuery(internal.debriefs.linkReadData, { rdvId: payload.rdvId as any });
-    if (!data) return json({ message: "Rendez-vous introuvable." }, 404);
-    return json(data);
+    if (!data) return corsJson({ message: "Rendez-vous introuvable." }, 404);
+    return corsJson(data);
   }),
 });
 
@@ -324,26 +347,26 @@ http.route({
     const isReschedule = suffix.endsWith("/reschedule");
     const token = isReschedule ? suffix.slice(0, -"/reschedule".length) : suffix;
     const payload = await verifyDebriefToken(token, debriefLinkSecret());
-    if (!payload) return json({ message: "Lien invalide ou expiré." }, 410);
+    if (!payload) return corsJson({ message: "Lien invalide ou expiré." }, 410);
     const rdvId = payload.rdvId as any;
 
     let body: Record<string, unknown>;
     try {
       body = (await req.json()) as Record<string, unknown>;
     } catch {
-      return json({ message: "Body JSON invalide" }, 400);
+      return corsJson({ message: "Body JSON invalide" }, 400);
     }
 
     if (isReschedule) {
       const when = typeof body.scheduledAt === "string" ? Date.parse(body.scheduledAt) : NaN;
-      if (Number.isNaN(when)) return json({ message: "Date de report invalide." }, 400);
-      if (when <= Date.now()) return json({ message: "La nouvelle date doit être dans le futur." }, 400);
+      if (Number.isNaN(when)) return corsJson({ message: "Date de report invalide." }, 400);
+      if (when <= Date.now()) return corsJson({ message: "La nouvelle date doit être dans le futur." }, 400);
       try {
         await ctx.runMutation(internal.debriefs.rescheduleViaLink, { rdvId, scheduledAt: when });
       } catch (err) {
-        return json({ message: err instanceof Error ? err.message : "Report impossible." }, 404);
+        return corsJson({ message: err instanceof Error ? err.message : "Report impossible." }, 404);
       }
-      return json({ ok: true });
+      return corsJson({ ok: true });
     }
 
     try {
@@ -351,9 +374,9 @@ http.route({
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Enregistrement impossible.";
       const status = /introuvable/i.test(msg) ? 404 : 400;
-      return json({ message: msg }, status);
+      return corsJson({ message: msg }, status);
     }
-    return json({ ok: true });
+    return corsJson({ ok: true });
   }),
 });
 
