@@ -22,7 +22,13 @@ vi.mock('./auth', () => ({
     selector({ user: { role: roleRef.role }, realUser: { role: roleRef.role } }),
 }))
 
-import { useConvexAnalyticsFunnel, useConvexAnalyticsSummary, useConvexDebriefAnalytics } from './convexHooks'
+import {
+  useConvexAnalyticsFunnel,
+  useConvexAnalyticsSummary,
+  useConvexCommercialAnalytics,
+  useConvexDebriefAnalytics,
+  useConvexSetterStats,
+} from './convexHooks'
 
 const lastArg = () => useQueryCalls[useQueryCalls.length - 1]
 
@@ -86,6 +92,30 @@ describe('gating des analytics Convex par rôle', () => {
     rerender()
     expect(result.current.data).toBe(next)
     expect(result.current.loading).toBe(false)
+  })
+
+  it('setterStats : setter autorisé (ses propres stats), technicien skip, sans id skip', () => {
+    roleRef.role = 'setter'
+    renderHook(() => useConvexSetterStats('u1', { from: 'a', to: 'b' }))
+    expect(lastArg()).toMatchObject({ setterId: 'u1', from: 'a', to: 'b' })
+
+    roleRef.role = 'technicien'
+    renderHook(() => useConvexSetterStats('u1', {}))
+    expect(lastArg()).toBe('skip')
+
+    roleRef.role = 'setter'
+    renderHook(() => useConvexSetterStats(undefined, {}))
+    expect(lastArg()).toBe('skip')
+  })
+
+  it('commercialStats : commercial autorisé, setter skip', () => {
+    roleRef.role = 'commercial'
+    renderHook(() => useConvexCommercialAnalytics('u2', { days: 30 }))
+    expect(lastArg()).toMatchObject({ commercialId: 'u2', days: 30 })
+
+    roleRef.role = 'setter'
+    renderHook(() => useConvexCommercialAnalytics('u2', {}))
+    expect(lastArg()).toBe('skip')
   })
 
   it('now est stable entre deux rendus (pas de refetch en boucle)', () => {

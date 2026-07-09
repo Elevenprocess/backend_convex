@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePaginatedQuery, useQuery } from 'convex/react'
-import { analyticsDebriefStats, analyticsFunnel, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsGet, leadsList, leadsStats, paymentsListAcomptes, rdvList, substepsList, usersList } from './convexApi'
+import { analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsGet, leadsList, leadsStats, paymentsListAcomptes, rdvList, substepsList, usersList } from './convexApi'
 import { mapConvexAcompte, mapConvexCallLog, mapConvexClient, mapConvexCommercialObjective, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexSubstep, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
 import type {
   AcompteResponse,
+  AnalyticsCommercialSummary,
   AnalyticsFunnelResponse,
+  AnalyticsSetterSummary,
   AnalyticsSummaryResponse,
   CallLogResponse,
   ClientResponse,
@@ -284,6 +286,58 @@ export function useConvexDebriefAnalytics(filters?: {
   const sticky = usePersistentSticky(key, res)
   return {
     data: allowed ? ((sticky ?? null) as DebriefStats | null) : null,
+    loading: allowed && res === undefined,
+    error: null,
+    refetch: noop,
+  }
+}
+
+// Rôles alignés sur analytics.ts (SETTER_STATS_ROLES / COMMERCIAL_STATS_ROLES).
+const SETTER_STATS_ROLES = new Set<Role>(['admin', 'setter', 'setter_lead', 'commercial', 'commercial_lead'])
+const COMMERCIAL_STATS_ROLES = new Set<Role>(['admin', 'commercial', 'commercial_lead'])
+
+export function useConvexSetterStats(
+  id: string | undefined,
+  filters?: { from?: string; to?: string; days?: number },
+): Async<AnalyticsSetterSummary> {
+  const now = useStableNow()
+  const role = useAuth((s) => s.user?.role)
+  const uid = useAuth((s) => s.user?.id)
+  const allowed = !!id && !!role && SETTER_STATS_ROLES.has(role)
+  const res = useQuery(
+    analyticsSetterStats,
+    allowed ? { setterId: id, now, days: filters?.days, from: filters?.from, to: filters?.to } : 'skip',
+  )
+  const key = allowed
+    ? `kpi:setter:${uid ?? '?'}:${id}:${filters?.days ?? ''}:${filters?.from ?? ''}:${filters?.to ?? ''}`
+    : null
+  const sticky = usePersistentSticky(key, res)
+  return {
+    data: allowed ? ((sticky ?? null) as AnalyticsSetterSummary | null) : null,
+    loading: allowed && res === undefined,
+    error: null,
+    refetch: noop,
+  }
+}
+
+export function useConvexCommercialAnalytics(
+  id: string | undefined,
+  filters?: { from?: string; to?: string; days?: number },
+): Async<AnalyticsCommercialSummary> {
+  const now = useStableNow()
+  const role = useAuth((s) => s.user?.role)
+  const uid = useAuth((s) => s.user?.id)
+  const allowed = !!id && !!role && COMMERCIAL_STATS_ROLES.has(role)
+  const res = useQuery(
+    analyticsCommercialStats,
+    allowed ? { commercialId: id, now, days: filters?.days, from: filters?.from, to: filters?.to } : 'skip',
+  )
+  const key = allowed
+    ? `kpi:commercial:${uid ?? '?'}:${id}:${filters?.days ?? ''}:${filters?.from ?? ''}:${filters?.to ?? ''}`
+    : null
+  const sticky = usePersistentSticky(key, res)
+  return {
+    data: allowed ? ((sticky ?? null) as AnalyticsCommercialSummary | null) : null,
     loading: allowed && res === undefined,
     error: null,
     refetch: noop,

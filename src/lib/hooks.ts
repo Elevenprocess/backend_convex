@@ -42,8 +42,10 @@ import {
   useConvexAnalyticsSummary,
   useConvexCallLogs,
   useConvexClients,
+  useConvexCommercialAnalytics,
   useConvexCommercialObjectives,
   useConvexDebriefAnalytics,
+  useConvexSetterStats,
   useConvexLead,
   useConvexLeadDebriefs,
   useConvexLeadStats,
@@ -684,7 +686,7 @@ export function prefetchAnalyticsSummary(filters?: {
 }
 
 // Stats d'un setter arbitraire (profil /team/setters/:id), filtrables par période.
-export function useSetterStats(
+function useSetterStatsRest(
   id: string | undefined,
   filters?: { from?: string; to?: string; days?: number },
 ): Async<AnalyticsSetterSummary> {
@@ -693,6 +695,10 @@ export function useSetterStats(
     silentInitialLoading: true,
   })
 }
+
+export const useSetterStats: typeof useSetterStatsRest = convexAuthEnabled
+  ? (useConvexSetterStats as unknown as typeof useSetterStatsRest)
+  : useSetterStatsRest
 
 function useCommercialObjectivesRest(period: string | null): Async<CommercialObjectiveResponse[]> {
   return useFetch<CommercialObjectiveResponse[]>(
@@ -1194,9 +1200,13 @@ export function moveGhlOpportunity(
   )
 }
 
-export function useCommercialAnalytics(id: string | undefined, filters?: { days?: number; from?: string; to?: string }): Async<AnalyticsCommercialSummary> {
+function useCommercialAnalyticsRest(id: string | undefined, filters?: { days?: number; from?: string; to?: string }): Async<AnalyticsCommercialSummary> {
   return useFetch<AnalyticsCommercialSummary>(id ? `/analytics/commercials/${id}` : null, filters)
 }
+
+export const useCommercialAnalytics: typeof useCommercialAnalyticsRest = convexAuthEnabled
+  ? (useConvexCommercialAnalytics as unknown as typeof useCommercialAnalyticsRest)
+  : useCommercialAnalyticsRest
 
 export type CreateGhlAppointmentInput = CreateRdvInput & {
   sector: string

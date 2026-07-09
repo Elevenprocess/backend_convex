@@ -546,3 +546,15 @@ export const analyticsDebriefStats = makeFunctionReference<
   { from?: string; to?: string; commercialId?: string },
   unknown
 >('analytics:debriefStats')
+
+export const analyticsSetterStats = makeFunctionReference<
+  'query',
+  { setterId: string; now: number; days?: number; from?: string; to?: string },
+  unknown
+>('analytics:setterStats')
+
+export const analyticsCommercialStats = makeFunctionReference<
+  'query',
+  { commercialId: string; now: number; days?: number; from?: string; to?: string },
+  unknown
+>('analytics:commercialStats')
