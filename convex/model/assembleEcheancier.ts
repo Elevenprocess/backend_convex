@@ -12,6 +12,7 @@ import {
   EDF_CONFIRMATION_JALON,
   WorkTemplate,
 } from "./acompteEcheancier";
+import { templatesFromDevisEcheancier } from "./devisEcheancier";
 import { isJalonReached, clientStatusGlobal } from "./delivrabiliteSeam";
 import { AcompteStatut, EcheanceJalon } from "./enums";
 
@@ -33,6 +34,12 @@ export type EcheanceLine = {
   updatedAt: null; // acompteEcheances n'a pas de updatedAt en Convex
 };
 
+// Provenance du plan de tranches :
+//   custom   → échéancier personnalisé saisi back-office (setEcheancier)
+//   devis    → échéancier du devis signé (conditions de règlement OCR)
+//   standard → template en dur dérivé du financingType (fallback historique)
+export type EcheancierSource = "custom" | "devis" | "standard";
+
 export type AcompteResponse = {
   debriefId: Id<"debriefs">;
   leadId: Id<"leads"> | null;
@@ -47,6 +54,9 @@ export type AcompteResponse = {
   acomptePercent: number | null;
   acompteAmount: number | null;
   customEcheancier: boolean;
+  echeancierSource: EcheancierSource;
+  // Numéro du devis signé qui fournit le plan (source === "devis"), sinon null.
+  devisNumber: string | null;
   signedAt: number | null; // Unix ms (Convex) vs ISO string (NestJS)
   edfRecepisse: boolean;
   echeances: EcheanceLine[];
@@ -57,13 +67,29 @@ export type AcompteResponse = {
 // ─── Helper partagé lecture/écriture ─────────────────────────────────────────
 
 /**
+ * Un devis signé ne pilote l'échéancier que pour les ventes payées par le
+ * client au fil des jalons : comptant ou mode non renseigné. Les financements
+ * (solde organisme à l'install) et 10x/12x (suivi externe) gardent leur
+ * logique propre — l'échéancier du devis y décrit ce que paie l'organisme ou
+ * les mensualités client, pas les encaissements à suivre côté finances.
+ */
+export function devisEcheancierEligible(debrief: Doc<"debriefs">): boolean {
+  return debrief.financingType === "comptant" || debrief.financingType == null;
+}
+
+/**
  * Sélectionne les templates de tranches à partir des données déjà chargées.
  * Source unique utilisée par la LECTURE (assembleEcheancier) ET l'ÉCRITURE
  * (recordEcheance), garantissant que l'ensemble des ordres valides est identique.
  *
- * @param debrief      Document debriefs
- * @param imported     true si source === "airtable_migration"
+ * Priorité : échéancier personnalisé (back-office) > échéancier du devis signé
+ * (conditions de règlement) > template standard dérivé du financingType.
+ *
+ * @param debrief       Document debriefs
+ * @param imported      true si source === "airtable_migration"
  * @param persistedRows lignes acompteEcheances existantes pour ce débrief
+ * @param devisTemplates tranches issues du devis signé (templatesFromDevisEcheancier),
+ *                       [] si pas de devis signé exploitable
  */
 export function resolveTemplatesFromData(
   debrief: Doc<"debriefs">,
@@ -75,14 +101,17 @@ export function resolveTemplatesFromData(
     montantPrevu?: number;
     jalonKey?: string;
   }>,
-): WorkTemplate[] {
+  devisTemplates: WorkTemplate[] = [],
+): { templates: WorkTemplate[]; source: EcheancierSource } {
   const hasUsableCustomPlan = persistedRows.some(
     (r) => r.montantPrevu != null || r.percent != null || r.jalonKey != null,
   );
   const useCustomEcheancier = debrief.customEcheancier && hasUsableCustomPlan;
 
-  return useCustomEcheancier
-    ? customTemplatesFromRows(
+  if (useCustomEcheancier) {
+    return {
+      source: "custom",
+      templates: customTemplatesFromRows(
         persistedRows.map((r) => ({
           ordre: r.ordre,
           label: r.label ?? null,
@@ -90,14 +119,117 @@ export function resolveTemplatesFromData(
           montantPrevu: r.montantPrevu ?? null,
           jalonKey: r.jalonKey ?? null,
         })),
-      )
-    : resolveEcheancier({
-        financingType: debrief.financingType ?? null,
-        montantTotal: debrief.montantTotal ?? null,
-        acompteAmount: debrief.acompteAmount ?? null,
-        acomptePercent: debrief.acomptePercent ?? null,
-        imported,
-      });
+      ),
+    };
+  }
+
+  if (devisTemplates.length > 0 && devisEcheancierEligible(debrief)) {
+    return { source: "devis", templates: devisTemplates };
+  }
+
+  return {
+    source: "standard",
+    templates: resolveEcheancier({
+      financingType: debrief.financingType ?? null,
+      montantTotal: debrief.montantTotal ?? null,
+      acompteAmount: debrief.acompteAmount ?? null,
+      acomptePercent: debrief.acomptePercent ?? null,
+      imported,
+    }),
+  };
+}
+
+/**
+ * Devis signé qui fait foi pour l'échéancier d'un débrief : le plus spécifique
+ * d'abord (même rdv), sinon même projet, sinon même lead. Parmi les candidats :
+ * status "signe", non supprimé, échéancier extrait non vide ; le plus récemment
+ * signé gagne.
+ */
+export async function findSignedDevisForDebrief(
+  ctx: QueryCtx,
+  debrief: Doc<"debriefs">,
+): Promise<Doc<"devis"> | null> {
+  const { rdvId, projectId, leadId } = debrief;
+  const scopes: Array<() => Promise<Doc<"devis">[]>> = [];
+  if (rdvId) {
+    scopes.push(() =>
+      ctx.db
+        .query("devis")
+        .withIndex("by_rdv", (q) => q.eq("rdvId", rdvId))
+        .collect(),
+    );
+  }
+  if (projectId) {
+    scopes.push(() =>
+      ctx.db
+        .query("devis")
+        .withIndex("by_project", (q) => q.eq("projectId", projectId))
+        .collect(),
+    );
+  }
+  if (leadId) {
+    scopes.push(() =>
+      ctx.db
+        .query("devis")
+        .withIndex("by_lead", (q) => q.eq("leadId", leadId))
+        .collect(),
+    );
+  }
+
+  for (const load of scopes) {
+    const candidates = (await load()).filter(
+      (d) =>
+        d.deletedAt === undefined &&
+        d.status === "signe" &&
+        Array.isArray(d.echeancier) &&
+        d.echeancier.length > 0,
+    );
+    if (candidates.length === 0) continue;
+    candidates.sort(
+      (a, b) =>
+        (b.signedAt ?? b._creationTime) - (a.signedAt ?? a._creationTime),
+    );
+    return candidates[0];
+  }
+  return null;
+}
+
+/**
+ * Résolution complète du plan de tranches pour un débrief : charge le devis
+ * signé pertinent puis délègue à resolveTemplatesFromData. À utiliser partout
+ * (lecture ET écriture) pour que l'ensemble des ordres valides soit identique.
+ */
+export async function resolveTemplatesForDebrief(
+  ctx: QueryCtx,
+  debrief: Doc<"debriefs">,
+  imported: boolean,
+  persistedRows: Array<{
+    ordre: number;
+    label?: string;
+    percent?: number;
+    montantPrevu?: number;
+    jalonKey?: string;
+  }>,
+): Promise<{
+  templates: WorkTemplate[];
+  source: EcheancierSource;
+  devis: Doc<"devis"> | null;
+}> {
+  // Inutile de charger le devis si son échéancier ne peut pas s'appliquer
+  // (financement / 10x-12x) — resolveTemplatesFromData l'ignorerait de toute façon.
+  const devis = devisEcheancierEligible(debrief)
+    ? await findSignedDevisForDebrief(ctx, debrief)
+    : null;
+  const devisTemplates = devis
+    ? templatesFromDevisEcheancier(devis.echeancier, debrief.montantTotal ?? null)
+    : [];
+  const { templates, source } = resolveTemplatesFromData(
+    debrief,
+    imported,
+    persistedRows,
+    devisTemplates,
+  );
+  return { templates, source, devis: source === "devis" ? devis : null };
 }
 
 // ─── Fonction principale ──────────────────────────────────────────────────────
@@ -165,15 +297,16 @@ export async function assembleEcheancier(
     .withIndex("by_debrief", (q) => q.eq("debriefId", debrief._id))
     .first();
 
-  // ── 6. Choix du plan : custom ou template déduit du financingType ─────────────
-  // Délégué à resolveTemplatesFromData (partagé avec recordEcheance) pour garantir
-  // que l'ensemble des ordres valides est identique en lecture et en écriture.
-  const useCustomEcheancier =
-    debrief.customEcheancier &&
-    persistedRows.some(
-      (r) => r.montantPrevu != null || r.percent != null || r.jalonKey != null,
-    );
-  const templates = resolveTemplatesFromData(debrief, imported, persistedRows);
+  // ── 6. Choix du plan : custom > devis signé > template financingType ──────────
+  // Délégué à resolveTemplatesForDebrief (partagé avec recordEcheance) pour
+  // garantir que l'ensemble des ordres valides est identique en lecture et en
+  // écriture.
+  const {
+    templates,
+    source: echeancierSource,
+    devis: sourceDevis,
+  } = await resolveTemplatesForDebrief(ctx, debrief, imported, persistedRows);
+  const useCustomEcheancier = echeancierSource === "custom";
 
   // 10x/12x sans acompte, ou aucun montant → rien à afficher.
   if (templates.length === 0) return null;
@@ -387,6 +520,8 @@ export async function assembleEcheancier(
     acomptePercent: debrief.acomptePercent ?? null,
     acompteAmount: debrief.acompteAmount ?? null,
     customEcheancier: debrief.customEcheancier,
+    echeancierSource,
+    devisNumber: sourceDevis?.devisNumber ?? null,
     signedAt: debrief.signedAt ?? null,
     edfRecepisse,
     echeances,

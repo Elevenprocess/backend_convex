@@ -14,7 +14,7 @@ const UPLOAD = [
   "delivrabilite", "responsable_technique", "back_office",
 ] as const;
 
-function toResponse(row: Record<string, unknown>) {
+export function toResponse(row: Record<string, unknown>) {
   const { markedSignedById, deletedAt, ...rest } = row as Record<string, unknown>;
   void markedSignedById; void deletedAt;
   return rest;
@@ -256,7 +256,8 @@ export const markAsSigned = mutation({
     const now = Date.now();
     await ctx.db.patch(args.devisId, { status: "signe", signedAt: now, markedSignedById: user._id });
 
-    // Sync rdv inline (hors-scope : propagation échéancier → payments).
+    // Sync rdv inline. L'échéancier du devis est pris en compte côté payments
+    // à la LECTURE (resolveTemplatesForDebrief) : rien à propager ici.
     if (row.rdvId) {
       const montantPourRdv = row.montantNet ?? row.montantTtc;
       await ctx.db.patch(row.rdvId, {

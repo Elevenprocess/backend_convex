@@ -17,7 +17,7 @@ import {
 import {
   assembleEcheancier,
   AcompteResponse,
-  resolveTemplatesFromData,
+  resolveTemplatesForDebrief,
 } from "./model/assembleEcheancier";
 
 // Rôles autorisés pour les queries finances.
@@ -357,7 +357,12 @@ export const recordEcheance = mutation({
       .withIndex("by_debrief_ordre", (q) => q.eq("debriefId", debrief._id))
       .collect();
 
-    const templates = resolveTemplatesFromData(debrief, imported, persistedRows);
+    const { templates } = await resolveTemplatesForDebrief(
+      ctx,
+      debrief,
+      imported,
+      persistedRows,
+    );
     const validOrdres = new Set(templates.map((t) => t.ordre));
 
     if (!validOrdres.has(args.ordre)) {
