@@ -22,7 +22,11 @@
 import { internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
-import { recomputePhase, recomputeClientStatus } from "./model/ensureDossier";
+import {
+  ensureDossier,
+  recomputePhase,
+  recomputeClientStatus,
+} from "./model/ensureDossier";
 import { WorkflowSubstepKey } from "./model/enums";
 
 const rowValidator = v.object({
@@ -161,6 +165,15 @@ export const apply = internalMutation({
           if (byQty.length === 1) matches = byQty;
         }
       }
+      // Départage : nom COMPLET identique (parenthèses comprises — cas des
+      // multi-sites « PICARD … (tampon 409 chemin du petit) »).
+      if (matches.length > 1) {
+        const rowFull = fold(row.name).replace(/\s+/g, " ");
+        const exactFull = matches.filter(
+          (m) => fold(m.display).replace(/\s+/g, " ") === rowFull,
+        );
+        if (exactFull.length === 1) matches = exactFull;
+      }
       // Départage : préférer le match exact (mêmes jetons des deux côtés).
       if (matches.length > 1) {
         const exact = matches.filter(
@@ -286,5 +299,158 @@ export const apply = internalMutation({
     }
 
     return { dryRun, ...report };
+  },
+});
+
+// ─── ensureDossiers — crée les dossiers manquants pour les lignes de la feuille ─
+// Pour chaque ligne sans dossier délivrabilité :
+//  1. lead existant matché strictement (jetons uniques) → ensureDossier(lead)
+//  2. aucun lead et createLeads=true → création d'un lead minimal (nom complet
+//     de la feuille, ville/adresse/téléphone, source "manual", statut "signe")
+//     puis ensureDossier.
+// Idempotent (ensureDossier l'est ; deux lignes → même lead : la 2e est
+// rapportée, un seul dossier sans projet par lead). Relancer apply ensuite
+// pour poser statuts/dates/notes sur les nouveaux dossiers.
+export const ensureDossiers = internalMutation({
+  args: {
+    rows: v.array(rowValidator),
+    createLeads: v.optional(v.boolean()),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const dryRun = args.dryRun === true;
+
+    // Leads existants (jetons) + leads ayant déjà un dossier actif.
+    const allLeads = (await ctx.db.query("leads").collect()).filter(
+      (l) => l.deletedAt === undefined,
+    );
+    const leadTokens = allLeads
+      .map((l) => ({
+        lead: l,
+        display: [l.firstName, l.lastName].filter(Boolean).join(" "),
+        tokens: nameTokens([l.firstName, l.lastName].filter(Boolean).join(" ")),
+      }))
+      .filter((e) => e.tokens.length > 0);
+    const withDossier = new Set<string>();
+    for (const c of await ctx.db.query("clients").collect()) {
+      if (c.deletedAt === undefined) withDossier.add(c.leadId);
+    }
+
+    const report = {
+      dryRun,
+      rows: args.rows.length,
+      alreadyHasDossier: 0,
+      dossiersCreated: [] as string[],
+      leadsCreated: [] as string[],
+      ambiguousLead: [] as string[],
+      noLead: [] as string[],
+      sameLeadDuplicate: [] as string[],
+      annule: [] as string[],
+    };
+    const usedLeads = new Set<string>();
+
+    for (const row of args.rows) {
+      if (fold(row.installe) === "annuler") {
+        report.annule.push(row.name);
+        continue;
+      }
+      const rowTokens = nameTokens(row.name);
+      if (rowTokens.length === 0) continue;
+      const rowSet = new Set(rowTokens);
+
+      let matches = leadTokens.filter(({ tokens }) => {
+        const leadSet = new Set(tokens);
+        return tokens.every((t) => rowSet.has(t)) || rowTokens.every((t) => leadSet.has(t));
+      });
+
+      if (matches.length > 1) {
+        // 1. La table leads contient beaucoup de doublons (même personne,
+        //    plusieurs leads). Si l'un des candidats a déjà un dossier, le
+        //    dossier de cette personne existe → rien à créer.
+        if (matches.some((m) => withDossier.has(m.lead._id))) {
+          report.alreadyHasDossier++;
+          continue;
+        }
+        // 2. Préférer le match le plus SPÉCIFIQUE (plus de jetons communs
+        //    avec la ligne) : « GRONDIN Marie Nadeige » bat « Marie Grondin ».
+        const overlap = (m: (typeof matches)[number]) =>
+          m.tokens.filter((t) => rowSet.has(t)).length;
+        const maxOverlap = Math.max(...matches.map(overlap));
+        matches = matches.filter((m) => overlap(m) === maxOverlap);
+        // 3. Dédupe des doublons purs (mêmes jetons) : garder le « meilleur »
+        //    lead — signé > téléphone renseigné > le plus récent.
+        const setKey = (m: (typeof matches)[number]) => [...new Set(m.tokens)].sort().join("|");
+        const groups = new Map<string, typeof matches>();
+        for (const m of matches) {
+          const k = setKey(m);
+          groups.set(k, [...(groups.get(k) ?? []), m]);
+        }
+        const score = (m: (typeof matches)[number]) =>
+          (m.lead.status === "signe" ? 4 : 0) +
+          (m.lead.phone ? 2 : 0) +
+          m.lead._creationTime / 1e15;
+        matches = [...groups.values()].map(
+          (g) => g.sort((a, b) => score(b) - score(a))[0],
+        );
+        // 4. Groupes distincts restants (ex. couple « DIDIER ou MARYLOU ») :
+        //    préférer le nom en TÊTE de ligne (indice moyen des jetons le plus bas).
+        if (matches.length > 1) {
+          const avgIdx = (m: (typeof matches)[number]) => {
+            const idxs = m.tokens.map((t) => rowTokens.indexOf(t)).filter((i) => i >= 0);
+            return idxs.length ? idxs.reduce((a, b) => a + b, 0) / idxs.length : 99;
+          };
+          matches.sort((a, b) => avgIdx(a) - avgIdx(b));
+          if (avgIdx(matches[0]) < avgIdx(matches[1])) matches = [matches[0]];
+        }
+      }
+
+      if (matches.length > 1) {
+        report.ambiguousLead.push(`${row.name} → ${matches.map((m) => m.display).join(" / ")}`);
+        continue;
+      }
+
+      let leadId: Id<"leads"> | null = null;
+      if (matches.length === 1) {
+        // Sécurité création : exiger ≥ 2 jetons communs pour matcher un lead.
+        if (matches[0].tokens.length < 2 && rowTokens.length >= 2) {
+          report.ambiguousLead.push(`${row.name} → match trop faible : ${matches[0].display}`);
+          continue;
+        }
+        leadId = matches[0].lead._id;
+        if (withDossier.has(leadId)) {
+          report.alreadyHasDossier++;
+          continue;
+        }
+      } else if (args.createLeads === true) {
+        // Garder les parenthèses : elles distinguent les multi-sites
+        // (« PICARD JEAN DANIEL et SYLVIE (tampon 409 chemin du petit) »).
+        const cleanName = row.name.replace(/\s+/g, " ").trim();
+        if (!dryRun) {
+          leadId = await ctx.db.insert("leads", {
+            source: "manual",
+            status: "signe",
+            lastName: cleanName,
+            ...(row.tel?.trim() ? { phone: row.tel.trim() } : {}),
+            ...(row.ville?.trim() ? { city: row.ville.trim() } : {}),
+          });
+        }
+        report.leadsCreated.push(cleanName);
+      } else {
+        report.noLead.push(row.name);
+        continue;
+      }
+
+      if (leadId !== null && usedLeads.has(leadId)) {
+        report.sameLeadDuplicate.push(row.name);
+        continue;
+      }
+      if (leadId !== null) usedLeads.add(leadId);
+
+      if (!dryRun && leadId !== null) {
+        await ensureDossier(ctx, { leadId });
+      }
+      report.dossiersCreated.push(row.name);
+    }
+    return report;
   },
 });
