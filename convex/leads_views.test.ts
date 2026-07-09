@@ -73,4 +73,22 @@ describe("leads.dashboard", () => {
     expect(d.alerts.staleQuotes).toBe(1); // rdv_honore depuis 30j >= 14
     expect(d.alerts.stuckLeads).toBe(1);  // open honore >= 30j
   });
+
+  it("compte TOUS les statuts (signature_en_cours / pas_qualifie / pas_de_reponse)", async () => {
+    const t = makeT();
+    const comId = await insertUser(t, { role: "commercial" });
+    await t.run(async (ctx) => {
+      await ctx.db.insert("leads", { source: "ghl", status: "signature_en_cours", assignedToId: comId });
+      await ctx.db.insert("leads", { source: "ghl", status: "pas_qualifie", assignedToId: comId });
+      await ctx.db.insert("leads", { source: "ghl", status: "pas_de_reponse", assignedToId: comId });
+    });
+    const d = await asUser(t, comId).query(api.leads.dashboard, { now: NOW });
+    expect(d.counters.signature_en_cours).toBe(1);
+    expect(d.counters.pas_qualifie).toBe(1);
+    expect(d.counters.pas_de_reponse).toBe(1);
+    // ces 3 statuts sont "ouverts" (ni signe ni perdu) → cohérence compteurs/openLeads.
+    const counted = Object.values(d.counters).reduce((a, b) => a + b, 0);
+    expect(counted).toBe(3);
+    expect(d.totals.openLeads).toBe(3);
+  });
 });

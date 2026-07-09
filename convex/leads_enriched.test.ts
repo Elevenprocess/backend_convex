@@ -16,13 +16,13 @@ describe("leads.getEnriched", () => {
 
     await t.run(async (ctx) => {
       // 2 appels : un aujourd'hui (avec rappel programmé), un il y a 3 jours.
-      await ctx.db.insert("callLogs", { leadId, setterId, calledAt: NOW - 2 * 3_600_000, result: "answered", notes: "RAS", nextCallbackAt: NOW + DAY });
-      await ctx.db.insert("callLogs", { leadId, setterId, calledAt: NOW - 3 * DAY, result: "no_answer" });
+      await ctx.db.insert("callLogs", { leadId, setterId, calledAt: NOW - 2 * 3_600_000, result: "joint", notes: "RAS", nextCallbackAt: NOW + DAY });
+      await ctx.db.insert("callLogs", { leadId, setterId, calledAt: NOW - 3 * DAY, result: "non_joint" });
       // RDV honoré avec commercial + débrief rempli.
       await ctx.db.insert("rdv", { leadId, commercialId: comId, locationType: "domicile", status: "honore", scheduledAt: NOW - DAY, debriefFilledAt: NOW - DAY });
       // Devis + dossier délivrabilité + historique de stage.
       await ctx.db.insert("devis", { leadId, commercialId: comId, status: "signe", ocrStatus: "done", filename: "d.pdf", sizeBytes: 1, lignes: [], echeancier: [], extracted: {} });
-      await ctx.db.insert("clients", { leadId, statusGlobal: "en_cours", currentPhase: "visite_technique", blocked: false });
+      await ctx.db.insert("clients", { leadId, statusGlobal: "administratif_en_cours", currentPhase: "vt", blocked: false });
       await ctx.db.insert("leadStageHistory", { leadId, ghlStageName: "signe", saasStatus: "signe", changedAt: NOW - 5 * DAY, source: "manual" });
       await ctx.db.insert("leadStageHistory", { leadId, ghlStageName: "nouveau", saasStatus: "nouveau", changedAt: NOW - 10 * DAY, source: "manual" });
     });
@@ -37,7 +37,7 @@ describe("leads.getEnriched", () => {
       latestRdvCommercialId: comId,
       hasDevis: true,
       hasDebrief: true,
-      delivrabiliteStatus: "en_cours",
+      delivrabiliteStatus: "administratif_en_cours",
     });
     expect(e!.latestCallAt).toBe(NOW - 2 * 3_600_000);
     expect(e!.nextCallbackAt).toBe(NOW + DAY);
@@ -60,10 +60,10 @@ describe("leads.listEnriched", () => {
     const t = makeT();
     const adminId = await insertUser(t, { role: "admin" });
     const leadId = await t.run((ctx) => ctx.db.insert("leads", { source: "ghl", status: "signe" }));
-    await t.run((ctx) => ctx.db.insert("clients", { leadId, statusGlobal: "installation", currentPhase: "installation", blocked: false }));
+    await t.run((ctx) => ctx.db.insert("clients", { leadId, statusGlobal: "installation_planifiee", currentPhase: "installation", blocked: false }));
     const page = await asUser(t, adminId).query(api.leads.listEnriched, { now: NOW, paginationOpts: { numItems: 10, cursor: null } });
     const row = page.page.find((l) => l._id === leadId);
-    expect(row?.delivrabiliteStatus).toBe("installation");
+    expect(row?.delivrabiliteStatus).toBe("installation_planifiee");
     expect(row?.callCount).toBe(0);
   });
 });

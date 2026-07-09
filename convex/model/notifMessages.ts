@@ -58,6 +58,36 @@ export function debriefCreatedMessage(input: {
   };
 }
 
+// Alerte immédiate au commercial quand l'accueil signale une annulation de RDV
+// (reçue par appel/WhatsApp sur le numéro central). Type préfixé `rdv_` pour
+// que le front lui donne l'icône/le groupe RDV.
+export function rdvCancelledMessage(input: {
+  leadName: string;
+  reason?: string;
+}): { type: "rdv_annule"; title: string; body: string } {
+  const motif = input.reason ? ` — ${input.reason}` : "";
+  return {
+    type: "rdv_annule",
+    title: "RDV annulé",
+    body: `${input.leadName} a annulé son RDV${motif}.`,
+  };
+}
+
+// Alerte immédiate au commercial quand l'accueil signale un report de RDV. La
+// nouvelle date/heure exacte est portée par le payload (formatée côté front,
+// pour éviter tout décalage de fuseau côté serveur).
+export function rdvRescheduledMessage(input: {
+  leadName: string;
+  reason?: string;
+}): { type: "rdv_reporte"; title: string; body: string } {
+  const motif = input.reason ? ` — ${input.reason}` : "";
+  return {
+    type: "rdv_reporte",
+    title: "RDV reporté",
+    body: `${input.leadName} a reporté son RDV${motif}.`,
+  };
+}
+
 export function acompteSoldeMessage(input: {
   leadName: string;
 }): { type: "acompte_a_encaisser"; title: string; body: string } {

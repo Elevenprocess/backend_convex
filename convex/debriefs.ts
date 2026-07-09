@@ -10,7 +10,6 @@ import {
 import { requireRole, requireUser, assertCommercialRole } from "./model/access";
 import { insertStageHistory } from "./model/stageHistory";
 import { deriveLeadStatusFromDebrief } from "./model/deriveLeadStatusFromDebrief";
-import { deriveLeadStatus } from "./model/deriveLeadStatus";
 import { ensureProjectForLead, markProjectSigned } from "./model/ensureProject";
 import { internal } from "./_generated/api";
 import { ensureDossier } from "./model/ensureDossier";
@@ -271,12 +270,15 @@ export const create = mutation({
   },
 });
 
-// Portage verbatim de outcomeToResult (debrief-link.controller.ts).
+// Mappe l'outcome du débrief vers le champ `result` du RDV (RDV_RESULTS).
+// en_reflexion / suivi_prevu → "reflexion" pour que le RDV reflète l'état de
+// suivi (sinon le RDV restait sans result et le lead ne bougeait pas).
 export function outcomeToResult(
   outcome: string,
   reason: string | undefined,
 ): "signe" | "reflexion" | "perdu" | "no_show" | undefined {
   if (outcome === "vente") return "signe";
+  if (outcome === "en_reflexion" || outcome === "suivi_prevu") return "reflexion";
   if (outcome === "non_vente") {
     if (reason === "no_show") return "no_show";
     if (reason === "suivi_prevu") return "reflexion";
@@ -323,6 +325,11 @@ export const linkReadData = internalQuery({
             financingType: existing.financingType,
             signedAt: existing.signedAt,
             kits: existing.kits,
+            paymentSubMethod: existing.paymentSubMethod,
+            financingOrg: existing.financingOrg,
+            acomptePercent: existing.acomptePercent,
+            acompteAmount: existing.acompteAmount,
+            customEcheancier: existing.customEcheancier ?? false,
           }
         : null,
     };
@@ -340,6 +347,18 @@ export const submitViaLink = internalMutation({
     if (!rdvRow.leadId || !rdvRow.commercialId) throw new Error("Rendez-vous sans lead ou commercial associé.");
     const leadId = rdvRow.leadId;
     const commercialId = rdvRow.commercialId;
+
+    // Idempotence : un lien magique peut être POSTé deux fois. Si un débrief
+    // existe déjà pour ce RDV, on ne réinsère pas (sinon double débrief + double
+    // notif). Le front doit basculer en édition (linkReadData.alreadyDebriefed).
+    const existingDebrief = await ctx.db
+      .query("debriefs")
+      .withIndex("by_rdv", (q) => q.eq("rdvId", args.rdvId))
+      .order("desc")
+      .first();
+    if (existingDebrief && existingDebrief.deletedAt === undefined) {
+      return { ok: true, alreadyDebriefed: true };
+    }
 
     // Un débrief via lien magique ne porte jamais de projectId pré-créé : on
     // bootstrappe (crée/réutilise + signe) le projet pour une vente.
@@ -379,8 +398,10 @@ export const submitViaLink = internalMutation({
     };
     await ctx.db.patch(args.rdvId, rdvPatch);
 
-    // Dérive le statut du lead comme rdv.update (amélioration vs NestJS).
-    const derived = deriveLeadStatus(rdvRow.status, result ?? null);
+    // Statut lead dérivé du DÉBRIEF (autoritatif), identique au flux in-app
+    // createForLead : en_reflexion / suivi_prevu → a_rappeler (deriveLeadStatus
+    // via le RDV ne l'atteignait jamais).
+    const derived = deriveLeadStatusFromDebrief(args.outcome, args.nonSaleReason ?? null);
     if (derived) {
       const lead = await ctx.db.get(leadId);
       if (lead && lead.status !== derived) {
@@ -459,7 +480,7 @@ export const update = mutation({
     ...DEBRIEF_FIELDS,
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, [...COMMERCIAL]);
+    const user = await requireRole(ctx, [...COMMERCIAL]);
     const existing = await ctx.db.get(args.debriefId);
     if (!existing || existing.deletedAt !== undefined) throw new Error("Débrief introuvable");
 
@@ -484,9 +505,34 @@ export const update = mutation({
       await applyLeadEffect(ctx, existing.leadId, effOutcome, effNonSale, existing.rdvId);
     }
 
-    // Propage l'état commercial effectif vers le dossier délivrabilité.
     if (existing.leadId) {
-      const updated = (await ctx.db.get(args.debriefId))!;
+      let updated = (await ctx.db.get(args.debriefId))!;
+
+      // Transition vers vente via édition : provisionne projet + dossier + notif,
+      // à parité avec createForLead (une vente saisie en édition doit exister en
+      // délivrabilité — sinon le dossier n'était jamais créé).
+      if (updated.outcome === "vente" && existing.outcome !== "vente") {
+        let projectId = updated.projectId;
+        if (!projectId) {
+          projectId = await ensureProjectForLead(ctx, {
+            leadId: existing.leadId, commercialId: existing.commercialId,
+          });
+          await ctx.db.patch(args.debriefId, { projectId });
+          updated = (await ctx.db.get(args.debriefId))!;
+        }
+        await ensureDossierForVente(ctx, {
+          outcome: "vente", leadId: existing.leadId, projectId,
+          rdvId: updated.rdvId, montantTotal: updated.montantTotal,
+          financingType: updated.financingType, kits: updated.kits,
+          signedAt: updated.signedAt, actorId: user._id,
+        });
+        await notifyDebriefCreated(ctx, {
+          leadId: existing.leadId, commercialId: existing.commercialId,
+          outcome: "vente", montantTotal: updated.montantTotal, rdvId: updated.rdvId,
+        });
+      }
+
+      // Propage l'état commercial effectif vers le dossier délivrabilité.
       await syncDeliveryFromDebrief(ctx, {
         leadId: existing.leadId,
         outcome: updated.outcome,

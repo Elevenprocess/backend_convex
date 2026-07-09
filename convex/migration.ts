@@ -95,6 +95,32 @@ export const backfillCreatedAt = internalMutation({
   },
 });
 
+/** externalId des lignes SANS storageId (pour cibler le ré-upload des blobs). */
+export const missingStorageIds = internalQuery({
+  args: { table: v.string() },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query(args.table as TableNames).collect();
+    const missing = rows
+      .filter((r) => !("storageId" in r) || !(r as { storageId?: string }).storageId)
+      .map((r) => ("externalId" in r ? (r as { externalId?: string }).externalId : undefined))
+      .filter((x): x is string => x !== undefined);
+    return { total: rows.length, withStorage: rows.length - missing.length, missing };
+  },
+});
+
+/** Patch storageId d'une ligne par externalId (ré-upload de blob). */
+export const patchStorageId = internalMutation({
+  args: { table: v.string(), externalId: v.string(), storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    const row = await (ctx.db.query(args.table as TableNames) as any)
+      .withIndex("by_externalId", (q: any) => q.eq("externalId", args.externalId))
+      .unique();
+    if (!row) return { patched: false };
+    await ctx.db.patch(row._id, { storageId: args.storageId } as never);
+    return { patched: true };
+  },
+});
+
 /** Comptage paginé (vérification post-import, robuste aux grosses tables). */
 export const countRows = internalQuery({
   args: { table: v.string(), cursor: v.union(v.string(), v.null()) },
@@ -103,6 +129,24 @@ export const countRows = internalQuery({
       .query(args.table as TableNames)
       .paginate({ numItems: 500, cursor: args.cursor });
     return { count: page.page.length, cursor: page.isDone ? null : page.continueCursor };
+  },
+});
+
+/** Nombre de documents sans createdAt (afficheraient _creationTime = date d'import). */
+export const countMissingCreatedAt = internalQuery({
+  args: { table: v.string() },
+  handler: async (ctx, args) => {
+    if (!(MAPPABLE_TABLES as readonly string[]).includes(args.table)) {
+      throw new Error(`Table non mappable : ${args.table}`);
+    }
+    const rows = await ctx.db.query(args.table as TableNames).collect();
+    const missing = rows.filter((r) => (r as { createdAt?: number }).createdAt === undefined);
+    return {
+      missing: missing.length,
+      // Un doc migré (externalId présent) sans createdAt est un vrai problème ;
+      // un doc natif Convex sans createdAt affiche _creationTime, qui est correct.
+      migratedMissing: missing.filter((r) => (r as { externalId?: string }).externalId !== undefined).length,
+    };
   },
 });
 

@@ -223,7 +223,9 @@ export default defineSchema({
     ringoverCallId: v.optional(v.string()),
     ringoverChannelId: v.optional(v.string()),
     ringoverStatus: v.optional(v.string()),
-    ringoverPayload: v.optional(v.any()),
+    // Pas de ringoverPayload ici : le payload webhook complet reste dans
+    // Postgres (jamais lu par l'app, et les queries lisent les docs EN ENTIER —
+    // l'embarquer gonflerait chaque lecture analytics). Exclu aussi des synchros.
     nextCallbackAt: v.optional(v.number()),
     notes: v.optional(v.string()),
   })

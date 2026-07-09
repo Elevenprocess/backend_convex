@@ -136,6 +136,29 @@ test("update re-dérive le statut lead quand outcome change", async () => {
   expect(await leadStatus(t, leadId)).toBe("perdu");
 });
 
+test("update vers vente provisionne projet signé + dossier délivrabilité", async () => {
+  const t = makeT();
+  const { comId, leadId } = await seed(t);
+  // Débrief initial en réflexion : aucun projet ni dossier.
+  const debriefId = await asUser(t, comId).mutation(api.debriefs.createForLead, {
+    leadId, outcome: "en_reflexion", reflexionReason: "autre",
+  });
+  expect(await asUser(t, comId).query(api.projects.listByLead, { leadId })).toHaveLength(0);
+
+  // Le commercial édite en vente : le projet et le dossier doivent apparaître.
+  await asUser(t, comId).mutation(api.debriefs.update, {
+    debriefId, outcome: "vente", montantTotal: 18000,
+  });
+  const d = await t.run((ctx: any) => ctx.db.get(debriefId));
+  expect(d.projectId).toBeDefined();
+  const project = await t.run((ctx: any) => ctx.db.get(d.projectId));
+  expect(project.status).toBe("signe");
+  const dossier = await t.run((ctx: any) =>
+    ctx.db.query("clients").withIndex("by_project", (q: any) => q.eq("projectId", d.projectId)).first());
+  expect(dossier).not.toBeNull();
+  expect(await leadStatus(t, leadId)).toBe("signe");
+});
+
 test("createForLead refusé pour un setter (gating commercial)", async () => {
   const t = makeT();
   const { setterId, leadId } = await seed(t);

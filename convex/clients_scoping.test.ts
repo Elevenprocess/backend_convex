@@ -44,6 +44,41 @@ test("scoping technicien : VT attribuée OU responsable d'une étape installatio
   expect(rows.map((r: any) => r._id)).not.toContain(hidden.clientId);
 });
 
+test("technicien responsable d'une pose voit AUSSI les étapes du dossier (scoping unifié)", async () => {
+  const t = makeT();
+  const techId = await insertUser(t, { role: "technicien", email: "t@e.fr" });
+  const { clientId } = await seedDossier(t);
+  // Responsable de l'étape installation, sans être technicien VT du dossier.
+  await t.run(async (ctx: any) => {
+    const step = await ctx.db
+      .query("workflowSteps")
+      .withIndex("by_client_phase", (q: any) => q.eq("clientId", clientId).eq("phase", "installation"))
+      .first();
+    await ctx.db.patch(step._id, { responsableId: techId });
+  });
+  const steps = await asUser(t, techId).query(api.workflowSteps.list, { clientId });
+  expect(steps.length).toBeGreaterThan(0);
+  expect(steps.some((s: any) => s.phase === "installation")).toBe(true);
+});
+
+test("decorateClient résout l'équipement (produits) et les référents (noms)", async () => {
+  const t = makeT();
+  const boId = await insertUser(t, { role: "back_office" });
+  const referentId = await insertUser(t, { role: "back_office", email: "ref@e.fr", name: "Ref BO" });
+  const { clientId, leadId } = await seedDossier(t);
+  const panneauId = await t.run((ctx: any) =>
+    ctx.db.insert("products", { nom: "Panneau 500W", marque: "DualSun", type: "panneau", stockActuel: 10, seuilAlerte: 2 }),
+  );
+  await t.run((ctx: any) =>
+    ctx.db.patch(clientId, { panneauProductId: panneauId, panneauQty: 12, adminReferentId: referentId }),
+  );
+  const dossier = await asUser(t, boId).query(api.clients.getByLead, { leadId });
+  expect(dossier!.equipment.panneau).toMatchObject({ nom: "Panneau 500W", marque: "DualSun", qty: 12 });
+  expect(dossier!.equipment.onduleur).toBeNull();
+  expect(dossier!.adminReferent).toMatchObject({ id: referentId, name: "Ref BO" });
+  expect(dossier!.poseTeamLead).toBeNull();
+});
+
 test("scoping commercial : ses leads seulement ; commercial_lead tout", async () => {
   const t = makeT();
   const comId = await insertUser(t, { role: "commercial" });

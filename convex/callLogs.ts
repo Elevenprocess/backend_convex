@@ -4,7 +4,7 @@ import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { callResultValidator } from "./model/enums";
 import type { CallResult, LeadStatus } from "./model/enums";
-import { requireUser } from "./model/access";
+import { requireUser, requireLeadWriteRole } from "./model/access";
 import { insertStageHistory } from "./model/stageHistory";
 
 // Portage de CallLogsService : le résultat d'appel dérive le statut du lead
@@ -52,7 +52,7 @@ async function countDistinctCallDays(ctx: MutationCtx, leadId: Id<"leads">): Pro
   return days.size;
 }
 
-// TODO(workflow-tranche): decide whether to role-gate lead-state mutations (currently any authenticated role). See final review #3.
+// Un appel fait bouger le statut du lead : réservé aux rôles commerciaux/setter.
 export const logCall = mutation({
   args: {
     leadId: v.id("leads"),
@@ -62,7 +62,7 @@ export const logCall = mutation({
     nextCallbackAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
+    const user = await requireLeadWriteRole(ctx);
     const lead = await ctx.db.get(args.leadId);
     if (!lead) throw new Error("Lead introuvable");
     const calledAt = Date.now();

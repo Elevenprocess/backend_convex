@@ -1,7 +1,9 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { projectStatusValidator } from "./model/enums";
-import { requireRole, requireUser, assertCommercialRole } from "./model/access";
+import { requireRole, requireUser, assertCommercialRole, roleOf } from "./model/access";
+import { toResponse as devisToResponse } from "./devis";
+import { READ_ROLES as ATTACHMENT_READ_ROLES, toSummary as attachmentToSummary } from "./projectAttachments";
 
 const COMMERCIAL = ["admin", "commercial", "commercial_lead"] as const;
 
@@ -88,6 +90,77 @@ export const update = mutation({
     if (args.notes !== undefined) patch.notes = args.notes;
     await ctx.db.patch(args.projectId, patch);
     return null;
+  },
+});
+
+/**
+ * Fiche client : tous les projets actifs du lead avec leurs débriefs, devis et
+ * pièces en UNE query. La page fiche payait une cascade de 3 vagues d'appels
+ * (liste, puis 2 vagues de détail par projet), coûteuse loin du datacenter.
+ * Shapes identiques aux queries unitaires (projects:get, debriefs:listByProject,
+ * devis:listByLead, projectAttachments:listByProject).
+ */
+export const ficheByLead = query({
+  args: { leadId: v.id("leads") },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    // Parité avec projectAttachments:listByProject (rôles lecture) : un rôle
+    // hors liste voit les projets sans leurs pièces plutôt qu'une erreur.
+    const canReadAttachments = ATTACHMENT_READ_ROLES.includes(roleOf(user));
+
+    const projects = (
+      await ctx.db
+        .query("projects")
+        .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
+        .collect()
+    )
+      .filter((p) => p.deletedAt === undefined)
+      .sort((a, b) => b._creationTime - a._creationTime);
+
+    const devisRows = (
+      await ctx.db
+        .query("devis")
+        .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
+        .collect()
+    )
+      .filter((r) => r.deletedAt === undefined)
+      .sort((a, b) => b._creationTime - a._creationTime);
+
+    return await Promise.all(
+      projects.map(async (project) => {
+        const debriefs = (
+          await ctx.db
+            .query("debriefs")
+            .withIndex("by_project", (q) => q.eq("projectId", project._id))
+            .collect()
+        )
+          .filter((d) => d.deletedAt === undefined)
+          .sort((a, b) => b._creationTime - a._creationTime);
+
+        const attachments = canReadAttachments
+          ? await Promise.all(
+              (
+                await ctx.db
+                  .query("projectAttachments")
+                  .withIndex("by_project", (q) => q.eq("projectId", project._id))
+                  .collect()
+              )
+                .filter((a) => a.deletedAt === undefined)
+                .map(async (a) => {
+                  const url = a.storageId ? ((await ctx.storage.getUrl(a.storageId)) ?? undefined) : undefined;
+                  return attachmentToSummary(a, url);
+                }),
+            )
+          : [];
+
+        return {
+          project,
+          debriefs,
+          devis: devisRows.filter((d) => d.projectId === project._id).map((d) => devisToResponse(d)),
+          attachments,
+        };
+      }),
+    );
   },
 });
 

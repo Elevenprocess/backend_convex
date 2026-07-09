@@ -1,59 +1,40 @@
-#!/usr/bin/env node
+"use node";
 /**
- * Catch-up sync Render (Postgres) → Convex.
+ * Catch-up sync Render (Postgres) → Convex, exécuté CÔTÉ CONVEX.
  *
- * Postgres reste la base LIVE (le backend NestJS reçoit encore les webhooks GHL),
- * donc Convex — figé au jour de la migration — diverge en continu. Ce script
- * rejoue un upsert IDEMPOTENT (dédup par externalId = id Postgres) pour rattraper
- * le delta, et backfill les dates métier manquantes (debriefs.createdAt notamment,
- * ajouté après la 1re passe). Sûr à relancer autant de fois que nécessaire.
+ * Même logique que scripts/catchupSync.mjs (upsert idempotent par externalId +
+ * backfill debriefs.createdAt), mais portée en action Node : certains réseaux
+ * bloquent le port 5432 sortant, alors que le cloud Convex joint Render sans
+ * problème. DATABASE_URL doit être défini dans l'environnement du déploiement
+ * (`npx convex env set DATABASE_URL ...`).
  *
- * Prérequis :
- *   - DATABASE_URL         = chaîne de connexion externe Postgres Render
- *   - CONVEX_DEPLOY_KEY    = deploy key du déploiement Convex cible
- *   - schéma Convex À JOUR déployé (debriefs.createdAt doit exister)
- *
- * Usage :  DATABASE_URL=... CONVEX_DEPLOY_KEY=... node scripts/catchupSync.mjs
+ * Usage :
+ *   npx convex run migrationPg:catchup '{"tables":["leads"]}'
+ *   npx convex run migrationPg:catchup '{}'            # toutes les tables + backfill
+ *   npx convex run migrationPg:pgCounts '{}'           # comptages PG (diagnostic)
  */
+import { internalAction } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { v } from "convex/values";
 import pg from "pg";
-import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
-
-const CONVEX_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const DATABASE_URL = process.env.DATABASE_URL;
-const DEPLOY_KEY = process.env.CONVEX_DEPLOY_KEY;
-if (!DATABASE_URL || !DEPLOY_KEY) {
-  console.error("DATABASE_URL et CONVEX_DEPLOY_KEY requis dans l'environnement.");
-  process.exit(1);
-}
 
 const UPSERT_BATCH = 100;
 const BACKFILL_BATCH = 400;
 
-function convexRun(fn, args) {
-  const out = execFileSync("npx", ["convex", "run", fn, JSON.stringify(args)], {
-    cwd: CONVEX_DIR,
-    env: { ...process.env, CONVEX_DEPLOY_KEY: DEPLOY_KEY },
-    encoding: "utf8",
-    maxBuffer: 1024 * 1024 * 128,
-  });
-  return out.trim() ? JSON.parse(out) : null;
-}
-
 // ─── Convertisseurs (pg renvoie numeric/bigint en string, ts/date en Date) ──────
-const ms = (v) => (v == null ? undefined : new Date(v).getTime());
-const num = (v) => (v == null ? undefined : Number(v));
-const str = (v) => (v == null ? undefined : v);
-const bool = (v) => (v == null ? undefined : Boolean(v));
+const ms = (v: unknown) => (v == null ? undefined : new Date(v as string).getTime());
+const num = (v: unknown) => (v == null ? undefined : Number(v));
+const str = (v: unknown) => (v == null ? undefined : v);
 
-/**
- * Spec par table : [convexField, pgColumn, convert]. `id` PG → `externalId` Convex
- * (clé de dédup). Les colonnes PG `external_id` (id GHL) ne sont PAS reprises : la
- * convention établie est externalId = id Postgres (résolution des FK).
- * fkFields : résolution UUID PG → Id Convex via l'index by_externalId.
- */
-const TABLES = {
+type Conv = (v: unknown) => unknown;
+type Spec = {
+  pg: string;
+  fields: Array<[string, string, Conv]>;
+  fk: Array<{ field: string; refTable: string; required: boolean }>;
+};
+
+/** Copie conforme de la spec de scripts/catchupSync.mjs — voir ce fichier. */
+const TABLES: Record<string, Spec> = {
   leads: {
     pg: "leads",
     fields: [
@@ -144,15 +125,10 @@ const TABLES = {
   },
 };
 
-// Ordre = dépendances FK (users/referrers supposés déjà migrés et stables).
-// SYNC_TABLES (liste csv) restreint les tables ; SKIP_BACKFILL saute le backfill
-// debriefs.createdAt (utile pour rejouer avant/après le déploiement du schéma).
-const ALL = ["leads", "rdv", "debriefs", "callLogs"];
-const ORDER = process.env.SYNC_TABLES ? process.env.SYNC_TABLES.split(",").map((s) => s.trim()) : ALL;
-const SKIP_BACKFILL = process.env.SKIP_BACKFILL === "1";
+const ORDER = ["leads", "rdv", "debriefs", "callLogs"];
 
-function mapRow(spec, row) {
-  const doc = {};
+function mapRow(spec: Spec, row: Record<string, unknown>) {
+  const doc: Record<string, unknown> = {};
   for (const [cf, pc, conv] of spec.fields) {
     const val = conv(row[pc]);
     if (val !== undefined) doc[cf] = val;
@@ -160,38 +136,98 @@ function mapRow(spec, row) {
   return doc;
 }
 
-async function main() {
-  const client = new pg.Client({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
+async function withPg<T>(fn: (client: pg.Client) => Promise<T>): Promise<T> {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL absent de l'env du déploiement (npx convex env set DATABASE_URL ...)");
+  const client = new pg.Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
   await client.connect();
   try {
-    for (const name of ORDER) {
-      const spec = TABLES[name];
-      const { rows } = await client.query(`SELECT * FROM ${spec.pg}`);
-      const docs = rows.map((r) => mapRow(spec, r));
-      let inserted = 0, skippedExisting = 0, unresolved = 0;
-      for (let i = 0; i < docs.length; i += UPSERT_BATCH) {
-        const batch = docs.slice(i, i + UPSERT_BATCH);
-        const res = convexRun("migration:upsertMigration", { table: name, fkFields: spec.fk, rows: batch });
-        inserted += res.inserted; skippedExisting += res.skippedExisting;
-        unresolved += res.skippedUnresolved.length;
-      }
-      console.log(`${name}: PG=${rows.length} → +${inserted} nouveaux, ${skippedExisting} déjà présents, ${unresolved} FK non résolue`);
-    }
-
-    if (SKIP_BACKFILL) { console.log("(backfill debriefs.createdAt sauté : SKIP_BACKFILL=1)"); return; }
-    // Backfill debriefs.createdAt sur TOUTES les lignes (les débriefs déjà migrés
-    // avant l'ajout du champ n'ont pas de createdAt → dates de débrief fausses).
-    const { rows: dbg } = await client.query("SELECT id, created_at FROM debriefs WHERE created_at IS NOT NULL");
-    const pairs = dbg.map((r) => ({ externalId: r.id, value: new Date(r.created_at).getTime() }));
-    let patched = 0, notFound = 0;
-    for (let i = 0; i < pairs.length; i += BACKFILL_BATCH) {
-      const res = convexRun("migration:backfillCreatedAt", { table: "debriefs", field: "createdAt", pairs: pairs.slice(i, i + BACKFILL_BATCH) });
-      patched += res.patched; notFound += res.notFound;
-    }
-    console.log(`debriefs.createdAt: ${patched} patchés, ${notFound} introuvables`);
+    return await fn(client);
   } finally {
     await client.end();
   }
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+export const catchup = internalAction({
+  args: {
+    tables: v.optional(v.array(v.string())),
+    skipBackfill: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const order = args.tables ?? ORDER;
+    const summary: Record<string, unknown> = {};
+    await withPg(async (client) => {
+      for (const name of order) {
+        const spec = TABLES[name];
+        if (!spec) throw new Error(`Table inconnue : ${name}`);
+        const { rows } = await client.query(`SELECT * FROM ${spec.pg}`);
+        const docs = rows.map((r) => mapRow(spec, r));
+        let inserted = 0, skippedExisting = 0;
+        const unresolved: string[] = [];
+        for (let i = 0; i < docs.length; i += UPSERT_BATCH) {
+          const res: any = await ctx.runMutation(internal.migration.upsertMigration, {
+            table: name,
+            fkFields: spec.fk,
+            rows: docs.slice(i, i + UPSERT_BATCH),
+          });
+          inserted += res.inserted;
+          skippedExisting += res.skippedExisting;
+          unresolved.push(...res.skippedUnresolved);
+        }
+        summary[name] = { pg: rows.length, inserted, skippedExisting, unresolved };
+      }
+
+      if (!args.skipBackfill && order.includes("debriefs")) {
+        const { rows: dbg } = await client.query(
+          "SELECT id, created_at FROM debriefs WHERE created_at IS NOT NULL"
+        );
+        const pairs = dbg.map((r: { id: string; created_at: string | Date }) => ({
+          externalId: r.id,
+          value: new Date(r.created_at).getTime(),
+        }));
+        let patched = 0, notFound = 0;
+        for (let i = 0; i < pairs.length; i += BACKFILL_BATCH) {
+          const res: any = await ctx.runMutation(internal.migration.backfillCreatedAt, {
+            table: "debriefs",
+            field: "createdAt",
+            pairs: pairs.slice(i, i + BACKFILL_BATCH),
+          });
+          patched += res.patched;
+          notFound += res.notFound;
+        }
+        summary.backfillDebriefsCreatedAt = { patched, notFound };
+      }
+    });
+    return summary;
+  },
+});
+
+/** SELECT de diagnostic (interne : requiert la clé admin du déploiement). */
+export const pgSelect = internalAction({
+  args: { sql: v.string() },
+  handler: async (_ctx, args) => {
+    if (!/^\s*select\b/i.test(args.sql)) throw new Error("SELECT uniquement");
+    return withPg(async (client) => {
+      const { rows } = await client.query(args.sql);
+      return rows;
+    });
+  },
+});
+
+/** Comptages PG de toutes les tables publiques (diagnostic de delta). */
+export const pgCounts = internalAction({
+  args: {},
+  handler: async () => {
+    return withPg(async (client) => {
+      const { rows: tables } = await client.query(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name"
+      );
+      const counts: Record<string, number> = {};
+      for (const { table_name } of tables) {
+        const { rows } = await client.query(`SELECT count(*)::int AS c FROM "${table_name}"`);
+        counts[table_name] = rows[0].c;
+      }
+      return counts;
+    });
+  },
+});

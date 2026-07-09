@@ -41,7 +41,7 @@ export const emailInUse = internalQuery({
   handler: async (ctx, args) => {
     const rows = await ctx.db
       .query("users")
-      .withIndex("by_email", (q) => q.eq("email", args.email))
+      .withIndex("email", (q) => q.eq("email", args.email))
       .collect();
     return rows.some((u) => u.deletedAt === undefined);
   },

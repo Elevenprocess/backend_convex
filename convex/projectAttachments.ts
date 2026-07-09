@@ -16,9 +16,9 @@ const ALLOWED_KINDS = ["photo", "document"];
 // Dépôt/suppression : admin + commerciaux + délivrabilité.
 const MANAGE_ROLES: Role[] = ["admin", "commercial", "commercial_lead", "delivrabilite", "responsable_technique", "back_office"];
 // Lecture : + setters + finances.
-const READ_ROLES: Role[] = ["admin", "setter", "setter_lead", "commercial", "commercial_lead", "delivrabilite", "responsable_technique", "back_office", "finances"];
+export const READ_ROLES: Role[] = ["admin", "setter", "setter_lead", "commercial", "commercial_lead", "delivrabilite", "responsable_technique", "back_office", "finances"];
 
-function toSummary(row: Doc<"projectAttachments">, url?: string) {
+export function toSummary(row: Doc<"projectAttachments">, url?: string) {
   return {
     id: row._id,
     projectId: row.projectId,

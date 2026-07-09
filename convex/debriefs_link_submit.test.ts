@@ -49,6 +49,32 @@ describe("submitViaLink", () => {
     expect((await t.run((ctx) => ctx.db.query("projects").collect())).length).toBeGreaterThan(0);
   });
 
+  it("en_reflexion : lead → a_rappeler, RDV result=reflexion (parité in-app)", async () => {
+    const t = makeT();
+    const { leadId, rdvId } = await seed(t);
+    clearGhl();
+    await t.mutation(internal.debriefs.submitViaLink, { rdvId, outcome: "en_reflexion", reflexionReason: "besoin_reflechir" });
+    await drain(t);
+    const rdvRow = await t.run((ctx) => ctx.db.get(rdvId));
+    expect(rdvRow?.result).toBe("reflexion");
+    expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("a_rappeler");
+  });
+
+  it("double POST : idempotent (un seul débrief, 2e appel alreadyDebriefed)", async () => {
+    const t = makeT();
+    const { rdvId } = await seed(t);
+    clearGhl();
+    const r1 = await t.mutation(internal.debriefs.submitViaLink, { rdvId, outcome: "non_vente", nonSaleReason: "trop_cher" });
+    await drain(t);
+    const r2 = await t.mutation(internal.debriefs.submitViaLink, { rdvId, outcome: "vente", montantTotal: 9999 });
+    await drain(t);
+    expect(r1).toEqual({ ok: true });
+    expect(r2).toEqual({ ok: true, alreadyDebriefed: true });
+    // un seul débrief, et le 2e POST n'a pas écrasé le RDV en vente.
+    expect(await t.run((ctx) => ctx.db.query("debriefs").collect())).toHaveLength(1);
+    expect((await t.run((ctx) => ctx.db.get(rdvId)))?.result).toBe("perdu");
+  });
+
   it("RDV sans lead ou sans commercial → throw", async () => {
     const t = makeT();
     const leadId = await t.run((ctx) => ctx.db.insert("leads", { source: "ghl", status: "qualifie" }));

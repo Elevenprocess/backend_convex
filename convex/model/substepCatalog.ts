@@ -36,27 +36,31 @@ export const SLA_DAYS = 28;
  * DATE DE DEPOT CONSUEL, CONSUEL reçu, ETAT DU DOSSIER, SOLTEO,
  * DOCUMENTS MANQUANTS.
  */
+// Gating SOUPLE (non bloquant) : chaque sous-étape « suivante » d'une phase
+// attend que la précédente soit `fait` pour se déverrouiller (flag `unlocked`
+// d'affichage : le front grise l'étape « en attente de … »). La saisie n'est
+// jamais refusée côté serveur — on n'ordonne que l'affichage, pas l'écriture.
 export const SUBSTEP_CATALOG: SubstepDef[] = [
   // ── Amont / VT ──
   { phase: 'vt', key: 'vt_planifie', position: 1, label: 'VT planifiée', actionLabel: 'Marquer planifiée', expectedDocs: [], optional: false, prerequisites: [] },
-  { phase: 'vt', key: 'vt_attribuee', position: 2, label: 'Technicien attribué', actionLabel: 'Attribuer le technicien', expectedDocs: [], optional: false, prerequisites: [] },
-  { phase: 'vt', key: 'vt_validee', position: 3, label: 'VT validée', actionLabel: 'Valider la VT', expectedDocs: ['rapport_vt'], optional: false, prerequisites: [] },
+  { phase: 'vt', key: 'vt_attribuee', position: 2, label: 'Technicien attribué', actionLabel: 'Attribuer le technicien', expectedDocs: [], optional: false, prerequisites: ['vt_planifie'] },
+  { phase: 'vt', key: 'vt_validee', position: 3, label: 'VT validée', actionLabel: 'Valider la VT', expectedDocs: ['rapport_vt'], optional: false, prerequisites: ['vt_attribuee'] },
 
   // ── Déclaration préalable ──
   { phase: 'dp', key: 'dp_envoyee_mairie', position: 1, label: 'DP envoyée à la mairie / récépissé de dépôt', actionLabel: 'Marquer DP envoyée', expectedDocs: ['recepisse_dp'], optional: false, prerequisites: [], slaTargetKey: 'dp_validee' },
-  { phase: 'dp', key: 'dp_validee', position: 2, label: 'DP validée / refusée — CNO ou retour mairie', actionLabel: 'Valider la DP / signaler un refus', expectedDocs: ['cno_dp'], optional: false, prerequisites: [] },
+  { phase: 'dp', key: 'dp_validee', position: 2, label: 'DP validée / refusée — CNO ou retour mairie', actionLabel: 'Valider la DP / signaler un refus', expectedDocs: ['cno_dp'], optional: false, prerequisites: ['dp_envoyee_mairie'] },
 
   // ── Raccordement ──
   { phase: 'racco', key: 'racco_envoye', position: 1, label: 'Raccordement envoyé / récépissé de raccordement', actionLabel: 'Marquer raccordement envoyé', expectedDocs: ['recepisse_racco'], optional: false, prerequisites: [], slaTargetKey: 'racco_validee' },
-  { phase: 'racco', key: 'racco_validee', position: 2, label: 'Raccordement validé — CRAE', actionLabel: 'Marquer CRAE reçu', expectedDocs: ['crae'], optional: false, prerequisites: [], depositOnly: true },
+  { phase: 'racco', key: 'racco_validee', position: 2, label: 'Raccordement validé — CRAE', actionLabel: 'Marquer CRAE reçu', expectedDocs: ['crae'], optional: false, prerequisites: ['racco_envoye'], depositOnly: true },
 
   // ── Installation puis Consuel ──
   { phase: 'installation', key: 'install_a_faire', position: 1, label: 'Installation planifiée', actionLabel: "Planifier l'installation", expectedDocs: [], optional: false, prerequisites: [] },
-  { phase: 'installation', key: 'install_effectuee', position: 2, label: 'Installé', actionLabel: 'Marquer installé', expectedDocs: [], optional: false, prerequisites: [] },
+  { phase: 'installation', key: 'install_effectuee', position: 2, label: 'Installé', actionLabel: 'Marquer installé', expectedDocs: [], optional: false, prerequisites: ['install_a_faire'] },
 
   // ── Consuel (après installation) ──
   { phase: 'consuel', key: 'consuel_a_faire', position: 1, label: 'Consuel envoyé', actionLabel: 'Marquer Consuel envoyé', expectedDocs: [], optional: false, prerequisites: [], slaTargetKey: 'consuel_valide' },
-  { phase: 'consuel', key: 'consuel_valide', position: 2, label: 'Consuel validé', actionLabel: 'Marquer Consuel validé', expectedDocs: ['attestation_consuel'], optional: false, prerequisites: [] },
+  { phase: 'consuel', key: 'consuel_valide', position: 2, label: 'Consuel validé', actionLabel: 'Marquer Consuel validé', expectedDocs: ['attestation_consuel'], optional: false, prerequisites: ['consuel_a_faire'] },
 
   // ── Mise en service / clôture ──
   { phase: 'mes', key: 'enquete_satisfaction', position: 1, label: 'ETAT DU DOSSIER / SOLTEO / DOCUMENTS MANQUANTS', actionLabel: 'Marquer mise en service réalisée', expectedDocs: [], optional: false, prerequisites: [] },

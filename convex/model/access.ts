@@ -32,6 +32,17 @@ export async function requireRole(ctx: Ctx, allowed: Role[]): Promise<Doc<"users
 
 const COMMERCIAL_ROLES: Role[] = ["admin", "commercial", "commercial_lead"];
 
+// Rôles autorisés à faire « bouger » un lead (statut/qualification/appel).
+// Exclut technicien / back_office / responsable_technique / finances / delivrabilite,
+// qui n'ont pas à modifier l'état commercial d'un lead.
+export const LEAD_WRITE_ROLES: Role[] = [
+  "admin", "setter", "setter_lead", "commercial", "commercial_lead",
+];
+
+export async function requireLeadWriteRole(ctx: Ctx): Promise<Doc<"users">> {
+  return await requireRole(ctx, LEAD_WRITE_ROLES);
+}
+
 export async function assertCommercialRole(ctx: Ctx, userId: Id<"users">): Promise<Doc<"users">> {
   const user = await ctx.db.get(userId);
   if (!user) throw new Error("Commercial introuvable");

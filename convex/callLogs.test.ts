@@ -56,6 +56,18 @@ test("logCall() ne régresse pas un lead terminal (rdv_pris/signe)", async () =>
   expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("signe");
 });
 
+test("logCall() refuse un rôle non commercial (technicien)", async () => {
+  const t = makeT();
+  const setterId = await insertUser(t, { role: "setter" });
+  const techId = await insertUser(t, { role: "technicien", email: "tech@ecoi.fr" });
+  const leadId = await asUser(t, setterId).mutation(api.leads.create, { firstName: "Rg" });
+  await expect(
+    asUser(t, techId).mutation(api.callLogs.logCall, { leadId, result: "joint" }),
+  ).rejects.toThrow(/Accès refusé/);
+  const logs = await asUser(t, setterId).query(api.callLogs.listByLead, { leadId });
+  expect(logs).toHaveLength(0);
+});
+
 test("upcomingCallbacks() renvoie les rappels planifiés", async () => {
   const t = makeT();
   const setterId = await insertUser(t, { role: "setter" });
@@ -68,3 +80,4 @@ test("upcomingCallbacks() renvoie les rappels planifiés", async () => {
   const cbs = await asUser(t, setterId).query(api.callLogs.upcomingCallbacks, { now: Date.now() });
   expect(cbs).toHaveLength(1);
 });
+

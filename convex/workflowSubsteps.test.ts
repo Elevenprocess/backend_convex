@@ -27,14 +27,27 @@ async function seedDossier(
   return { leadId, clientId, subByKey };
 }
 
-test("list décoré du flag unlocked", async () => {
+test("list décoré du flag unlocked (ordre intra-phase, non bloquant)", async () => {
   const t = makeT();
   const boId = await insertUser(t, { role: "back_office" });
-  const { clientId } = await seedDossier(t);
-  const rows = await asUser(t, boId).query(api.workflowSubsteps.list, { clientId });
-  expect(rows).toHaveLength(12);
-  // Catalogue actuel : aucun prérequis → tout déverrouillé (mécanisme prêt).
-  expect(rows.every((r: any) => r.unlocked === true)).toBe(true);
+  const { clientId, subByKey } = await seedDossier(t);
+  const unlockedByKey = (rs: any[]) =>
+    Object.fromEntries(rs.map((r) => [r.key, r.unlocked])) as Record<string, boolean>;
+
+  let u = unlockedByKey(await asUser(t, boId).query(api.workflowSubsteps.list, { clientId }));
+  // Têtes de phase déverrouillées ; sous-étapes suivantes en attente du prérequis.
+  expect(u.vt_planifie).toBe(true);
+  expect(u.dp_envoyee_mairie).toBe(true);
+  expect(u.install_a_faire).toBe(true);
+  expect(u.vt_attribuee).toBe(false);
+  expect(u.vt_validee).toBe(false);
+  expect(u.dp_validee).toBe(false);
+
+  // Marquer vt_planifie `fait` déverrouille vt_attribuee (mais pas encore vt_validee).
+  await asUser(t, boId).mutation(api.workflowSubsteps.update, { substepId: subByKey.vt_planifie._id, status: "fait" });
+  u = unlockedByKey(await asUser(t, boId).query(api.workflowSubsteps.list, { clientId }));
+  expect(u.vt_attribuee).toBe(true);
+  expect(u.vt_validee).toBe(false);
 });
 
 test("list filtre par phase (via catalogue) ; technicien scopé", async () => {

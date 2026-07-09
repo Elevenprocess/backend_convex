@@ -1,8 +1,8 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
-import { leadStatusValidator, adChannelValidator } from "./model/enums";
-import { requireUser, requireRole, roleOf } from "./model/access";
+import { leadStatusValidator, adChannelValidator, LEAD_STATUSES } from "./model/enums";
+import { requireUser, requireRole, requireLeadWriteRole, roleOf } from "./model/access";
 import type { Role } from "./model/enums";
 import { normalizeSource } from "./model/acquisitionChannel";
 import { insertStageHistory } from "./model/stageHistory";
@@ -108,11 +108,10 @@ export const assignCommercial = mutation({
   },
 });
 
-// TODO(workflow-tranche): decide whether to role-gate lead-state mutations (currently any authenticated role). See final review #3.
 export const updateStatus = mutation({
   args: { leadId: v.id("leads"), status: leadStatusValidator },
   handler: async (ctx, args) => {
-    await requireUser(ctx);
+    await requireLeadWriteRole(ctx);
     const lead = await ctx.db.get(args.leadId);
     if (!lead) throw new Error("Lead introuvable");
     if (lead.status === args.status) return null; // pas de mouvement
@@ -132,7 +131,7 @@ export const updateStatus = mutation({
 export const qualify = mutation({
   args: { leadId: v.id("leads"), qualified: v.boolean() },
   handler: async (ctx, args) => {
-    await requireUser(ctx);
+    await requireLeadWriteRole(ctx);
     const lead = await ctx.db.get(args.leadId);
     if (!lead) throw new Error("Lead introuvable");
     const status = args.qualified ? "qualifie" : "pas_qualifie";
@@ -171,7 +170,7 @@ export const update = mutation({
     assignedToId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    await requireUser(ctx);
+    await requireLeadWriteRole(ctx);
     const { leadId, ...rest } = args;
     const lead = await ctx.db.get(leadId);
     if (!lead) throw new Error("Lead introuvable");
@@ -295,12 +294,11 @@ export const stats = query({
   args: {},
   handler: async (ctx) => {
     const user = await requireUser(ctx);
-    const all = await ctx.db.query("leads").collect();
-    const scoped = all.filter((l) => {
-      if (l.deletedAt !== undefined) return false;
-      if (roleOf(user) === "commercial") return l.assignedToId === user._id;
-      return true;
-    });
+    // Commercial : scope à ses leads via l'index by_assignedTo (pas de full-scan).
+    const rows = roleOf(user) === "commercial"
+      ? await ctx.db.query("leads").withIndex("by_assignedTo", (q) => q.eq("assignedToId", user._id)).collect()
+      : await ctx.db.query("leads").collect();
+    const scoped = rows.filter((l) => l.deletedAt === undefined);
     const byStatus: Record<string, number> = {};
     const bySource: Record<string, number> = {};
     for (const l of scoped) {
@@ -323,9 +321,9 @@ export const pendingQuotes = query({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, SALES_MANAGER_ROLES);
     const staleDays = args.staleDays ?? 14;
-    const rows = (await ctx.db.query("leads").collect()).filter(
-      (l) => l.deletedAt === undefined && l.assignedToId === user._id && l.status === "rdv_honore",
-    );
+    const rows = (
+      await ctx.db.query("leads").withIndex("by_assignedTo", (q) => q.eq("assignedToId", user._id)).collect()
+    ).filter((l) => l.deletedAt === undefined && l.status === "rdv_honore");
     const list = await Promise.all(
       rows.map(async (l) => {
         const days = await daysSinceLastStageChange(ctx, l._id, args.now);
@@ -352,15 +350,17 @@ export const dashboard = query({
   args: { now: v.number() },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, SALES_MANAGER_ROLES);
-    const rows = (await ctx.db.query("leads").collect()).filter(
-      (l) => l.deletedAt === undefined && l.assignedToId === user._id,
+    const rows = (
+      await ctx.db.query("leads").withIndex("by_assignedTo", (q) => q.eq("assignedToId", user._id)).collect()
+    ).filter((l) => l.deletedAt === undefined);
+    // Tous les statuts sont comptés (sinon signature_en_cours/pas_qualifie/
+    // pas_de_reponse tombaient hors des compteurs alors qu'ils entrent dans openLeads).
+    const counters: Record<string, number> = Object.fromEntries(
+      LEAD_STATUSES.map((s) => [s, 0]),
     );
-    const counters: Record<string, number> = {
-      nouveau: 0, qualifie: 0, rdv_pris: 0, rdv_honore: 0, signe: 0, perdu: 0, relance: 0, a_rappeler: 0,
-    };
     let ca = 0, signed = 0, lost = 0, staleQuotes = 0, stuckLeads = 0;
     for (const l of rows) {
-      if (l.status in counters) counters[l.status] += 1;
+      counters[l.status] += 1;
       if (l.status === "signe") { signed += 1; ca += l.monetaryValue ?? 0; }
       if (l.status === "perdu") lost += 1;
       const days = (await daysSinceLastStageChange(ctx, l._id, args.now)) ?? 0;

@@ -19,7 +19,7 @@ import {
 import { countMissingDocs } from "./model/substepGating";
 import { requireRole } from "./model/access";
 import { ensureDossier, recomputeClientStatus } from "./model/ensureDossier";
-import { can, normalizeRole } from "./model/delivrabilitePermissions";
+import { can, visibleClientIds } from "./model/delivrabilitePermissions";
 import { newlyAddedTechs, pickVtDate, pickVtHeure, inPeriod } from "./model/vtCalendar";
 import { vtAssignedMessage } from "./model/notifMessages";
 import { createNotification } from "./model/notify";
@@ -88,7 +88,7 @@ export const getByProject = query({
     const dossier = await findActiveByProject(ctx, args.projectId);
     if (!dossier) return null;
     // Même périmètre que list : null hors scope, sans fuite d'existence.
-    const visible = await listVisibleClientIds(ctx, user);
+    const visible = await visibleClientIds(ctx, user);
     if (visible !== null && !visible.has(dossier._id)) return null;
     return await decorateClient(ctx, dossier);
   },
@@ -101,7 +101,7 @@ export const getByLead = query({
     const dossier = await findActiveByLead(ctx, args.leadId);
     if (!dossier) return null;
     // Même périmètre que list : null hors scope, sans fuite d'existence.
-    const visible = await listVisibleClientIds(ctx, user);
+    const visible = await visibleClientIds(ctx, user);
     if (visible !== null && !visible.has(dossier._id)) return null;
     return await decorateClient(ctx, dossier);
   },
@@ -152,7 +152,7 @@ export const list = query({
     }
 
     // Scoping serveur (les filtres query ne peuvent qu'affiner, jamais élargir).
-    const visible = await listVisibleClientIds(ctx, user);
+    const visible = await visibleClientIds(ctx, user);
     const scoped = rows
       .filter(isActive)
       .filter((c) => visible === null || visible.has(c._id))
@@ -167,43 +167,6 @@ export const list = query({
 });
 
 /**
- * Dossiers visibles pour clients.list/vtCalendar (parité ClientsService.list) :
- * technicien → VT attribuée (scalaire) OU responsable d'une étape installation ;
- * commercial (pas commercial_lead) → dossiers de SES leads. null = tout voir.
- * Périmètre volontairement plus restreint que visibleClientIds (steps/substeps).
- */
-async function listVisibleClientIds(
-  ctx: QueryCtx,
-  user: Doc<"users">,
-): Promise<Set<Id<"clients">> | null> {
-  const role = user.role ?? "setter";
-  if (normalizeRole(role) === "technicien") {
-    const out = new Set<Id<"clients">>();
-    const all = await ctx.db.query("clients").collect();
-    for (const c of all) {
-      if (c.deletedAt === undefined && c.technicienVtId === user._id) out.add(c._id);
-    }
-    const steps = await ctx.db
-      .query("workflowSteps")
-      .withIndex("by_responsable", (q) => q.eq("responsableId", user._id))
-      .collect();
-    for (const s of steps) if (s.phase === "installation") out.add(s.clientId);
-    return out;
-  }
-  if (role === "commercial") {
-    const out = new Set<Id<"clients">>();
-    const all = await ctx.db.query("clients").collect();
-    for (const c of all) {
-      if (c.deletedAt !== undefined) continue;
-      const lead = await ctx.db.get(c.leadId);
-      if (lead?.assignedToId === user._id) out.add(c._id);
-    }
-    return out;
-  }
-  return null;
-}
-
-/**
  * Nombre de sous-étapes du dossier dont au moins une pièce attendue manque.
  * Requête documents directe (pas d'import de documents.ts : il importe clients.ts).
  */
@@ -212,16 +175,17 @@ async function missingDocsOf(ctx: QueryCtx, clientId: Id<"clients">): Promise<nu
     .query("workflowSubsteps")
     .withIndex("by_client", (q) => q.eq("clientId", clientId))
     .collect();
+  // Un seul scan des documents du dossier (index by_client) puis regroupement en
+  // mémoire par sous-étape — évite le N+1 (une requête by_substep par sous-étape).
+  const docs = await ctx.db
+    .query("documents")
+    .withIndex("by_client", (q) => q.eq("clientId", clientId))
+    .collect();
   const docTypesBySubstep = new Map<string, DocumentType[]>();
-  for (const s of subs) {
-    const docs = await ctx.db
-      .query("documents")
-      .withIndex("by_substep", (q) => q.eq("workflowSubstepId", s._id))
-      .collect();
-    docTypesBySubstep.set(
-      s._id,
-      docs.filter((d) => d.deletedAt === undefined).map((d) => d.type),
-    );
+  for (const s of subs) docTypesBySubstep.set(s._id, []);
+  for (const d of docs) {
+    if (d.deletedAt !== undefined || !d.workflowSubstepId) continue;
+    docTypesBySubstep.get(d.workflowSubstepId)?.push(d.type);
   }
   return countMissingDocs(
     subs.map((s) => ({ id: s._id, key: s.key })),
@@ -277,6 +241,27 @@ async function leadDecorOf(
   return { fullName, city: lead?.city ?? null, phone: lead?.phone ?? null };
 }
 
+/** Référence produit résolue (nom + marque) pour l'affichage de l'équipement. */
+async function productRefOf(
+  ctx: QueryCtx,
+  productId: Id<"products"> | undefined,
+  qty: number | undefined,
+): Promise<{ productId: Id<"products">; qty: number | null; nom: string | null; marque: string | null } | null> {
+  if (!productId) return null;
+  const p = await ctx.db.get(productId);
+  return { productId, qty: qty ?? null, nom: p?.nom ?? null, marque: p?.marque ?? null };
+}
+
+/** Référence utilisateur résolue (id + nom) pour référent/pose team lead. */
+async function userRefOf(
+  ctx: QueryCtx,
+  userId: Id<"users"> | undefined,
+): Promise<{ id: Id<"users">; name: string | null } | null> {
+  if (!userId) return null;
+  const u = await ctx.db.get(userId);
+  return { id: userId, name: u?.name ?? null };
+}
+
 /** Décor commun des trois lectures de dossier (list/getByProject/getByLead). */
 async function decorateClient(ctx: QueryCtx, c: Doc<"clients">) {
   return {
@@ -285,6 +270,15 @@ async function decorateClient(ctx: QueryCtx, c: Doc<"clients">) {
     missingDocs: await missingDocsOf(ctx, c._id),
     steps: await stepsMapOf(ctx, c._id),
     lead: await leadDecorOf(ctx, c.leadId),
+    // Équipement et référents résolus (noms) — le front n'a plus à joindre les
+    // tables products/users à partir d'IDs bruts.
+    equipment: {
+      panneau: await productRefOf(ctx, c.panneauProductId, c.panneauQty),
+      onduleur: await productRefOf(ctx, c.onduleurProductId, c.onduleurQty),
+      batterie: await productRefOf(ctx, c.batterieProductId, c.batterieQty),
+    },
+    adminReferent: await userRefOf(ctx, c.adminReferentId),
+    poseTeamLead: await userRefOf(ctx, c.poseTeamLeadId),
   };
 }
 
@@ -325,7 +319,7 @@ export const vtCalendar = query({
   args: { from: v.optional(v.string()), to: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, WORKFLOW_VIEW_ROLES);
-    const visible = await listVisibleClientIds(ctx, user);
+    const visible = await visibleClientIds(ctx, user);
     const all = (await ctx.db.query("clients").collect())
       .filter(isActive)
       .filter((c) => visible === null || visible.has(c._id));

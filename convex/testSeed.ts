@@ -18,7 +18,7 @@ export const setup = internalMutation({
     const byEmail = async (email: string) => {
       const u = await ctx.db
         .query("users")
-        .withIndex("by_email", (q) => q.eq("email", email))
+        .withIndex("email", (q) => q.eq("email", email))
         .unique();
       if (!u) throw new Error(`Compte introuvable : ${email} (signup manquant)`);
       return u._id;

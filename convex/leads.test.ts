@@ -92,3 +92,22 @@ test("qualify() passe le lead en qualifie / pas_qualifie", async () => {
   const lead = await t.run((ctx) => ctx.db.get(leadId));
   expect(lead?.status).toBe("pas_qualifie");
 });
+
+test("les mutations d'état lead refusent les rôles non commerciaux (technicien)", async () => {
+  const t = makeT();
+  const setterId = await insertUser(t, { role: "setter" });
+  const techId = await insertUser(t, { role: "technicien", email: "tech@ecoi.fr" });
+  const leadId = await asUser(t, setterId).mutation(api.leads.create, { firstName: "Z" });
+
+  await expect(
+    asUser(t, techId).mutation(api.leads.updateStatus, { leadId, status: "qualifie" }),
+  ).rejects.toThrow(/Accès refusé/);
+  await expect(
+    asUser(t, techId).mutation(api.leads.qualify, { leadId, qualified: true }),
+  ).rejects.toThrow(/Accès refusé/);
+  await expect(
+    asUser(t, techId).mutation(api.leads.update, { leadId, status: "perdu" }),
+  ).rejects.toThrow(/Accès refusé/);
+  // le lead n'a pas bougé
+  expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("nouveau");
+});

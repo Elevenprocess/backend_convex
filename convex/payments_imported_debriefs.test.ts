@@ -9,7 +9,7 @@ async function seedProjectWithClient(
   const leadId = await t.run((ctx) => ctx.db.insert("leads", { source: "airtable_migration", status: "signe" }));
   const commercialId = await t.run((ctx) => ctx.db.insert("users", { email: "c@e.fr", name: "Com", role: "commercial", active: true }));
   const projectId = await t.run((ctx) => ctx.db.insert("projects", { leadId, commercialId, name: "Projet", status: "signe" }));
-  await t.run((ctx) => ctx.db.insert("clients", { leadId, projectId, statusGlobal: "en_cours", currentPhase: "visite_technique", blocked: false, ...clientOverrides }));
+  await t.run((ctx) => ctx.db.insert("clients", { leadId, projectId, statusGlobal: "administratif_en_cours", currentPhase: "vt", blocked: false, ...clientOverrides }));
   return { leadId, commercialId, projectId };
 }
 

@@ -5,7 +5,7 @@
 
 import type { MutationCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
-import { acompte40Message, acompteSoldeMessage, debriefCreatedMessage, vtDateChangedMessage } from "./notifMessages";
+import { acompte40Message, acompteSoldeMessage, debriefCreatedMessage, rdvCancelledMessage, rdvRescheduledMessage, vtDateChangedMessage } from "./notifMessages";
 import { roleOf } from "./access";
 
 // Notifie chaque responsable commercial (commercial_lead actif) à la création
@@ -83,6 +83,50 @@ export async function notifyVtDateChange(
   } catch (err) {
     // Best-effort : ne jamais bloquer la transition de sous-étape.
     console.error("[notifyVtDateChange] erreur best-effort", err);
+  }
+}
+
+/**
+ * Best-effort : alerte le commercial concerné quand l'accueil signale une
+ * annulation ou un report de RDV (numéro central). Destinataire = commercial
+ * du RDV, sinon commercial assigné au lead. La date de report exacte est portée
+ * par le payload (formatée côté front).
+ */
+export async function notifyRdvReceptionFlag(
+  ctx: MutationCtx,
+  input: {
+    rdvId: Id<"rdv">;
+    kind: "annule" | "reporte";
+    reason?: string;
+    newScheduledAt?: number;
+  },
+): Promise<void> {
+  try {
+    const rdv = await ctx.db.get(input.rdvId);
+    if (!rdv) return;
+    const lead = rdv.leadId ? await ctx.db.get(rdv.leadId) : null;
+    const targetId = rdv.commercialId ?? lead?.assignedToId;
+    if (!targetId) return;
+    const leadName =
+      [lead?.firstName, lead?.lastName].filter(Boolean).join(" ").trim() || "Un prospect";
+    const msg =
+      input.kind === "annule"
+        ? rdvCancelledMessage({ leadName, reason: input.reason })
+        : rdvRescheduledMessage({ leadName, reason: input.reason });
+    await createNotification(ctx, {
+      userId: targetId,
+      type: msg.type,
+      title: msg.title,
+      body: msg.body,
+      payload: {
+        rdvId: input.rdvId,
+        ...(rdv.leadId ? { leadId: rdv.leadId } : {}),
+        ...(input.newScheduledAt !== undefined ? { newScheduledAt: input.newScheduledAt } : {}),
+      },
+    });
+  } catch (err) {
+    // Best-effort : ne jamais bloquer le signalement.
+    console.error("[notifyRdvReceptionFlag] erreur best-effort", err);
   }
 }
 

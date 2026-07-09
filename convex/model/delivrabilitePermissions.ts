@@ -82,10 +82,15 @@ export function canEditStep(
 export const canEditSubstep = canEditStep;
 
 /**
- * Visibilité des dossiers pour les listes. null = aucun filtre (tout voir).
- * Technicien : dossiers actifs où il est technicien VT. Commercial (pas
- * commercial_lead : supervision d'équipe) : dossiers actifs de SES leads
- * (lead.assignedToId).
+ * Visibilité des dossiers — source UNIQUE partagée par clients.ts (list/
+ * getByProject/getByLead/vtCalendar) ET workflowSteps/Substeps. null = tout voir.
+ *
+ * Technicien : dossiers actifs où il est technicien VT (scalaire) OU responsable
+ * d'une étape `installation` (il pose sans forcément avoir fait la VT). Commercial
+ * (pas commercial_lead : supervision d'équipe) : dossiers actifs de SES leads.
+ *
+ * Avant, clients.ts et ce module avaient deux définitions divergentes : un
+ * technicien de pose voyait le dossier dans la liste mais pas ses étapes. Unifié.
  */
 export async function visibleClientIds(
   ctx: QueryCtx,
@@ -93,12 +98,18 @@ export async function visibleClientIds(
 ): Promise<Set<Id<"clients">> | null> {
   const role = roleOf(user);
   if (normalizeRole(role) === "technicien") {
+    const out = new Set<Id<"clients">>();
     const rows = await ctx.db.query("clients").collect();
-    return new Set(
-      rows
-        .filter((c) => c.deletedAt === undefined && c.technicienVtId === user._id)
-        .map((c) => c._id),
-    );
+    for (const c of rows) {
+      if (c.deletedAt === undefined && c.technicienVtId === user._id) out.add(c._id);
+    }
+    // Responsable d'une pose (étape installation) sur un dossier qu'il n'a pas en VT.
+    const steps = await ctx.db
+      .query("workflowSteps")
+      .withIndex("by_responsable", (q) => q.eq("responsableId", user._id))
+      .collect();
+    for (const s of steps) if (s.phase === "installation") out.add(s.clientId);
+    return out;
   }
   if (role === "commercial") {
     const rows = await ctx.db.query("clients").collect();
