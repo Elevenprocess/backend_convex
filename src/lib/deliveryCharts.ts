@@ -2,15 +2,16 @@ import type { ClientResponse, WorkflowPhase } from './types'
 import { DELIVERY_PHASES } from './deliveryOverview'
 import { PHASE_LABEL } from './suivi-board'
 
-// Palette séquentielle vert → cuivre alignée sur le thème Velora : chaque phase
-// du tunnel a sa teinte, la mise en service (livré) reprend le vert « succès ».
+// Palette catégorielle des phases (identité stable, jamais recyclée) validée
+// dataviz clair + sombre : ΔE CVD ≥ 19 entre voisines, contraste ≥ 3:1 sur les
+// deux surfaces. VT garde le vert historique, installation l'« or » Velora.
 export const PHASE_COLOR: Record<WorkflowPhase, string> = {
-  vt: '#145A41',
-  dp: '#1F7857',
-  racco: '#3E9A6F',
-  installation: '#B59241',
-  consuel: '#CFB063',
-  mes: '#3DA86A',
+  vt: '#157F52',
+  dp: '#0F86B0',
+  racco: '#8257D6',
+  installation: '#B8860B',
+  consuel: '#D95F45',
+  mes: '#2E7DD1',
 }
 
 const TERMINAL_STATUSES = new Set(['annule', 'cloture'])

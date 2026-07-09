@@ -233,7 +233,7 @@ export function Suivi() {
             <div className="suivi-stat-ring" style={{ ['--p' as string]: progressAvg }}>
               <div className="suivi-stat-ring-inner">
                 <CountUp className="suivi-stat-ring-val" value={progressAvg} format={(n) => `${n}%`} />
-                <small>progression</small>
+                <small>progression moyenne</small>
               </div>
             </div>
             <div className="suivi-stat-figures">
@@ -247,7 +247,7 @@ export function Suivi() {
               </div>
               {blockedCount > 0 && (
                 <button type="button" className="suivi-stat-alert" onClick={() => setProgressFilter('blocked')}>
-                  <CountUp value={blockedCount} /> bloqué{blockedCount > 1 ? 's' : ''}
+                  <span aria-hidden>⚠</span> <CountUp value={blockedCount} /> bloqué{blockedCount > 1 ? 's' : ''}
                 </button>
               )}
             </div>

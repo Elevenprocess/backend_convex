@@ -6417,20 +6417,22 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 .dfx-tooltip-row strong { margin-left: auto; color: var(--color-text); padding-left: 12px; }
 
 /* ── Donut répartition par phase ──────────────────────────────────────────── */
-/* flex-wrap : quand la carte est étroite, la légende passe sous l'anneau
-   au lieu d'être écrasée (labels tronqués) ou de déborder de la carte. */
-.dfx-donut-body { display: flex; align-items: center; justify-content: center; gap: 14px; row-gap: 10px; margin-top: 6px; flex-wrap: wrap; }
-.dfx-donut-ring { position: relative; width: 150px; flex-shrink: 0; }
-.dfx-donut-center { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; pointer-events: none; }
-.dfx-donut-total { font-size: 24px; font-weight: 950; color: var(--color-text); line-height: 1; }
-.dfx-donut-center small { display: block; font-size: 9px; text-transform: uppercase; letter-spacing: .06em; color: var(--color-faint); font-weight: 700; margin-top: 2px; }
-.dfx-donut-legend { display: flex; flex-direction: column; gap: 3px; min-width: 132px; flex: 1 1 132px; }
-.dfx-legend-row { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--color-muted); font-weight: 600; padding: 2px 5px; border-radius: 6px; }
-.dfx-legend-row.is-clickable { cursor: pointer; }
-.dfx-legend-row.is-clickable:hover { background: var(--color-or-tint); }
-.dfx-legend-row i { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
-.dfx-legend-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dfx-legend-row strong { color: var(--color-text); font-weight: 850; flex-shrink: 0; margin-left: auto; font-variant-numeric: tabular-nums; }
+/* Barres de phases ordonnées (remplace le donut) : une ligne par phase du
+   pipeline — pastille + label direct, barre fine à bouts arrondis (largeur
+   relative au max), compte + part du total en chiffres tabulaires. Les phases
+   vides restent visibles (forme du tunnel), atténuées. */
+.dfx-phasebars { display: flex; flex-direction: column; gap: 7px; margin-top: 12px; }
+.dfx-phasebar-row { display: grid; grid-template-columns: minmax(96px, 118px) 1fr auto; align-items: center; gap: 9px; background: none; border: none; padding: 3px 6px; margin: 0 -6px; border-radius: 8px; text-align: left; font: inherit; color: inherit; }
+.dfx-phasebar-row.is-clickable { cursor: pointer; transition: background .15s ease; }
+.dfx-phasebar-row.is-clickable:hover, .dfx-phasebar-row.is-clickable:focus-visible { background: var(--color-or-tint); }
+.dfx-phasebar-row.is-empty { opacity: .45; }
+.dfx-phasebar-label { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700; color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dfx-phasebar-label i { width: 8px; height: 8px; border-radius: 3px; flex-shrink: 0; }
+.dfx-phasebar-track { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--color-line) 55%, transparent); overflow: hidden; }
+.dfx-phasebar-fill { display: block; height: 100%; border-radius: 4px; transition: width .5s ease; }
+.dfx-phasebar-value { display: flex; align-items: baseline; gap: 6px; justify-content: flex-end; }
+.dfx-phasebar-value strong { font-size: 13px; font-weight: 900; color: var(--color-text); font-variant-numeric: tabular-nums; min-width: 22px; text-align: right; }
+.dfx-phasebar-value small { font-size: 10px; font-weight: 700; color: var(--color-faint); font-variant-numeric: tabular-nums; min-width: 30px; text-align: right; }
 
 /* ── KPI count-up (réutilise .overview-air-kpi) ───────────────────────────── */
 .dfx-kpi--danger strong { color: var(--color-rouille); }
@@ -6447,18 +6449,20 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 @media (max-width: 1100px) { .suivi-insights { grid-template-columns: 1fr 1fr; } .suivi-insights > :last-child { grid-column: 1 / -1; } }
 @media (max-width: 680px) { .suivi-insights { grid-template-columns: 1fr; } .suivi-insights > :last-child { grid-column: auto; } }
 
-.suivi-stat-panel { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; row-gap: 12px; }
-.suivi-stat-ring { --p: 0; width: 92px; height: 92px; border-radius: 50%; background: conic-gradient(var(--color-or) calc(var(--p) * 1%), var(--color-line) 0); display: grid; place-items: center; flex-shrink: 0; transition: background .6s ease; }
-.suivi-stat-ring-inner { width: 72px; height: 72px; border-radius: 50%; background: var(--color-card); display: grid; place-items: center; text-align: center; }
-.suivi-stat-ring-val { font-size: 20px; font-weight: 950; color: var(--color-or-dark); line-height: 1; }
-.suivi-stat-ring-inner small { font-size: 9px; text-transform: uppercase; letter-spacing: .05em; color: var(--color-faint); font-weight: 700; margin-top: 2px; }
-.suivi-stat-figures { display: flex; flex-direction: column; gap: 10px; min-width: 0; flex: 1 1 120px; }
+.suivi-stat-panel { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; row-gap: 12px; }
+/* Anneau : arc en dégradé or-sombre → or, piste discrète, cap arrondi simulé
+   par le point de départ à 12h ; le % est le héros de la carte. */
+.suivi-stat-ring { --p: 0; width: 98px; height: 98px; border-radius: 50%; background: conic-gradient(from 0deg, var(--color-or-dark), var(--color-or) calc(var(--p) * 1%), color-mix(in srgb, var(--color-line) 55%, transparent) 0); display: grid; place-items: center; flex-shrink: 0; transition: background .6s ease; }
+.suivi-stat-ring-inner { width: 80px; height: 80px; border-radius: 50%; background: var(--color-card); display: grid; place-items: center; text-align: center; }
+.suivi-stat-ring-val { font-size: 23px; font-weight: 950; color: var(--color-or-dark); line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.suivi-stat-ring-inner small { font-size: 8.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--color-faint); font-weight: 750; margin-top: 3px; max-width: 64px; line-height: 1.25; }
+.suivi-stat-figures { display: flex; flex-direction: column; gap: 11px; min-width: 0; flex: 1 1 120px; }
 .suivi-stat-fig { display: flex; flex-direction: column; min-width: 0; }
-.suivi-stat-num { font-size: 26px; font-weight: 950; color: var(--color-text); line-height: 1; letter-spacing: -.02em; }
-.suivi-stat-num--ok { color: var(--color-or); }
+.suivi-stat-num { font-size: 27px; font-weight: 950; color: var(--color-text); line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.suivi-stat-num--ok { color: var(--color-or-dark); }
 .suivi-stat-fig span { font-size: 11px; font-weight: 700; color: var(--color-muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.suivi-stat-alert { align-self: flex-start; background: var(--color-rouille-tint); color: var(--color-rouille); border: none; border-radius: 999px; padding: 4px 11px; font-size: 11px; font-weight: 850; cursor: pointer; transition: transform .15s ease; }
-.suivi-stat-alert:hover { transform: translateY(-1px); }
+.suivi-stat-alert { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; background: var(--color-rouille-tint); color: var(--color-rouille); border: 1px solid color-mix(in srgb, var(--color-rouille) 25%, transparent); border-radius: 999px; padding: 4px 11px; font-size: 11px; font-weight: 850; cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
+.suivi-stat-alert:hover { transform: translateY(-1px); box-shadow: 0 2px 8px color-mix(in srgb, var(--color-rouille) 25%, transparent); }
 
 /* ── Compteurs sur les chips de filtre ────────────────────────────────────── */
 .suivi-filters button { display: inline-flex; align-items: center; }
