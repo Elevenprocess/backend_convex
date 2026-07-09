@@ -34,7 +34,7 @@ import type {
 import { fetchCache, type FetchCacheEntry } from './fetchCacheStore'
 import { persistEntry, loadAllEntries, migrateLegacyLocalStorage } from './cachePersist'
 import { convexAuthEnabled, convexClient } from './convex'
-import { callLogsLogCall, leadsCreate, leadsGet, leadsUpdate, rdvCreate, rdvFlagByReception, rdvGet, rdvUpdate } from './convexApi'
+import { callLogsLogCall, leadsCreate, leadsGet, leadsSoftDelete, leadsUpdate, rdvCreate, rdvFlagByReception, rdvGet, rdvUpdate } from './convexApi'
 import { mapConvexLead, mapConvexRdv } from './convexMappers'
 import {
   useConvexAcomptes,
@@ -998,6 +998,12 @@ export async function updateLead(id: string, input: UpdateLeadInput): Promise<Le
 }
 
 export async function deleteLead(id: string): Promise<{ ok: true }> {
+  if (convexAuthEnabled && convexClient) {
+    // Soft delete (deletedAt) : les listes réactives Convex se mettent à jour
+    // d'elles-mêmes, pas de purge de cache à faire.
+    await convexClient.mutation(leadsSoftDelete, { leadId: id })
+    return { ok: true }
+  }
   return api<{ ok: true }>(`/leads/${id}`, { method: 'DELETE' })
 }
 

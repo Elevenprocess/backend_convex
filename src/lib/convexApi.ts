@@ -458,6 +458,12 @@ export const leadsUpdate = makeFunctionReference<
   ConvexLeadDoc | null
 >('leads:update')
 
+export const leadsSoftDelete = makeFunctionReference<
+  'mutation',
+  { leadId: string },
+  null
+>('leads:softDelete')
+
 export const rdvCreate = makeFunctionReference<
   'mutation',
   { leadId: string; commercialId?: string; scheduledAt?: number; locationType?: string; externalId?: string; notes?: string },
