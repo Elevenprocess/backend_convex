@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePaginatedQuery, useQuery } from 'convex/react'
+import { getFunctionName } from 'convex/server'
+import { convexClient } from './convex'
 import { analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsGet, leadsList, leadsStats, paymentsListAcomptes, rdvList, substepsList, usersList } from './convexApi'
 import { mapConvexAcompte, mapConvexCallLog, mapConvexClient, mapConvexCommercialObjective, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexSubstep, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
@@ -91,7 +93,11 @@ export function useConvexLeads(filters?: {
 // exacts sur toute la base), et non par le comptage des leads chargés — qui, en
 // mode fenêtré, ne verrait que la fenêtre courante.
 export function useConvexLeadStats(): Async<import('./types').LeadStatsResponse> {
-  const res = useQuery(leadsStats, {})
+  // Ponctuel (pas d'abonnement) : la query full-scan les leads et ses args fixes
+  // en faisaient LE plus gros consommateur réactif — chaque appel loggé patche
+  // un lead et ré-exécutait le scan pour chaque client. TTL = bucket 5 min.
+  const now = useStableNow()
+  const res = useOneShotQuery(leadsStats, {}, String(now))
   const data = useMemo(
     () => (res ? (res as unknown as import('./types').LeadStatsResponse) : null),
     [res],
@@ -200,6 +206,58 @@ function usePersistentSticky<T>(key: string | null, value: T | undefined): T | u
   return value === undefined ? current.v : value
 }
 
+// ─── Requête PONCTUELLE (sans abonnement réactif) ───────────
+// Un useQuery maintient un abonnement : CHAQUE écriture touchant les tables
+// lues (appel loggé → patch du lead, changement de statut…) fait ré-exécuter
+// la query côté serveur, pour chaque client connecté. Or les queries de stats
+// scannent des tables entières : c'était le principal poste de bande passante
+// du plan Convex. Les stats n'ont pas besoin d'être live → une requête
+// ponctuelle par jeu d'arguments suffit ; le `now` bucketé 5 min (useStableNow)
+// présent dans les args (ou passé en cacheSalt) sert de TTL de rafraîchissement.
+const oneShotCache = new Map<string, Promise<unknown> | { value: unknown }>()
+
+/** Vide le cache des requêtes ponctuelles (tests uniquement). */
+export function __clearOneShotCacheForTests(): void {
+  oneShotCache.clear()
+}
+
+function useOneShotQuery<T>(
+  ref: Parameters<NonNullable<typeof convexClient>['query']>[0],
+  args: Record<string, unknown> | 'skip',
+  cacheSalt = '',
+): T | undefined {
+  const key = args === 'skip' ? null : `${getFunctionName(ref)}:${cacheSalt}:${JSON.stringify(args)}`
+  const [held, setHeld] = useState<{ k: string; v: unknown } | null>(null)
+  useEffect(() => {
+    if (key === null || !convexClient || args === 'skip') return
+    const cached = oneShotCache.get(key)
+    if (cached && !(cached instanceof Promise)) {
+      setHeld({ k: key, v: cached.value })
+      return
+    }
+    // Les clés embarquent le bucket 5 min → elles expirent d'elles-mêmes ;
+    // purge grossière pour éviter une croissance sans fin sur session longue.
+    if (oneShotCache.size > 300) oneShotCache.clear()
+    let cancelled = false
+    const promise = cached instanceof Promise ? cached : convexClient.query(ref as never, args as never)
+    if (!(cached instanceof Promise)) oneShotCache.set(key, promise)
+    promise
+      .then((v) => {
+        oneShotCache.set(key, { value: v })
+        if (!cancelled) setHeld({ k: key, v })
+      })
+      .catch((e) => {
+        oneShotCache.delete(key)
+        console.warn('Requête stats Convex échouée', e)
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- key résume ref+args
+  }, [key])
+  return held && held.k === key ? (held.v as T) : undefined
+}
+
 // Rôles autorisés côté serveur (analytics.ts). Une query Convex lancée par un
 // rôle non autorisé THROW au rendu (→ crash/remount). On skip donc la query
 // pour ces rôles et on renvoie null, comme un 403 REST capté silencieusement.
@@ -223,7 +281,7 @@ export function useConvexAnalyticsSummary(filters?: {
   const role = useAuth((s) => s.user?.role)
   const uid = useAuth((s) => s.user?.id)
   const allowed = !!role && SUMMARY_ROLES.has(role)
-  const res = useQuery(
+  const res = useOneShotQuery(
     analyticsSummary,
     allowed ? { now, days: filters?.days, from: filters?.from, to: filters?.to } : 'skip',
   )
@@ -250,7 +308,7 @@ export function useConvexAnalyticsFunnel(filters?: {
   const role = useAuth((s) => s.user?.role)
   const uid = useAuth((s) => s.user?.id)
   const allowed = !!role && FUNNEL_ROLES.has(role)
-  const res = useQuery(
+  const res = useOneShotQuery(
     analyticsFunnel,
     allowed
       ? { now, days: filters?.days, from: filters?.from, to: filters?.to, setterId: filters?.setterId, sector: filters?.sector }
@@ -276,7 +334,7 @@ export function useConvexDebriefAnalytics(filters?: {
   const role = useAuth((s) => s.user?.role)
   const uid = useAuth((s) => s.user?.id)
   const allowed = !!role && DEBRIEF_ROLES.has(role)
-  const res = useQuery(
+  const res = useOneShotQuery(
     analyticsDebriefStats,
     allowed ? { from: filters?.from, to: filters?.to, commercialId: filters?.commercialId } : 'skip',
   )
@@ -304,7 +362,7 @@ export function useConvexSetterStats(
   const role = useAuth((s) => s.user?.role)
   const uid = useAuth((s) => s.user?.id)
   const allowed = !!id && !!role && SETTER_STATS_ROLES.has(role)
-  const res = useQuery(
+  const res = useOneShotQuery(
     analyticsSetterStats,
     allowed ? { setterId: id, now, days: filters?.days, from: filters?.from, to: filters?.to } : 'skip',
   )
@@ -328,7 +386,7 @@ export function useConvexCommercialAnalytics(
   const role = useAuth((s) => s.user?.role)
   const uid = useAuth((s) => s.user?.id)
   const allowed = !!id && !!role && COMMERCIAL_STATS_ROLES.has(role)
-  const res = useQuery(
+  const res = useOneShotQuery(
     analyticsCommercialStats,
     allowed ? { commercialId: id, now, days: filters?.days, from: filters?.from, to: filters?.to } : 'skip',
   )

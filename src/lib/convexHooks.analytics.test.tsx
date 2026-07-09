@@ -1,19 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook } from '@testing-library/react'
+import { renderHook, waitFor } from '@testing-library/react'
 
-// Capture les arguments passés à useQuery pour vérifier le gating par rôle
-// (un rôle non autorisé DOIT produire 'skip', sinon la query Convex throw au
-// rendu et fait planter/redémarrer la page) et la stabilité de `now`.
-const useQueryCalls: unknown[] = []
-// Valeur retournée par le mock useQuery — `undefined` = chargement. Contrôlable
-// pour tester le stale-while-revalidate (on la fait passer valeur → undefined).
+// Les hooks de stats font des requêtes PONCTUELLES via convexClient.query (pas
+// d'abonnement useQuery : chaque écriture ré-exécutait les full-scans côté
+// serveur). On capture les appels pour vérifier le gating par rôle (un rôle
+// non autorisé ne doit émettre AUCUNE requête) et la stabilité de `now`.
+const queryCalls: { name: string; args: unknown }[] = []
+// Valeur résolue par le mock — contrôlable pour tester le stale-while-revalidate.
 const queryReturn: { value: unknown } = { value: undefined }
-vi.mock('convex/react', () => ({
-  useQuery: (_ref: unknown, args: unknown) => {
-    useQueryCalls.push(args)
-    return args === 'skip' ? undefined : queryReturn.value
+vi.mock('./convex', () => ({
+  convexAuthEnabled: true,
+  convexClient: {
+    query: (ref: unknown, args: unknown) => {
+      const name = String((ref as { toString?: () => string })?.toString?.() ?? ref)
+      queryCalls.push({ name, args })
+      return Promise.resolve(queryReturn.value)
+    },
   },
-  usePaginatedQuery: () => ({ results: [], status: 'LoadingFirstPage', loadMore: vi.fn() }),
 }))
 
 const roleRef: { role: string | null } = { role: 'admin' }
@@ -30,102 +33,151 @@ import {
   useConvexSetterStats,
 } from './convexHooks'
 
-const lastArg = () => useQueryCalls[useQueryCalls.length - 1]
+const lastArg = () => queryCalls[queryCalls.length - 1]?.args
+// Le cache module-level des requêtes ponctuelles survit entre les tests : on
+// varie les args (marqueur unique) pour garantir un vrai appel réseau par test.
+let seq = 0
+const uniq = () => `t${++seq}-${Math.random().toString(36).slice(2)}`
+const flush = () => new Promise((r) => setTimeout(r, 0))
 
 beforeEach(() => {
-  useQueryCalls.length = 0
+  queryCalls.length = 0
   roleRef.role = 'admin'
   queryReturn.value = undefined
+  localStorage.clear()
 })
 
-describe('gating des analytics Convex par rôle', () => {
-  it('funnel : admin passe des args, setter est skip', () => {
+describe('gating et cycle de vie des stats Convex (requêtes ponctuelles)', () => {
+  it('funnel : admin émet une requête avec les args, setter n’en émet aucune', async () => {
     roleRef.role = 'admin'
-    const admin = renderHook(() => useConvexAnalyticsFunnel({ from: 'a', to: 'b' }))
-    expect(lastArg()).toMatchObject({ from: 'a', to: 'b' })
-    expect(admin.result.current.data).toBeNull() // undefined→null tant que ça charge
+    const marker = uniq()
+    renderHook(() => useConvexAnalyticsFunnel({ from: marker, to: 'b' }))
+    await waitFor(() => expect(lastArg()).toMatchObject({ from: marker, to: 'b' }))
 
+    queryCalls.length = 0
     roleRef.role = 'setter'
-    renderHook(() => useConvexAnalyticsFunnel({ from: 'a', to: 'b' }))
-    expect(lastArg()).toBe('skip')
+    const skipArgs1 = { from: uniq(), to: 'b' }
+    renderHook(() => useConvexAnalyticsFunnel(skipArgs1))
+    await flush()
+    expect(queryCalls).toHaveLength(0)
   })
 
-  it('summary : setter autorisé, technicien skip', () => {
+  it('summary : setter autorisé, technicien sans aucune requête', async () => {
     roleRef.role = 'setter'
-    renderHook(() => useConvexAnalyticsSummary({ from: 'a', to: 'b' }))
-    expect(lastArg()).toMatchObject({ from: 'a', to: 'b' })
+    const marker = uniq()
+    renderHook(() => useConvexAnalyticsSummary({ from: marker, to: 'b' }))
+    await waitFor(() => expect(lastArg()).toMatchObject({ from: marker, to: 'b' }))
 
+    queryCalls.length = 0
     roleRef.role = 'technicien'
-    renderHook(() => useConvexAnalyticsSummary({}))
-    expect(lastArg()).toBe('skip')
+    const skipArgs2 = { from: uniq() }
+    renderHook(() => useConvexAnalyticsSummary(skipArgs2))
+    await flush()
+    expect(queryCalls).toHaveLength(0)
   })
 
-  it('debriefStats : commercial autorisé, finances skip', () => {
+  it('debriefStats : commercial autorisé, finances sans requête', async () => {
     roleRef.role = 'commercial'
-    renderHook(() => useConvexDebriefAnalytics({ from: 'a' }))
-    expect(lastArg()).toMatchObject({ from: 'a' })
+    const marker = uniq()
+    renderHook(() => useConvexDebriefAnalytics({ from: marker }))
+    await waitFor(() => expect(lastArg()).toMatchObject({ from: marker }))
 
+    queryCalls.length = 0
     roleRef.role = 'finances'
-    renderHook(() => useConvexDebriefAnalytics({}))
-    expect(lastArg()).toBe('skip')
+    const skipArgs3 = { from: uniq() }
+    renderHook(() => useConvexDebriefAnalytics(skipArgs3))
+    await flush()
+    expect(queryCalls).toHaveLength(0)
   })
 
-  it('stale-while-revalidate : la donnée précédente reste affichée pendant le rechargement (pas de flash à 0)', () => {
-    roleRef.role = 'admin'
-    const prev = { admin: { calls: 1130 } } as unknown
-    queryReturn.value = prev
-    const { result, rerender } = renderHook(() => useConvexAnalyticsSummary({ from: 'a', to: 'b' }))
-    expect(result.current.data).toBe(prev)
-    expect(result.current.loading).toBe(false)
-
-    // Changement de période → Convex renvoie undefined le temps de recharger.
-    queryReturn.value = undefined
-    rerender()
-    // La donnée précédente est conservée (au lieu de retomber à null/0)…
-    expect(result.current.data).toBe(prev)
-    // …mais `loading` passe à true pour signaler le rafraîchissement.
-    expect(result.current.loading).toBe(true)
-
-    // La nouvelle plage arrive → bascule sur la nouvelle valeur.
-    const next = { admin: { calls: 990 } } as unknown
-    queryReturn.value = next
-    rerender()
-    expect(result.current.data).toBe(next)
-    expect(result.current.loading).toBe(false)
-  })
-
-  it('setterStats : setter autorisé (ses propres stats), technicien skip, sans id skip', () => {
+  it('setterStats : setter autorisé (ses propres stats), technicien et absence d’id → aucune requête', async () => {
     roleRef.role = 'setter'
-    renderHook(() => useConvexSetterStats('u1', { from: 'a', to: 'b' }))
-    expect(lastArg()).toMatchObject({ setterId: 'u1', from: 'a', to: 'b' })
+    const marker = uniq()
+    renderHook(() => useConvexSetterStats('u1', { from: marker, to: 'b' }))
+    await waitFor(() => expect(lastArg()).toMatchObject({ setterId: 'u1', from: marker, to: 'b' }))
 
+    queryCalls.length = 0
     roleRef.role = 'technicien'
-    renderHook(() => useConvexSetterStats('u1', {}))
-    expect(lastArg()).toBe('skip')
-
+    const skipArgs4 = { from: uniq() }
+    renderHook(() => useConvexSetterStats('u1', skipArgs4))
     roleRef.role = 'setter'
-    renderHook(() => useConvexSetterStats(undefined, {}))
-    expect(lastArg()).toBe('skip')
+    const skipArgs5 = { from: uniq() }
+    renderHook(() => useConvexSetterStats(undefined, skipArgs5))
+    await flush()
+    expect(queryCalls).toHaveLength(0)
   })
 
-  it('commercialStats : commercial autorisé, setter skip', () => {
+  it('commercialStats : commercial autorisé, setter sans requête', async () => {
     roleRef.role = 'commercial'
-    renderHook(() => useConvexCommercialAnalytics('u2', { days: 30 }))
-    expect(lastArg()).toMatchObject({ commercialId: 'u2', days: 30 })
+    const marker = uniq()
+    renderHook(() => useConvexCommercialAnalytics('u2', { from: marker }))
+    await waitFor(() => expect(lastArg()).toMatchObject({ commercialId: 'u2', from: marker }))
 
+    queryCalls.length = 0
     roleRef.role = 'setter'
-    renderHook(() => useConvexCommercialAnalytics('u2', {}))
-    expect(lastArg()).toBe('skip')
+    const skipArgs6 = { from: uniq() }
+    renderHook(() => useConvexCommercialAnalytics('u2', skipArgs6))
+    await flush()
+    expect(queryCalls).toHaveLength(0)
   })
 
-  it('now est stable entre deux rendus (pas de refetch en boucle)', () => {
+  it('cache ponctuel : un remontage sur la même période est servi SANS nouvelle requête ; une nouvelle période refait un appel', async () => {
     roleRef.role = 'admin'
-    const { rerender } = renderHook(() => useConvexAnalyticsSummary({ from: 'a' }))
+    const v1 = { admin: { calls: 1130 } } as unknown
+    queryReturn.value = v1
+    const filters = { from: uniq(), to: 'b' }
+    const first = renderHook(() => useConvexAnalyticsSummary(filters))
+    await waitFor(() => expect(first.result.current.data).toBe(v1))
+    expect(queryCalls).toHaveLength(1)
+    first.unmount()
+
+    // Remontage (navigation retour) sur la même période → cache mémoire, 0 requête.
+    const second = renderHook(() => useConvexAnalyticsSummary(filters))
+    await waitFor(() => expect(second.result.current.data).toEqual(v1))
+    expect(queryCalls).toHaveLength(1)
+    second.unmount()
+
+    // Nouvelle période → nouvelle clé → un (seul) nouvel appel.
+    const v2 = { admin: { calls: 990 } } as unknown
+    queryReturn.value = v2
+    // Args figés HORS rendu : des args recréés à chaque render changeraient la
+    // clé en boucle (le hook mémorise par clé, pas par identité d'objet).
+    const filters2 = { from: uniq(), to: 'b' }
+    const third = renderHook(() => useConvexAnalyticsSummary(filters2))
+    await waitFor(() => expect(third.result.current.data).toBe(v2))
+    expect(queryCalls).toHaveLength(2)
+  })
+
+  it('stale-while-revalidate persistant : au remontage à froid, les derniers chiffres localStorage s’affichent pendant la requête', async () => {
+    roleRef.role = 'admin'
+    const v1 = { admin: { calls: 1130 } } as unknown
+    queryReturn.value = v1
+    const filters = { from: uniq(), to: 'b' }
+    const first = renderHook(() => useConvexAnalyticsSummary(filters))
+    await waitFor(() => expect(first.result.current.data).toBe(v1))
+    first.unmount()
+
+    // Simule une nouvelle session : cache mémoire vidé, localStorage conservé.
+    const { __clearOneShotCacheForTests } = await import('./convexHooks')
+    __clearOneShotCacheForTests()
+    const v2 = { admin: { calls: 990 } } as unknown
+    queryReturn.value = v2
+    const second = renderHook(() => useConvexAnalyticsSummary(filters))
+    // Avant la réponse réseau : les chiffres persistés s'affichent (pas de flash à 0).
+    expect(second.result.current.data).toEqual(v1)
+    expect(second.result.current.loading).toBe(true)
+    await waitFor(() => expect(second.result.current.data).toBe(v2))
+  })
+
+  it('now est stable entre deux rendus (pas de refetch en boucle) et bucketé à 5 min', async () => {
+    roleRef.role = 'admin'
+    const marker = uniq()
+    const { rerender } = renderHook(() => useConvexAnalyticsSummary({ from: marker }))
+    await waitFor(() => expect(queryCalls.length).toBe(1))
     const first = (lastArg() as { now: number }).now
     rerender()
-    const second = (lastArg() as { now: number }).now
-    expect(second).toBe(first)
-    // bucketé à 5 min
+    await flush()
+    expect(queryCalls.length).toBe(1) // pas de second appel : clé inchangée
     expect(first % 300_000).toBe(0)
   })
 })
