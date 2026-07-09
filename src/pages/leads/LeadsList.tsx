@@ -1780,8 +1780,11 @@ function useInfiniteLeadLoad(
   const items = virtualizer.getVirtualItems()
   const lastIndex = items.length ? items[items.length - 1].index : 0
   useEffect(() => {
-    if (!canLoadMore || !loadMore || count === 0) return
-    if (lastIndex >= count - LEAD_LOAD_MORE_THRESHOLD) loadMore()
+    if (!canLoadMore || !loadMore) return
+    // count === 0 : l'onglet actif n'a AUCUN lead dans la fenêtre déjà chargée
+    // (filtrage client sur pagination serveur) → continuer à charger, sinon
+    // l'onglet paraît vide alors que ses leads sont dans les pages suivantes.
+    if (count === 0 || lastIndex >= count - LEAD_LOAD_MORE_THRESHOLD) loadMore()
   }, [lastIndex, count, canLoadMore, loadMore])
 }
 
