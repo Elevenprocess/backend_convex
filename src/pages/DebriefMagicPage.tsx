@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { buildApiUrl } from '../lib/api'
+import { buildPublicLinkUrl } from '../lib/api'
 import {
   PublicDebriefWizard,
   type PublicDebriefPayload,
@@ -22,7 +22,7 @@ export function DebriefMagicPage() {
   useEffect(() => {
     let alive = true
     setLoading(true)
-    fetch(buildApiUrl(`/debrief-link/${token}`))
+    fetch(buildPublicLinkUrl(`/debrief-link/${token}`))
       .then(async (r) => {
         if (r.status === 410) throw new Error('Ce lien a expiré ou n’est plus valide.')
         if (r.status === 404) throw new Error('Rendez-vous introuvable.')
@@ -36,7 +36,7 @@ export function DebriefMagicPage() {
   }, [token])
 
   async function submit(payload: PublicDebriefPayload) {
-    const res = await fetch(buildApiUrl(`/debrief-link/${token}`), {
+    const res = await fetch(buildPublicLinkUrl(`/debrief-link/${token}`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -49,7 +49,7 @@ export function DebriefMagicPage() {
   }
 
   async function reschedule(scheduledAt: string) {
-    const res = await fetch(buildApiUrl(`/debrief-link/${token}/reschedule`), {
+    const res = await fetch(buildPublicLinkUrl(`/debrief-link/${token}/reschedule`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scheduledAt }),

@@ -67,6 +67,18 @@ export function buildApiUrl(path: string): string {
   return `${base}${normalizedPath}`
 }
 
+// Endpoints publics (/debrief-link/*) : servis par les http actions Convex
+// (domaine .convex.site) en mode Convex, sinon par l'API NestJS. L'URL site se
+// dérive de VITE_CONVEX_URL (.convex.cloud → .convex.site).
+const CONVEX_SITE_BASE = (import.meta.env.VITE_CONVEX_URL as string | undefined)
+  ?.replace(/\.convex\.cloud\/?$/, '.convex.site')
+
+export function buildPublicLinkUrl(path: string): string {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  if (convexAuthEnabled && CONVEX_SITE_BASE) return `${CONVEX_SITE_BASE}${normalizedPath}`
+  return buildApiUrl(normalizedPath)
+}
+
 export class ApiError extends Error {
   status: number
   code?: string
