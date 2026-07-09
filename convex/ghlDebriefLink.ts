@@ -41,6 +41,62 @@ export const dueRdvForBackfill = internalQuery({
   },
 });
 
+/**
+ * Résout le RDV à débriefer pour une demande entrante GHL (webhook workflow).
+ * Priorité : appointmentExternalId (id du RDV GHL, le plus précis) puis
+ * contactExternalId (dernier RDV non débriefé du lead, sinon le plus récent).
+ * Retourne aussi le contactExternalId (payload ou lead) pour la mise à jour
+ * du champ contact `lien_debrief`.
+ */
+export const resolveRdvForDebriefRequest = internalQuery({
+  args: {
+    contactExternalId: v.optional(v.string()),
+    appointmentExternalId: v.optional(v.string()),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ rdvId: string; contactExternalId: string | null } | null> => {
+    // 1. Par id de rendez-vous GHL.
+    if (args.appointmentExternalId) {
+      const rdv = await ctx.db
+        .query("rdv")
+        .withIndex("by_externalId", (q) => q.eq("externalId", args.appointmentExternalId))
+        .first();
+      if (rdv && rdv.deletedAt === undefined) {
+        const lead = await ctx.db.get(rdv.leadId);
+        return {
+          rdvId: rdv._id,
+          contactExternalId: args.contactExternalId ?? lead?.externalId ?? null,
+        };
+      }
+    }
+
+    // 2. Par contact GHL : dernier RDV du lead, non débriefé de préférence.
+    if (args.contactExternalId) {
+      const lead = await ctx.db
+        .query("leads")
+        .withIndex("by_externalId", (q) => q.eq("externalId", args.contactExternalId))
+        .first();
+      if (!lead || lead.deletedAt !== undefined) return null;
+      const rows = (
+        await ctx.db
+          .query("rdv")
+          .withIndex("by_lead", (q) => q.eq("leadId", lead._id))
+          .collect()
+      ).filter((r) => r.deletedAt === undefined);
+      if (rows.length === 0) return null;
+      const byRecency = (a: (typeof rows)[number], b: (typeof rows)[number]) =>
+        (b.scheduledAt ?? b._creationTime) - (a.scheduledAt ?? a._creationTime);
+      const pending = rows.filter((r) => r.debriefFilledAt === undefined).sort(byRecency);
+      const chosen = pending[0] ?? rows.sort(byRecency)[0];
+      return { rdvId: chosen._id, contactExternalId: args.contactExternalId };
+    }
+
+    return null;
+  },
+});
+
 export const markDebriefDuePushed = internalMutation({
   args: { rdvId: v.id("rdv"), now: v.number() },
   handler: async (ctx, args) => {

@@ -1,6 +1,6 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { auth } from "./auth";
 import { mapGhlLeadPayload } from "./model/ghl/leadWebhook";
 import {
@@ -9,7 +9,7 @@ import {
 } from "./model/ghl/opportunityWebhook";
 import { mapGhlStageToStatus } from "./model/ghl/stageMapper";
 import { checkWebhookSecret, clientIp, importsDisabled } from "./model/ghl/webhookAuth";
-import { verifyDebriefToken } from "./model/debriefLinkToken";
+import { signDebriefToken, verifyDebriefToken } from "./model/debriefLinkToken";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);
@@ -162,6 +162,127 @@ http.route({
 function debriefLinkSecret(): string {
   return process.env.DEBRIEF_LINK_SECRET || process.env.BETTER_AUTH_SECRET || "";
 }
+
+// Extraction souple d'un id dans le payload d'un webhook workflow GHL : les
+// clés varient selon la config de l'action. Cherche `keys` à la racine et dans
+// customData, puis `id` UNIQUEMENT dans les objets imbriqués `nestedNames`
+// (contact.id oui, payload.id non — trop ambigu à la racine).
+function extractId(
+  payload: Record<string, unknown>,
+  keys: string[],
+  nestedNames: string[],
+): string | undefined {
+  const asStr = (v: unknown) =>
+    typeof v === "string" && v.trim() ? v.trim() : undefined;
+  const scopes: Array<Record<string, unknown>> = [payload];
+  const customData = payload.customData;
+  if (customData && typeof customData === "object") {
+    scopes.push(customData as Record<string, unknown>);
+  }
+  for (const scope of scopes) {
+    for (const key of keys) {
+      const value = asStr(scope[key]);
+      if (value) return value;
+    }
+  }
+  for (const nested of nestedNames) {
+    const obj = payload[nested];
+    if (obj && typeof obj === "object") {
+      const value = asStr((obj as Record<string, unknown>).id);
+      if (value) return value;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Webhook GHL "envoi du lien débrief" (workflow → action Webhook au moment où
+ * GHL décide que le commercial doit débriefer, p.ex. fin de rendez-vous).
+ * Le backend résout le RDV, signe le lien magique PERMANENT (token sans
+ * expiration), l'écrit dans le champ contact `lien_debrief` (best-effort) et
+ * répond avec l'URL — le workflow GHL l'envoie ensuite au commercial (SMS/
+ * email) via le champ contact ou le mapping de réponse.
+ */
+http.route({
+  path: "/webhooks/ghl/debrief-link",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    const secretCheck = checkWebhookSecret(req);
+    if (!secretCheck.ok) return json({ message: secretCheck.error }, 403);
+
+    let payload: Record<string, unknown>;
+    try {
+      payload = (await req.json()) as Record<string, unknown>;
+    } catch {
+      return json({ message: "Body JSON invalide" }, 400);
+    }
+
+    const eventId = await ctx.runMutation(internal.webhooks.recordEvent, {
+      provider: "ghl",
+      eventType: "debrief.link.requested",
+      payload: JSON.stringify(payload),
+      ...(clientIp(req) !== undefined ? { ipAddress: clientIp(req) } : {}),
+    });
+
+    try {
+      const contactExternalId = extractId(payload, ["contact_id", "contactId"], ["contact"]);
+      const appointmentExternalId = extractId(
+        payload,
+        ["appointment_id", "appointmentId", "calendar_event_id"],
+        ["appointment", "calendar"],
+      );
+      if (!contactExternalId && !appointmentExternalId) {
+        await ctx.runMutation(internal.webhooks.markFailed, {
+          eventId, error: "contact_id ou appointment_id requis",
+        });
+        // 200 {ok:false} : erreur permanente, inutile que GHL retente (parité opportunity).
+        return json({ ok: false, eventId, error: "contact_id ou appointment_id requis" });
+      }
+
+      const resolved = await ctx.runQuery(internal.ghlDebriefLink.resolveRdvForDebriefRequest, {
+        ...(contactExternalId !== undefined ? { contactExternalId } : {}),
+        ...(appointmentExternalId !== undefined ? { appointmentExternalId } : {}),
+      });
+      if (!resolved) {
+        await ctx.runMutation(internal.webhooks.markFailed, {
+          eventId, error: "Aucun RDV trouvé pour ce contact/rendez-vous",
+        });
+        return json({ ok: false, eventId, error: "Aucun RDV trouvé pour ce contact/rendez-vous" });
+      }
+
+      const secret = debriefLinkSecret();
+      if (!secret) return json({ message: "DEBRIEF_LINK_SECRET non configuré" }, 500);
+      const token = await signDebriefToken(resolved.rdvId, secret); // permanent (pas de TTL)
+
+      // URL courte /d/<token> sur le domaine Convex site ; fallback URL front longue.
+      const siteBase = (process.env.CONVEX_SITE_URL ?? "").replace(/\/$/, "");
+      const url = siteBase
+        ? `${siteBase}/d/${token}`
+        : `${frontendBase()}/#/debrief/${encodeURIComponent(token)}`;
+
+      // Écriture du token dans le champ contact `lien_debrief` (best-effort :
+      // false si GHL non configuré — la réponse porte l'URL de toute façon).
+      let fieldUpdated = false;
+      if (resolved.contactExternalId) {
+        fieldUpdated = await ctx.runAction(api.ghlDebriefLink.setContactDebriefLink, {
+          contactExternalId: resolved.contactExternalId,
+          rdvId: resolved.rdvId,
+        });
+      }
+      await ctx.runMutation(internal.ghlDebriefLink.markDebriefDuePushed, {
+        rdvId: resolved.rdvId as any,
+        now: Date.now(),
+      });
+
+      await ctx.runMutation(internal.webhooks.markProcessed, { eventId });
+      return json({ ok: true, eventId, rdvId: resolved.rdvId, url, token, fieldUpdated });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erreur inconnue";
+      await ctx.runMutation(internal.webhooks.markFailed, { eventId, error: message });
+      return json({ message }, 500);
+    }
+  }),
+});
 
 function frontendBase(): string {
   return (process.env.FRONTEND_URL ?? "https://crm.electroconceptoi.com")
