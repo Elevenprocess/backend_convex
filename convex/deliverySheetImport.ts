@@ -27,6 +27,7 @@ import {
   recomputePhase,
   recomputeClientStatus,
 } from "./model/ensureDossier";
+import { ensureProjectForLead } from "./model/ensureProject";
 import { WorkflowSubstepKey } from "./model/enums";
 
 const rowValidator = v.object({
@@ -452,5 +453,43 @@ export const ensureDossiers = internalMutation({
       report.dossiersCreated.push(row.name);
     }
     return report;
+  },
+});
+
+// ─── linkProjects — répare les dossiers créés sans projet ─────────────────────
+// La fiche client navigue vers le workflow via le PROJET : un dossier
+// délivrabilité sans projectId y est invisible (« Aucun projet »). Pour chaque
+// dossier actif sans projet : crée/réutilise le projet du lead
+// (ensureProjectForLead, statut signé, commercial = assignedToId du lead sinon
+// fallback fourni) puis lie client.projectId. Idempotent.
+export const linkProjects = internalMutation({
+  args: {
+    fallbackCommercialId: v.id("users"),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const dryRun = args.dryRun === true;
+    const clients = (await ctx.db.query("clients").collect()).filter(
+      (c) => c.deletedAt === undefined && c.projectId === undefined,
+    );
+    let linked = 0;
+    const skipped: string[] = [];
+    for (const client of clients) {
+      const lead = await ctx.db.get(client.leadId);
+      if (!lead || lead.deletedAt !== undefined) {
+        skipped.push(client._id);
+        continue;
+      }
+      if (!dryRun) {
+        const commercialId = lead.assignedToId ?? args.fallbackCommercialId;
+        const projectId = await ensureProjectForLead(ctx, {
+          leadId: client.leadId,
+          commercialId,
+        });
+        await ctx.db.patch(client._id, { projectId });
+      }
+      linked++;
+    }
+    return { dryRun, dossiersSansProjet: clients.length, linked, skipped: skipped.length };
   },
 });
