@@ -491,6 +491,14 @@ export const callLogsLogCall = makeFunctionReference<
 
 export const projectsListByLead = makeFunctionReference<'query', { leadId: string }, ConvexProjectDoc[]>('projects:listByLead')
 
+// Fiche client : projets + débriefs + devis + pièces du lead en UN aller-retour
+// (remplace la cascade listByLead → get/debriefs → devis/attachments par projet).
+export const projectsFicheByLead = makeFunctionReference<
+  'query',
+  { leadId: string },
+  { project: ConvexProjectDoc; debriefs: ConvexDebriefDoc[]; devis: ConvexDevisDoc[]; attachments: ConvexAttachmentSummary[] }[]
+>('projects:ficheByLead')
+
 export const projectsGet = makeFunctionReference<'query', { projectId: string }, ConvexProjectDoc | null>('projects:get')
 
 export const projectsCreate = makeFunctionReference<

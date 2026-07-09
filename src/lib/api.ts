@@ -29,7 +29,7 @@ import type {
 } from './types'
 import { notifyRealtimeRefresh } from './realtime'
 import { convexAuthEnabled, convexClient } from './convex'
-import { clientsAssignTechniciens, clientsBootstrap, clientsCreateManualDossier, clientsList, debriefsCreate, debriefsCreateForLead, debriefsGet, debriefsListByLead, debriefsListByProject, devisCreate, devisGenerateUploadUrl, devisGetById, devisListByLead, devisMarkAsSigned, devisRemove, devisRetryOcr, devisUpdate, documentsAttachToSubstep, documentsGenerateUploadUrl, documentsGetUrl, documentsListBySubstep, documentsRemove, paymentsGetAcompte, paymentsListAcomptes, paymentsRecordEcheance, paymentsResetEcheancier, paymentsSetEcheancier, paymentsUpdateFinancing, projectAttachmentsCreate, projectAttachmentsGenerateUploadUrl, projectAttachmentsGetUrl, projectAttachmentsListByProject, projectAttachmentsRemove, projectsCreate, projectsGet, projectsListByLead, substepsGet, substepsList, substepsResolveProblem, substepsUpdate, type ConvexAttachmentSummary } from './convexApi'
+import { clientsAssignTechniciens, clientsBootstrap, clientsCreateManualDossier, clientsList, debriefsCreate, debriefsCreateForLead, debriefsGet, debriefsListByLead, debriefsListByProject, devisCreate, devisGenerateUploadUrl, devisGetById, devisListByLead, devisMarkAsSigned, devisRemove, devisRetryOcr, devisUpdate, documentsAttachToSubstep, documentsGenerateUploadUrl, documentsGetUrl, documentsListBySubstep, documentsRemove, paymentsGetAcompte, paymentsListAcomptes, paymentsRecordEcheance, paymentsResetEcheancier, paymentsSetEcheancier, paymentsUpdateFinancing, projectAttachmentsCreate, projectAttachmentsGenerateUploadUrl, projectAttachmentsGetUrl, projectAttachmentsListByProject, projectAttachmentsRemove, projectsCreate, projectsFicheByLead, projectsGet, projectsListByLead, substepsGet, substepsList, substepsResolveProblem, substepsUpdate, type ConvexAttachmentSummary } from './convexApi'
 import { mapConvexAcompte, mapConvexClient, mapConvexDebrief, mapConvexDevis, mapConvexProject, mapConvexSubstep, mapConvexSubstepDocument } from './convexMappers'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
@@ -701,6 +701,26 @@ export async function listProjectsByLead(leadId: string): Promise<ProjectRespons
     return rows.map(mapConvexProject)
   }
   return api<ProjectResponse[]>(`/projects/lead/${leadId}`)
+}
+
+/**
+ * Fiche client : tous les projets du lead AVEC leur détail (débriefs, devis,
+ * pièces) en un seul aller-retour Convex — la cascade listProjectsByLead puis
+ * getProjectDetail par projet multipliait la latence réseau.
+ */
+export async function listProjectDetailsByLead(leadId: string): Promise<ProjectDetailResponse[]> {
+  if (convexAuthEnabled && convexClient) {
+    const rows = await convexClient.query(projectsFicheByLead, { leadId })
+    return rows.map(({ project, debriefs, devis, attachments }) => ({
+      ...mapConvexProject(project),
+      devis: devis.map(mapConvexDevis),
+      debriefs: debriefs.map(mapConvexDebrief),
+      attachments: attachments.map(mapConvexAttachment),
+    }))
+  }
+  const projects = await api<ProjectResponse[]>(`/projects/lead/${leadId}`)
+  const loaded = await Promise.all(projects.map((p) => getProjectDetail(p.id).catch(() => null)))
+  return loaded.filter((d): d is ProjectDetailResponse => Boolean(d))
 }
 
 export async function getProjectDetail(projectId: string): Promise<ProjectDetailResponse> {

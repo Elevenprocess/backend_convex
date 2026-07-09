@@ -26,11 +26,9 @@ vi.mock('../lib/hooks', () => ({
   useInterventions: () => useInterventionsMock(),
 }))
 
-const listProjectsByLeadMock = vi.fn()
-const getProjectDetailMock = vi.fn()
+const listProjectDetailsByLeadMock = vi.fn()
 vi.mock('../lib/api', () => ({
-  listProjectsByLead: (...a: unknown[]) => listProjectsByLeadMock(...a),
-  getProjectDetail: (...a: unknown[]) => getProjectDetailMock(...a),
+  listProjectDetailsByLead: (...a: unknown[]) => listProjectDetailsByLeadMock(...a),
   attachmentRawUrl: (id: string) => `/raw/${id}`,
   interventionFileRawUrl: (id: string) => `/raw/${id}`,
   uploadInterventionFiles: vi.fn(),
@@ -107,8 +105,7 @@ beforeEach(() => {
   useLeadDebriefsMock.mockReturnValue({ data: [] })
   useClientsMock.mockReturnValue({ data: [], loading: false, refetch: vi.fn() })
   useSubstepsMock.mockReturnValue({ data: [], loading: false, refetch: vi.fn() })
-  listProjectsByLeadMock.mockResolvedValue([project])
-  getProjectDetailMock.mockResolvedValue(projectDetail)
+  listProjectDetailsByLeadMock.mockResolvedValue([projectDetail])
   try { window.localStorage.clear() } catch { /* jsdom */ }
 })
 

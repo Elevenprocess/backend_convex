@@ -6,7 +6,7 @@ import { LoadingBlock } from '../components/Spinner'
 import { useAuth } from '../lib/auth'
 import { useLead, useRdvList, useUsers, useLeadDebriefs, useClients } from '../lib/hooks'
 import { buildDossier, readWorkflowState } from '../lib/suivi'
-import { listProjectsByLead, getProjectDetail } from '../lib/api'
+import { listProjectDetailsByLead } from '../lib/api'
 import { fullName, type ClientResponse, type ProjectDetailResponse, type ProjectStatus } from '../lib/types'
 import { FicheClientPanel } from '../components/suivi/FicheClientPanel'
 import { ProjectCard } from '../components/suivi/ProjectCard'
@@ -51,23 +51,24 @@ export function FicheCompletePage() {
     )
   }, [id, lead, rdvs, users])
 
-  const { data: leadDebriefs } = useLeadDebriefs(dossier?.lead.id)
+  // L'id de route EST l'id du lead : on lance débriefs, dossiers délivrabilité
+  // et projets EN PARALLÈLE du chargement du lead au lieu d'attendre `dossier`
+  // (chaque étage de cascade coûte un aller-retour réseau complet).
+  const { data: leadDebriefs } = useLeadDebriefs(id)
 
   const [details, setDetails] = useState<ProjectDetailResponse[] | null>(null)
   const [loadingProjects, setLoadingProjects] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const leadId = dossier?.lead.id
+  const leadId = id
   useEffect(() => {
     if (!leadId) return
     let cancelled = false
     setLoadingProjects(true)
     setError(null)
-    listProjectsByLead(leadId)
-      .then(async (projects) => {
-        const loaded = await Promise.all(projects.map((p) => getProjectDetail(p.id).catch(() => null)))
-        if (cancelled) return
-        setDetails(loaded.filter((d): d is ProjectDetailResponse => Boolean(d)))
+    listProjectDetailsByLead(leadId)
+      .then((loaded) => {
+        if (!cancelled) setDetails(loaded)
       })
       .catch(() => {
         if (!cancelled) setError('Impossible de charger les projets du client.')
