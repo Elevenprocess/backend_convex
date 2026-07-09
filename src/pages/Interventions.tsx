@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { LoadingBlock } from '../components/Spinner'
@@ -6,6 +7,7 @@ import { Icon } from '../components/Icon'
 import { FileDropzone } from '../components/FileDropzone'
 import { useAuth } from '../lib/auth'
 import { useClients, useInterventions, useUsers } from '../lib/hooks'
+import { buildTerrainInterventions, TERRAIN_TYPE_LABEL, type TerrainIntervention } from '../lib/interventionsTerrain'
 import {
   createIntervention,
   deleteIntervention,
@@ -68,10 +70,19 @@ export function Interventions() {
   const role = me?.role
   const isTeam = role != null && TEAM_ROLES.has(role)
   const { data, loading, error, refetch } = useInterventions()
+  // VT + installations planifiées/réalisées dans les étapes des dossiers en
+  // suivi : affichées ici aux côtés du SAV, en lecture seule.
+  const { data: clients } = useClients()
+  const { data: users } = useUsers()
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [query, setQuery] = useState('')
   const [creating, setCreating] = useState(false)
   const [closing, setClosing] = useState<InterventionResponse | null>(null)
+
+  const terrain = useMemo(() => {
+    const usersById = new Map((users ?? []).map((u) => [u.id, u.name]))
+    return buildTerrainInterventions(clients ?? [], usersById)
+  }, [clients, users])
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -85,6 +96,19 @@ export function Interventions() {
         .includes(q)
     })
   }, [data, statusFilter, query])
+
+  const terrainRows = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return terrain.filter((row) => {
+      if (statusFilter !== 'all' && row.status !== statusFilter) return false
+      if (!q) return true
+      return [row.clientName, row.city, TERRAIN_TYPE_LABEL[row.type], ...row.technicienNames]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(q)
+    })
+  }, [terrain, statusFilter, query])
 
   const act = async (fn: () => Promise<unknown>) => {
     try {
@@ -138,12 +162,15 @@ export function Interventions() {
           <LoadingBlock label="Chargement des interventions…" />
         ) : error ? (
           <p className="wf-modal-error">{error}</p>
-        ) : rows.length === 0 ? (
+        ) : rows.length === 0 && terrainRows.length === 0 ? (
           <div className="suivi-empty">
             <p>{statusFilter !== 'all' || query ? 'Aucune intervention ne correspond aux filtres.' : 'Aucune intervention enregistrée pour le moment.'}</p>
           </div>
         ) : (
           <div className="space-y-3 mt-4">
+            {terrainRows.map((row) => (
+              <TerrainInterventionCard key={row.id} row={row} />
+            ))}
             {rows.map((row) => {
               const canClose = row.status !== 'realisee' && (isTeam || (role === 'technicien' && row.technicienId === me?.id))
               return (
@@ -211,6 +238,43 @@ export function Interventions() {
         {closing && <CloseInterventionModal intervention={closing} onClose={() => setClosing(null)} onSaved={() => { setClosing(null); refetch() }} />}
       </main>
     </AppShell>
+  )
+}
+
+// Intervention « terrain » (VT / installation) issue des étapes du dossier :
+// lecture seule ici, elle se pilote depuis la fiche suivi du dossier.
+function TerrainInterventionCard({ row }: { row: TerrainIntervention }) {
+  const navigate = useNavigate()
+  return (
+    <article className="glass-card p-4 sm:p-5">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <strong className="text-sm">{row.clientName || '—'}</strong>
+            {row.city && <span className="text-xs text-muted">· {row.city}</span>}
+            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${STATUS_BADGE_CLS[row.status]}`}>
+              {INTERVENTION_STATUS_LABEL[row.status]}
+            </span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-or/10 text-or-dark">
+              {TERRAIN_TYPE_LABEL[row.type]}
+            </span>
+          </div>
+          <p className="text-xs text-muted mt-1">
+            {row.technicienNames.length > 0 ? `Technicien : ${row.technicienNames.join(', ')} · ` : ''}
+            {row.status === 'realisee' ? `Réalisée le ${fmtDate(row.date)}` : `Planifiée le ${fmtDate(row.date)}`}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            className="text-xs font-bold text-or hover:underline"
+            onClick={() => navigate(`/suivi/${row.leadId}/fiche`)}
+          >
+            Voir le dossier
+          </button>
+        </div>
+      </div>
+    </article>
   )
 }
 
