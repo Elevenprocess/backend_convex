@@ -427,10 +427,13 @@ export const ensureDossiers = internalMutation({
         // (« PICARD JEAN DANIEL et SYLVIE (tampon 409 chemin du petit) »).
         const cleanName = row.name.replace(/\s+/g, " ").trim();
         if (!dryRun) {
+          // Date métier = dépôt DP de la feuille (client historique), sinon now.
+          const createdAt = row.dpDate ? Date.parse(`${row.dpDate}T00:00:00Z`) : Date.now();
           leadId = await ctx.db.insert("leads", {
             source: "manual",
             status: "signe",
             lastName: cleanName,
+            createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),
             ...(row.tel?.trim() ? { phone: row.tel.trim() } : {}),
             ...(row.ville?.trim() ? { city: row.ville.trim() } : {}),
           });
@@ -491,5 +494,45 @@ export const linkProjects = internalMutation({
       linked++;
     }
     return { dryRun, dossiersSansProjet: clients.length, linked, skipped: skipped.length };
+  },
+});
+
+// ─── Réparations de dates ─────────────────────────────────────────────────────
+// 1. Leads sans createdAt (natifs Convex) : createdAt := _creationTime (leur
+//    vraie date). Rend l'index by_createdAt total → tri métier fiable.
+// 2. Leads "manual" créés par l'import : createdAt := date de dépôt DP de la
+//    feuille (clients historiques — sinon ils flottent en tête comme du neuf).
+export const backfillLeadDates = internalMutation({
+  args: {
+    rows: v.optional(v.array(rowValidator)),
+  },
+  handler: async (ctx, args) => {
+    const leads = (await ctx.db.query("leads").collect());
+    let fromCreationTime = 0;
+    for (const lead of leads) {
+      if (lead.createdAt === undefined) {
+        await ctx.db.patch(lead._id, { createdAt: lead._creationTime });
+        fromCreationTime++;
+      }
+    }
+    let datedFromSheet = 0;
+    if (args.rows) {
+      const byName = new Map<string, number>();
+      for (const row of args.rows) {
+        if (!row.dpDate) continue;
+        const ms = Date.parse(`${row.dpDate}T00:00:00Z`);
+        if (!Number.isFinite(ms)) continue;
+        byName.set(row.name.replace(/\s+/g, " ").trim(), ms);
+      }
+      for (const lead of leads) {
+        if (lead.source !== "manual" || !lead.lastName) continue;
+        const ms = byName.get(lead.lastName.replace(/\s+/g, " ").trim());
+        if (ms !== undefined && lead.createdAt !== ms) {
+          await ctx.db.patch(lead._id, { createdAt: ms });
+          datedFromSheet++;
+        }
+      }
+    }
+    return { fromCreationTime, datedFromSheet };
   },
 });

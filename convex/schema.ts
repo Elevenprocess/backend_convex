@@ -126,7 +126,12 @@ export default defineSchema({
     .index("by_city", ["city"])
     .index("by_assignedTo", ["assignedToId"])
     .index("by_acquisitionChannel", ["acquisitionChannel"])
-    .index("by_ghlContactId", ["ghlContactId"]),
+    .index("by_ghlContactId", ["ghlContactId"])
+    // Tri métier des listes : createdAt = vraie date (Render pour le migré,
+    // Date.now() posé à l'insert pour le natif, backfillé sinon). Jamais
+    // _creationTime, arbitraire depuis la migration.
+    .index("by_createdAt", ["createdAt"])
+    .index("by_status_createdAt", ["status", "createdAt"]),
 
   leadStageHistory: defineTable({
     leadId: v.id("leads"),

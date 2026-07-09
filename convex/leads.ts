@@ -44,11 +44,13 @@ export const list = query({
         ix.eq("status", args.status!).eq("setterId", args.setterId!),
       );
     } else if (args.status !== undefined) {
-      q = ctx.db.query("leads").withIndex("by_status_setter", (ix) => ix.eq("status", args.status!));
+      // Tri par date métier (createdAt backfillé partout) — _creationTime est
+      // arbitraire depuis la migration (ordre d'écriture des imports).
+      q = ctx.db.query("leads").withIndex("by_status_createdAt", (ix) => ix.eq("status", args.status!));
     } else if (args.setterId !== undefined) {
       q = ctx.db.query("leads").withIndex("by_setter", (ix) => ix.eq("setterId", args.setterId!));
     } else {
-      q = ctx.db.query("leads");
+      q = ctx.db.query("leads").withIndex("by_createdAt");
     }
     const ordered = q.order("desc").filter((f) => f.eq(f.field("deletedAt"), undefined));
     if (args.city !== undefined) {
@@ -85,6 +87,7 @@ export const create = mutation({
       ...args,
       source: "manual",
       status: args.status ?? "nouveau",
+      createdAt: Date.now(),
       setterId: user._id,
     });
   },

@@ -551,6 +551,7 @@ export const createManualDossier = mutation({
     }
 
     const leadId = await ctx.db.insert("leads", {
+      createdAt: Date.now(),
       source: "manual",
       status: "signe",
       firstName: args.firstName,

@@ -235,6 +235,7 @@ async function findOrCreateLeadFromGhlEvent(
   const firstName = event.contactFirstName ?? nameParts.firstName;
   const lastName = event.contactLastName ?? nameParts.lastName;
   return await ctx.db.insert("leads", {
+    createdAt: Date.now(),
     externalId: contactId,
     source: "ghl",
     status: "qualifie",

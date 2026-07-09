@@ -133,6 +133,7 @@ export const applyGhlStageChange = internalMutation({
     if (!existing) {
       // Création minimale (opportunité arrivée avant contact.created).
       leadId = await ctx.db.insert("leads", {
+        createdAt: Date.now(),
         externalId: input.externalId,
         source: "ghl",
         status: mapped.status ?? "nouveau",
@@ -273,6 +274,7 @@ export const createLeadFromWebhook = internalMutation({
     const channel = deriveAcquisitionChannel(args.signals, sourceMap);
 
     const leadId = await ctx.db.insert("leads", {
+      createdAt: Date.now(),
       ...(args.externalId !== undefined ? { externalId: args.externalId } : {}),
       source: "ghl",
       status: "nouveau",
