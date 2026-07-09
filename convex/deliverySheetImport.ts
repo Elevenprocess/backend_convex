@@ -536,3 +536,28 @@ export const backfillLeadDates = internalMutation({
     return { fromCreationTime, datedFromSheet };
   },
 });
+
+// Aligne le statut commercial des leads ayant un dossier délivrabilité ACTIF
+// (non annulé) : un dossier implique une vente signée. Ne touche ni "perdu"
+// ni "signature_en_cours" (états volontaires), ni les dossiers annulés.
+export const alignDossierLeadStatuses = internalMutation({
+  args: { dryRun: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
+    const FIXABLE = new Set(["nouveau", "qualifie", "rdv_pris", "rdv_honore", "relance", "a_rappeler", "pas_de_reponse", "pas_qualifie"]);
+    const clients = (await ctx.db.query("clients").collect()).filter(
+      (c) => c.deletedAt === undefined && c.statusGlobal !== "annule",
+    );
+    let patched = 0;
+    const seen = new Set<string>();
+    for (const client of clients) {
+      if (seen.has(client.leadId)) continue;
+      seen.add(client.leadId);
+      const lead = await ctx.db.get(client.leadId);
+      if (!lead || lead.deletedAt !== undefined) continue;
+      if (!FIXABLE.has(lead.status)) continue;
+      if (args.dryRun !== true) await ctx.db.patch(lead._id, { status: "signe" });
+      patched++;
+    }
+    return { dryRun: args.dryRun === true, patched };
+  },
+});
