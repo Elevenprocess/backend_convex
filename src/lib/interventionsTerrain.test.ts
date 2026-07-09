@@ -32,12 +32,22 @@ describe('buildTerrainInterventions', () => {
     expect(rows.find((r) => r.id === 'c2:vt')).toMatchObject({ status: 'a_refaire' })
   })
 
-  it('ignore les étapes non datées non faites, les annulées et les absentes', () => {
+  it('étape pas encore commencée (sans date) → à venir ; en cours sans date → planifiée', () => {
     const rows = buildTerrainInterventions([
       client({ steps: {
-        vt: step('a_faire'),
-        installation: step('annule', '2026-06-20'),
+        vt: step('en_cours'),
+        installation: step('a_faire'),
       } }),
+      client({ id: 'c2', leadId: 'l2', steps: { vt: step('en_attente') } }),
+    ])
+    expect(rows.find((r) => r.id === 'c1:vt')).toMatchObject({ status: 'planifiee', date: null })
+    expect(rows.find((r) => r.id === 'c1:installation')).toMatchObject({ status: 'a_venir', date: null })
+    expect(rows.find((r) => r.id === 'c2:vt')).toMatchObject({ status: 'a_venir' })
+  })
+
+  it('ignore les étapes annulées et absentes du dossier', () => {
+    const rows = buildTerrainInterventions([
+      client({ steps: { installation: step('annule', '2026-06-20') } }),
     ])
     expect(rows).toHaveLength(0)
   })
@@ -53,14 +63,5 @@ describe('buildTerrainInterventions', () => {
     )
     expect(rows.find((r) => r.type === 'vt')?.technicienNames).toEqual(['Théo', 'Sam'])
     expect(rows.find((r) => r.type === 'installation')?.technicienNames).toEqual(['Paul Pose'])
-  })
-
-  it('trie par date décroissante, dates absentes en queue', () => {
-    const rows = buildTerrainInterventions([
-      client({ id: 'c1', steps: { vt: step('planifie', '2026-06-01') } }),
-      client({ id: 'c2', leadId: 'l2', steps: { vt: step('fait', null, null) } }),
-      client({ id: 'c3', leadId: 'l3', steps: { installation: step('planifie', '2026-07-01') } }),
-    ])
-    expect(rows.map((r) => r.id)).toEqual(['c3:installation', 'c1:vt', 'c2:vt'])
   })
 })

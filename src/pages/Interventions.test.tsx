@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import type { InterventionResponse, UserResponse } from '../lib/types'
+import type { ClientResponse, InterventionResponse, UserResponse } from '../lib/types'
 
 vi.mock('../components/shell/AppShell', () => ({
   AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -36,9 +36,24 @@ const INTERVENTIONS: InterventionResponse[] = [
   intervention({ id: 'i2', motif: 'Panneau fissuré', status: 'realisee', observations: 'Remplacé sous garantie', client: { leadId: 'l2', fullName: 'Marie Posée', city: 'Saint-Pierre' } }),
 ]
 
+const CLIENTS: ClientResponse[] = [
+  {
+    id: 'cl1', leadId: 'lead-9', projectId: null, rdvId: null,
+    lead: { fullName: 'Paul Futur', city: 'Le Tampon', phone: null },
+    technicienVtId: null, techniciens: [{ id: 't9', name: 'Vito VT' }],
+    poseTeamLeadId: null, adminReferentId: null,
+    statusGlobal: 'vt_a_faire', currentPhase: 'vt', blocked: false,
+    missingDocsCount: 0, signedAt: null,
+    steps: {
+      vt: { status: 'planifie', datePlanifiee: '2026-07-15', dateRealisee: null, problemReason: null, responsableId: null },
+      installation: { status: 'a_faire', datePlanifiee: null, dateRealisee: null, problemReason: null, responsableId: null },
+    },
+  },
+]
+
 vi.mock('../lib/hooks', () => ({
   useInterventions: () => ({ data: INTERVENTIONS, loading: false, error: null, refetch: () => {} }),
-  useClients: () => ({ data: [], loading: false, error: null }),
+  useClients: () => ({ data: CLIENTS, loading: false, error: null }),
   useUsers: () => ({ data: [], loading: false, error: null }),
 }))
 
@@ -70,9 +85,25 @@ describe('Interventions — page SAV', () => {
 
   it('filtre statut : « Réalisées » ne montre que les interventions réalisées', () => {
     renderPage('delivrabilite')
-    fireEvent.click(screen.getByRole('button', { name: 'Réalisées' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Réalisées/ }))
     expect(screen.queryByText('Onduleur en défaut')).toBeNull()
     expect(screen.getByText('Panneau fissuré')).toBeTruthy()
     expect(screen.getByText('Remplacé sous garantie')).toBeTruthy()
+  })
+
+  it('interventions terrain : la VT planifiée du dossier apparaît avec son technicien', () => {
+    renderPage('delivrabilite')
+    expect(screen.getByText('Visite technique')).toBeTruthy()
+    expect(screen.getAllByText('Paul Futur').length).toBeGreaterThan(0)
+    expect(screen.getByText(/Vito VT/)).toBeTruthy()
+  })
+
+  it('filtre « À venir » : montre l’installation pas encore commencée, masque le reste', () => {
+    renderPage('delivrabilite')
+    fireEvent.click(screen.getByRole('button', { name: /^À venir/ }))
+    expect(screen.getByText('Installation')).toBeTruthy()
+    expect(screen.getByText('Pas encore planifiée')).toBeTruthy()
+    expect(screen.queryByText('Visite technique')).toBeNull()
+    expect(screen.queryByText('Onduleur en défaut')).toBeNull()
   })
 })

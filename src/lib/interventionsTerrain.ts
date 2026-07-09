@@ -6,6 +6,9 @@ import type { ClientResponse, InterventionStatus } from './types'
 
 export type TerrainType = 'vt' | 'installation'
 
+/** Statuts SAV + « à venir » : étape pas encore commencée ni planifiée. */
+export type TerrainStatus = InterventionStatus | 'a_venir'
+
 export const TERRAIN_TYPE_LABEL: Record<TerrainType, string> = {
   vt: 'Visite technique',
   installation: 'Installation',
@@ -16,7 +19,7 @@ export type TerrainIntervention = {
   clientId: string
   leadId: string
   type: TerrainType
-  status: InterventionStatus
+  status: TerrainStatus
   /** dateRealisee si réalisée (repli datePlanifiee), sinon datePlanifiee. */
   date: string | null
   clientName: string | null
@@ -28,8 +31,8 @@ const PHASES: TerrainType[] = ['vt', 'installation']
 
 /**
  * Étape dossier → statut « intervention » : fait → réalisée, probleme → à
- * refaire, sinon planifiée si une date est posée. Une étape a_faire sans date
- * ou annulée n'est pas une intervention.
+ * refaire, datée ou en cours → planifiée, sinon → à venir (l'étape existe au
+ * dossier mais n'a pas encore commencé). Une étape annulée n'apparaît pas.
  */
 export function buildTerrainInterventions(
   clients: ClientResponse[],
@@ -40,11 +43,11 @@ export function buildTerrainInterventions(
     for (const type of PHASES) {
       const step = c.steps[type]
       if (!step || step.status === 'annule') continue
-      let status: InterventionStatus
+      let status: TerrainStatus
       if (step.status === 'fait') status = 'realisee'
       else if (step.status === 'probleme') status = 'a_refaire'
-      else if (step.datePlanifiee) status = 'planifiee'
-      else continue
+      else if (step.datePlanifiee || step.status === 'en_cours') status = 'planifiee'
+      else status = 'a_venir'
       const poseLeadName = c.poseTeamLeadId ? usersById?.get(c.poseTeamLeadId) : undefined
       rows.push({
         id: `${c.id}:${type}`,
@@ -60,6 +63,5 @@ export function buildTerrainInterventions(
       })
     }
   }
-  // Plus récentes/prochaines en tête ; sans date en queue.
-  return rows.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''))
+  return rows
 }
