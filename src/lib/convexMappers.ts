@@ -320,6 +320,8 @@ export function mapConvexAcompte(doc: import('./convexApi').ConvexAcompteDoc): i
     acomptePercent: doc.acomptePercent,
     acompteAmount: s(doc.acompteAmount),
     customEcheancier: doc.customEcheancier,
+    echeancierSource: doc.echeancierSource,
+    devisNumber: doc.devisNumber,
     signedAt: iso(doc.signedAt ?? undefined),
     edfRecepisse: doc.edfRecepisse,
     echeances: doc.echeances.map((e) => ({

@@ -84,6 +84,11 @@ export function EcheancierEditorModal({
               Montant total {money(a.montantTotal)} · total réparti {sumPercent}%
               {reste !== 0 && <span className={reste < 0 ? 'text-rouille' : 'text-faint'}> · reste {reste}%</span>}
             </p>
+            {a.echeancierSource === 'devis' && (
+              <p className="fiche-modal-sub text-or-dark">
+                Plan actuel : conditions de règlement du devis{a.devisNumber ? ` ${a.devisNumber}` : ''} — enregistrer ici le remplace par un plan personnalisé.
+              </p>
+            )}
           </div>
           <button type="button" className="fiche-modal-close" onClick={onClose} aria-label="Fermer">✕</button>
         </header>

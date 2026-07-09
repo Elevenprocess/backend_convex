@@ -295,6 +295,11 @@ function FinanceVenteRows({
         <td data-label="Commercial" className="text-muted">{a.commercialName ?? '—'}</td>
         <td data-label="Paiement" className="text-muted">
           {method ?? '—'}
+          {a.echeancierSource === 'devis' && (
+            <span className="ml-1.5 fin-pill bg-or-tint text-or-dark" title="Échéancier issu des conditions de règlement du devis signé">
+              Devis{a.devisNumber ? ` ${a.devisNumber}` : ''}
+            </span>
+          )}
           {a.edfRecepisse && <span className="ml-1.5 fin-pill bg-or-tint text-or-dark">Récépissé EDF</span>}
         </td>
         <td data-label="Montant total">{money(a.montantTotal)}</td>

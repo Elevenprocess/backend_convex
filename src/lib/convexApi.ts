@@ -276,6 +276,7 @@ export type ConvexAcompteDoc = {
   montantTotal: number | null; financingType: string | null; paymentSubMethod: string | null
   financingOrg: string | null; acomptePercent: number | null; acompteAmount: number | null
   customEcheancier: boolean; signedAt: number | null; edfRecepisse: boolean
+  echeancierSource: 'custom' | 'devis' | 'standard'; devisNumber: string | null
   echeances: ConvexEcheanceLine[]; totalEncaisse: number | null; resteAPayer: number | null
 }
 

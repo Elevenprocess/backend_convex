@@ -1075,6 +1075,12 @@ export type AcompteResponse = {
   acomptePercent: number | null
   acompteAmount: string | null
   customEcheancier: boolean
+  /** Provenance du plan de tranches : custom (back-office) | devis (échéancier
+   *  du devis signé) | standard (template financingType). Absent sur le
+   *  backend REST legacy. */
+  echeancierSource?: 'custom' | 'devis' | 'standard'
+  /** Numéro du devis signé qui fournit l'échéancier (source devis). */
+  devisNumber?: string | null
   signedAt: string | null
   edfRecepisse: boolean
   echeances: EcheanceLine[]
