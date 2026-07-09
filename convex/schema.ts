@@ -65,6 +65,12 @@ export default defineSchema({
 
   leads: defineTable({
     externalId: v.optional(v.string()),
+    // Id du contact GHL. Distinct d'externalId qui, pour les lignes issues de
+    // Render, porte l'uuid Postgres (les leads créés par les webhooks Convex
+    // ont externalId = id GHL). Requis pour résoudre les webhooks GHL
+    // (contact_id) et pousser le champ lien_debrief — backfillé depuis
+    // leads.external_id PG, alimenté au fil de l'eau par la sync catchup.
+    ghlContactId: v.optional(v.string()),
     source: leadSourceValidator,
     status: leadStatusValidator,
     // identité
@@ -119,7 +125,8 @@ export default defineSchema({
     .index("by_lastContact", ["lastContactAt"])
     .index("by_city", ["city"])
     .index("by_assignedTo", ["assignedToId"])
-    .index("by_acquisitionChannel", ["acquisitionChannel"]),
+    .index("by_acquisitionChannel", ["acquisitionChannel"])
+    .index("by_ghlContactId", ["ghlContactId"]),
 
   leadStageHistory: defineTable({
     leadId: v.id("leads"),
@@ -238,6 +245,11 @@ export default defineSchema({
 
   rdv: defineTable({
     externalId: v.optional(v.string()),
+    // Id du rendez-vous GHL (calendar event). Distinct d'externalId qui, pour
+    // les lignes issues de Render, porte l'uuid Postgres. Requis pour résoudre
+    // les webhooks GHL (appointment_id) — backfillé depuis rdv.external_id PG,
+    // alimenté au fil de l'eau par la sync catchup.
+    ghlEventId: v.optional(v.string()),
     leadId: v.id("leads"),
     commercialId: v.optional(v.id("users")),
     scheduledAt: v.optional(v.number()),
@@ -271,7 +283,8 @@ export default defineSchema({
     .index("by_signature", ["signatureAt"])
     .index("by_scheduledAt", ["scheduledAt"])
     .index("by_status", ["status"])
-    .index("by_externalId", ["externalId"]),
+    .index("by_externalId", ["externalId"])
+    .index("by_ghlEventId", ["ghlEventId"]),
 
   projects: defineTable({
     externalId: v.optional(v.string()),

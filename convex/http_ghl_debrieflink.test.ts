@@ -116,6 +116,37 @@ describe("POST /webhooks/ghl/debrief-link", () => {
     expect(body.error).toMatch(/contact_id ou appointment_id/);
   });
 
+  it("rdv migré Render : résolution par ghlEventId / ghlContactId (externalId = uuid PG)", async () => {
+    const t = makeT();
+    setupEnv();
+    // Ligne issue de la migration : externalId = uuid Postgres, id GHL à part.
+    const leadId = await t.run((ctx) =>
+      ctx.db.insert("leads", {
+        source: "ghl", status: "rdv_honore",
+        externalId: "5b60fcac-2e4a-41e3-907e-c88bd49f4ece",
+        ghlContactId: "BkZeaEdJauCiTjwDjeGn",
+      }),
+    );
+    const rdvId = await t.run((ctx) =>
+      ctx.db.insert("rdv", {
+        leadId, locationType: "domicile", status: "honore",
+        externalId: "4b00d339-d055-4a2d-b891-032523803f52",
+        ghlEventId: "dYx6TlU9DM61UE0Ea3nK",
+        scheduledAt: 3000,
+      }),
+    );
+
+    // Par appointment_id GHL.
+    const byAppt = await (await post(t, { appointment_id: "dYx6TlU9DM61UE0Ea3nK" })).json();
+    expect(byAppt.ok).toBe(true);
+    expect(byAppt.rdvId).toBe(rdvId);
+
+    // Par contact_id GHL.
+    const byContact = await (await post(t, { contact_id: "BkZeaEdJauCiTjwDjeGn" })).json();
+    expect(byContact.ok).toBe(true);
+    expect(byContact.rdvId).toBe(rdvId);
+  });
+
   it("customData.appointmentId accepté (payload workflow custom)", async () => {
     const t = makeT();
     setupEnv();

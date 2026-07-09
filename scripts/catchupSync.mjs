@@ -49,8 +49,8 @@ const bool = (v) => (v == null ? undefined : Boolean(v));
 
 /**
  * Spec par table : [convexField, pgColumn, convert]. `id` PG → `externalId` Convex
- * (clé de dédup). Les colonnes PG `external_id` (id GHL) ne sont PAS reprises : la
- * convention établie est externalId = id Postgres (résolution des FK).
+ * (clé de dédup, convention FK). Les colonnes PG `external_id` (id GHL) sont
+ * reprises À PART dans ghlContactId/ghlEventId (résolution des webhooks GHL).
  * fkFields : résolution UUID PG → Id Convex via l'index by_externalId.
  */
 const TABLES = {
@@ -58,6 +58,7 @@ const TABLES = {
     pg: "leads",
     fields: [
       ["externalId", "id", str],
+      ["ghlContactId", "external_id", str], // id contact GHL (webhooks + lien_debrief)
       ["source", "source", str], ["status", "status", str],
       ["firstName", "first_name", str], ["lastName", "last_name", str],
       ["email", "email", str], ["phone", "phone", str],
@@ -88,7 +89,9 @@ const TABLES = {
   rdv: {
     pg: "rdv",
     fields: [
-      ["externalId", "id", str], ["leadId", "lead_id", str], ["commercialId", "commercial_id", str],
+      ["externalId", "id", str],
+      ["ghlEventId", "external_id", str], // id rendez-vous GHL (webhooks appointment_id)
+      ["leadId", "lead_id", str], ["commercialId", "commercial_id", str],
       ["scheduledAt", "scheduled_at", ms], ["locationType", "location_type", str],
       ["status", "status", str], ["result", "result", str],
       ["signatureAt", "signature_at", ms], ["montantTotal", "montant_total", num],

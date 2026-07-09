@@ -39,6 +39,9 @@ const TABLES: Record<string, Spec> = {
     pg: "leads",
     fields: [
       ["externalId", "id", str],
+      // Id contact GHL (leads.external_id PG) : requis pour les webhooks GHL
+      // (contact_id) et le push du champ lien_debrief.
+      ["ghlContactId", "external_id", str],
       ["source", "source", str], ["status", "status", str],
       ["firstName", "first_name", str], ["lastName", "last_name", str],
       ["email", "email", str], ["phone", "phone", str],
@@ -69,7 +72,11 @@ const TABLES: Record<string, Spec> = {
   rdv: {
     pg: "rdv",
     fields: [
-      ["externalId", "id", str], ["leadId", "lead_id", str], ["commercialId", "commercial_id", str],
+      ["externalId", "id", str],
+      // Id du rendez-vous GHL (rdv.external_id PG) : résolution des webhooks
+      // GHL (appointment_id).
+      ["ghlEventId", "external_id", str],
+      ["leadId", "lead_id", str], ["commercialId", "commercial_id", str],
       ["scheduledAt", "scheduled_at", ms], ["locationType", "location_type", str],
       ["status", "status", str], ["result", "result", str],
       ["signatureAt", "signature_at", ms], ["montantTotal", "montant_total", num],
@@ -196,6 +203,46 @@ export const catchup = internalAction({
           notFound += res.notFound;
         }
         summary.backfillDebriefsCreatedAt = { patched, notFound };
+      }
+    });
+    return summary;
+  },
+});
+
+/**
+ * Backfill des ids GHL sur les lignes déjà migrées (upsertMigration skippe
+ * l'existant, donc les nouveaux champs ghlContactId/ghlEventId n'arrivent que
+ * sur les insertions futures — cette action patche le stock).
+ *   npx convex run migrationPg:backfillGhlIds '{}'
+ */
+export const backfillGhlIds = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const JOBS = [
+      { table: "leads", field: "ghlContactId", pg: "leads" },
+      { table: "rdv", field: "ghlEventId", pg: "rdv" },
+    ] as const;
+    const summary: Record<string, unknown> = {};
+    await withPg(async (client) => {
+      for (const job of JOBS) {
+        const { rows } = await client.query(
+          `SELECT id::text, external_id FROM ${job.pg} WHERE external_id IS NOT NULL`
+        );
+        const pairs = rows.map((r: { id: string; external_id: string }) => ({
+          externalId: r.id,
+          value: r.external_id,
+        }));
+        let patched = 0, notFound = 0;
+        for (let i = 0; i < pairs.length; i += BACKFILL_BATCH) {
+          const res: any = await ctx.runMutation(internal.migration.backfillStringField, {
+            table: job.table,
+            field: job.field,
+            pairs: pairs.slice(i, i + BACKFILL_BATCH),
+          });
+          patched += res.patched;
+          notFound += res.notFound;
+        }
+        summary[`${job.table}.${job.field}`] = { pg: pairs.length, patched, notFound };
       }
     });
     return summary;

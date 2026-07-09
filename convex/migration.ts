@@ -95,6 +95,39 @@ export const backfillCreatedAt = internalMutation({
   },
 });
 
+/**
+ * Backfill générique d'un champ STRING par externalId (miroir de
+ * backfillCreatedAt qui ne prend que des numbers). Utilisé pour rapatrier les
+ * ids GHL (leads.ghlContactId / rdv.ghlEventId) depuis PG external_id.
+ */
+export const backfillStringField = internalMutation({
+  args: {
+    table: v.string(),
+    field: v.string(),
+    pairs: v.array(v.object({ externalId: v.string(), value: v.string() })),
+  },
+  handler: async (ctx, args) => {
+    if (!(MAPPABLE_TABLES as readonly string[]).includes(args.table)) {
+      throw new Error(`Table non mappable : ${args.table}`);
+    }
+    let patched = 0;
+    const notFound: string[] = [];
+    for (const { externalId, value } of args.pairs) {
+      const row = await (ctx.db.query(args.table as TableNames) as any)
+        .withIndex("by_externalId", (q: any) => q.eq("externalId", externalId))
+        .unique();
+      if (!row) {
+        notFound.push(externalId);
+        continue;
+      }
+      if (row[args.field] === value) continue; // idempotent, pas d'écriture inutile
+      await ctx.db.patch(row._id, { [args.field]: value } as never);
+      patched += 1;
+    }
+    return { table: args.table, field: args.field, patched, notFound: notFound.length };
+  },
+});
+
 /** externalId des lignes SANS storageId (pour cibler le ré-upload des blobs). */
 export const missingStorageIds = internalQuery({
   args: { table: v.string() },

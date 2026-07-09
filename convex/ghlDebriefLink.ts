@@ -31,10 +31,15 @@ export const dueRdvForBackfill = internalQuery({
     const out: Array<{ rdvId: (typeof rows)[number]["_id"]; contactExternalId: string }> = [];
     for (const r of rows) {
       if (r.deletedAt !== undefined || r.debriefFilledAt !== undefined || r.debriefDueAt !== undefined) continue;
-      if (r.externalId === undefined) continue;
+      if (r.externalId === undefined && r.ghlEventId === undefined) continue;
       const lead = await ctx.db.get(r.leadId);
-      if (!lead || lead.deletedAt !== undefined || lead.externalId === undefined) continue;
-      out.push({ rdvId: r._id, contactExternalId: lead.externalId });
+      if (!lead || lead.deletedAt !== undefined) continue;
+      // Id contact GHL réel : ghlContactId (lignes migrées de Render) sinon
+      // externalId (leads créés par les webhooks Convex). Les leads migrés non
+      // backfillés n'ont qu'un uuid Postgres → skip (PUT /contacts/<uuid> = 404).
+      const contactExternalId = lead.ghlContactId ?? lead.externalId;
+      if (contactExternalId === undefined || /^[0-9a-f]{8}-[0-9a-f]{4}/.test(contactExternalId)) continue;
+      out.push({ rdvId: r._id, contactExternalId });
       if (out.length >= args.limit) break;
     }
     return out;
@@ -57,27 +62,41 @@ export const resolveRdvForDebriefRequest = internalQuery({
     ctx,
     args,
   ): Promise<{ rdvId: string; contactExternalId: string | null } | null> => {
-    // 1. Par id de rendez-vous GHL.
+    // 1. Par id de rendez-vous GHL. Deux familles d'ids coexistent : les rdv
+    // synchronisés depuis Render portent l'id GHL dans ghlEventId (externalId
+    // = uuid Postgres), les rdv créés nativement côté Convex dans externalId.
     if (args.appointmentExternalId) {
-      const rdv = await ctx.db
-        .query("rdv")
-        .withIndex("by_externalId", (q) => q.eq("externalId", args.appointmentExternalId))
-        .first();
+      const rdv =
+        (await ctx.db
+          .query("rdv")
+          .withIndex("by_ghlEventId", (q) => q.eq("ghlEventId", args.appointmentExternalId))
+          .first()) ??
+        (await ctx.db
+          .query("rdv")
+          .withIndex("by_externalId", (q) => q.eq("externalId", args.appointmentExternalId))
+          .first());
       if (rdv && rdv.deletedAt === undefined) {
         const lead = await ctx.db.get(rdv.leadId);
         return {
           rdvId: rdv._id,
-          contactExternalId: args.contactExternalId ?? lead?.externalId ?? null,
+          contactExternalId:
+            args.contactExternalId ?? lead?.ghlContactId ?? lead?.externalId ?? null,
         };
       }
     }
 
     // 2. Par contact GHL : dernier RDV du lead, non débriefé de préférence.
+    // Même dualité d'ids que pour les rdv (ghlContactId vs externalId).
     if (args.contactExternalId) {
-      const lead = await ctx.db
-        .query("leads")
-        .withIndex("by_externalId", (q) => q.eq("externalId", args.contactExternalId))
-        .first();
+      const lead =
+        (await ctx.db
+          .query("leads")
+          .withIndex("by_ghlContactId", (q) => q.eq("ghlContactId", args.contactExternalId))
+          .first()) ??
+        (await ctx.db
+          .query("leads")
+          .withIndex("by_externalId", (q) => q.eq("externalId", args.contactExternalId))
+          .first());
       if (!lead || lead.deletedAt !== undefined) return null;
       const rows = (
         await ctx.db
