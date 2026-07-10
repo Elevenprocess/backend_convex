@@ -34,7 +34,9 @@ import type {
 import { fetchCache, type FetchCacheEntry } from './fetchCacheStore'
 import { persistEntry, loadAllEntries, migrateLegacyLocalStorage } from './cachePersist'
 import { convexAuthEnabled, convexClient } from './convex'
-import { callLogsLogCall, leadsCreate, leadsGet, leadsSoftDelete, leadsUpdate, rdvCreate, rdvFlagByReception, rdvGet, rdvUpdate } from './convexApi'
+import { callLogsLogCall, leadsCreate, leadsGet, leadsSoftDelete, leadsUpdate, rdvCreate, rdvFlagByReception, rdvGet, rdvUpdate,
+  ghlCalendarGetConfig, ghlCalendarListUsers, ghlCalendarMySector, ghlCalendarFreeSlots, ghlCalendarEventsAction,
+  ghlCalendarSyncEvents, ghlCalendarSyncLeadEvents, ghlAppointmentsCreate, ghlAppointmentsUpdate } from './convexApi'
 import { mapConvexLead, mapConvexRdv } from './convexMappers'
 import {
   useConvexAcomptes,
@@ -1137,13 +1139,52 @@ export type GhlMySector = {
   sectors: Array<{ sector: string; calendarId: string; label: string; primary: boolean }>
 }
 
-export function useGhlCalendarConfig(enabled = true): Async<GhlCalendarConfig> {
-  return useFetch<GhlCalendarConfig>(enabled ? '/ghl-calendar/config' : null)
+// Adaptateur générique : sert un résultat d'ACTION Convex sous la forme Async<T>
+// (les actions GHL n'ont pas d'abonnement réactif — fetch ponctuel + refetch).
+function useConvexActionData<T>(ref: unknown, args: Record<string, unknown> | null): Async<T> {
+  const [data, setData] = useState<T | null>(null)
+  const [loading, setLoading] = useState(args !== null)
+  const [error, setError] = useState<string | null>(null)
+  const [tick, setTick] = useState(0)
+  const key = args === null ? null : JSON.stringify(args)
+  useEffect(() => {
+    if (key === null || !convexClient) { setData(null); setLoading(false); return }
+    let on = true
+    setLoading(true)
+    setError(null)
+    convexClient
+      .action(ref as never, JSON.parse(key) as never)
+      .then((d) => { if (on) setData(d as T) })
+      .catch((e) => { if (on) setError(e instanceof Error ? e.message : String(e)) })
+      .finally(() => { if (on) setLoading(false) })
+    return () => { on = false }
+  }, [key, tick])
+  const refetch = useCallback(() => setTick((t) => t + 1), [])
+  return { data, loading, error, refetch }
 }
 
-export function useGhlUsers(): Async<GhlUser[]> {
+const ms = (iso: string | undefined) => {
+  const t = iso ? Date.parse(iso) : NaN
+  return Number.isNaN(t) ? undefined : t
+}
+
+function useGhlCalendarConfigRest(enabled = true): Async<GhlCalendarConfig> {
+  return useFetch<GhlCalendarConfig>(enabled ? '/ghl-calendar/config' : null)
+}
+function useGhlCalendarConfigConvex(enabled = true): Async<GhlCalendarConfig> {
+  return useConvexActionData<GhlCalendarConfig>(ghlCalendarGetConfig, enabled ? {} : null)
+}
+export const useGhlCalendarConfig: typeof useGhlCalendarConfigRest = convexAuthEnabled
+  ? useGhlCalendarConfigConvex
+  : useGhlCalendarConfigRest
+
+function useGhlUsersRest(): Async<GhlUser[]> {
   return useFetch<GhlUser[]>('/ghl-calendar/users')
 }
+function useGhlUsersConvex(): Async<GhlUser[]> {
+  return useConvexActionData<GhlUser[]>(ghlCalendarListUsers, {})
+}
+export const useGhlUsers: typeof useGhlUsersRest = convexAuthEnabled ? useGhlUsersConvex : useGhlUsersRest
 
 export type GhlCommercialSyncReport = {
   ghlUserCount: number
@@ -1157,28 +1198,43 @@ export function syncGhlCommercialUsers(): Promise<GhlCommercialSyncReport> {
   return api<GhlCommercialSyncReport>('/ghl-calendar/sync-users', { method: 'POST' })
 }
 
-export function useGhlMySector(enabled = true): Async<GhlMySector> {
+function useGhlMySectorRest(enabled = true): Async<GhlMySector> {
   return useFetch<GhlMySector>(enabled ? '/ghl-calendar/my-sector' : null)
 }
+function useGhlMySectorConvex(enabled = true): Async<GhlMySector> {
+  return useConvexActionData<GhlMySector>(ghlCalendarMySector, enabled ? {} : null)
+}
+export const useGhlMySector: typeof useGhlMySectorRest = convexAuthEnabled ? useGhlMySectorConvex : useGhlMySectorRest
 
-export function useGhlFreeSlots(filters?: {
-  sector?: string
-  calendarId?: string
-  from?: string
-  to?: string
-  timezone?: string
-}): Async<{ configured: boolean; slots: GhlFreeSlot[] }> {
+type GhlFreeSlotsFilters = { sector?: string; calendarId?: string; from?: string; to?: string; timezone?: string }
+function useGhlFreeSlotsRest(filters?: GhlFreeSlotsFilters): Async<{ configured: boolean; slots: GhlFreeSlot[] }> {
   return useFetch<{ configured: boolean; slots: GhlFreeSlot[] }>(filters?.from && filters?.to ? '/ghl-calendar/free-slots' : null, filters)
 }
+function useGhlFreeSlotsConvex(filters?: GhlFreeSlotsFilters): Async<{ configured: boolean; slots: GhlFreeSlot[] }> {
+  const from = ms(filters?.from)
+  const to = ms(filters?.to)
+  const ready = from !== undefined && to !== undefined
+  return useConvexActionData<{ configured: boolean; slots: GhlFreeSlot[] }>(
+    ghlCalendarFreeSlots,
+    ready ? { from, to, sector: filters?.sector, calendarId: filters?.calendarId, timezone: filters?.timezone } : null,
+  )
+}
+export const useGhlFreeSlots: typeof useGhlFreeSlotsRest = convexAuthEnabled ? useGhlFreeSlotsConvex : useGhlFreeSlotsRest
 
-export function useGhlCalendarEvents(filters?: {
-  sector?: string
-  calendarId?: string
-  from?: string
-  to?: string
-}): Async<{ configured: boolean; events: GhlCalendarEvent[] }> {
+type GhlEventsFilters = { sector?: string; calendarId?: string; from?: string; to?: string }
+function useGhlCalendarEventsRest(filters?: GhlEventsFilters): Async<{ configured: boolean; events: GhlCalendarEvent[] }> {
   return useFetch<{ configured: boolean; events: GhlCalendarEvent[] }>(filters?.from && filters?.to ? '/ghl-calendar/events' : null, filters, { silentInitialLoading: true })
 }
+function useGhlCalendarEventsConvex(filters?: GhlEventsFilters): Async<{ configured: boolean; events: GhlCalendarEvent[] }> {
+  const from = ms(filters?.from)
+  const to = ms(filters?.to)
+  const ready = from !== undefined && to !== undefined
+  return useConvexActionData<{ configured: boolean; events: GhlCalendarEvent[] }>(
+    ghlCalendarEventsAction,
+    ready ? { from, to, sector: filters?.sector, calendarId: filters?.calendarId } : null,
+  )
+}
+export const useGhlCalendarEvents: typeof useGhlCalendarEventsRest = convexAuthEnabled ? useGhlCalendarEventsConvex : useGhlCalendarEventsRest
 
 export function useGhlOpportunities(filters?: {
   pipelineId?: string
@@ -1189,10 +1245,19 @@ export function useGhlOpportunities(filters?: {
 }
 
 export function syncGhlCalendarEvents(filters: { from: string; to: string; sector?: string; calendarId?: string }): Promise<{ configured: boolean; created: number; updated: number; skipped: number; events: GhlCalendarEvent[] }> {
+  if (convexAuthEnabled && convexClient) {
+    const from = ms(filters.from)
+    const to = ms(filters.to)
+    if (from === undefined || to === undefined) return Promise.reject(new Error('Période invalide.'))
+    return convexClient.action(ghlCalendarSyncEvents, { from, to, sector: filters.sector, calendarId: filters.calendarId }) as Promise<{ configured: boolean; created: number; updated: number; skipped: number; events: GhlCalendarEvent[] }>
+  }
   return api<{ configured: boolean; created: number; updated: number; skipped: number; events: GhlCalendarEvent[] }>('/ghl-calendar/sync-events', { method: 'POST', query: filters })
 }
 
 export function syncLeadGhlCalendarEvents(leadId: string): Promise<{ configured: boolean; created: number; updated: number; skipped: number; matched: number; events: GhlCalendarEvent[] }> {
+  if (convexAuthEnabled && convexClient) {
+    return convexClient.action(ghlCalendarSyncLeadEvents, { leadId }) as Promise<{ configured: boolean; created: number; updated: number; skipped: number; matched: number; events: GhlCalendarEvent[] }>
+  }
   return api<{ configured: boolean; created: number; updated: number; skipped: number; matched: number; events: GhlCalendarEvent[] }>(`/ghl-calendar/leads/${leadId}/sync-events`, { method: 'POST' })
 }
 
@@ -1229,6 +1294,29 @@ export type CreateGhlAppointmentInput = CreateRdvInput & {
 }
 
 export async function createGhlAppointment(input: CreateGhlAppointmentInput): Promise<{ rdv: RdvResponse; ghl: unknown }> {
+  if (convexAuthEnabled && convexClient) {
+    const scheduledAt = ms(input.scheduledAt ?? undefined)
+    if (scheduledAt === undefined) throw new Error('Date de rendez-vous invalide.')
+    const res = await convexClient.action(ghlAppointmentsCreate, {
+      leadId: input.leadId,
+      sector: input.sector,
+      calendarId: input.calendarId ?? undefined,
+      scheduledAt,
+      locationType: input.locationType ?? undefined,
+      notes: input.notes ?? undefined,
+      firstName: input.firstName ?? undefined,
+      lastName: input.lastName ?? undefined,
+      email: input.email ?? undefined,
+      phone: input.phone ?? undefined,
+      addressLine: input.addressLine ?? undefined,
+      city: input.city ?? undefined,
+      postalCode: input.postalCode ?? undefined,
+      typeLogement: input.typeLogement ?? undefined,
+      revenuFiscal: input.revenuFiscal ?? undefined,
+    })
+    notifyRealtimeRefresh({ event: 'rdv:created', paths: ['/rdv', '/leads', '/analytics/summary', '/analytics/funnel', '/ghl-calendar/events'] })
+    return { rdv: { id: res.rdvId } as unknown as RdvResponse, ghl: res }
+  }
   return api<{ rdv: RdvResponse; ghl: unknown }>('/ghl-calendar/appointments', {
     method: 'POST',
     body: input,
@@ -1252,6 +1340,24 @@ export type UpdateGhlAppointmentInput = {
 // Édite un RDV (rdvId local) déjà envoyé à GHL : replanification, note et infos
 // lead. Le backend pousse vers GHL puis met le local à jour.
 export async function updateGhlAppointment(rdvId: string, input: UpdateGhlAppointmentInput): Promise<{ rdv: RdvResponse; ghl: unknown }> {
+  if (convexAuthEnabled && convexClient) {
+    const res = await convexClient.action(ghlAppointmentsUpdate, {
+      rdvId,
+      scheduledAt: input.scheduledAt !== undefined ? ms(input.scheduledAt) : undefined,
+      notes: input.notes,
+      firstName: input.firstName ?? undefined,
+      lastName: input.lastName ?? undefined,
+      email: input.email ?? undefined,
+      phone: input.phone ?? undefined,
+      addressLine: input.addressLine ?? undefined,
+      city: input.city ?? undefined,
+      postalCode: input.postalCode ?? undefined,
+      typeLogement: input.typeLogement ?? undefined,
+      revenuFiscal: input.revenuFiscal ?? undefined,
+    })
+    notifyRealtimeRefresh({ event: 'rdv:updated', paths: ['/rdv', '/leads', '/analytics/summary', '/analytics/funnel', '/ghl-calendar/events'] })
+    return { rdv: { id: rdvId } as unknown as RdvResponse, ghl: res }
+  }
   const updated = await api<{ rdv: RdvResponse; ghl: unknown }>(`/ghl-calendar/appointments/${encodeURIComponent(rdvId)}`, {
     method: 'PATCH',
     body: input,

@@ -573,3 +573,32 @@ export const analyticsCommercialStats = makeFunctionReference<
   { commercialId: string; now: number; days?: number; from?: string; to?: string },
   unknown
 >('analytics:commercialStats')
+
+// ─── GHL calendrier & prise de RDV (actions Convex — remplace le REST NestJS) ──
+export const ghlCalendarGetConfig = makeFunctionReference<'action', Record<string, never>, { configured: boolean; locationIdPresent: boolean; sectorCalendarCount: number; sectors: unknown[] }>('ghlCalendar:getConfig')
+export const ghlCalendarListUsers = makeFunctionReference<'action', Record<string, never>, unknown[]>('ghlCalendar:listUsers')
+export const ghlCalendarMySector = makeFunctionReference<'action', { userId?: string }, unknown>('ghlCalendar:mySector')
+export const ghlCalendarFreeSlots = makeFunctionReference<'action', { from: number; to: number; sector?: string; calendarId?: string; timezone?: string }, { configured: boolean; slots: unknown[] }>('ghlCalendar:freeSlots')
+export const ghlCalendarEventsAction = makeFunctionReference<'action', { from: number; to: number; sector?: string; calendarId?: string }, { configured: boolean; events: unknown[] }>('ghlCalendar:events')
+export const ghlCalendarSyncEvents = makeFunctionReference<'action', { from: number; to: number; sector?: string; calendarId?: string }, unknown>('ghlCalendar:syncEvents')
+export const ghlCalendarSyncLeadEvents = makeFunctionReference<'action', { leadId: string }, unknown>('ghlCalendar:syncLeadEvents')
+export const ghlAppointmentsCreate = makeFunctionReference<
+  'action',
+  {
+    leadId: string; sector: string; calendarId?: string; scheduledAt: number; locationType?: string
+    notes?: string | null; firstName?: string | null; lastName?: string | null; email?: string | null
+    phone?: string | null; addressLine?: string | null; city?: string | null; postalCode?: string | null
+    typeLogement?: string | null; revenuFiscal?: number | null
+  },
+  { rdvId: string; contactId: string; appointmentId: string | null; movedToRdvPlanifie: boolean }
+>('ghlAppointments:createAppointment')
+export const ghlAppointmentsUpdate = makeFunctionReference<
+  'action',
+  {
+    rdvId: string; scheduledAt?: number; notes?: string | null
+    firstName?: string | null; lastName?: string | null; email?: string | null; phone?: string | null
+    addressLine?: string | null; city?: string | null; postalCode?: string | null
+    typeLogement?: string | null; revenuFiscal?: number | null
+  },
+  { ok: boolean }
+>('ghlAppointments:updateAppointment')
