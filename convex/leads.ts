@@ -33,30 +33,59 @@ export const list = query({
   args: {
     status: v.optional(leadStatusValidator),
     setterId: v.optional(v.id("users")),
+    assignedToId: v.optional(v.id("users")),
     city: v.optional(v.string()),
+    search: v.optional(v.string()),
     paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
     await requireUser(ctx);
     let q;
-    if (args.status !== undefined && args.setterId !== undefined) {
+    let statusViaIndex = false;
+    if (args.assignedToId !== undefined) {
+      // Liste commerciale : l'index prime, status/city retombent en filtre.
+      q = ctx.db.query("leads").withIndex("by_assignedTo", (ix) => ix.eq("assignedToId", args.assignedToId!));
+    } else if (args.status !== undefined && args.setterId !== undefined) {
+      statusViaIndex = true;
       q = ctx.db.query("leads").withIndex("by_status_setter", (ix) =>
         ix.eq("status", args.status!).eq("setterId", args.setterId!),
       );
     } else if (args.status !== undefined) {
       // Tri par date métier (createdAt backfillé partout) — _creationTime est
       // arbitraire depuis la migration (ordre d'écriture des imports).
+      statusViaIndex = true;
       q = ctx.db.query("leads").withIndex("by_status_createdAt", (ix) => ix.eq("status", args.status!));
     } else if (args.setterId !== undefined) {
       q = ctx.db.query("leads").withIndex("by_setter", (ix) => ix.eq("setterId", args.setterId!));
     } else {
       q = ctx.db.query("leads").withIndex("by_createdAt");
     }
-    const ordered = q.order("desc").filter((f) => f.eq(f.field("deletedAt"), undefined));
-    if (args.city !== undefined) {
-      return await ordered.filter((f) => f.eq(f.field("city"), args.city!)).paginate(args.paginationOpts);
+    let ordered = q.order("desc").filter((f) => f.eq(f.field("deletedAt"), undefined));
+    if (args.status !== undefined && !statusViaIndex) {
+      ordered = ordered.filter((f) => f.eq(f.field("status"), args.status!));
     }
-    return await ordered.paginate(args.paginationOpts);
+    if (args.city !== undefined) {
+      ordered = ordered.filter((f) => f.eq(f.field("city"), args.city!));
+    }
+
+    const needle = args.search?.trim().toLowerCase();
+    if (!needle) return await ordered.paginate(args.paginationOpts);
+
+    // Recherche plein-texte simple (nom/email/téléphone/ville), filtrée en JS
+    // sur la page courante : pas de searchIndex sur leads (champs multiples).
+    // On élargit la page scannée pour que les correspondances remontent vite ;
+    // le curseur reste valide, le client enchaîne les loadMore normalement.
+    const page = await ordered.paginate({
+      ...args.paginationOpts,
+      numItems: Math.max(args.paginationOpts.numItems, 300),
+    });
+    const matches = (l: (typeof page.page)[number]) => {
+      const hay = [l.firstName, l.lastName, `${l.firstName ?? ""} ${l.lastName ?? ""}`, l.email, l.phone, l.city]
+        .filter((s): s is string => typeof s === "string")
+        .map((s) => s.toLowerCase());
+      return hay.some((s) => s.includes(needle));
+    };
+    return { ...page, page: page.page.filter(matches) };
   },
 });
 
