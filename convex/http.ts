@@ -109,7 +109,35 @@ http.route({
 
     const eventId = await record();
     try {
-      const n = normalizeOpportunityWebhook(payload, Date.now());
+      let n;
+      try {
+        n = normalizeOpportunityWebhook(payload, Date.now());
+      } catch (err) {
+        // stage_name absent du payload (workflow GHL sans le token d'étape,
+        // non corrigeable par API) : on résout l'étape courante du contact
+        // via l'API GHL, puis on re-normalise. Échec → erreur d'origine.
+        if (!(err instanceof GhlOpportunityWebhookValidationError)) throw err;
+        const contactId = extractId(payload, ["contact_id", "contactId"], ["contact"]);
+        if (!contactId) throw err;
+        const resolved = await ctx.runAction(internal.ghlOpportunity.resolveStageForContact, {
+          contactId,
+        });
+        if (!resolved) throw err;
+        n = normalizeOpportunityWebhook(
+          {
+            ...payload,
+            contact_id: contactId,
+            stage_name: resolved.stageName,
+            ...(payload.pipeline_id === undefined && resolved.pipelineId !== undefined
+              ? { pipeline_id: resolved.pipelineId }
+              : {}),
+            ...(payload.assigned_user_id === undefined && resolved.assignedUserId !== undefined
+              ? { assigned_user_id: resolved.assignedUserId }
+              : {}),
+          },
+          Date.now(),
+        );
+      }
       const result = await ctx.runMutation(internal.webhooks.applyGhlStageChange, {
         externalId: n.externalId,
         ghlStageName: n.ghlStageName,
