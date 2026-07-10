@@ -9,6 +9,7 @@ import { RequireAuth } from './components/RequireAuth'
 import { Login } from './pages/Login'
 import { Landing } from './pages/Landing'
 import { RouteFallback } from './components/RouteFallback'
+import { RouteError, shouldAutoReload } from './components/RouteError'
 import { useAuth } from './lib/auth'
 import { ConvexAuthProvider } from '@convex-dev/auth/react'
 import { convexClient } from './lib/convex'
@@ -76,9 +77,19 @@ function RdvCalendarGuard({ children }: { children: ReactElement }) {
   return children
 }
 
+// Après un déploiement, les chunks hashés de l'ancien build n'existent plus :
+// Vite signale l'échec de préchargement ici. On recharge pour basculer sur le
+// nouveau build (garde anti-boucle dans shouldAutoReload).
+window.addEventListener('vite:preloadError', (event) => {
+  if (!shouldAutoReload()) return
+  event.preventDefault()
+  window.location.reload()
+})
+
 const router = createHashRouter([
   {
     element: <RootLayout />,
+    errorElement: <RouteError />,
     children: [
       { path: '/', element: <Landing /> },
       { path: '/login', element: <Login /> },
