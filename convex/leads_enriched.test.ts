@@ -67,3 +67,38 @@ describe("leads.listEnriched", () => {
     expect(row?.callCount).toBe(0);
   });
 });
+
+describe("leads.listEnriched — filtres partagés avec list", () => {
+  it("filtre assignedToId + jauges appels (callsToday, joursRelance)", async () => {
+    const t = makeT();
+    const adminId = await insertUser(t, { role: "admin" });
+    const comId = await insertUser(t, { role: "commercial" });
+    const setterId = await insertUser(t, { role: "setter" });
+    const mineId = await t.run((ctx) => ctx.db.insert("leads", { source: "ghl", status: "qualifie", assignedToId: comId }));
+    await t.run((ctx) => ctx.db.insert("leads", { source: "ghl", status: "qualifie" }));
+    await t.run(async (ctx) => {
+      // 2 appels aujourd'hui + 1 hier = 2 jours distincts, 2 aujourd'hui.
+      await ctx.db.insert("callLogs", { leadId: mineId, setterId, calledAt: NOW - 3_600_000, result: "joint" });
+      await ctx.db.insert("callLogs", { leadId: mineId, setterId, calledAt: NOW - 2 * 3_600_000, result: "non_joint" });
+      await ctx.db.insert("callLogs", { leadId: mineId, setterId, calledAt: NOW - DAY, result: "non_joint" });
+    });
+    const page = await asUser(t, adminId).query(api.leads.listEnriched, {
+      assignedToId: comId, now: NOW, paginationOpts: { numItems: 10, cursor: null },
+    });
+    expect(page.page.map((l) => l._id)).toEqual([mineId]);
+    expect(page.page[0].callCount).toBe(3);
+    expect(page.page[0].callsToday).toBe(2);
+    expect(page.page[0].joursRelance).toBe(2);
+  });
+
+  it("filtre search (nom) comme leads.list", async () => {
+    const t = makeT();
+    const adminId = await insertUser(t, { role: "admin" });
+    const target = await t.run((ctx) => ctx.db.insert("leads", { source: "ghl", status: "nouveau", firstName: "Zora", lastName: "Hoarau" }));
+    await t.run((ctx) => ctx.db.insert("leads", { source: "ghl", status: "nouveau", firstName: "Jean" }));
+    const page = await asUser(t, adminId).query(api.leads.listEnriched, {
+      search: "hoarau", now: NOW, paginationOpts: { numItems: 10, cursor: null },
+    });
+    expect(page.page.map((l) => l._id)).toEqual([target]);
+  });
+});

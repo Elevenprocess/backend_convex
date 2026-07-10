@@ -1,4 +1,5 @@
-import { query, mutation } from "./_generated/server";
+import { query, mutation, type QueryCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { leadStatusValidator, adChannelValidator, LEAD_STATUSES } from "./model/enums";
@@ -29,17 +30,19 @@ export const softDelete = mutation({
   },
 });
 
-export const list = query({
+// Filtres + pagination partagés entre `list` (docs bruts) et `listEnriched`
+// (docs + agrégats appels/RDV — jauges 4/jour et 11 jours de la liste leads).
+async function paginateLeadsPage(
+  ctx: QueryCtx,
   args: {
-    status: v.optional(leadStatusValidator),
-    setterId: v.optional(v.id("users")),
-    assignedToId: v.optional(v.id("users")),
-    city: v.optional(v.string()),
-    search: v.optional(v.string()),
-    paginationOpts: paginationOptsValidator,
+    status?: Doc<"leads">["status"];
+    setterId?: Id<"users">;
+    assignedToId?: Id<"users">;
+    city?: string;
+    search?: string;
+    paginationOpts: { numItems: number; cursor: string | null };
   },
-  handler: async (ctx, args) => {
-    await requireUser(ctx);
+) {
     let q;
     let statusViaIndex = false;
     if (args.assignedToId !== undefined) {
@@ -86,6 +89,20 @@ export const list = query({
       return hay.some((s) => s.includes(needle));
     };
     return { ...page, page: page.page.filter(matches) };
+}
+
+export const list = query({
+  args: {
+    status: v.optional(leadStatusValidator),
+    setterId: v.optional(v.id("users")),
+    assignedToId: v.optional(v.id("users")),
+    city: v.optional(v.string()),
+    search: v.optional(v.string()),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    await requireUser(ctx);
+    return await paginateLeadsPage(ctx, args);
   },
 });
 
@@ -421,27 +438,24 @@ export const getEnriched = query({
   },
 });
 
+// Liste enrichie (agrégats appels/RDV/devis par lead) : mêmes filtres et même
+// tri que `list` via paginateLeadsPage — c'est elle qui alimente les jauges
+// « appels 4/jour » (callsToday) et « 11 jours » (joursRelance) de la liste.
 export const listEnriched = query({
   args: {
     status: v.optional(leadStatusValidator),
     setterId: v.optional(v.id("users")),
+    assignedToId: v.optional(v.id("users")),
+    city: v.optional(v.string()),
+    search: v.optional(v.string()),
     now: v.number(),
     paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
     await requireUser(ctx);
-    let q;
-    if (args.status !== undefined && args.setterId !== undefined) {
-      q = ctx.db.query("leads").withIndex("by_status_setter", (ix) => ix.eq("status", args.status!).eq("setterId", args.setterId!));
-    } else if (args.status !== undefined) {
-      q = ctx.db.query("leads").withIndex("by_status_setter", (ix) => ix.eq("status", args.status!));
-    } else if (args.setterId !== undefined) {
-      q = ctx.db.query("leads").withIndex("by_setter", (ix) => ix.eq("setterId", args.setterId!));
-    } else {
-      q = ctx.db.query("leads");
-    }
-    const page = await q.order("desc").filter((f) => f.eq(f.field("deletedAt"), undefined)).paginate(args.paginationOpts);
-    const enriched = await Promise.all(page.page.map((lead) => enrichLead(ctx, lead, args.now)));
+    const { now, ...rest } = args;
+    const page = await paginateLeadsPage(ctx, rest);
+    const enriched = await Promise.all(page.page.map((lead) => enrichLead(ctx, lead, now)));
     return { ...page, page: enriched };
   },
 });
