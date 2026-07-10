@@ -226,6 +226,8 @@ function SettingsAdmin({ restricted = false }: { restricted?: boolean }) {
   }
   const isDark = useTheme((s) => s.isDark)
   const toggleTheme = useTheme((s) => s.toggleTheme)
+  const themeMode = useTheme((s) => s.theme)
+  const setTheme = useTheme((s) => s.setTheme)
   // commercial_lead : restreint la base aux setters et commerciaux uniquement.
   const team = useMemo(
     () => (users ?? []).filter((u) => !restricted || ACQUISITION_ROLES.includes(u.role)),
@@ -398,6 +400,11 @@ function SettingsAdmin({ restricted = false }: { restricted?: boolean }) {
             <div className="space-y-2.5">
               <PrefRow label="Notifications email" enabled />
               <PrefRow label="Notifications in-app" enabled />
+              <PrefRow
+                label="Thème automatique (suivre le système)"
+                enabled={themeMode === 'system'}
+                onClick={() => setTheme(themeMode === 'system' ? (isDark ? 'dark' : 'light') : 'system')}
+              />
               <PrefRow label="Mode sombre" enabled={isDark} onClick={toggleTheme} />
               <PrefRow label="Débrief obligatoire post-RDV" enabled />
             </div>

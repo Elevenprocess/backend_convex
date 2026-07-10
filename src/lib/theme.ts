@@ -1,23 +1,39 @@
 import { create } from 'zustand'
 
-export type ThemeMode = 'light' | 'dark'
+export type ThemeMode = 'light' | 'dark' | 'system'
+export type ResolvedTheme = 'light' | 'dark'
 
 const THEME_STORAGE_KEY = 'ecoi.theme'
 
-function readStoredTheme(): ThemeMode {
-  if (typeof window === 'undefined') return 'light'
-  const stored = window.localStorage.getItem(THEME_STORAGE_KEY)
-  return stored === 'dark' ? 'dark' : 'light'
+function getSystemMediaQuery(): MediaQueryList | null {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return null
+  return window.matchMedia('(prefers-color-scheme: dark)')
 }
 
-function applyTheme(mode: ThemeMode): void {
+function systemPrefersDark(): boolean {
+  return getSystemMediaQuery()?.matches ?? false
+}
+
+function readStoredTheme(): ThemeMode {
+  if (typeof window === 'undefined') return 'system'
+  const stored = window.localStorage.getItem(THEME_STORAGE_KEY)
+  return stored === 'dark' || stored === 'light' ? stored : 'system'
+}
+
+function resolveTheme(mode: ThemeMode): ResolvedTheme {
+  if (mode === 'system') return systemPrefersDark() ? 'dark' : 'light'
+  return mode
+}
+
+function applyTheme(resolved: ResolvedTheme): void {
   if (typeof document === 'undefined') return
-  document.documentElement.dataset.theme = mode
-  document.documentElement.style.colorScheme = mode
+  document.documentElement.dataset.theme = resolved
+  document.documentElement.style.colorScheme = resolved
 }
 
 type ThemeState = {
   theme: ThemeMode
+  resolvedTheme: ResolvedTheme
   isDark: boolean
   hydrateTheme: () => void
   setTheme: (mode: ThemeMode) => void
@@ -26,24 +42,36 @@ type ThemeState = {
 
 export const useTheme = create<ThemeState>((set, get) => ({
   theme: readStoredTheme(),
-  isDark: readStoredTheme() === 'dark',
+  resolvedTheme: resolveTheme(readStoredTheme()),
+  isDark: resolveTheme(readStoredTheme()) === 'dark',
 
   hydrateTheme: () => {
     const theme = readStoredTheme()
-    applyTheme(theme)
-    set({ theme, isDark: theme === 'dark' })
+    const resolved = resolveTheme(theme)
+    applyTheme(resolved)
+    set({ theme, resolvedTheme: resolved, isDark: resolved === 'dark' })
   },
 
   setTheme: (theme) => {
     if (typeof window !== 'undefined') window.localStorage.setItem(THEME_STORAGE_KEY, theme)
-    applyTheme(theme)
-    set({ theme, isDark: theme === 'dark' })
+    const resolved = resolveTheme(theme)
+    applyTheme(resolved)
+    set({ theme, resolvedTheme: resolved, isDark: resolved === 'dark' })
   },
 
   toggleTheme: () => {
-    const nextTheme: ThemeMode = get().theme === 'dark' ? 'light' : 'dark'
+    const nextTheme: ThemeMode = get().resolvedTheme === 'dark' ? 'light' : 'dark'
     get().setTheme(nextTheme)
   },
 }))
 
-applyTheme(readStoredTheme())
+applyTheme(resolveTheme(readStoredTheme()))
+
+// Suit en direct le thème de l'OS tant que l'utilisateur n'a pas forcé clair/sombre.
+getSystemMediaQuery()?.addEventListener('change', () => {
+  const { theme } = useTheme.getState()
+  if (theme !== 'system') return
+  const resolved = resolveTheme('system')
+  applyTheme(resolved)
+  useTheme.setState({ resolvedTheme: resolved, isDark: resolved === 'dark' })
+})
