@@ -8,6 +8,20 @@ export const me = query({
   handler: async (ctx) => getCurrentUser(ctx),
 });
 
+// Profil d'un membre (pages /team/setters/:id et /team/commerciaux/:id).
+// Arg string + normalizeId : un id invalide (vieux lien REST) rend null au
+// lieu de faire échouer la validation.
+export const get = query({
+  args: { userId: v.string() },
+  handler: async (ctx, args) => {
+    await requireUser(ctx);
+    const id = ctx.db.normalizeId("users", args.userId);
+    if (!id) return null;
+    const user = await ctx.db.get(id);
+    return user && user.deletedAt === undefined ? user : null;
+  },
+});
+
 export const list = query({
   args: {
     role: v.optional(roleValidator),

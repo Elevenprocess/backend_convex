@@ -73,3 +73,15 @@ test("heartbeat() met à jour lastSeenAt", async () => {
   const u = await t.run((ctx) => ctx.db.get(id));
   expect(u?.lastSeenAt).toBeGreaterThan(0);
 });
+
+test("get : renvoie le user par id, null si supprimé ou id invalide", async () => {
+  const t = makeT();
+  const adminId = await insertUser(t, { role: "admin" });
+  const setterId = await insertUser(t, { role: "setter", email: "g@ecoi.fr" });
+  const got = await asUser(t, adminId).query(api.users.get, { userId: setterId });
+  expect(got?._id).toBe(setterId);
+  const delId = await insertUser(t, { role: "setter", email: "d@ecoi.fr" });
+  await t.run(async (ctx: any) => ctx.db.patch(delId, { deletedAt: 1 }));
+  expect(await asUser(t, adminId).query(api.users.get, { userId: delId })).toBeNull();
+  expect(await asUser(t, adminId).query(api.users.get, { userId: "42" })).toBeNull();
+});
