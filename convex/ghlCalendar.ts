@@ -149,11 +149,21 @@ export const persistGhlEvents = internalMutation({
       const scheduledAt = Date.parse(event.startTime);
       const status = mapGhlStatusToRdvStatus(event.status);
 
+      // Deux familles d'ids : rdv natif → id GHL dans externalId ; rdv migré
+      // de Render → externalId = uuid Postgres, id GHL dans ghlEventId. Ne
+      // chercher que externalId dupliquerait chaque rdv migré à chaque sync.
       const candidates = await ctx.db
         .query("rdv")
         .withIndex("by_externalId", (q) => q.eq("externalId", event.id))
         .collect();
-      const existing = candidates.find((r) => r.deletedAt === undefined);
+      let existing = candidates.find((r) => r.deletedAt === undefined);
+      if (!existing) {
+        const migrated = await ctx.db
+          .query("rdv")
+          .withIndex("by_ghlEventId", (q) => q.eq("ghlEventId", event.id))
+          .collect();
+        existing = migrated.find((r) => r.deletedAt === undefined);
+      }
 
       if (existing) {
         const rearm = shouldRearmDebriefOnReschedule({
@@ -221,11 +231,20 @@ async function findOrCreateLeadFromGhlEvent(
 ): Promise<Id<"leads"> | null> {
   if (!event.contactId) return null;
   const contactId = event.contactId;
+  // Bi-famille d'ids (cf. persistGhlEvents) : externalId pour les leads
+  // natifs, ghlContactId pour les migrés de Render.
   const candidates = await ctx.db
     .query("leads")
     .withIndex("by_externalId", (q) => q.eq("externalId", contactId))
     .collect();
-  const existing = candidates.find((l: Doc<"leads">) => l.deletedAt === undefined);
+  let existing = candidates.find((l: Doc<"leads">) => l.deletedAt === undefined);
+  if (!existing) {
+    const migrated = await ctx.db
+      .query("leads")
+      .withIndex("by_ghlContactId", (q) => q.eq("ghlContactId", contactId))
+      .collect();
+    existing = migrated.find((l: Doc<"leads">) => l.deletedAt === undefined);
+  }
   if (existing) {
     const patch = leadPatchFromGhlEvent(event);
     if (Object.keys(patch).length > 0) await ctx.db.patch(existing._id, patch as Partial<Doc<"leads">>);
