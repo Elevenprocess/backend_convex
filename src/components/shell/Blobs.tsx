@@ -31,25 +31,25 @@ export function Blobs({ blobs }: BlobsProps) {
 
 export const BLOB_PRESETS: Record<string, BlobSpec[]> = {
   setter: [
-    { size: 420, color: '#1F7857', opacity: 0.16, position: 'top-10 left-1/4' },
+    { size: 420, color: '#00A8E8', opacity: 0.16, position: 'top-10 left-1/4' },
     { size: 320, color: '#6B7C8C', opacity: 0.14, position: 'bottom-20 right-1/3' },
   ],
   commercial: [
-    { size: 420, color: '#145A41', opacity: 0.14, position: '-top-10 right-10' },
-    { size: 320, color: '#1F7857', opacity: 0.16, position: 'bottom-10 left-1/4' },
+    { size: 420, color: '#0075A8', opacity: 0.14, position: '-top-10 right-10' },
+    { size: 320, color: '#00A8E8', opacity: 0.16, position: 'bottom-10 left-1/4' },
   ],
   admin: [
     { size: 480, color: '#6B7C8C', opacity: 0.16, position: 'top-0 left-1/2 -translate-x-1/2' },
-    { size: 380, color: '#1F7857', opacity: 0.14, position: 'bottom-20 right-10' },
+    { size: 380, color: '#00A8E8', opacity: 0.14, position: 'bottom-20 right-10' },
   ],
   login: [
-    { size: 480, color: '#1F7857', opacity: 0.18, position: '-top-20 -left-20' },
-    { size: 320, color: '#145A41', opacity: 0.15, position: 'bottom-10 right-40' },
+    { size: 480, color: '#00A8E8', opacity: 0.18, position: '-top-20 -left-20' },
+    { size: 320, color: '#0075A8', opacity: 0.15, position: 'bottom-10 right-40' },
     { size: 400, color: '#6B7C8C', opacity: 0.22, position: 'top-40 right-10' },
   ],
   default: [
-    { size: 420, color: '#1F7857', opacity: 0.14, position: 'top-10 left-10' },
-    { size: 320, color: '#3E9A6F', opacity: 0.12, position: 'bottom-20 right-20' },
+    { size: 420, color: '#00A8E8', opacity: 0.14, position: 'top-10 left-10' },
+    { size: 320, color: '#3DC6FF', opacity: 0.12, position: 'bottom-20 right-20' },
     { size: 280, color: '#6B7C8C', opacity: 0.14, position: 'top-1/2 right-1/4' },
   ],
 }

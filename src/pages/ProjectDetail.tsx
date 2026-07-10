@@ -252,7 +252,7 @@ export function ProjectDetailPage() {
             {/* Workflow en plein écran sur mobile */}
             {wfMobileOpen && (
               <div
-                className="fixed inset-0 z-[210] flex items-stretch justify-center bg-[rgba(15,30,22,0.58)] backdrop-blur-sm lg:hidden"
+                className="fixed inset-0 z-[210] flex items-stretch justify-center bg-[rgba(12, 27, 36,0.58)] backdrop-blur-sm lg:hidden"
                 role="dialog"
                 aria-modal="true"
                 aria-label="Workflow délivrabilité"

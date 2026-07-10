@@ -14,14 +14,14 @@ export function VeloraMark() {
     >
       <defs>
         <linearGradient id="velora-v-grad" x1="80" y1="78" x2="160" y2="170" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#4E9667" />
-          <stop offset="1" stopColor="#2F6D49" />
+          <stop offset="0" stopColor="#3FB9F2" />
+          <stop offset="1" stopColor="#1D6FA3" />
         </linearGradient>
       </defs>
 
       {/* Grand anneau (fin) */}
       <circle className="velora-ring velora-ring--lg" cx="120" cy="120" r="104"
-        fill="none" stroke="#2F6D49" strokeWidth="3" strokeOpacity="0.55" />
+        fill="none" stroke="#1D6FA3" strokeWidth="3" strokeOpacity="0.55" />
 
       {/* Petit anneau (épais, or) */}
       <circle className="velora-ring velora-ring--sm" cx="120" cy="120" r="82"

@@ -11,11 +11,11 @@ import { Icon, type IconName } from '../Icon'
 export type KpiAccent = 'green' | 'gold' | 'rust' | 'success' | 'info'
 
 const ACCENTS: Record<KpiAccent, { base: string; glow: string }> = {
-  green: { base: '#1F7857', glow: '#3E9A6F' },
+  green: { base: '#00A8E8', glow: '#3DC6FF' },
   gold: { base: '#B59241', glow: '#CFB063' },
   rust: { base: '#A85D2E', glow: '#C77449' },
   success: { base: '#3DA86A', glow: '#5FBE87' },
-  info: { base: '#6B8C7C', glow: '#93A89A' },
+  info: { base: '#6B87A0', glow: '#8FA5B5' },
 }
 
 export type DeltaTone = 'success' | 'warn' | 'danger' | 'info'

@@ -604,7 +604,7 @@ function SectionHead({ icon, eyebrow, title, hint }: {
 }
 
 // Entonnoir tapered : Impressions → Clics → Leads → Devis signés.
-const FUNNEL_COLORS = ['#6B8C7C', '#3E9A6F', '#1F7857', '#B59241']
+const FUNNEL_COLORS = ['#6B87A0', '#3DC6FF', '#00A8E8', '#B59241']
 
 function AcquisitionFunnel({ totals }: { totals?: AdsTotals }) {
   const stages = [
@@ -672,7 +672,7 @@ function AcquisitionFunnel({ totals }: { totals?: AdsTotals }) {
 }
 
 // Donut : répartition de la dépense entre les 5 plus grosses campagnes + « Autres ».
-const DONUT_PALETTE = ['#1F7857', '#3E9A6F', '#B59241', '#A85D2E', '#6B8C7C', '#C4D3CA']
+const DONUT_PALETTE = ['#00A8E8', '#3DC6FF', '#B59241', '#A85D2E', '#6B87A0', '#C4D3CA']
 
 function SpendDonut({ rows }: { rows: AdsReportRow[] }) {
   const sorted = useMemo(
@@ -763,7 +763,7 @@ function RoasByCampaign({ rows }: { rows: AdsReportRow[] }) {
             <div className="relative h-3 rounded-full bg-line-soft overflow-hidden">
               <div
                 className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-500"
-                style={{ width: `${pct}%`, background: good ? '#1F7857' : '#A85D2E' }}
+                style={{ width: `${pct}%`, background: good ? '#00A8E8' : '#A85D2E' }}
               />
               <div
                 className="absolute top-[-2px] bottom-[-2px] w-px bg-faint/70"
@@ -775,7 +775,7 @@ function RoasByCampaign({ rows }: { rows: AdsReportRow[] }) {
         )
       })}
       <div className="flex items-center gap-4 pt-1 text-[11px] text-faint font-semibold">
-        <span className="flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: '#1F7857' }} /> rentable (≥ 1×)</span>
+        <span className="flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: '#00A8E8' }} /> rentable (≥ 1×)</span>
         <span className="flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: '#A85D2E' }} /> à perte (&lt; 1×)</span>
       </div>
     </div>

@@ -18,7 +18,7 @@ const FINANCEMENTS = [
 ] as const
 
 const inputCls =
-  'rounded-lg border border-[var(--border,rgba(15,30,22,0.14))] bg-[var(--surface,transparent)] px-2.5 py-1.5 text-sm outline-none focus:border-emerald-500'
+  'rounded-lg border border-[var(--border,rgba(12, 27, 36,0.14))] bg-[var(--surface,transparent)] px-2.5 py-1.5 text-sm outline-none focus:border-emerald-500'
 
 /**
  * Modal « Nouveau client » : création manuelle d'un dossier délivrabilité
@@ -92,7 +92,7 @@ export function NewClientModal({
 
   return (
     <div
-      className="fixed inset-0 z-[210] flex items-stretch justify-center bg-[rgba(15,30,22,0.58)] p-0 backdrop-blur-sm sm:items-center sm:p-7"
+      className="fixed inset-0 z-[210] flex items-stretch justify-center bg-[rgba(12, 27, 36,0.58)] p-0 backdrop-blur-sm sm:items-center sm:p-7"
       role="dialog" aria-modal="true" aria-label="Nouveau client"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >

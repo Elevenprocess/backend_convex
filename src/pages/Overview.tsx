@@ -426,7 +426,7 @@ function OverviewSetter() {
             <div className="overview-role-chart">
               <FuturisticLineChart
                 points={activityRange === 'today' ? stats.activityToday : stats.activityWeek}
-                color="#1F7857"
+                color="#00A8E8"
                 caption={activityRange === 'today' ? "Aujourd'hui" : '7 derniers jours'}
               />
             </div>
@@ -1114,9 +1114,9 @@ function CardHead({ title, icon }: { title: string; icon: ShotIcon }) {
 
 
 const LEAD_EVOLUTION_SERIES: { key: LeadEvolutionSeriesKey; label: string; color: string }[] = [
-  { key: 'leads', label: 'Nouveaux prospects', color: '#1F7857' },
+  { key: 'leads', label: 'Nouveaux prospects', color: '#00A8E8' },
   { key: 'qualified', label: 'Leads qualifiés', color: '#3DA86A' },
-  { key: 'signed', label: 'Ventes', color: '#3E9A6F' },
+  { key: 'signed', label: 'Ventes', color: '#3DC6FF' },
 ]
 
 const GRANULARITY_SUBTITLE: Record<EvolutionGranularity, string> = {
@@ -1475,7 +1475,7 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
   )
 }
 
-const PIE_COLORS = ['#1F7857', '#3DA86A', '#3E9A6F', '#6B7C8C', '#145A41', '#7C6A46']
+const PIE_COLORS = ['#00A8E8', '#3DA86A', '#3DC6FF', '#6B7C8C', '#0075A8', '#7C6A46']
 
 type LeadSegment = { label: string; value: number; description?: string }
 type QualifiedProspect = { id: string; name: string; phone: string | null; city: string | null; status: string; scheduledAt: string | null; commercialName?: string | null; setterName?: string | null }
@@ -1904,7 +1904,7 @@ function FunnelFlowMap({ totals }: { totals: AnalyticsFunnelResponse['totals'] }
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_auto_1fr_auto_1.35fr_auto_1fr] gap-2 items-stretch">
-        <MiniFlowStep title="Appels" value={totals.calls} sub={`${callsPerLead(totals.calls, treatedLeads)} / prospect traité`} color="#1F7857" />
+        <MiniFlowStep title="Appels" value={totals.calls} sub={`${callsPerLead(totals.calls, treatedLeads)} / prospect traité`} color="#00A8E8" />
         <MiniArrow />
         <MiniFlowStep title="Traités" value={treatedLeads} sub="prospects" color="#6B7C8C" />
         <MiniArrow />

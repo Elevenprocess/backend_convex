@@ -88,9 +88,9 @@ export function Analytics() {
 // Couleurs des 6 phases du pipeline délivrabilité (dégradé de la palette Goal).
 const PHASE_GOAL_COLOR: Record<string, string> = {
   vt: '#9DC41A',
-  dp: '#3E9A6F',
+  dp: '#3DC6FF',
   racco: '#2E8B8B',
-  installation: '#1F7857',
+  installation: '#00A8E8',
   consuel: '#B58A2A',
   mes: '#0E7E6B',
 }
@@ -280,9 +280,9 @@ function AnalyticsSetter({ name }: { name: string }) {
           <div className="glass-card p-6 col-span-12 xl:col-span-5">
             <h3 className="font-bold mb-4">Taux de conversion</h3>
             <div className="space-y-4">
-              <Goal label="Taux de réponse" value={`${stats.answered} / ${Math.max(1, stats.newLeads)} · ${stats.responseRate}%`} pct={stats.responseRate} color="#1F7857" />
+              <Goal label="Taux de réponse" value={`${stats.answered} / ${Math.max(1, stats.newLeads)} · ${stats.responseRate}%`} pct={stats.responseRate} color="#00A8E8" />
               <Goal label="RDV après réponse" value={`${stats.rdvPris} / ${Math.max(1, stats.answered)} · ${stats.rdvAfterAnswerRate}%`} pct={stats.rdvAfterAnswerRate} color="#3DA86A" />
-              <Goal label="Taux global RDV" value={`${stats.rdvPris} / ${Math.max(1, stats.newLeads)} · ${stats.globalRdvRate}%`} pct={stats.globalRdvRate} color="#3E9A6F" />
+              <Goal label="Taux global RDV" value={`${stats.rdvPris} / ${Math.max(1, stats.newLeads)} · ${stats.globalRdvRate}%`} pct={stats.globalRdvRate} color="#3DC6FF" />
               <Row label="Prospects en relance" value={String(stats.relance)} />
               <Row label="Pas qualifiés" value={String(stats.notQualified)} />
               <Row label="Qualifiés" value={String(stats.qualified)} highlight />
@@ -300,7 +300,7 @@ function AnalyticsSetter({ name }: { name: string }) {
           </div>
           <div className="glass-card p-6 col-span-12 xl:col-span-5">
             <h3 className="font-bold mb-4">Série — appels par jour</h3>
-            <Heatline values={stats.dailyCalls} color="#1F7857" />
+            <Heatline values={stats.dailyCalls} color="#00A8E8" />
           </div>
         </div>
       </main>
@@ -746,10 +746,10 @@ function BigStatCard({ label, value, delta, sub, accent, icon, progress, deltaTo
 function PipelineFlow({ stats }: { stats: AnalyticsSetterSummary }) {
   const nodes = [
     { label: 'Nouveau prospect', value: stats.newLeads, color: '#6B7C8C', sub: 'entrées' },
-    { label: 'Appel setter', value: stats.calls, color: '#1F7857', sub: 'actions' },
+    { label: 'Appel setter', value: stats.calls, color: '#00A8E8', sub: 'actions' },
     { label: 'A répondu', value: stats.answered, color: '#3DA86A', sub: `${stats.responseRate}% réponse` },
-    { label: 'Qualifié', value: stats.qualified, color: '#3E9A6F', sub: `${stats.notQualified} pas qualifiés` },
-    { label: 'Prise de RDV', value: stats.rdvPris, color: '#145A41', sub: `${stats.globalRdvRate}% global` },
+    { label: 'Qualifié', value: stats.qualified, color: '#3DC6FF', sub: `${stats.notQualified} pas qualifiés` },
+    { label: 'Prise de RDV', value: stats.rdvPris, color: '#0075A8', sub: `${stats.globalRdvRate}% global` },
   ]
   return (
     <div className="space-y-5">
