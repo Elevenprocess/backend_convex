@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 import { getFunctionName } from 'convex/server'
 import { convexClient } from './convex'
-import { analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsGet, leadsList, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, substepsList, usersList } from './convexApi'
+import { analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsGet, leadsListEnriched, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, substepsList, usersList } from './convexApi'
 import { mapConvexAcompte, mapConvexCallLog, mapConvexClient, mapConvexCommercialObjective, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexSubstep, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
 import type {
@@ -57,6 +57,10 @@ export function useConvexLeads(filters?: {
   // status/setterId/assignedToId/city/search sont exécutés CÔTÉ SERVEUR (index +
   // searchIndex Convex). Changer un de ces args réinitialise la pagination du curseur.
   const search = filters?.search?.trim()
+  // Liste ENRICHIE : chaque lead arrive avec ses agrégats (callsToday, joursRelance,
+  // dernier RDV…) — les jauges appels 4/jour et 11 jours en dépendent. `now` stable
+  // (bucket 5 min) sinon chaque rendu relancerait la query.
+  const now = useStableNow()
   const args = filters === null
     ? ('skip' as const)
     : {
@@ -65,8 +69,9 @@ export function useConvexLeads(filters?: {
         assignedToId: filters?.assignedToId,
         city: filters?.city,
         search: search ? search : undefined,
+        now,
       }
-  const { results, status, loadMore } = usePaginatedQuery(leadsList, args, { initialNumItems: LEADS_PAGE_SIZE })
+  const { results, status, loadMore } = usePaginatedQuery(leadsListEnriched, args, { initialNumItems: LEADS_PAGE_SIZE })
 
   // Chargement fenêtré : on NE déroule PAS toute la pagination (10k–50k leads
   // saturent la RAM et crashent l'onglet). On expose loadMore/canLoadMore et la

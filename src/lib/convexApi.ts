@@ -55,6 +55,27 @@ export type ConvexLeadDoc = {
   latestCallSetterId?: string
   // Date réelle Render posée par la migration (repli _creationTime si absente).
   createdAt?: number
+  // Agrégats read-side posés par leads:listEnriched (enrichLead) — absents sur
+  // leads:get/list bruts. Alimentent les jauges appels 4/jour et 11 jours.
+  callCount?: number
+  callsToday?: number
+  joursRelance?: number
+  joursSansContact?: number
+  assignedSetterIds?: string[]
+  latestRdvAt?: number
+  latestRdvStatus?: string
+  latestRdvCommercialId?: string
+  transferredAt?: number
+  nextCallbackAt?: number
+  callbackSetAt?: number
+  hasDevis?: boolean
+  latestDevisAt?: number
+  hasDebrief?: boolean
+  latestDebriefAt?: number
+  lastStageChangeAt?: number
+  daysSinceLastStageChange?: number
+  arrivalAt?: number
+  delivrabiliteStatus?: string
   [k: string]: unknown
 }
 
@@ -401,6 +422,14 @@ export const leadsList = makeFunctionReference<
   { status?: string; setterId?: string; assignedToId?: string; city?: string; search?: string; paginationOpts: PaginationOptsArg },
   PaginationResult<ConvexLeadDoc>
 >('leads:list')
+
+// Liste enrichie (agrégats appels/RDV par lead) — mêmes filtres que leads:list.
+// `now` doit être stable entre les rendus (cf. useStableNow) sous peine de boucle.
+export const leadsListEnriched = makeFunctionReference<
+  'query',
+  { status?: string; setterId?: string; assignedToId?: string; city?: string; search?: string; now: number; paginationOpts: PaginationOptsArg },
+  PaginationResult<ConvexLeadDoc>
+>('leads:listEnriched')
 
 export const rdvList = makeFunctionReference<
   'query',
