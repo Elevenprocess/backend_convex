@@ -411,6 +411,8 @@ type PaginationOptsArg = { numItems: number; cursor: string | null }
 
 export const usersMe = makeFunctionReference<'query', Record<string, never>, ConvexUserDoc | null>('users:me')
 
+export const usersGet = makeFunctionReference<'query', { userId: string }, ConvexUserDoc | null>('users:get')
+
 export const usersList = makeFunctionReference<
   'query',
   { role?: string; team?: string; active?: boolean },

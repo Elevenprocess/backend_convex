@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 import { getFunctionName } from 'convex/server'
 import { convexClient } from './convex'
-import { analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsGet, leadsListEnriched, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, substepsList, usersList } from './convexApi'
+import { analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsGet, leadsListEnriched, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, substepsList, usersGet, usersList } from './convexApi'
 import { mapConvexAcompte, mapConvexCallLog, mapConvexClient, mapConvexCommercialObjective, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexSubstep, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
 import type {
@@ -528,6 +528,14 @@ export function useConvexClients(filters?: {
     return rows.map(mapConvexClient)
   }, [allowed, rows, filtersIsNull])
   return { data, loading: allowed && rows === undefined, error: null, refetch: noop }
+}
+
+// Profil d'un membre par id — users:get Convex (la variante REST /users/:id
+// pointait sur NestJS/Render, qui ne connaît pas les ids Convex → « introuvable »).
+export function useConvexUser(id: string | undefined): Async<UserResponse> {
+  const res = useQuery(usersGet, id ? { userId: id } : 'skip')
+  const data = useMemo(() => (res ? mapConvexUser(res) : null), [res])
+  return { data, loading: !!id && res === undefined, error: null, refetch: noop }
 }
 
 const USERS_LIST_ROLES = new Set(['admin', 'setter_lead', 'commercial_lead'])

@@ -54,6 +54,7 @@ import {
   useConvexLeads,
   useConvexRdvList,
   useConvexSubsteps,
+  useConvexUser,
   useConvexUsers,
 } from './convexHooks'
 
@@ -657,9 +658,13 @@ export async function deleteUser(id: string): Promise<{ ok: true }> {
   return api<{ ok: true }>(`/users/${id}`, { method: 'DELETE' })
 }
 
-export function useUser(id: string | undefined): Async<UserResponse> {
+function useUserRest(id: string | undefined): Async<UserResponse> {
   return useFetch<UserResponse>(id ? `/users/${id}` : null)
 }
+
+export const useUser: typeof useUserRest = convexAuthEnabled
+  ? (useConvexUser as unknown as typeof useUserRest)
+  : useUserRest
 
 // ─── Analytics ─────────────────────────────────────────────
 function useAnalyticsSummaryRest(filters?: {
