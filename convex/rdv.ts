@@ -250,6 +250,24 @@ export const get = query({
   },
 });
 
+// RDV d'un lead via l'index by_lead : la fiche client / page projet n'a besoin
+// que de ceux-là. Avant, le front paginait TOUTE la table rdv (rdv:list ne
+// filtrait pas par lead) puis filtrait côté client — la page projet chargeait
+// des milliers de lignes pour en garder 2-3.
+export const listByLead = query({
+  args: { leadId: v.id("leads") },
+  handler: async (ctx, args) => {
+    await requireUser(ctx);
+    const rows = await ctx.db
+      .query("rdv")
+      .withIndex("by_lead", (ix) => ix.eq("leadId", args.leadId))
+      .collect();
+    return rows
+      .filter((r) => r.deletedAt === undefined)
+      .sort((a, b) => (b.scheduledAt ?? b._creationTime) - (a.scheduledAt ?? a._creationTime));
+  },
+});
+
 export const list = query({
   args: {
     commercialId: v.optional(v.id("users")),

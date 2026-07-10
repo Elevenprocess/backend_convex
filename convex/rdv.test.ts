@@ -135,3 +135,22 @@ test("get renvoie le rdv", async () => {
   const got = await asUser(t, comId).query(api.rdv.get, { rdvId });
   expect(got?._id).toBe(rdvId);
 });
+
+test("listByLead ne renvoie que les RDV du lead, sans les supprimés", async () => {
+  const t = makeT();
+  const comId = await insertUser(t, { role: "commercial" });
+  const setterId = await insertUser(t, { role: "setter", email: "lbl@ecoi.fr" });
+  const leadId = await makeLead(t, setterId);
+  const otherLeadId = await makeLead(t, setterId);
+  const rdvId = await asUser(t, comId).mutation(api.rdv.create, { leadId, commercialId: comId });
+  await asUser(t, comId).mutation(api.rdv.create, { leadId: otherLeadId, commercialId: comId });
+  const deletedId = await t.run(async (ctx: any) => {
+    const id = await ctx.db.insert("rdv", {
+      leadId, commercialId: comId, locationType: "domicile", status: "annule", deletedAt: Date.now(),
+    });
+    return id;
+  });
+  const rows = await asUser(t, comId).query(api.rdv.listByLead, { leadId });
+  expect(rows.map((r: any) => r._id)).toEqual([rdvId]);
+  expect(rows.map((r: any) => r._id)).not.toContain(deletedId);
+});
