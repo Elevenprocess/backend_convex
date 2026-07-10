@@ -92,3 +92,21 @@ describe("leads.dashboard", () => {
     expect(d.totals.openLeads).toBe(3);
   });
 });
+
+describe("leads.stats — leadsToday", () => {
+  it("flux entrant global du jour (non scoppé au setter)", async () => {
+    const t = makeT();
+    const setterId = await insertUser(t, { role: "setter" });
+    const otherSetterId = await insertUser(t, { role: "setter", email: "o@ecoi.fr" });
+    const todayStart = NOW - 12 * 3_600_000; // minuit local fictif avant NOW
+    await t.run(async (ctx: any) => {
+      await ctx.db.insert("leads", { source: "ghl", status: "nouveau", setterId, createdAt: NOW - 3_600_000 });
+      await ctx.db.insert("leads", { source: "ghl", status: "nouveau", setterId: otherSetterId, createdAt: NOW - 7_200_000 });
+      await ctx.db.insert("leads", { source: "ghl", status: "nouveau", createdAt: todayStart - 3_600_000 }); // hier
+    });
+    const stats = await asUser(t, setterId).query(api.leads.stats, { todayStart });
+    expect(stats.leadsToday).toBe(2);
+    const noArg = await asUser(t, setterId).query(api.leads.stats, {});
+    expect(noArg.leadsToday).toBeUndefined();
+  });
+});

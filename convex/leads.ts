@@ -340,8 +340,11 @@ async function daysSinceLastStageChange(
 
 // Stats globales leads (commercial scopé à ses leads assignés).
 export const stats = query({
-  args: {},
-  handler: async (ctx) => {
+  // todayStart (ms, minuit local du client) : active le compteur leadsToday —
+  // TOUS les prospects arrivés aujourd'hui (date métier createdAt), non scoppé
+  // au setter : le KPI « Nouveaux aujourd'hui » mesure le flux entrant global.
+  args: { todayStart: v.optional(v.number()) },
+  handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     // Commercial : scope à ses leads via l'index by_assignedTo (pas de full-scan).
     const rows = roleOf(user) === "commercial"
@@ -350,9 +353,11 @@ export const stats = query({
     const scoped = rows.filter((l) => l.deletedAt === undefined);
     const byStatus: Record<string, number> = {};
     const bySource: Record<string, number> = {};
+    let leadsToday = 0;
     for (const l of scoped) {
       byStatus[l.status] = (byStatus[l.status] ?? 0) + 1;
       bySource[l.source] = (bySource[l.source] ?? 0) + 1;
+      if (args.todayStart !== undefined && (l.createdAt ?? l._creationTime) >= args.todayStart) leadsToday++;
     }
     return {
       total: scoped.length,
@@ -360,6 +365,7 @@ export const stats = query({
       bySource,
       imported: (bySource.ghl ?? 0) + (bySource.airtable_migration ?? 0),
       directGhl: bySource.ghl ?? 0,
+      leadsToday: args.todayStart === undefined ? undefined : leadsToday,
     };
   },
 });
