@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 import { getFunctionName } from 'convex/server'
 import { convexClient } from './convex'
-import { analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsGet, leadsList, leadsStats, paymentsListAcomptes, rdvList, substepsList, usersList } from './convexApi'
+import { analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsGet, leadsList, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, substepsList, usersList } from './convexApi'
 import { mapConvexAcompte, mapConvexCallLog, mapConvexClient, mapConvexCommercialObjective, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexSubstep, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
 import type {
@@ -113,7 +113,14 @@ export function useConvexRdvList(filters?: {
   toDate?: string
   limit?: number
 } | null): Async<RdvResponse[]> {
-  const args = filters === null
+  const leadId = filters === null ? undefined : filters?.leadId
+
+  // Avec un leadId : query ciblée rdv:listByLead (index by_lead) — un lead n'a
+  // que quelques RDV. Sans leadId : liste paginée classique. Avant, le cas
+  // leadId paginait TOUTE la table rdv puis filtrait côté client.
+  const byLead = useQuery(rdvListByLead, leadId ? { leadId } : 'skip')
+
+  const args = filters === null || leadId
     ? ('skip' as const)
     : {
         commercialId: filters?.commercialId,
@@ -125,16 +132,14 @@ export function useConvexRdvList(filters?: {
     if (status === 'CanLoadMore') loadMore(PAGE_SIZE)
   }, [status, loadMore])
 
-  // Filtre leadId non supporté par rdv:list — appliqué côté client.
-  const leadId = filters === null ? undefined : filters?.leadId
   const data = useMemo(() => {
-    const mapped = results.map(mapConvexRdv)
-    return leadId ? mapped.filter((r) => r.leadId === leadId) : mapped
-  }, [results, leadId])
+    if (leadId) return (byLead ?? []).map(mapConvexRdv)
+    return results.map(mapConvexRdv)
+  }, [results, leadId, byLead])
 
   return {
     data: filters === null ? null : data,
-    loading: status === 'LoadingFirstPage' && filters !== null,
+    loading: filters !== null && (leadId ? byLead === undefined : status === 'LoadingFirstPage'),
     error: null,
     refetch: noop,
   }

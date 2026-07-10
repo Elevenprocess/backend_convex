@@ -408,6 +408,10 @@ export const rdvList = makeFunctionReference<
   PaginationResult<ConvexRdvDoc>
 >('rdv:list')
 
+// RDV d'un lead via l'index by_lead — évite de paginer toute la table quand on
+// n'affiche que la fiche d'un client.
+export const rdvListByLead = makeFunctionReference<'query', { leadId: string }, ConvexRdvDoc[]>('rdv:listByLead')
+
 export const clientsList = makeFunctionReference<
   'query',
   { leadId?: string; projectId?: string; phase?: string; statusGlobal?: string; blocked?: boolean; technicienVtId?: string; unassignedVt?: boolean },
