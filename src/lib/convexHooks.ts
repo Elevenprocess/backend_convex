@@ -102,7 +102,9 @@ export function useConvexLeadStats(): Async<import('./types').LeadStatsResponse>
   // en faisaient LE plus gros consommateur réactif — chaque appel loggé patche
   // un lead et ré-exécutait le scan pour chaque client. TTL = bucket 5 min.
   const now = useStableNow()
-  const res = useOneShotQuery(leadsStats, {}, String(now))
+  // Minuit local : le serveur en déduit le compteur global « arrivés aujourd'hui ».
+  const todayStart = new Date(now).setHours(0, 0, 0, 0)
+  const res = useOneShotQuery(leadsStats, { todayStart }, String(now))
   const data = useMemo(
     () => (res ? (res as unknown as import('./types').LeadStatsResponse) : null),
     [res],

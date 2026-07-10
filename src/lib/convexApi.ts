@@ -453,8 +453,8 @@ export const leadsGet = makeFunctionReference<'query', { leadId: string }, Conve
 
 export const leadsStats = makeFunctionReference<
   'query',
-  Record<string, never>,
-  { total: number; byStatus: Record<string, number>; bySource: Record<string, number>; imported: number; directGhl: number }
+  { todayStart?: number },
+  { total: number; byStatus: Record<string, number>; bySource: Record<string, number>; imported: number; directGhl: number; leadsToday?: number }
 >('leads:stats')
 
 export const clientsAssignTechniciens = makeFunctionReference<

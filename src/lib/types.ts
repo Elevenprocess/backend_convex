@@ -70,6 +70,9 @@ export type LeadStatsResponse = {
   bySource: Partial<Record<LeadSource, number>>
   imported: number
   directGhl: number
+  // Prospects arrivés aujourd'hui (global, non scoppé au setter) — présent en
+  // mode Convex uniquement.
+  leadsToday?: number
 }
 
 export type LeadResponse = {

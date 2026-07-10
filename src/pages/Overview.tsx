@@ -7,7 +7,7 @@ import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
 import { leadDetailPath } from '../lib/leadPaths'
 import { useDisplayUser } from '../lib/role'
-import { useCallLogs, useClients, useLeads, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary, useCommercialObjectives, useDebriefAnalytics, prefetchAnalyticsFunnel, prefetchAnalyticsSummary, type DebriefAnalyticsResponse } from '../lib/hooks'
+import { useCallLogs, useClients, useLeads, useLeadStats, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary, useCommercialObjectives, useDebriefAnalytics, prefetchAnalyticsFunnel, prefetchAnalyticsSummary, type DebriefAnalyticsResponse } from '../lib/hooks'
 import { STATUS_LABEL, DEBRIEF_ACCEPTANCE_FACTOR_LABEL, DEBRIEF_NON_SALE_REASON_LABEL, fullName, initials, type AnalyticsAdminSummary, type AnalyticsFunnelResponse, type CallLogResponse, type CommercialObjectiveResponse, type DebriefAcceptanceFactor, type DebriefNonSaleReason, type LeadResponse, type LeadStatus, type RdvResponse, type RdvLeadSummary, type UserResponse } from '../lib/types'
 import { CommercialLeaderboard, type LeaderboardRow } from '../components/overview/CommercialLeaderboard'
 import { ObjectivesEditorModal } from '../components/overview/ObjectivesEditorModal'
@@ -309,6 +309,9 @@ function OverviewSetter() {
   const [activityRange, setActivityRange] = useState<'today' | 'week'>('today')
   const { data: leads = [] } = useLeads({ limit: 500 })
   const { data: calls = [] } = useCallLogs(me?.id ? { setterId: me.id, limit: 500 } : { limit: 500 })
+  // « Nouveaux aujourd'hui » = flux entrant GLOBAL du jour (compte serveur exact),
+  // pas les leads du setter : le KPI mesure ce qui est arrivé, pas ce qu'il traite.
+  const { data: leadStats } = useLeadStats()
 
   const callbacks = useMemo(
     () =>
@@ -336,7 +339,9 @@ function OverviewSetter() {
     )
     const qualifies = classified.filter((l) => qualifiedStatuses.includes(l.status) && qualifiedBySetter(l, me?.id)).length
     const rdvPris = classified.filter((l) => (l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe') && qualifiedBySetter(l, me?.id)).length
-    const leadsToday = ownLeads.filter((l) => isCreatedToday(l.createdAt)).length
+    // Compte serveur exact (toute la base) ; repli sur la fenêtre chargée —
+    // TOUS les leads du jour, pas seulement ceux du setter.
+    const leadsToday = leadStats?.leadsToday ?? list.filter((l) => isCreatedToday(l.createdAt)).length
     return {
       appels,
       connexions,
@@ -350,7 +355,7 @@ function OverviewSetter() {
       activityToday: todayLogicalCallSeries(loggedCalls, classified),
       activityWeek: weekLogicalCallSeries(loggedCalls, classified),
     }
-  }, [leads, calls, me?.id])
+  }, [leads, calls, me?.id, leadStats?.leadsToday])
 
   return (
     <AppShell flat>
