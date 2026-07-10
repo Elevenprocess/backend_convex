@@ -1,6 +1,7 @@
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
-import type { TableNames } from "./_generated/dataModel";
+import type { Doc, TableNames } from "./_generated/dataModel";
+import { LEAD_STATUSES } from "./model/enums";
 
 // ─── Outillage de migration NestJS/Postgres → Convex ────────────────────────
 // Fonctions INTERNES uniquement (lancées via `npx convex run` avec la deploy
@@ -24,6 +25,77 @@ export const idMap = internalQuery({
     return rows
       .filter((r) => "externalId" in r && r.externalId)
       .map((r) => [(r as { externalId: string }).externalId, r._id] as const);
+  },
+});
+
+/**
+ * Nettoyage des doublons créés par les webhooks GHL avant le fix de dédup
+ * bi-famille : un contact.created sur un client MIGRÉ (id GHL dans
+ * ghlContactId, externalId = uuid Postgres) recréait un lead « nouveau ».
+ * Repère les leads ghl récents dont l'externalId (id GHL) correspond au
+ * ghlContactId d'un autre lead, et les soft-delete si apply=true.
+ */
+export const dedupeGhlWebhookLeads = internalMutation({
+  args: { sinceMs: v.number(), apply: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
+    const recent = await ctx.db
+      .query("leads")
+      .withIndex("by_createdAt", (ix) => ix.gte("createdAt", args.sinceMs))
+      .collect();
+    const dupes: Array<Record<string, unknown>> = [];
+    for (const l of recent) {
+      if (l.source !== "ghl" || l.externalId === undefined || l.deletedAt !== undefined) continue;
+      const original = await ctx.db
+        .query("leads")
+        .withIndex("by_ghlContactId", (q) => q.eq("ghlContactId", l.externalId!))
+        .first();
+      if (!original || original._id === l._id || original.deletedAt !== undefined) continue;
+      dupes.push({
+        dupeId: l._id,
+        name: `${l.firstName ?? ""} ${l.lastName ?? ""}`.trim(),
+        dupeStatus: l.status,
+        keptId: original._id,
+        keptStatus: original.status,
+      });
+      if (args.apply) await ctx.db.patch(l._id, { deletedAt: Date.now() });
+    }
+    return { count: dupes.length, applied: args.apply === true, dupes };
+  },
+});
+
+/** Leads migrés (externalId présent) encore en statut "nouveau" — support de
+ * migrationPg:syncLeadStatuses. */
+export const listNouveauMigratedLeads = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db
+      .query("leads")
+      .withIndex("by_status_createdAt", (ix) => ix.eq("status", "nouveau"))
+      .collect();
+    return rows
+      .filter((l) => l.externalId !== undefined && l.deletedAt === undefined)
+      .map((l) => ({
+        _id: l._id,
+        externalId: l.externalId,
+        name: `${l.firstName ?? ""} ${l.lastName ?? ""}`.trim(),
+      }));
+  },
+});
+
+/** Patch de statuts en lot (resync migration) — statut validé contre l'enum. */
+export const patchLeadStatuses = internalMutation({
+  args: { pairs: v.array(v.object({ leadId: v.id("leads"), status: v.string() })) },
+  handler: async (ctx, args) => {
+    let patched = 0;
+    for (const p of args.pairs) {
+      if (!(LEAD_STATUSES as readonly string[]).includes(p.status)) continue;
+      const lead = await ctx.db.get(p.leadId);
+      // Garde anti-course : ne patcher que si toujours "nouveau".
+      if (!lead || lead.status !== "nouveau") continue;
+      await ctx.db.patch(p.leadId, { status: p.status as Doc<"leads">["status"] });
+      patched++;
+    }
+    return { patched };
   },
 });
 

@@ -14,6 +14,27 @@ import { ensureDossier } from "./model/ensureDossier";
 import { deriveAcquisitionChannel } from "./model/acquisitionChannel";
 import { syncProjectFromLeadStatus } from "./model/ghl/projectSync";
 
+// Résolution d'un contact GHL vers son lead — les deux familles d'ids :
+// lead natif Convex → l'id GHL est dans externalId (source "ghl") ;
+// lead migré de Render → externalId = uuid Postgres, l'id GHL est dans
+// ghlContactId (backfillé). Ne chercher que externalId recréait chaque client
+// migré en doublon « nouveau » à chaque webhook le concernant.
+async function findLeadByGhlContact(
+  ctx: MutationCtx,
+  ghlContactId: string,
+): Promise<Doc<"leads"> | null> {
+  const byExternal = await ctx.db
+    .query("leads")
+    .withIndex("by_externalId", (q) => q.eq("externalId", ghlContactId))
+    .collect();
+  const native = byExternal.find((l) => l.source === "ghl");
+  if (native) return native;
+  return await ctx.db
+    .query("leads")
+    .withIndex("by_ghlContactId", (q) => q.eq("ghlContactId", ghlContactId))
+    .first();
+}
+
 export const recordEvent = internalMutation({
   args: {
     provider: webhookProviderValidator,
@@ -118,12 +139,8 @@ export const applyGhlStageChange = internalMutation({
         );
     }
 
-    // 2) Lookup lead existant (externalId GHL = contact_id, source ghl)
-    const candidates = await ctx.db
-      .query("leads")
-      .withIndex("by_externalId", (q) => q.eq("externalId", input.externalId))
-      .collect();
-    const existing = candidates.find((l) => l.source === "ghl");
+    // 2) Lookup lead existant (id GHL dans externalId OU ghlContactId — migré)
+    const existing = await findLeadByGhlContact(ctx, input.externalId);
 
     let leadId: Id<"leads">;
     let created = false;
@@ -260,12 +277,7 @@ export const createLeadFromWebhook = internalMutation({
   },
   handler: async (ctx, args) => {
     if (args.externalId !== undefined) {
-      const externalId = args.externalId;
-      const candidates = await ctx.db
-        .query("leads")
-        .withIndex("by_externalId", (q) => q.eq("externalId", externalId))
-        .collect();
-      const existing = candidates.find((l) => l.source === "ghl");
+      const existing = await findLeadByGhlContact(ctx, args.externalId);
       if (existing) return { leadId: existing._id, duplicate: true };
     }
 

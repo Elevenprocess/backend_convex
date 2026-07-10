@@ -210,6 +210,41 @@ export const catchup = internalAction({
 });
 
 /**
+ * Resynchronise les STATUTS des leads migrés restés « nouveau » dans Convex
+ * alors que Postgres (alimenté par GHL/Render) a avancé depuis leur import :
+ * upsertMigration skippe l'existant, donc un statut qui bouge côté Render
+ * après l'import n'arrive jamais. Prudent : ne touche QUE les leads Convex en
+ * "nouveau" (jamais retravaillés dans l'app) — un statut posé par un setter
+ * dans VELORA n'est jamais écrasé.
+ *   npx convex run migrationPg:syncLeadStatuses '{}'            # dry-run
+ *   npx convex run migrationPg:syncLeadStatuses '{"apply":true}'
+ */
+export const syncLeadStatuses = internalAction({
+  args: { apply: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
+    const pgStatus = new Map<string, string>();
+    await withPg(async (client) => {
+      const { rows } = await client.query("SELECT id::text, status FROM leads WHERE status IS NOT NULL");
+      for (const r of rows as Array<{ id: string; status: string }>) pgStatus.set(r.id, r.status);
+    });
+    const nouveaux: Array<{ _id: import("./_generated/dataModel").Id<"leads">; externalId?: string; name?: string }> =
+      await ctx.runQuery(internal.migration.listNouveauMigratedLeads, {});
+    const diffs = nouveaux.flatMap((l) => {
+      const pg = l.externalId ? pgStatus.get(l.externalId) : undefined;
+      return pg && pg !== "nouveau" ? [{ leadId: l._id, name: l.name, from: "nouveau", to: pg }] : [];
+    });
+    if (args.apply) {
+      for (let i = 0; i < diffs.length; i += BACKFILL_BATCH) {
+        await ctx.runMutation(internal.migration.patchLeadStatuses, {
+          pairs: diffs.slice(i, i + BACKFILL_BATCH).map((d) => ({ leadId: d.leadId, status: d.to })),
+        });
+      }
+    }
+    return { count: diffs.length, applied: args.apply === true, diffs };
+  },
+});
+
+/**
  * Backfill des ids GHL sur les lignes déjà migrées (upsertMigration skippe
  * l'existant, donc les nouveaux champs ghlContactId/ghlEventId n'arrivent que
  * sur les insertions futures — cette action patche le stock).
