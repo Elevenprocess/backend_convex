@@ -53,7 +53,7 @@ export function RdvReceptionFlagModal({
 
   return (
     <div
-      className="fixed inset-0 z-[210] flex items-stretch justify-center bg-[rgba(12, 27, 36,0.58)] p-0 backdrop-blur-sm sm:items-center sm:p-7"
+      className="fixed inset-0 z-[210] flex items-stretch justify-center bg-[rgba(15,30,22,0.58)] p-0 backdrop-blur-sm sm:items-center sm:p-7"
       role="dialog"
       aria-modal="true"
       aria-label="Signaler une annulation ou un report"

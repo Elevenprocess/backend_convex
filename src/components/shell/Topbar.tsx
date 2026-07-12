@@ -296,7 +296,7 @@ function readSeenNotificationIds(): Set<string> {
 // Aucun état d'arrêt — l'animation tourne en boucle indépendamment des requêtes.
 function PageLoader(_props: { animated: boolean }) {
   const size = 32
-  const color = 'var(--color-or-dark, #00A8E8)'
+  const color = 'var(--color-or-dark, #1F7857)'
   return <Grid size={size} speed={1.4} color={color} />
 }
 

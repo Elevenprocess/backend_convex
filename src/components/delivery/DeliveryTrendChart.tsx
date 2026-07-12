@@ -13,7 +13,7 @@ import type { ClientResponse } from '../../lib/types'
 import { deliveriesByMonth } from '../../lib/deliveryCharts'
 
 const COLOR_INSTALL = '#B59241'
-const COLOR_MES = '#00A8E8'
+const COLOR_MES = '#1F7857'
 const COLOR_GRID = 'var(--color-line)'
 const COLOR_TICK = 'var(--color-muted)'
 
@@ -85,7 +85,7 @@ export function DeliveryTrendChart({ clients, now, monthsBack = 12, title = 'Dos
             <XAxis dataKey="label" tick={{ fontSize: 11, fill: COLOR_TICK }} tickLine={false} axisLine={false} />
             <YAxis yAxisId="left" allowDecimals={false} tick={{ fontSize: 11, fill: COLOR_TICK }} tickLine={false} axisLine={false} width={34} />
             <YAxis yAxisId="right" orientation="right" allowDecimals={false} tick={{ fontSize: 11, fill: COLOR_TICK }} tickLine={false} axisLine={false} width={34} />
-            <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(0, 168, 232,0.05)' }} />
+            <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(31,120,87,0.05)' }} />
             <Bar yAxisId="left" dataKey="signed" name="Dossiers signés" fill={COLOR_INSTALL} radius={[5, 5, 0, 0]} maxBarSize={34} animationDuration={700} />
             <Line
               yAxisId="right"

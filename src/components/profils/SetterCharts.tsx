@@ -17,13 +17,13 @@ import {
 import type { AnalyticsSetterSummary } from '../../lib/types'
 
 // ── palette alignée sur le thème Velora (cf. TerrainMonthlyChart) ─────────────
-const COLOR_OR = '#00A8E8'
+const COLOR_OR = '#1F7857'
 const COLOR_CUIVRE = '#B59241'
-const COLOR_GRID = '#DBEAF3'
-const COLOR_TICK = '#587184'
+const COLOR_GRID = '#E1EBE3'
+const COLOR_TICK = '#5E7264'
 const COLOR_TOOLTIP_BORDER = '#DCE8DE'
 // Palette de repli pour le camembert « Issue des leads ».
-const PIPELINE_COLORS = ['#00A8E8', '#B59241', '#6B7C8C', '#C2703D', '#B7410E']
+const PIPELINE_COLORS = ['#1F7857', '#B59241', '#6B7C8C', '#C2703D', '#B7410E']
 
 interface TooltipPayloadEntry {
   name: string
@@ -236,7 +236,7 @@ export function SetterCharts({ stats }: { stats: AnalyticsSetterSummary }) {
               <CartesianGrid strokeDasharray="3 3" stroke={COLOR_GRID} vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 11, fill: COLOR_TICK }} tickLine={false} axisLine={false} />
               <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: COLOR_TICK }} tickLine={false} axisLine={false} width={28} />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0, 168, 232,0.04)', radius: 6 }} />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(31,120,87,0.04)', radius: 6 }} />
               <Bar dataKey="calls" name="Appels" fill={COLOR_OR} radius={[4, 4, 0, 0]} maxBarSize={34} />
             </BarChart>
           </ResponsiveContainer>

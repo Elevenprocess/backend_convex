@@ -15,10 +15,10 @@ import { computeMonthlyTerrain } from '../../lib/technicienStats'
 import { useMemo } from 'react'
 
 // ── palette alignée sur le thème Velora ──────────────────────────────────────
-const COLOR_VT = '#00A8E8'          // --color-or (vert forêt)
+const COLOR_VT = '#1F7857'          // --color-or (vert forêt)
 const COLOR_INSTALL = '#B59241'     // --color-cuivre (ambre)
-const COLOR_GRID = '#DBEAF3'        // --color-line
-const COLOR_TICK = '#587184'        // --color-muted
+const COLOR_GRID = '#E1EBE3'        // --color-line
+const COLOR_TICK = '#5E7264'        // --color-muted
 const COLOR_TOOLTIP_BORDER = '#DCE8DE'
 
 function formatMonth(m: string): string {
@@ -187,7 +187,7 @@ export function TerrainMonthlyChart({ clients }: Props) {
               axisLine={false}
               width={28}
             />
-            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0, 168, 232,0.04)', radius: 6 }} />
+            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(31,120,87,0.04)', radius: 6 }} />
             <Bar dataKey="vtCount" name="VT réalisées" fill={COLOR_VT} radius={[4, 4, 0, 0]} maxBarSize={32} />
             <Bar dataKey="installCount" name="Installations posées" fill={COLOR_INSTALL} radius={[4, 4, 0, 0]} maxBarSize={32} />
           </BarChart>
