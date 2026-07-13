@@ -6,6 +6,7 @@ import { Icon } from '../../components/Icon'
 import { LeadFiltersBar } from '../../components/LeadFiltersBar'
 import { useLeads, useStartCall } from '../../lib/hooks'
 import { DEFAULT_LEAD_FILTERS, applyLeadFilters, type LeadListFilters } from '../../lib/leadFilters'
+import { normalizeSearchText, phoneMatches, phoneSearchVariants } from '../../lib/searchText'
 import { fullName, type LeadResponse } from '../../lib/types'
 
 const KEYS = ['1','2','3','4','5','6','7','8','9','+','0','⌫']
@@ -19,13 +20,23 @@ export function Dialer() {
   const [leadFilters, setLeadFilters] = useState<LeadListFilters>(DEFAULT_LEAD_FILTERS)
 
   const matches = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    const digits = number.replace(/\s/g, '')
+    // Recherche insensible à la casse/accents ; le pavé numérique matche les
+    // numéros quels que soient les espaces et le préfixe (+262/+33 ↔ 0…).
+    const q = normalizeSearchText(query)
+    const qPhoneVariants = phoneSearchVariants(query)
+    const padVariants = phoneSearchVariants(number)
+    const digits = number.replace(/\D/g, '')
     return applyLeadFilters(leads ?? [], leadFilters)
       .filter((l) => {
-        const name = fullName(l).toLowerCase()
-        const phone = (l.phone ?? '').replace(/\s/g, '')
-        return (q && name.includes(q)) || (digits && phone.includes(digits)) || (!q && !digits)
+        const hay = normalizeSearchText(
+          [fullName(l), l.email, l.city, l.addressLine, l.postalCode].filter(Boolean).join(' '),
+        )
+        const textMatch = Boolean(q) && hay.includes(q)
+        const queryPhoneMatch = phoneMatches(qPhoneVariants, l.phone)
+        const padMatch = digits
+          ? phoneMatches(padVariants, l.phone) || (l.phone ?? '').replace(/\D/g, '').includes(digits)
+          : false
+        return textMatch || queryPhoneMatch || padMatch || (!q && qPhoneVariants.length === 0 && !digits)
       })
       .slice(0, 8)
   }, [leads, leadFilters, query, number])

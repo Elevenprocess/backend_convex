@@ -10,6 +10,7 @@ import { useAuth } from '../../lib/auth'
 import { deleteLead, useLeadStats, useLeads, useLeadsProgressive, useUsers, useStartCall, useRdvList } from '../../lib/hooks'
 import { useLeadSidebar } from '../../lib/leadSidebar'
 import { emitLeadDeselect, emitLeadSelect, useLeadLocks, type LeadLockInfo } from '../../lib/realtime'
+import { normalizeSearchText, phoneMatches, phoneSearchVariants } from '../../lib/searchText'
 import { DossierCard } from '../../components/suivi/DossierCard'
 import { ManualLeadModal } from '../../components/leads/ManualLeadModal'
 import { buildDossiers, readWorkflowState } from '../../lib/suivi'
@@ -303,26 +304,28 @@ function LeadsSetter() {
   }, [categoryLeads, filter])
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    const qPhoneVariants = phoneSearchVariants(q)
+    // Recherche insensible à la casse ET aux accents ; les numéros matchent
+    // quels que soient les espaces et le préfixe (+262/+33 ↔ 0…).
+    const q = normalizeSearchText(query)
+    const qPhoneVariants = phoneSearchVariants(query)
     // Si une recherche est saisie, elle doit être globale sur toutes les catégories
     // setter, même si l’onglet actif est "Nouveaux", "À rappeler", etc.
-    let list = q ? categoryLeads : filterSetterLeadsByStatus(categoryLeads, filter)
+    const searching = Boolean(q) || qPhoneVariants.length > 0
+    let list = searching ? categoryLeads : filterSetterLeadsByStatus(categoryLeads, filter)
     if (missingFilter !== 'all') list = list.filter((l) => matchesMissingFilter(l, missingFilter))
-    if (q) {
+    if (searching) {
       list = list.filter((l) => {
-        const textMatch = [fullName(l), l.phone, l.email, l.city].filter(Boolean).join(' ').toLowerCase().includes(q)
-        const leadPhoneVariants = phoneSearchVariants(l.phone ?? '')
-        const phoneMatch = qPhoneVariants.some((queryPhone) =>
-          leadPhoneVariants.some((leadPhone) => leadPhone.includes(queryPhone) || queryPhone.includes(leadPhone)),
+        const hay = normalizeSearchText(
+          [fullName(l), l.phone, l.email, l.city, l.addressLine, l.postalCode].filter(Boolean).join(' '),
         )
-        return textMatch || phoneMatch
+        const textMatch = Boolean(q) && hay.includes(q)
+        return textMatch || phoneMatches(qPhoneVariants, l.phone)
       })
     }
     // Tri explicite par clic sur l'en-tête « prochain rappel » : prioritaire sur le tri par défaut.
     if (callbackSort) {
       list = sortLeadsByNextCallback(list, callbackSort)
-    } else if (!q && filter === 'rappel') {
+    } else if (!searching && filter === 'rappel') {
       // Onglet "À rappeler" : on trie par date de prochain rappel (futurs proches en haut,
       // en retard regroupés en bas). On ne le fait pas en recherche globale (liste multi-catégories).
       list = sortCallbackLeadsByNextCallback(list)
@@ -870,21 +873,6 @@ function matchesMissingFilter(lead: LeadResponse, filter: SetterMissingFilter): 
 
 function hasValue(value: string | null | undefined): boolean {
   return Boolean(cleanField(value))
-}
-
-function normalizePhoneDigits(value: string): string {
-  return value.replace(/\D/g, '')
-}
-
-function phoneSearchVariants(value: string): string[] {
-  const digits = normalizePhoneDigits(value)
-  if (digits.length < 4) return []
-  const variants = new Set<string>([digits])
-  if (digits.startsWith('262') && digits.length > 3) variants.add(`0${digits.slice(3)}`)
-  if (digits.startsWith('33') && digits.length > 2) variants.add(`0${digits.slice(2)}`)
-  if (digits.length >= 8) variants.add(digits.slice(-8))
-  if (digits.length >= 9) variants.add(digits.slice(-9))
-  return Array.from(variants).filter((variant) => variant.length >= 4)
 }
 
 
