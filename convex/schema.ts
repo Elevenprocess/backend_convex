@@ -148,6 +148,22 @@ export default defineSchema({
     .index("by_changedAt", ["changedAt"])
     .index("by_lead_stage_changedAt", ["leadId", "ghlStageName", "changedAt"]),
 
+  /**
+   * Présence setter « je regarde ce lead » (remplace le socket NestJS) :
+   * une ligne par utilisateur, heartbeat côté client (~25 s) qui prolonge
+   * expiresAt (TTL 60 s) ; un onglet fermé expire tout seul. Petite table
+   * volatile — lue en entier par leadPresence:list (réactif).
+   */
+  leadPresence: defineTable({
+    leadId: v.id("leads"),
+    userId: v.id("users"),
+    userName: v.string(),
+    startedAt: v.number(),  // ms — début de consultation (affichage "depuis")
+    expiresAt: v.number(),  // ms — au-delà, le verrou est mort
+  })
+    .index("by_user", ["userId"])
+    .index("by_expiresAt", ["expiresAt"]),
+
   // Audit trail des webhooks entrants (parité webhook_events NestJS) : le raw
   // payload survit à l'échec du traitement → replay/debug possibles.
   webhookEvents: defineTable({
