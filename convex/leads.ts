@@ -30,6 +30,31 @@ export const softDelete = mutation({
   },
 });
 
+// Casse + accents neutralisés, espaces multiples repliés : « José-Müller » et
+// « jose muller » doivent se retrouver.
+function normalizeSearchText(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Variantes d'un numéro pour la recherche : chiffres seuls (les espaces/points
+// ne comptent pas), équivalence +262/+33 ↔ 0…, et suffixes 8/9 chiffres pour
+// matcher un numéro saisi partiellement. Miroir de la même fonction côté front.
+function phoneSearchVariants(value: string): string[] {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length < 4) return [];
+  const variants = new Set<string>([digits]);
+  if (digits.startsWith("262") && digits.length > 3) variants.add(`0${digits.slice(3)}`);
+  if (digits.startsWith("33") && digits.length > 2) variants.add(`0${digits.slice(2)}`);
+  if (digits.length >= 8) variants.add(digits.slice(-8));
+  if (digits.length >= 9) variants.add(digits.slice(-9));
+  return Array.from(variants).filter((variant) => variant.length >= 4);
+}
+
 // Filtres + pagination partagés entre `list` (docs bruts) et `listEnriched`
 // (docs + agrégats appels/RDV — jauges 4/jour et 11 jours de la liste leads).
 async function paginateLeadsPage(
@@ -71,11 +96,14 @@ async function paginateLeadsPage(
       ordered = ordered.filter((f) => f.eq(f.field("city"), args.city!));
     }
 
-    const needle = args.search?.trim().toLowerCase();
-    if (!needle) return await ordered.paginate(args.paginationOpts);
+    const needle = normalizeSearchText(args.search ?? "");
+    const needlePhones = phoneSearchVariants(args.search ?? "");
+    if (!needle && needlePhones.length === 0) return await ordered.paginate(args.paginationOpts);
 
-    // Recherche plein-texte simple (nom/email/téléphone/ville), filtrée en JS
-    // sur la page courante : pas de searchIndex sur leads (champs multiples).
+    // Recherche plein-texte simple (nom/email/téléphone/adresse/ville), filtrée
+    // en JS sur la page courante : pas de searchIndex sur leads (champs multiples).
+    // Insensible à la casse ET aux accents ; les numéros matchent quels que
+    // soient les espaces et le préfixe (+262/+33 ↔ 0…, cf. phoneSearchVariants).
     // On élargit la page scannée pour que les correspondances remontent vite ;
     // le curseur reste valide, le client enchaîne les loadMore normalement.
     const page = await ordered.paginate({
@@ -83,10 +111,22 @@ async function paginateLeadsPage(
       numItems: Math.max(args.paginationOpts.numItems, 300),
     });
     const matches = (l: (typeof page.page)[number]) => {
-      const hay = [l.firstName, l.lastName, `${l.firstName ?? ""} ${l.lastName ?? ""}`, l.email, l.phone, l.city]
+      const hay = [
+        l.firstName,
+        l.lastName,
+        `${l.firstName ?? ""} ${l.lastName ?? ""}`,
+        l.email,
+        l.phone,
+        l.city,
+        l.addressLine,
+        l.postalCode,
+      ]
         .filter((s): s is string => typeof s === "string")
-        .map((s) => s.toLowerCase());
-      return hay.some((s) => s.includes(needle));
+        .map(normalizeSearchText);
+      if (needle && hay.some((s) => s.includes(needle))) return true;
+      if (needlePhones.length === 0) return false;
+      const leadPhones = phoneSearchVariants(l.phone ?? "");
+      return needlePhones.some((qp) => leadPhones.some((lp) => lp.includes(qp) || qp.includes(lp)));
     };
     return { ...page, page: page.page.filter(matches) };
 }

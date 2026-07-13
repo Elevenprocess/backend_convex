@@ -84,6 +84,51 @@ test("list() filtre par status et pagine", async () => {
   expect(page.page[0].firstName).toBe("B");
 });
 
+test("list({search}) : téléphone insensible aux espaces et au préfixe +262/+33", async () => {
+  const t = makeT();
+  const setterId = await insertUser(t, { role: "setter" });
+  const leadId = await asUser(t, setterId).mutation(api.leads.create, { firstName: "Tel" });
+  await t.run((ctx) => ctx.db.patch(leadId, { phone: "+262 692 12 34 56" }));
+
+  for (const search of ["0692123456", "0692 12 34 56", "692 123 456", "+262692123456", "262 692 12 34"]) {
+    const page = await asUser(t, setterId).query(api.leads.list, {
+      search,
+      paginationOpts: { numItems: 10, cursor: null },
+    });
+    expect(page.page.map((l) => l._id), `recherche « ${search} »`).toContain(leadId);
+  }
+
+  // Numéro stocké SANS indicatif, recherché avec +262.
+  const local = await asUser(t, setterId).mutation(api.leads.create, { firstName: "Local" });
+  await t.run((ctx) => ctx.db.patch(local, { phone: "0693 55 66 77" }));
+  const page = await asUser(t, setterId).query(api.leads.list, {
+    search: "+262 693 55 66 77",
+    paginationOpts: { numItems: 10, cursor: null },
+  });
+  expect(page.page.map((l) => l._id)).toContain(local);
+});
+
+test("list({search}) : nom/email/adresse insensibles à la casse et aux accents", async () => {
+  const t = makeT();
+  const setterId = await insertUser(t, { role: "setter" });
+  const leadId = await asUser(t, setterId).mutation(api.leads.create, {
+    firstName: "José", lastName: "Hoareau", city: "Saint-Denis",
+  });
+  await t.run((ctx) => ctx.db.patch(leadId, {
+    email: "Jose.Hoareau@Gmail.com",
+    addressLine: "12 Rue des Écoles",
+    postalCode: "97400",
+  }));
+
+  for (const search of ["jose", "JOSÉ HOAREAU", "jose.hoareau@gmail.com", "rue des ecoles", "97400", "SAINT-DENIS"]) {
+    const page = await asUser(t, setterId).query(api.leads.list, {
+      search,
+      paginationOpts: { numItems: 10, cursor: null },
+    });
+    expect(page.page.map((l) => l._id), `recherche « ${search} »`).toContain(leadId);
+  }
+});
+
 test("qualify() passe le lead en qualifie / pas_qualifie", async () => {
   const t = makeT();
   const setterId = await insertUser(t, { role: "setter" });
