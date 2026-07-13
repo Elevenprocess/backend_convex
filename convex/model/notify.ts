@@ -5,7 +5,8 @@
 
 import type { MutationCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
-import { acompte40Message, acompteSoldeMessage, debriefCreatedMessage, rdvCancelledMessage, rdvRescheduledMessage, vtDateChangedMessage } from "./notifMessages";
+import { acompte40Message, acompteRelanceMessage, acompteSoldeMessage, acompteTrancheMessage, debriefCreatedMessage, rdvCancelledMessage, rdvRescheduledMessage, vtDateChangedMessage } from "./notifMessages";
+import { acompteStateForClient, todayReunion } from "./acompteGuard";
 import { roleOf } from "./access";
 
 // Notifie chaque responsable commercial (commercial_lead actif) à la création
@@ -137,15 +138,54 @@ const SOLDE_TYPES = new Set([
   "apport_financement",
 ]);
 
-/** Best-effort : notifie finances/admin à la transition vt_validee ou install_effectuee → fait. */
+/**
+ * Best-effort : notifie finances/admin quand un jalon franchi rend une ou
+ * plusieurs tranches d'acompte « à encaisser ». Piloté par l'ÉCHÉANCIER réel
+ * (devis / custom / template — assembleEcheancier) ; retombe sur les deux
+ * messages historiques (40 % VT comptant, solde install financement) quand
+ * le dossier n'a pas d'échéancier assemblable.
+ */
 export async function notifyAcompte(
   ctx: MutationCtx,
   clientId: Id<"clients">,
-  substepKey: "vt_validee" | "install_effectuee",
+  substepKey: string,
 ): Promise<void> {
   try {
     const client = await ctx.db.get(clientId);
     if (!client) return;
+
+    // ── Chemin échéancier (source de vérité finances) ────────────────────────
+    const state = await acompteStateForClient(ctx, client, todayReunion());
+    if (state) {
+      const dues = state.echeances.filter(
+        (e) => e.jalonKey === substepKey && e.statut === "a_encaisser",
+      );
+      if (dues.length === 0) return;
+      const recipients = (await ctx.db.query("users").collect()).filter(
+        (u) => ["finances", "admin"].includes(roleOf(u)) && u.active !== false,
+      );
+      const leadName = state.clientName ?? "Client";
+      for (const due of dues) {
+        const msg = acompteTrancheMessage({
+          leadName,
+          label: due.label,
+          montant: due.montantPrevu,
+        });
+        for (const r of recipients) {
+          await createNotification(ctx, {
+            userId: r._id,
+            type: msg.type,
+            title: msg.title,
+            body: msg.body,
+            payload: { clientId, debriefId: state.debriefId, ordre: due.ordre },
+          });
+        }
+      }
+      return;
+    }
+
+    // ── Fallback legacy (pas d'échéancier assemblable) ───────────────────────
+    if (substepKey !== "vt_validee" && substepKey !== "install_effectuee") return;
 
     // Débrief vente du lead → financingType (parité requête NestJS).
     const debriefs = await ctx.db

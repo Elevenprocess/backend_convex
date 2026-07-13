@@ -60,7 +60,7 @@ test("vt_validee fait (comptant) → notif acompte 40% aux finances+admin", asyn
   const rows = await notifs(t);
   expect(rows).toHaveLength(2);
   expect(new Set(rows.map((n: any) => n.userId))).toEqual(new Set([finId, adminId]));
-  expect(rows[0].title).toBe("Acompte à encaisser (40 %)");
+  expect(rows[0].title).toBe("Acompte à encaisser (4\u202f000 €)");
   expect(rows[0].body).toContain("Sophie Martin");
   // Idempotence de transition : re-save sans changement de statut ne renotifie pas
   await asUser(t, boId).mutation(api.workflowSubsteps.update, {
@@ -84,7 +84,7 @@ test("vt_validee fait (financement) → PAS de notif 40% ; install_effectuee →
   });
   const rows = await notifs(t);
   expect(rows.length).toBeGreaterThan(0);
-  expect(rows[0].title).toBe("Solde à encaisser");
+  expect(rows[0].title).toBe("Acompte à encaisser (10\u202f000 €)");
 });
 
 test("paiement_10x : aucun effet jalon", async () => {

@@ -19,6 +19,7 @@ import {
   AcompteResponse,
   resolveTemplatesForDebrief,
 } from "./model/assembleEcheancier";
+import { acompteStateForClient, todayReunion } from "./model/acompteGuard";
 
 // Rôles autorisés pour les queries finances.
 const FINANCES_ROLES = [
@@ -400,5 +401,41 @@ export const recordEcheance = mutation({
     }
 
     return null;
+  },
+});
+
+// ─── acompteStateByClient ────────────────────────────────────────────────────
+// Résumé de l'échéancier d'un DOSSIER délivrabilité pour la fiche workflow :
+// badge « acompte à encaisser / en retard » + tranches. Ouvert aux rôles
+// workflow (délivrabilité voit l'état de paiement sans accéder à Finances).
+export const acompteStateByClient = query({
+  args: { clientId: v.id("clients") },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, [
+      "admin", "finances", "delivrabilite", "responsable_technique",
+      "back_office", "technicien", "commercial_lead",
+    ]);
+    const client = await ctx.db.get(args.clientId);
+    if (!client || client.deletedAt !== undefined) return null;
+    const state = await acompteStateForClient(ctx, client, todayReunion());
+    if (!state) return null;
+    const tranches = state.echeances.map((e) => ({
+      ordre: e.ordre,
+      label: e.label,
+      jalonKey: e.jalonKey,
+      statut: e.statut,
+      montantPrevu: e.montantPrevu,
+      dateEcheance: e.dateEcheance,
+    }));
+    return {
+      debriefId: state.debriefId,
+      echeancierSource: state.echeancierSource,
+      montantTotal: state.montantTotal,
+      totalEncaisse: state.totalEncaisse,
+      resteAPayer: state.resteAPayer,
+      aEncaisser: tranches.filter((t) => t.statut === "a_encaisser").length,
+      enRetard: tranches.filter((t) => t.statut === "en_retard").length,
+      tranches,
+    };
   },
 });

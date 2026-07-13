@@ -422,6 +422,17 @@ export default defineSchema({
     .index("by_lead", ["leadId"])
     .index("by_statut", ["statut"]),
 
+  /**
+   * Relances d'acomptes (cron) : mémorise la dernière alerte envoyée par
+   * tranche pour ne pas notifier finances/admin plus d'une fois tous les
+   * 3 jours tant que la tranche reste à encaisser / en retard.
+   */
+  acompteAlerts: defineTable({
+    debriefId: v.id("debriefs"),
+    ordre: v.number(),
+    sentAt: v.number(), // ms
+  }).index("by_debrief_ordre", ["debriefId", "ordre"]),
+
   /** Legacy : encaissements simples (1 ligne par debrief, modèle OCR historique). */
   acompteEncaissements: defineTable({
     debriefId: v.id("debriefs"),

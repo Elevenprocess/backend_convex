@@ -14,4 +14,7 @@ crons.interval(
   internal.ghlDebriefLink.syncDebriefLinksScheduled, {},
 );
 
+// Relances d'acomptes dus (à encaisser / en retard) — 09:00 à La Réunion.
+crons.daily("acompte-reminders", { hourUTC: 5, minuteUTC: 0 }, internal.acompteReminders.run, {});
+
 export default crons;

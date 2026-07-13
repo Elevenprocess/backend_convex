@@ -28,6 +28,36 @@ export function vtDateChangedMessage(input: {
   return { title: "Date de VT mise à jour", body };
 }
 
+// Message générique par TRANCHE d'échéancier (devis / template) : émis quand
+// le jalon de la tranche vient d'être franchi.
+export function acompteTrancheMessage(input: {
+  leadName: string;
+  label: string;
+  montant: number | null;
+}): { type: "acompte_a_encaisser"; title: string; body: string } {
+  const montant = input.montant != null ? ` (${input.montant.toLocaleString("fr-FR")} €)` : "";
+  return {
+    type: "acompte_a_encaisser",
+    title: `Acompte à encaisser${montant}`,
+    body: `${input.leadName} — « ${input.label} » franchie : tranche à encaisser${montant}.`,
+  };
+}
+
+// Relance périodique (cron) tant qu'une tranche due reste non encaissée.
+export function acompteRelanceMessage(input: {
+  leadName: string;
+  label: string;
+  montant: number | null;
+  enRetard: boolean;
+}): { type: "acompte_relance"; title: string; body: string } {
+  const montant = input.montant != null ? ` (${input.montant.toLocaleString("fr-FR")} €)` : "";
+  return {
+    type: "acompte_relance",
+    title: input.enRetard ? `Acompte EN RETARD${montant}` : `Acompte toujours à encaisser${montant}`,
+    body: `${input.leadName} — tranche « ${input.label} »${montant} ${input.enRetard ? "en retard d'encaissement" : "en attente d'encaissement"}.`,
+  };
+}
+
 export function acompte40Message(input: {
   leadName: string;
 }): { type: "acompte_a_encaisser"; title: string; body: string } {

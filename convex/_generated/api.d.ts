@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as acompteReminders from "../acompteReminders.js";
 import type * as analytics from "../analytics.js";
 import type * as auth from "../auth.js";
 import type * as callLogs from "../callLogs.js";
@@ -33,6 +34,7 @@ import type * as migration from "../migration.js";
 import type * as migrationPg from "../migrationPg.js";
 import type * as model_access from "../model/access.js";
 import type * as model_acompteEcheancier from "../model/acompteEcheancier.js";
+import type * as model_acompteGuard from "../model/acompteGuard.js";
 import type * as model_acquisitionChannel from "../model/acquisitionChannel.js";
 import type * as model_analyticsBuilders from "../model/analyticsBuilders.js";
 import type * as model_analyticsRange from "../model/analyticsRange.js";
@@ -92,6 +94,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  acompteReminders: typeof acompteReminders;
   analytics: typeof analytics;
   auth: typeof auth;
   callLogs: typeof callLogs;
@@ -117,6 +120,7 @@ declare const fullApi: ApiFromModules<{
   migrationPg: typeof migrationPg;
   "model/access": typeof model_access;
   "model/acompteEcheancier": typeof model_acompteEcheancier;
+  "model/acompteGuard": typeof model_acompteGuard;
   "model/acquisitionChannel": typeof model_acquisitionChannel;
   "model/analyticsBuilders": typeof model_analyticsBuilders;
   "model/analyticsRange": typeof model_analyticsRange;

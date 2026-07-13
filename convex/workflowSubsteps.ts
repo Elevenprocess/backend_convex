@@ -20,6 +20,7 @@ import { activeDocsOfSubstep, toDocumentSummary } from "./documents";
 import { insertAudit } from "./model/audit";
 import { shouldNotifyVtDateChange } from "./model/notifMessages";
 import { notifyAcompte, notifyVtDateChange } from "./model/notify";
+import { acompteStateForClient, blockingTranche, formatEuro, todayReunion } from "./model/acompteGuard";
 
 /** Décore une substep : unlocked (sœurs), documents actifs et badge pièce manquante. */
 async function decorate(ctx: QueryCtx, row: Doc<"workflowSubsteps">) {
@@ -146,6 +147,31 @@ async function applySubstepUpdate(
     throw new Error(`Rôle ${role} non autorisé à (dés)annuler la vente`);
   }
 
+  // ── Blocage acompte ─────────────────────────────────────────────────────────
+  // On ne coche pas le jalon de la tranche N tant qu'une tranche antérieure due
+  // (jalon franchi, non encaissée) n'est pas réglée. Les rôles finances/admin
+  // passent outre (ce sont eux qui encaissent / débloquent).
+  if (
+    args.status === "fait" &&
+    before.status !== "fait" &&
+    !["admin", "finances"].includes(role)
+  ) {
+    const clientDoc = client ?? (await ctx.db.get(before.clientId));
+    if (clientDoc) {
+      const state = await acompteStateForClient(ctx, clientDoc, todayReunion());
+      if (state) {
+        const blocking = blockingTranche(state.echeances, before.key);
+        if (blocking) {
+          const montant = blocking.montantPrevu != null ? ` (${formatEuro(blocking.montantPrevu)})` : "";
+          throw new Error(
+            `Étape bloquée : l'acompte « ${blocking.label} »${montant} n'est pas encaissé. ` +
+              `Rapprochez-vous des finances avant de valider cette étape.`,
+          );
+        }
+      }
+    }
+  }
+
   const patch: Record<string, unknown> = {};
   if (args.status !== undefined) patch.status = args.status;
   if (args.dateRealisee !== undefined) patch.dateRealisee = args.dateRealisee ?? undefined;
@@ -199,12 +225,10 @@ async function applySubstepUpdate(
   ) {
     await notifyVtDateChange(ctx, before.clientId, updated.dateRealisee ?? null);
   }
-  // Transition idempotente : uniquement au passage ≠fait → fait.
-  if (
-    before.status !== "fait" &&
-    updated.status === "fait" &&
-    (updated.key === "vt_validee" || updated.key === "install_effectuee")
-  ) {
+  // Transition idempotente : uniquement au passage ≠fait → fait. Tous les
+  // jalons sont candidats — notifyAcompte ne notifie que si l'échéancier du
+  // dossier a une tranche rattachée à ce jalon (fallback legacy vt/install).
+  if (before.status !== "fait" && updated.status === "fait") {
     await notifyAcompte(ctx, before.clientId, updated.key);
   }
 
