@@ -7,7 +7,7 @@ import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
 import { leadDetailPath } from '../lib/leadPaths'
 import { useDisplayUser } from '../lib/role'
-import { useCallLogs, useClients, useLeads, useLeadStats, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary, useCommercialObjectives, useDebriefAnalytics, prefetchAnalyticsFunnel, prefetchAnalyticsSummary, type DebriefAnalyticsResponse } from '../lib/hooks'
+import { useCallLogs, useClients, useLeads, useLeadStats, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary, useCommercialObjectives, useDebriefAnalytics, useSetterLeaderboard, prefetchAnalyticsFunnel, prefetchAnalyticsSummary, type DebriefAnalyticsResponse } from '../lib/hooks'
 import { STATUS_LABEL, DEBRIEF_ACCEPTANCE_FACTOR_LABEL, DEBRIEF_NON_SALE_REASON_LABEL, fullName, initials, type AnalyticsAdminSummary, type AnalyticsFunnelResponse, type CallLogResponse, type CommercialObjectiveResponse, type DebriefAcceptanceFactor, type DebriefNonSaleReason, type LeadResponse, type LeadStatus, type RdvResponse, type RdvLeadSummary, type UserResponse } from '../lib/types'
 import { CommercialLeaderboard, type LeaderboardRow } from '../components/overview/CommercialLeaderboard'
 import { ObjectivesEditorModal } from '../components/overview/ObjectivesEditorModal'
@@ -473,9 +473,38 @@ function OverviewSetter() {
             <TaskLine icon="target" title="Qualifiés" sub={`${fmtCompact(stats.qualifies)} prospects qualifiés`} done={stats.qualifies > 0} />
             <TaskLine icon="trophy" title="RDV" sub={`${fmtCompact(stats.rdvPris)} rendez-vous pris`} done={stats.rdvPris > 0} />
           </div>
+
+          <SetterLeaderboardCard meId={me?.id} />
         </section>
       </main>
     </AppShell>
+  )
+}
+
+// Classement minimal du jour (version réduite du tableau « Performances par
+// setter » d'Analytics) : uniquement les setters avec de l'activité, appels +
+// qualifiés envoyés aux commerciaux.
+function SetterLeaderboardCard({ meId }: { meId?: string }) {
+  const { data: rows, loading } = useSetterLeaderboard({ days: 1 })
+  return (
+    <div className="overview-air-card overview-role-side">
+      <CardHead title="Performances setters" icon="trophy" />
+      <div className="overview-role-list">
+        {loading && !rows?.length ? (
+          <div className="text-xs text-faint">Chargement…</div>
+        ) : !rows?.length ? (
+          <div className="text-xs text-faint">Aucune activité setter aujourd'hui.</div>
+        ) : rows.map((s) => (
+          <div key={s.id} className="overview-role-row">
+            <div className="overview-role-avatar">{s.initials}</div>
+            <div>
+              <strong>{s.name}{s.id === meId ? ' · moi' : ''}</strong>
+              <small>{fmtCompact(s.calls)} appel{s.calls > 1 ? 's' : ''} · {fmtCompact(s.qualified)} qualifié{s.qualified > 1 ? 's' : ''}</small>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 

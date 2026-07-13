@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 import { getFunctionName } from 'convex/server'
 import { convexClient } from './convex'
-import { analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsListEnriched, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, substepsList, usersGet, usersList, usersDirectory, leadsGetEnriched } from './convexApi'
-import type { ConvexUserDoc } from './convexApi'
+import { analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsListEnriched, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, substepsList, usersGet, usersList, usersDirectory, leadsGetEnriched, analyticsSetterLeaderboard } from './convexApi'
+import type { ConvexUserDoc, SetterLeaderboardEntry } from './convexApi'
 import { mapConvexAcompte, mapConvexCallLog, mapConvexClient, mapConvexCommercialObjective, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexSubstep, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
 import type {
@@ -369,6 +369,31 @@ export function useConvexDebriefAnalytics(filters?: {
 // Rôles alignés sur analytics.ts (SETTER_STATS_ROLES / COMMERCIAL_STATS_ROLES).
 const SETTER_STATS_ROLES = new Set<Role>(['admin', 'setter', 'setter_lead', 'commercial', 'commercial_lead'])
 const COMMERCIAL_STATS_ROLES = new Set<Role>(['admin', 'commercial', 'commercial_lead'])
+
+// Classement minimal des setters (carte Overview) : appels + qualifiés du jour
+// par défaut. Même pattern one-shot + sticky que les autres stats.
+export function useConvexSetterLeaderboard(
+  filters?: { from?: string; to?: string; days?: number },
+): Async<SetterLeaderboardEntry[]> {
+  const now = useStableNow()
+  const role = useAuth((s) => s.user?.role)
+  const uid = useAuth((s) => s.user?.id)
+  const allowed = !!role && SETTER_STATS_ROLES.has(role)
+  const res = useOneShotQuery(
+    analyticsSetterLeaderboard,
+    allowed ? { now, days: filters?.days, from: filters?.from, to: filters?.to } : 'skip',
+  )
+  const key = allowed
+    ? `kpi:setterboard:${uid ?? '?'}:${filters?.days ?? ''}:${filters?.from ?? ''}:${filters?.to ?? ''}`
+    : null
+  const sticky = usePersistentSticky(key, res)
+  return {
+    data: allowed ? ((sticky ?? null) as SetterLeaderboardEntry[] | null) : [],
+    loading: allowed && res === undefined,
+    error: null,
+    refetch: noop,
+  }
+}
 
 export function useConvexSetterStats(
   id: string | undefined,

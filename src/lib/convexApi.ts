@@ -616,6 +616,15 @@ export const analyticsSetterStats = makeFunctionReference<
   unknown
 >('analytics:setterStats')
 
+// Classement minimal des setters (Overview) : appels + qualifiés, setters
+// actifs uniquement. Ouvert aux rôles summary (dont setter).
+export type SetterLeaderboardEntry = { id: string; name: string; initials: string; calls: number; qualified: number }
+export const analyticsSetterLeaderboard = makeFunctionReference<
+  'query',
+  { now: number; days?: number; from?: string; to?: string },
+  SetterLeaderboardEntry[]
+>('analytics:setterLeaderboard')
+
 export const analyticsCommercialStats = makeFunctionReference<
   'query',
   { commercialId: string; now: number; days?: number; from?: string; to?: string },

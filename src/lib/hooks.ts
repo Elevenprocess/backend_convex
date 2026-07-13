@@ -48,6 +48,7 @@ import {
   useConvexCommercialObjectives,
   useConvexDebriefAnalytics,
   useConvexSetterStats,
+  useConvexSetterLeaderboard,
   useConvexLead,
   useConvexLeadDebriefs,
   useConvexLeadStats,
@@ -706,6 +707,16 @@ function useSetterStatsRest(
 export const useSetterStats: typeof useSetterStatsRest = convexAuthEnabled
   ? (useConvexSetterStats as unknown as typeof useSetterStatsRest)
   : useSetterStatsRest
+
+// Classement minimal des setters (Overview) — Convex uniquement : pas
+// d'équivalent REST, on renvoie une liste vide hors mode Convex.
+const useSetterLeaderboardRest: typeof useConvexSetterLeaderboard = () => ({
+  data: [],
+  loading: false,
+  error: null,
+  refetch: () => {},
+})
+export const useSetterLeaderboard = convexAuthEnabled ? useConvexSetterLeaderboard : useSetterLeaderboardRest
 
 function useCommercialObjectivesRest(period: string | null): Async<CommercialObjectiveResponse[]> {
   return useFetch<CommercialObjectiveResponse[]>(
