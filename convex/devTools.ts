@@ -2,7 +2,8 @@ import { internalMutation, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { createAccount } from "@convex-dev/auth/server";
 import { internal } from "./_generated/api";
-import { roleValidator } from "./model/enums";
+import { roleValidator, leadStatusValidator } from "./model/enums";
+import { insertStageHistory } from "./model/stageHistory";
 
 // Outils dev uniquement — internes (jamais appelables par un client) : lancés
 // via `npx convex run devTools:setRole '{"email":"…","role":"admin"}'` avec la
@@ -18,6 +19,28 @@ export const setRole = internalMutation({
     if (!user) throw new Error(`Compte introuvable : ${args.email} (signup manquant)`);
     await ctx.db.patch(user._id, { role: args.role });
     return { userId: user._id, role: args.role };
+  },
+});
+
+// Réparation ponctuelle : force le statut d'un lead (+ trace d'historique),
+// ex. lead rétrogradé par erreur par un résultat d'appel « refus ». Lancé via
+// `npx convex run devTools:setLeadStatus '{"leadId":"…","status":"rdv_pris"}'`.
+export const setLeadStatus = internalMutation({
+  args: { leadId: v.id("leads"), status: leadStatusValidator },
+  handler: async (ctx, args) => {
+    const lead = await ctx.db.get(args.leadId);
+    if (!lead) throw new Error("Lead introuvable");
+    if (lead.status === args.status) return { changed: false, status: args.status };
+    await ctx.db.patch(args.leadId, { status: args.status });
+    await insertStageHistory(ctx, {
+      leadId: args.leadId,
+      ghlStageName: args.status,
+      saasStatus: args.status,
+      assignedToId: lead.assignedToId,
+      changedAt: Date.now(),
+      source: "manual",
+    });
+    return { changed: true, from: lead.status, to: args.status };
   },
 });
 

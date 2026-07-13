@@ -4,7 +4,7 @@ import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { callResultValidator } from "./model/enums";
 import type { CallResult, LeadStatus } from "./model/enums";
-import { requireUser, requireLeadWriteRole } from "./model/access";
+import { requireUser, requireLeadWriteRole, roleOf } from "./model/access";
 import { insertStageHistory } from "./model/stageHistory";
 
 // Portage de CallLogsService : le résultat d'appel dérive le statut du lead
@@ -82,6 +82,12 @@ export const logCall = mutation({
       : (CALL_RESULT_TO_LEAD_STATUS[args.result] ?? null);
 
     const patch: Record<string, unknown> = { lastContactAt: calledAt };
+    // Attribution : les leads GHL natifs arrivent sans setterId — le premier
+    // setter qui traite le lead devient son setter principal (les suivants
+    // restent visibles via assignedSetterIds, dérivé des callLogs).
+    if (lead.setterId === undefined && ["setter", "setter_lead"].includes(roleOf(user))) {
+      patch.setterId = user._id;
+    }
     // On ne régresse jamais un lead terminal, ni un lead avec un projet aval.
     if (
       derivedStatus &&

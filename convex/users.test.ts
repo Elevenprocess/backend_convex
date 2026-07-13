@@ -85,3 +85,24 @@ test("get : renvoie le user par id, null si supprimé ou id invalide", async () 
   expect(await asUser(t, adminId).query(api.users.get, { userId: delId })).toBeNull();
   expect(await asUser(t, adminId).query(api.users.get, { userId: "42" })).toBeNull();
 });
+
+test("directory : accessible à un setter, ne renvoie que id/nom/rôle", async () => {
+  const t = makeT();
+  const setterId = await insertUser(t, { role: "setter", name: "Nina" });
+  await insertUser(t, { role: "commercial", email: "c@ecoi.fr", name: "Vincent" });
+  const delId = await insertUser(t, { role: "setter", email: "old@ecoi.fr" });
+  await t.run(async (ctx: any) => ctx.db.patch(delId, { deletedAt: 1 }));
+
+  const dir = await asUser(t, setterId).query(api.users.directory, {});
+  expect(dir).toHaveLength(2);
+  const vincent = dir.find((u) => u.name === "Vincent");
+  expect(vincent?.role).toBe("commercial");
+  // Projection minimale : pas d'email ni de téléphone exposés.
+  expect(Object.keys(vincent ?? {}).sort()).toEqual(["_creationTime", "_id", "name", "role"]);
+});
+
+test("directory : refusé sans authentification", async () => {
+  const t = makeT();
+  await insertUser(t, { role: "setter" });
+  await expect(t.query(api.users.directory, {})).rejects.toThrow(/Non authentifié/);
+});

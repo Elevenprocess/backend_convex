@@ -81,3 +81,29 @@ test("upcomingCallbacks() renvoie les rappels planifiés", async () => {
   expect(cbs).toHaveLength(1);
 });
 
+
+test("logCall() attribue lead.setterId au premier setter qui appelle (lead GHL natif)", async () => {
+  const t = makeT();
+  const setterId = await insertUser(t, { role: "setter" });
+  const setter2Id = await insertUser(t, { role: "setter", email: "s2@ecoi.fr" });
+  const leadId = await t.run((ctx) =>
+    ctx.db.insert("leads", { source: "ghl", status: "nouveau", firstName: "Ghl" }),
+  );
+
+  await asUser(t, setterId).mutation(api.callLogs.logCall, { leadId, result: "joint" });
+  expect((await t.run((ctx) => ctx.db.get(leadId)))?.setterId).toBe(setterId);
+
+  // Un second setter n'écrase pas le setter principal.
+  await asUser(t, setter2Id).mutation(api.callLogs.logCall, { leadId, result: "joint" });
+  expect((await t.run((ctx) => ctx.db.get(leadId)))?.setterId).toBe(setterId);
+});
+
+test("logCall() d'un commercial ne s'approprie pas le lead (setterId intact)", async () => {
+  const t = makeT();
+  const commercialId = await insertUser(t, { role: "commercial" });
+  const leadId = await t.run((ctx) =>
+    ctx.db.insert("leads", { source: "ghl", status: "qualifie", firstName: "Ghl" }),
+  );
+  await asUser(t, commercialId).mutation(api.callLogs.logCall, { leadId, result: "joint" });
+  expect((await t.run((ctx) => ctx.db.get(leadId)))?.setterId).toBeUndefined();
+});

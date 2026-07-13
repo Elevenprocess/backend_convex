@@ -39,6 +39,20 @@ export const list = query({
   },
 });
 
+// Annuaire minimal (id, nom, rôle) ouvert à tout utilisateur connecté : sert à
+// résoudre les noms setter/commercial dans les listes, appels et fiches. La
+// fiche complète (emails, téléphones, activité) reste réservée via list().
+export const directory = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireUser(ctx);
+    const rows = await ctx.db.query("users").collect();
+    return rows
+      .filter((u) => u.deletedAt === undefined)
+      .map((u) => ({ _id: u._id, _creationTime: u._creationTime, name: u.name, role: u.role }));
+  },
+});
+
 export const create = mutation({
   args: {
     email: v.string(),
