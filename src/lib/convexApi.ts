@@ -664,3 +664,16 @@ export const ghlAppointmentsUpdate = makeFunctionReference<
 export const leadPresenceTouch = makeFunctionReference<'mutation', { leadId: string }, null>('leadPresence:touch')
 export const leadPresenceRelease = makeFunctionReference<'mutation', Record<string, never>, null>('leadPresence:release')
 export const leadPresenceList = makeFunctionReference<'query', Record<string, never>, Array<{ leadId: string; userId: string; userName: string; since: number }>>('leadPresence:list')
+
+// État d'acompte d'un dossier (badge fiche workflow — alertes délivrabilité)
+export type ConvexAcompteState = {
+  debriefId: string
+  echeancierSource: 'custom' | 'devis' | 'standard'
+  montantTotal: number | null
+  totalEncaisse: number | null
+  resteAPayer: number | null
+  aEncaisser: number
+  enRetard: number
+  tranches: Array<{ ordre: number; label: string; jalonKey: string | null; statut: string; montantPrevu: number | null; dateEcheance: string | null }>
+} | null
+export const paymentsAcompteStateByClient = makeFunctionReference<'query', { clientId: string }, ConvexAcompteState>('payments:acompteStateByClient')

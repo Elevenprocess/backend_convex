@@ -7,6 +7,9 @@ import { Icon, type IconName } from '../Icon'
 import { PhaseHelp } from './PhaseHelp'
 import type { SubstepResponse, UpdateSubstepPatch, UserResponse, WorkflowPhase } from '../../lib/types'
 import type { ClientResponse } from '../../lib/types'
+import { useQuery } from 'convex/react'
+import { convexAuthEnabled } from '../../lib/convex'
+import { paymentsAcompteStateByClient } from '../../lib/convexApi'
 
 // Pastille-icône en tête de chaque section, pour ancrer visuellement les 3 temps
 // du dossier (préparation terrain → démarches admin → installation).
@@ -77,6 +80,29 @@ function CollapsibleWfSection({
   )
 }
 
+// Bannière « acomptes » : état de l'échéancier du dossier (réactif — un
+// encaissement côté Finances met la fiche à jour en direct). Rien si le
+// dossier n'a pas d'échéancier ou plus rien à encaisser.
+function AcompteBanner({ clientId }: { clientId: string }) {
+  const state = useQuery(paymentsAcompteStateByClient, convexAuthEnabled ? { clientId } : 'skip')
+  if (!state) return null
+  const dues = state.tranches.filter((t) => t.statut === 'a_encaisser' || t.statut === 'en_retard')
+  if (dues.length === 0) return null
+  const hasRetard = state.enRetard > 0
+  const euro = (n: number | null) => (n == null ? '' : ` (${n.toLocaleString('fr-FR')} €)`)
+  return (
+    <div className={`wf-acompte-banner${hasRetard ? ' is-retard' : ''}`} role="alert">
+      <Icon name={hasRetard ? 'flame' : 'clock'} size={16} strokeWidth={2.4} />
+      <span>
+        <strong>{hasRetard ? 'Acompte en retard' : 'Acompte à encaisser'}</strong>
+        {' — '}
+        {dues.map((t) => `« ${t.label} »${euro(t.montantPrevu)}`).join(' · ')}
+        {'. Les jalons suivants sont bloqués jusqu\u2019à encaissement (Finances).'}
+      </span>
+    </div>
+  )
+}
+
 export function WorkflowBoard({ substeps, onMutate, today, users, client, savingId, onDocsChanged, onTechniciensChanged, canEditPhase }: Props) {
   const grouped = groupSubsteps(substeps)
   const cancelled = substeps.some((s) => s.status === 'annule')
@@ -103,6 +129,7 @@ export function WorkflowBoard({ substeps, onMutate, today, users, client, saving
           <span><strong>Vente annulée</strong> — VT non validée. Dossier bloqué, finances à zéro (rien à encaisser).</span>
         </div>
       )}
+      {client?.id && <AcompteBanner clientId={client.id} />}
       {overallTotal > 0 && (
         <div className={`wf-overall${overallPct === 100 ? ' is-complete' : ''}`}>
           <div

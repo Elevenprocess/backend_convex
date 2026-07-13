@@ -5636,6 +5636,12 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
   border-radius: 12px; padding: 11px 14px; margin-bottom: 14px;
 }
 .wf-cancel-banner svg { flex-shrink: 0; }
+
+/* Bannière acomptes (fiche workflow) : tranche due → ambre ; en retard → rouille.
+   Les jalons suivants sont bloqués côté serveur tant que non encaissé. */
+.wf-acompte-banner { display: flex; align-items: flex-start; gap: 8px; padding: 10px 14px; border-radius: 12px; background: var(--color-or-tint); color: var(--color-or-dark); border: 1px solid color-mix(in srgb, var(--color-or-dark) 25%, transparent); font-size: 12.5px; line-height: 1.45; margin-bottom: 12px; }
+.wf-acompte-banner svg { flex-shrink: 0; margin-top: 1px; }
+.wf-acompte-banner.is-retard { background: var(--color-rouille-tint); color: var(--color-rouille); border-color: color-mix(in srgb, var(--color-rouille) 30%, transparent); }
 .wf-board-cancelled .wf-overall,
 .wf-board-cancelled .wf-section { opacity: .62; }
 
