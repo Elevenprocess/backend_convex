@@ -598,3 +598,68 @@ export const syncScheduled = internalAction({
     return null;
   },
 });
+
+// ─── Mapping commerciaux GHL ↔ comptes Velora ────────────────────────────────
+// Relie chaque membre des calendriers secteur GHL (Nord/Sud/Est/Ouest) à son
+// compte users Velora : match par email (index "email"), sinon par nom plié ;
+// compte créé (role commercial, team closing) s'il n'existe pas — il sera
+// adopté par Convex Auth au premier login Google sur le même email. Pose
+// ghlUserId (résolution commerciale des RDV sync) et ghlCalendarId quand un
+// seul secteur. Idempotent.
+export const mapGhlCommercials = internalMutation({
+  args: {
+    pairs: v.array(
+      v.object({
+        ghlUserId: v.string(),
+        email: v.string(),
+        name: v.string(),
+        calendarId: v.optional(v.string()),
+      }),
+    ),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const fold = (s: string) =>
+      s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z]/g, "");
+    const allUsers = await ctx.db.query("users").collect();
+    const report = { linked: [] as string[], created: [] as string[], already: [] as string[] };
+
+    for (const pair of args.pairs) {
+      const email = pair.email.trim().toLowerCase();
+      let user =
+        (email
+          ? await ctx.db.query("users").withIndex("email", (q) => q.eq("email", email)).unique()
+          : null) ??
+        allUsers.find((u) => u.deletedAt === undefined && fold(u.name ?? "") === fold(pair.name)) ??
+        null;
+
+      if (user) {
+        if (user.ghlUserId === pair.ghlUserId) {
+          report.already.push(`${pair.name} → ${user.name ?? user.email}`);
+          continue;
+        }
+        if (args.dryRun !== true) {
+          await ctx.db.patch(user._id, {
+            ghlUserId: pair.ghlUserId,
+            ...(pair.calendarId !== undefined ? { ghlCalendarId: pair.calendarId } : {}),
+          });
+        }
+        report.linked.push(`${pair.name} → ${user.name ?? user.email}`);
+      } else {
+        if (args.dryRun !== true) {
+          await ctx.db.insert("users", {
+            email,
+            name: pair.name,
+            role: "commercial",
+            team: "closing",
+            active: true,
+            ghlUserId: pair.ghlUserId,
+            ...(pair.calendarId !== undefined ? { ghlCalendarId: pair.calendarId } : {}),
+          });
+        }
+        report.created.push(`${pair.name} (${email})`);
+      }
+    }
+    return { dryRun: args.dryRun === true, ...report };
+  },
+});
