@@ -419,6 +419,15 @@ export const usersList = makeFunctionReference<
   ConvexUserDoc[]
 >('users:list')
 
+// Annuaire minimal (id, nom, rôle) accessible à tous les rôles connectés —
+// résolution des noms setter/commercial quand users:list est interdit.
+export type ConvexUserDirectoryEntry = { _id: string; _creationTime: number; name?: string; role?: string }
+export const usersDirectory = makeFunctionReference<
+  'query',
+  Record<string, never>,
+  ConvexUserDirectoryEntry[]
+>('users:directory')
+
 export const leadsList = makeFunctionReference<
   'query',
   { status?: string; setterId?: string; assignedToId?: string; city?: string; search?: string; paginationOpts: PaginationOptsArg },
@@ -450,6 +459,10 @@ export const clientsList = makeFunctionReference<
 >('clients:list')
 
 export const leadsGet = makeFunctionReference<'query', { leadId: string }, ConvexLeadDoc | null>('leads:get')
+
+// Fiche détail enrichie (assignedSetterIds, agrégats appels/RDV) — même
+// contrainte que leadsListEnriched : `now` stable entre les rendus.
+export const leadsGetEnriched = makeFunctionReference<'query', { leadId: string; now: number }, ConvexLeadDoc | null>('leads:getEnriched')
 
 export const leadsStats = makeFunctionReference<
   'query',

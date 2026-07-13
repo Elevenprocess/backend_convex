@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 import { getFunctionName } from 'convex/server'
 import { convexClient } from './convex'
-import { analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsGet, leadsListEnriched, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, substepsList, usersGet, usersList } from './convexApi'
+import { analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsListEnriched, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, substepsList, usersGet, usersList, usersDirectory, leadsGetEnriched } from './convexApi'
+import type { ConvexUserDoc } from './convexApi'
 import { mapConvexAcompte, mapConvexCallLog, mapConvexClient, mapConvexCommercialObjective, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexSubstep, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
 import type {
@@ -153,7 +154,10 @@ export function useConvexRdvList(filters?: {
 }
 
 export function useConvexLead(id: string | undefined): Async<LeadResponse> {
-  const res = useQuery(leadsGet, id ? { leadId: id } : 'skip')
+  // Variante enrichie : la fiche détail a besoin d'assignedSetterIds (setters
+  // dérivés des appels — les leads GHL natifs n'ont pas de setterId principal).
+  const now = useStableNow()
+  const res = useQuery(leadsGetEnriched, id ? { leadId: id, now } : 'skip')
   const data = useMemo(() => (res ? mapConvexLead(res) : (res === null ? null : null)), [res])
   return { data, loading: !!id && res === undefined, error: null, refetch: noop }
 }
@@ -543,16 +547,19 @@ export function useConvexUser(id: string | undefined): Async<UserResponse> {
 const USERS_LIST_ROLES = new Set(['admin', 'setter_lead', 'commercial_lead'])
 
 export function useConvexUsers(): Async<UserResponse[]> {
-  // users:list exige un rôle lead/admin côté serveur — pour les autres rôles
-  // on ne lance pas la requête (useQuery propagerait l'erreur au rendu) et on
-  // renvoie une liste vide : les pages tolèrent l'absence de noms.
+  // users:list (fiche complète) exige un rôle lead/admin côté serveur — les
+  // autres rôles chargent l'annuaire minimal users:directory (id, nom, rôle)
+  // pour que les noms setter/commercial restent résolus (appels, fiches, suivi).
   const role = useAuth((s) => s.realUser?.role)
-  const allowed = role !== undefined && role !== null && USERS_LIST_ROLES.has(role)
+  const known = role !== undefined && role !== null
+  const allowed = known && USERS_LIST_ROLES.has(role)
   const rows = useQuery(usersList, allowed ? {} : 'skip')
+  const dirRows = useQuery(usersDirectory, known && !allowed ? {} : 'skip')
   const data = useMemo(() => {
-    if (!allowed) return []
-    if (rows === undefined) return null
-    return rows.map(mapConvexUser)
-  }, [allowed, rows])
-  return { data, loading: allowed && rows === undefined, error: null, refetch: noop }
+    if (!known) return []
+    if (allowed) return rows === undefined ? null : rows.map(mapConvexUser)
+    return dirRows === undefined ? null : dirRows.map((u) => mapConvexUser(u as ConvexUserDoc))
+  }, [known, allowed, rows, dirRows])
+  const loading = known && (allowed ? rows === undefined : dirRows === undefined)
+  return { data, loading, error: null, refetch: noop }
 }

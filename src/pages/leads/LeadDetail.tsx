@@ -186,7 +186,10 @@ export function LeadDetail() {
     )
   }
 
-  const setter = lead.setterId ? userMap.get(lead.setterId) : undefined
+  // Repli sur assignedSetterIds (dérivé des appels) : les leads GHL natifs
+  // n'ont pas toujours de setterId principal — même logique que le suivi.
+  const setterId = lead.setterId ?? lead.assignedSetterIds?.[0]
+  const setter = setterId ? userMap.get(setterId) : undefined
   const commercial = lead.assignedToId ? userMap.get(lead.assignedToId) : undefined
 
   // Côté commercial, la fiche est ouverte comme « client » : on n'affiche jamais le
