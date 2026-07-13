@@ -1,10 +1,12 @@
-import { useEffect, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useSyncExternalStore } from 'react'
+import { useQuery } from 'convex/react'
 import { io, type Socket } from 'socket.io-client'
 import { API_BASE } from './api'
 import { shouldSurfaceNotification } from './realtimeNotify'
 import { createRealtimeRefreshCoalescer, REALTIME_REFRESH_COOLDOWN_MS } from './realtimeRefreshQueue'
 import { useAuth } from './auth'
-import { convexAuthEnabled } from './convex'
+import { convexAuthEnabled, convexClient } from './convex'
+import { leadPresenceList, leadPresenceRelease, leadPresenceTouch } from './convexApi'
 
 export const REALTIME_REFRESH_EVENT = 'ecoi:realtime-refresh'
 
@@ -33,7 +35,7 @@ function notifyLeadLockChange() {
   leadLockSubscribers.forEach((fn) => fn())
 }
 
-export function useLeadLocks(): ReadonlyMap<string, LeadLockInfo> {
+function useLeadLocksSocket(): ReadonlyMap<string, LeadLockInfo> {
   return useSyncExternalStore(
     (listener) => {
       leadLockSubscribers.add(listener)
@@ -43,6 +45,29 @@ export function useLeadLocks(): ReadonlyMap<string, LeadLockInfo> {
     () => leadLocksSnapshot,
   )
 }
+
+// Mode Convex : la présence vit dans la table leadPresence (heartbeat TTL 60 s)
+// et leadPresence:list est une query réactive — chaque touch/release des autres
+// onglets met la map à jour toute seule.
+function useLeadLocksConvex(): ReadonlyMap<string, LeadLockInfo> {
+  const rows = useQuery(leadPresenceList, {})
+  return useMemo(() => {
+    const map = new Map<string, LeadLockInfo>()
+    for (const r of rows ?? []) {
+      map.set(r.leadId, {
+        leadId: r.leadId,
+        setterId: r.userId,
+        setterName: r.userName,
+        since: new Date(r.since).toISOString(),
+      })
+    }
+    return map as ReadonlyMap<string, LeadLockInfo>
+  }, [rows])
+}
+
+export const useLeadLocks: typeof useLeadLocksSocket = convexAuthEnabled
+  ? useLeadLocksConvex
+  : useLeadLocksSocket
 
 // Store globale (singleton) des utilisateurs en ligne (présence WebSocket).
 // Alimentée par les events presence:* émis par le gateway backend.
@@ -70,15 +95,44 @@ export function useOnlineUsers(): ReadonlySet<string> {
 
 let activeSocket: Socket | null = null
 
+// Heartbeat Convex : tant qu'un prospect est ouvert, on re-touch toutes les
+// 25 s (TTL serveur 60 s) — un onglet fermé/crashé expire donc tout seul.
+let presenceLeadId: string | null = null
+let presenceTimer: number | null = null
+const PRESENCE_HEARTBEAT_MS = 25_000
+
 // Émet le verrou côté setter : on s'auto-déclare comme "je regarde ce lead".
 export function emitLeadSelect(leadId: string, setterId: string, setterName: string) {
   if (!leadId || !setterId) return
+  if (convexAuthEnabled) {
+    if (!convexClient) return
+    presenceLeadId = leadId
+    void convexClient.mutation(leadPresenceTouch, { leadId }).catch(() => {})
+    if (presenceTimer !== null) window.clearInterval(presenceTimer)
+    presenceTimer = window.setInterval(() => {
+      if (presenceLeadId && convexClient) {
+        void convexClient.mutation(leadPresenceTouch, { leadId: presenceLeadId }).catch(() => {})
+      }
+    }, PRESENCE_HEARTBEAT_MS)
+    return
+  }
   activeSocket?.emit('lead:select', { leadId, setterId, setterName })
 }
 
 // Libère le verrou : on a quitté ce lead (close drawer, change lead, navigate).
 export function emitLeadDeselect(leadId: string) {
   if (!leadId) return
+  if (convexAuthEnabled) {
+    if (presenceLeadId === leadId) {
+      presenceLeadId = null
+      if (presenceTimer !== null) {
+        window.clearInterval(presenceTimer)
+        presenceTimer = null
+      }
+      if (convexClient) void convexClient.mutation(leadPresenceRelease, {}).catch(() => {})
+    }
+    return
+  }
   activeSocket?.emit('lead:deselect', { leadId })
 }
 

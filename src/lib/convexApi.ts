@@ -637,3 +637,8 @@ export const ghlAppointmentsUpdate = makeFunctionReference<
   },
   { ok: boolean }
 >('ghlAppointments:updateAppointment')
+
+// ─── Présence « setter en cours sur ce lead » (remplace le socket NestJS) ─────
+export const leadPresenceTouch = makeFunctionReference<'mutation', { leadId: string }, null>('leadPresence:touch')
+export const leadPresenceRelease = makeFunctionReference<'mutation', Record<string, never>, null>('leadPresence:release')
+export const leadPresenceList = makeFunctionReference<'query', Record<string, never>, Array<{ leadId: string; userId: string; userName: string; since: number }>>('leadPresence:list')
