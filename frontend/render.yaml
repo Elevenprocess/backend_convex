@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: ecoi-frontend
+    runtime: static
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://api.electroconceptoi.com
+      - key: VITE_REALTIME_URL
+        value: https://api.electroconceptoi.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

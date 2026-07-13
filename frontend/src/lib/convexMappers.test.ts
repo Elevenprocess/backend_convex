@@ -1,0 +1,150 @@
+import { describe, expect, it } from 'vitest'
+import { mapConvexClient, mapConvexDebrief, mapConvexDevis, mapConvexLead, mapConvexProject, mapConvexRdv, mapConvexUser } from './convexMappers'
+import type { ConvexClientDoc, ConvexDebriefDoc, ConvexDevisDoc, ConvexLeadDoc, ConvexProjectDoc, ConvexRdvDoc, ConvexUserDoc } from './convexApi'
+
+const T0 = 1783181401517 // _creationTime de référence (ms)
+
+describe('mapConvexUser', () => {
+  it('applique le défaut setter/active=true comme roleOf() serveur', () => {
+    const doc: ConvexUserDoc = { _id: 'u1', _creationTime: T0, email: 'a@b.c', name: 'Alice' }
+    const u = mapConvexUser(doc)
+    expect(u.id).toBe('u1')
+    expect(u.role).toBe('setter')
+    expect(u.active).toBe(true)
+    expect(u.createdAt).toBe(new Date(T0).toISOString())
+  })
+
+  it('conserve rôle/team/active explicites', () => {
+    const doc: ConvexUserDoc = {
+      _id: 'u2', _creationTime: T0, email: 'x@y.z', name: 'Bob',
+      role: 'admin', team: 'closing', active: false,
+    }
+    const u = mapConvexUser(doc)
+    expect(u.role).toBe('admin')
+    expect(u.team).toBe('closing')
+    expect(u.active).toBe(false)
+  })
+
+  it('retombe sur l’email quand le nom manque (compte signUp)', () => {
+    const u = mapConvexUser({ _id: 'u3', _creationTime: T0, email: 'seul@velora.fr' })
+    expect(u.name).toBe('seul@velora.fr')
+  })
+})
+
+describe('mapConvexLead', () => {
+  it('nullifie les optionnels absents et convertit les timestamps en ISO', () => {
+    const doc: ConvexLeadDoc = {
+      _id: 'l1', _creationTime: T0, source: 'manual', status: 'rdv_pris',
+      firstName: 'Jean', latestCallAt: T0 + 1000, setterId: 'u1',
+    }
+    const l = mapConvexLead(doc)
+    expect(l.id).toBe('l1')
+    expect(l.lastName).toBeNull()
+    expect(l.city).toBeNull()
+    expect(l.latestCallAt).toBe(new Date(T0 + 1000).toISOString())
+    expect(l.assignedSetterIds).toEqual(['u1'])
+    expect(l.callCount).toBe(0)
+  })
+})
+
+describe('mapConvexRdv', () => {
+  it('sérialise montantTotal en string (convention REST) et scheduledAt en ISO', () => {
+    const doc: ConvexRdvDoc = {
+      _id: 'r1', _creationTime: T0, leadId: 'l1',
+      locationType: 'visio', status: 'planifie', scheduledAt: T0 + 5000, montantTotal: 12500,
+    }
+    const r = mapConvexRdv(doc)
+    expect(r.montantTotal).toBe('12500')
+    expect(r.scheduledAt).toBe(new Date(T0 + 5000).toISOString())
+    expect(r.lead).toBeNull()
+  })
+
+  it('scheduledAt absent → retombe sur _creationTime (le type REST est non-null)', () => {
+    const r = mapConvexRdv({ _id: 'r2', _creationTime: T0, leadId: 'l1', locationType: 'visio', status: 'planifie' })
+    expect(r.scheduledAt).toBe(new Date(T0).toISOString())
+  })
+})
+
+describe('mapConvexDevis', () => {
+  it('convertit montants number→string, storageId→storageKey, timestamps→ISO', () => {
+    const d = mapConvexDevis({
+      _id: 'dv1', _creationTime: T0, leadId: 'l1', commercialId: 'u1',
+      status: 'brouillon', filename: 'devis.pdf', sizeBytes: 1024, storageId: 'stor_1',
+      ocrStatus: 'done', montantTtc: 24000, montantHt: 20000, puissanceKwc: 6, nbPanneaux: 12,
+      lignes: [], echeancier: [], signedAt: T0 + 1000,
+    } as ConvexDevisDoc)
+    expect(d.id).toBe('dv1')
+    expect(d.storageKey).toBe('stor_1')
+    expect(d.montantTtc).toBe('24000')
+    expect(d.puissanceKwc).toBe('6')
+    expect(d.nbPanneaux).toBe(12)
+    expect(d.montantTva).toBeNull()
+    expect(d.projectId).toBeNull()
+    expect(d.signedAt).toBe(new Date(T0 + 1000).toISOString())
+    expect(d.createdAt).toBe(new Date(T0).toISOString())
+  })
+})
+
+describe('mapConvexClient', () => {
+  const base: ConvexClientDoc = {
+    _id: 'c1', _creationTime: T0, leadId: 'l1',
+    statusGlobal: 'en_cours', currentPhase: 'installation', blocked: false,
+    techniciens: [{ id: 'u1', name: 'Tech' }], missingDocs: 2,
+    steps: {
+      installation: { status: 'fait', datePlanifiee: '2026-06-01', dateRealisee: '2026-06-02', problemReason: null, responsableId: 'u1' },
+    },
+    lead: { fullName: 'Jean Dupont', city: 'Lyon', phone: '+262690000000' },
+  }
+
+  it('mappe le décor serveur (steps/lead/techniciens/missingDocs)', () => {
+    const c = mapConvexClient(base)
+    expect(c.id).toBe('c1')
+    expect(c.missingDocsCount).toBe(2)
+    expect(c.techniciens).toEqual([{ id: 'u1', name: 'Tech' }])
+    expect(c.lead).toEqual({ fullName: 'Jean Dupont', city: 'Lyon', phone: '+262690000000' })
+    expect(c.steps.installation?.status).toBe('fait')
+    expect(c.steps.installation?.dateRealisee).toBe('2026-06-02')
+    expect(c.currentPhase).toBe('installation')
+  })
+
+  it('décor absent → valeurs neutres (jamais de crash côté pipeline)', () => {
+    const c = mapConvexClient({
+      _id: 'c2', _creationTime: T0, leadId: 'l2',
+      statusGlobal: 'signe', currentPhase: 'vt', blocked: true,
+      techniciens: [], missingDocs: 0, steps: {}, lead: { fullName: null, city: null, phone: null },
+    })
+    expect(c.steps).toEqual({})
+    expect(c.projectId).toBeNull()
+    expect(c.signedAt).toBeNull()
+    expect(c.blocked).toBe(true)
+  })
+})
+
+describe('mapConvexProject', () => {
+  it('mappe le doc projet et nullifie les optionnels', () => {
+    const p = mapConvexProject({
+      _id: 'p1', _creationTime: T0, leadId: 'l1', commercialId: 'u1',
+      name: 'Installation 8 kWc', status: 'signe', city: 'Lyon',
+    } as ConvexProjectDoc)
+    expect(p.id).toBe('p1')
+    expect(p.addressLine).toBeNull()
+    expect(p.city).toBe('Lyon')
+    expect(p.status).toBe('signe')
+  })
+})
+
+describe('mapConvexDebrief', () => {
+  it('sérialise montants en string et nullifie les optionnels', () => {
+    const d = mapConvexDebrief({
+      _id: 'd1', _creationTime: T0, commercialId: 'u1', outcome: 'vente',
+      acceptanceFactors: ['prix'], montantTotal: 15000, acompteAmount: 6000, acomptePercent: 40,
+    } as ConvexDebriefDoc)
+    expect(d.id).toBe('d1')
+    expect(d.outcome).toBe('vente')
+    expect(d.montantTotal).toBe('15000')
+    expect(d.acompteAmount).toBe('6000')
+    expect(d.acomptePercent).toBe(40)
+    expect(d.nonSaleReason).toBeNull()
+    expect(d.projectId).toBeNull()
+  })
+})

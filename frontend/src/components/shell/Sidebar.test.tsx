@@ -1,0 +1,94 @@
+import { describe, it, expect, beforeEach } from 'vitest'
+import { render, screen, within, fireEvent } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+import type { UserResponse } from '../../lib/types'
+import { useAuth } from '../../lib/auth'
+import { Sidebar } from './Sidebar'
+
+function setUser(role: UserResponse['role']) {
+  useAuth.setState({ user: { id: 'u-1', name: 'Tech Un', role, active: true } as UserResponse })
+}
+
+function renderSidebar() {
+  return render(
+    <MemoryRouter initialEntries={['/overview']}>
+      <Sidebar />
+    </MemoryRouter>,
+  )
+}
+
+beforeEach(() => {
+  window.localStorage.clear()
+  useAuth.setState({ user: null })
+})
+
+describe('Sidebar — navigation par rôle', () => {
+  it('limite le menu technicien au planning et à ses dossiers', () => {
+    setUser('technicien')
+    renderSidebar()
+    const nav = screen.getByRole('button', { name: /Rechercher/i }).parentElement!
+
+    expect(within(nav).getByRole('link', { name: /Planning/i })).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: /Mes dossiers/i })).toBeInTheDocument()
+
+    expect(within(nav).queryByRole('link', { name: /Vue d'ensemble/i })).not.toBeInTheDocument()
+    expect(within(nav).queryByRole('link', { name: /Statistiques/i })).not.toBeInTheDocument()
+    expect(within(nav).queryByRole('link', { name: /Calendrier RDV/i })).not.toBeInTheDocument()
+  })
+
+  it('masque le Calendrier RDV au commercial individuel (vue épurée)', () => {
+    setUser('commercial')
+    renderSidebar()
+    const nav = screen.getByRole('button', { name: /Rechercher/i }).parentElement!
+
+    expect(within(nav).getByRole('link', { name: /Vue d'ensemble/i })).toBeInTheDocument()
+    expect(within(nav).queryByRole('link', { name: /Calendrier RDV/i })).not.toBeInTheDocument()
+  })
+
+  it('garde le Calendrier RDV pour le commercial_lead', () => {
+    setUser('commercial_lead')
+    renderSidebar()
+
+    expect(screen.getByRole('link', { name: 'Calendrier RDV' })).toBeInTheDocument()
+  })
+
+  it('groupe le setter par Acquisition et Calendriers', () => {
+    setUser('setter')
+    renderSidebar()
+
+    expect(screen.getByRole('navigation', { name: 'Statistiques' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Acquisition' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Calendriers' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Prospects' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Client' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Calendrier RDV' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Planning' })).not.toBeInTheDocument()
+  })
+
+  it('affiche à l’admin Acquisition, Délivrabilité et les deux calendriers', () => {
+    setUser('admin')
+    renderSidebar()
+
+    expect(screen.getByRole('navigation', { name: 'Statistiques' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Acquisition' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Délivrabilité' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Calendriers' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Prospects' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Client' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Dossiers' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Calendrier RDV' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Planning' })).toBeInTheDocument()
+  })
+
+  it('permet de replier une section métier sans masquer les autres groupes', () => {
+    setUser('admin')
+    renderSidebar()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Acquisition' }))
+
+    expect(screen.queryByRole('link', { name: 'Prospects' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Client' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Dossiers' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Calendrier RDV' })).toBeInTheDocument()
+  })
+})

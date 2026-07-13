@@ -1,0 +1,1204 @@
+import type {
+  AcompteResponse,
+  AdChannel,
+  AdsLevel,
+  AdsReport,
+  RecordEcheancePatch,
+  UpdateFinancingPatch,
+  EcheancierTranchePatch,
+  ClientResponse,
+  CommercialObjectiveResponse,
+  DebriefResponse,
+  Devis,
+  InterventionResponse,
+  InterventionStatus,
+  InterventionType,
+  LeadResponse,
+  NotificationResponse,
+  ProjectAttachmentKind,
+  ProjectAttachmentResponse,
+  ProjectDetailResponse,
+  ProjectResponse,
+  ProjectStatus,
+  SourceMapEntry,
+  SubstepResponse,
+  SubstepDocument,
+  UnmappedSource,
+  UpdateSubstepPatch,
+  UpsertCommercialObjectivePayload,
+} from './types'
+import { notifyRealtimeRefresh } from './realtime'
+import { convexAuthEnabled, convexClient } from './convex'
+import { clientsAssignTechniciens, clientsBootstrap, clientsCreateManualDossier, clientsList, debriefsCreate, debriefsCreateForLead, debriefsGet, debriefsListByLead, debriefsListByProject, devisCreate, devisGenerateUploadUrl, devisGetById, devisListByLead, devisMarkAsSigned, devisRemove, devisRetryOcr, devisUpdate, documentsAttachToSubstep, documentsGenerateUploadUrl, documentsGetUrl, documentsListBySubstep, documentsRemove, paymentsGetAcompte, paymentsListAcomptes, paymentsRecordEcheance, paymentsResetEcheancier, paymentsSetEcheancier, paymentsUpdateFinancing, projectAttachmentsCreate, projectAttachmentsGenerateUploadUrl, projectAttachmentsGetUrl, projectAttachmentsListByProject, projectAttachmentsRemove, projectsCreate, projectsFicheByLead, projectsGet, projectsListByLead, substepsGet, substepsList, substepsResolveProblem, substepsUpdate, type ConvexAttachmentSummary } from './convexApi'
+import { mapConvexAcompte, mapConvexClient, mapConvexDebrief, mapConvexDevis, mapConvexProject, mapConvexSubstep, mapConvexSubstepDocument } from './convexMappers'
+
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
+
+// Un débrief (vente/non-vente) impacte les analytics (ventes, facteurs, funnel),
+// le statut/RDV du lead et les projets. On invalide ces caches front après
+// création/suppression pour que le dashboard reflète immédiatement la vente.
+const DEBRIEF_REFRESH_PATHS = ['/analytics/summary', '/analytics/funnel', '/analytics/debriefs', '/leads', '/rdv']
+function bustDebriefCaches() {
+  notifyRealtimeRefresh({ event: 'debrief:changed', paths: DEBRIEF_REFRESH_PATHS })
+}
+
+// Une mutation de sous-étape (statut, date, technicien, annulation VT) change le
+// statut global du dossier (clients) et l'échéancier finances. On invalide ces
+// caches front pour que la fiche client (section « non validés ») et les
+// finances reflètent immédiatement le changement.
+const WORKFLOW_REFRESH_PATHS = ['/clients', '/substeps', '/payments/acomptes']
+function bustWorkflowCaches() {
+  notifyRealtimeRefresh({ event: 'workflow:changed', paths: WORKFLOW_REFRESH_PATHS })
+}
+
+export function buildApiUrl(path: string): string {
+  if (path.startsWith('http')) return path
+
+  const base = API_BASE.replace(/\/$/, '')
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+
+  // In production, VITE_API_URL can point to the public /api prefix so SPA
+  // routes like /leads keep rendering the React page instead of raw JSON.
+  // Keep better-auth paths as /api/auth/*, not /api/api/auth/*.
+  if (base.endsWith('/api') && normalizedPath.startsWith('/api/')) {
+    return `${base.slice(0, -4)}${normalizedPath}`
+  }
+
+  return `${base}${normalizedPath}`
+}
+
+// Endpoints publics (/debrief-link/*) : servis par les http actions Convex
+// (domaine .convex.site) en mode Convex, sinon par l'API NestJS. L'URL site se
+// dérive de VITE_CONVEX_URL (.convex.cloud → .convex.site).
+const CONVEX_SITE_BASE = (import.meta.env.VITE_CONVEX_URL as string | undefined)
+  ?.replace(/\.convex\.cloud\/?$/, '.convex.site')
+
+export function buildPublicLinkUrl(path: string): string {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  if (convexAuthEnabled && CONVEX_SITE_BASE) return `${CONVEX_SITE_BASE}${normalizedPath}`
+  return buildApiUrl(normalizedPath)
+}
+
+export class ApiError extends Error {
+  status: number
+  code?: string
+  /** Corps JSON brut de la réponse d'erreur (ex. { lead } sur un 409 doublon). */
+  data?: unknown
+  constructor(status: number, message: string, code?: string, data?: unknown) {
+    super(message)
+    this.status = status
+    this.code = code
+    this.data = data
+  }
+}
+
+type FetchOpts = {
+  method?: string
+  body?: unknown
+  query?: Record<string, string | number | undefined | null>
+  signal?: AbortSignal
+  // Quand true, on n'ajoute PAS le header X-View-As-User-Id même si une
+  // impersonation est mémorisée. Utilisé par hydrate() pour résoudre le VRAI
+  // user (et la cible) sans muter localStorage en plein vol (cf. race condition
+  // entre deux hydrate() concurrents qui faisait sauter le bandeau « voir en tant que »).
+  skipViewAs?: boolean
+}
+
+export async function api<T>(path: string, opts: FetchOpts = {}): Promise<T> {
+  // Mode Convex : le backend NestJS n'est pas le nôtre. Les fonctions câblées
+  // Convex court-circuitent AVANT d'arriver ici ; tout ce qui atteint api() est
+  // non porté → on rejette sans requête réseau (plus de 500 sur
+  // api.electroconceptoi.com). Les appelants impératifs .catch() déjà.
+  if (convexAuthEnabled) {
+    throw new ApiError(0, `Indisponible en mode Convex (endpoint NestJS non porté : ${path})`, 'CONVEX_MODE')
+  }
+  const { method = 'GET', body, query, signal, skipViewAs = false } = opts
+
+  const url = new URL(buildApiUrl(path))
+  if (query) {
+    for (const [k, v] of Object.entries(query)) {
+      if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v))
+    }
+  }
+
+  const init: RequestInit = {
+    method,
+    credentials: 'include',
+    signal,
+    headers: { Accept: 'application/json' },
+  }
+  if (body !== undefined) {
+    init.body = JSON.stringify(body)
+    ;(init.headers as Record<string, string>)['Content-Type'] = 'application/json'
+  }
+  // Impersonation : si un viewAsUserId est mémorisé (admin → quiconque,
+  // commercial → setter en lecture seule), on l'envoie en header pour que
+  // le back applique les permissions de l'overlay sur les GET.
+  if (typeof window !== 'undefined' && !skipViewAs) {
+    const viewAsId = window.localStorage.getItem('ecoi.viewAsUserId')
+    if (viewAsId) {
+      ;(init.headers as Record<string, string>)['X-View-As-User-Id'] = viewAsId
+    }
+  }
+
+  const res = await fetch(url.toString(), init)
+  const text = await res.text()
+  const data = text ? safeParse(text) : null
+
+  if (!res.ok) {
+    const msg = extractApiErrorMessage(data, `${res.status} ${res.statusText}`)
+    const code = data && typeof data === 'object' && 'code' in data ? (data as { code?: string }).code : undefined
+    throw new ApiError(res.status, msg, code, data)
+  }
+  return data as T
+}
+
+function safeParse(s: string): unknown {
+  try { return JSON.parse(s) } catch { return s }
+}
+
+function extractApiErrorMessage(data: unknown, fallback: string): string {
+  if (typeof data === 'string') return data || fallback
+  if (!data || typeof data !== 'object') return fallback
+  const obj = data as Record<string, unknown>
+  const message = obj.message
+  const fromMessage = formatUnknownErrorMessage(message)
+  if (fromMessage) return fromMessage
+  const fromErrors = formatUnknownErrorMessage(obj.errors)
+  if (fromErrors) return fromErrors
+  const fromDetails = formatUnknownErrorMessage(obj.details)
+  if (fromDetails) return fromDetails
+  return fallback
+}
+
+function formatUnknownErrorMessage(value: unknown): string | null {
+  if (!value) return null
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) {
+    const parts = value.map(formatUnknownErrorMessage).filter(Boolean)
+    return parts.length ? parts.join(' · ') : null
+  }
+  if (typeof value !== 'object') return String(value)
+
+  const obj = value as Record<string, unknown>
+  if (Array.isArray(obj.issues)) return formatZodIssues(obj.issues)
+  if (Array.isArray(obj.errors)) return formatZodIssues(obj.errors)
+  if (typeof obj.message === 'string') return obj.message
+  return JSON.stringify(obj)
+}
+
+function formatZodIssues(issues: unknown[]): string | null {
+  const parts = issues.map((issue) => {
+    if (!issue || typeof issue !== 'object') return String(issue)
+    const obj = issue as Record<string, unknown>
+    const path = Array.isArray(obj.path) ? obj.path.join('.') : ''
+    const message = typeof obj.message === 'string' ? obj.message : 'valeur invalide'
+    return path ? `${path}: ${message}` : message
+  })
+  return parts.length ? parts.join(' · ') : null
+}
+
+// ─── Devis (Solteo PDF integration) ──────────────────────
+// Upload uses FormData (multipart), so we bypass the generic `api<T>` helper
+// which assumes JSON. The other two endpoints use the standard helper.
+export async function uploadDevis(
+  leadId: string,
+  rdvId: string | undefined,
+  file: File,
+  meta?: { projectName?: string; installationAddress?: string; projectId?: string },
+): Promise<Devis> {
+  const fd = new FormData()
+  fd.append('leadId', leadId)
+  if (rdvId) fd.append('rdvId', rdvId)
+  if (meta?.projectId) fd.append('projectId', meta.projectId)
+  const name = meta?.projectName?.trim()
+  const addr = meta?.installationAddress?.trim()
+  const parts = ([name, addr].filter(Boolean) as string[]).map(sanitizeFileName)
+  const renamed = parts.length
+    ? new File([file], `${parts.join(' — ')} — ${file.name}`, { type: file.type })
+    : file
+  if (convexAuthEnabled && convexClient) {
+    // Flux Convex : 1) URL d'upload signée, 2) POST du fichier vers le storage
+    // Convex, 3) devis.create avec le storageId (déclenche l'OCR côté serveur).
+    const uploadUrl = await convexClient.mutation(devisGenerateUploadUrl, {})
+    const up = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: renamed.type ? { 'Content-Type': renamed.type } : undefined,
+      body: renamed,
+    })
+    if (!up.ok) throw new ApiError(up.status, `Upload devis (storage) échoué : ${up.status}`)
+    const { storageId } = (await up.json()) as { storageId: string }
+    const devisId = await convexClient.mutation(devisCreate, {
+      leadId,
+      storageId,
+      filename: renamed.name,
+      sizeBytes: renamed.size,
+      rdvId: rdvId ?? undefined,
+      projectId: meta?.projectId ?? undefined,
+    })
+    const doc = await convexClient.query(devisGetById, { devisId })
+    if (!doc) throw new ApiError(500, 'Devis créé mais introuvable')
+    return mapConvexDevis(doc)
+  }
+  const url = buildApiUrl('/devis')
+  const res = await fetch(url, {
+    method: 'POST',
+    credentials: 'include',
+    body: fd,
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, text || `Upload devis failed: ${res.status}`)
+  }
+  return res.json() as Promise<Devis>
+}
+
+function sanitizeFileName(name: string): string {
+  return name.replace(/[\\/:*?"<>|]+/g, '-').trim().slice(0, 80) || 'Projet'
+}
+
+// Parse "Nom — Adresse — fichier.pdf" produit par uploadDevis() ci-dessus.
+export function parseProjectMeta(filename: string): { name: string; address: string | null; rawFilename: string } {
+  const parts = filename.split(' — ')
+  if (parts.length >= 3) {
+    return { name: parts[0], address: parts[1] || null, rawFilename: parts.slice(2).join(' — ') }
+  }
+  if (parts.length === 2) {
+    return { name: parts[0], address: null, rawFilename: parts[1] }
+  }
+  return { name: filename.replace(/\.pdf$/i, ''), address: null, rawFilename: filename }
+}
+
+// ─── Leads : attribution / partage ───────────────────────
+// « Donner » un client à un commercial = transfert de propriété (leads.assignedToId).
+// Côté backend, les RDV à venir suivent le client (cf. spec attribution-partage-client).
+// Réservé admin / commercial_lead (garde @Roles côté API).
+export function assignLeadToCommercial(leadId: string, commercialId: string): Promise<LeadResponse> {
+  return api<LeadResponse>(`/leads/${leadId}/assign`, { method: 'POST', body: { commercialId } })
+}
+
+// Récupère le client décoré par son id (clients.list ne filtre pas par id → on
+// liste et on retrouve). Utilisé pour renvoyer un ClientResponse après mutation.
+async function convexClientById(clientId: string): Promise<ClientResponse> {
+  const rows = await convexClient!.query(clientsList, {})
+  const found = rows.find((c) => c._id === clientId)
+  if (!found) throw new ApiError(404, 'Dossier client introuvable')
+  return mapConvexClient(found)
+}
+
+export async function assignTechnicienVt(
+  clientId: string,
+  technicienVtId: string | null,
+): Promise<ClientResponse> {
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(clientsAssignTechniciens, { clientId, technicienVtId })
+    return convexClientById(clientId)
+  }
+  return api<ClientResponse>(`/clients/${clientId}`, {
+    method: 'PATCH',
+    body: { technicienVtId },
+  })
+}
+
+/**
+ * Assigne une liste de techniciens VT à un client (multi-assign).
+ * Remplace l'intégralité de la liste ; passer [] pour tout retirer.
+ */
+export async function assignTechniciens(
+  clientId: string,
+  technicienVtIds: string[],
+): Promise<ClientResponse> {
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(clientsAssignTechniciens, { clientId, technicienVtIds })
+    return convexClientById(clientId)
+  }
+  return api<ClientResponse>(`/clients/${clientId}`, {
+    method: 'PATCH',
+    body: { technicienVtIds },
+  })
+}
+
+/** Initialise un dossier (client + workflow) pour un lead signé sans client. */
+export async function bootstrapClient(leadId: string): Promise<ClientResponse> {
+  if (convexAuthEnabled && convexClient) {
+    const clientId = await convexClient.mutation(clientsBootstrap, { leadId })
+    return convexClientById(clientId)
+  }
+  return api<ClientResponse>('/clients/bootstrap', {
+    method: 'POST',
+    body: { leadId },
+  })
+}
+
+/**
+ * Initialise un dossier indépendant scopé à un PROJET précis (workflow propre
+ * à ce projet, distinct des autres projets du même lead).
+ */
+export async function bootstrapClientForProject(projectId: string): Promise<ClientResponse> {
+  if (convexAuthEnabled && convexClient) {
+    const clientId = await convexClient.mutation(clientsBootstrap, { projectId })
+    return convexClientById(clientId)
+  }
+  return api<ClientResponse>('/clients/bootstrap', {
+    method: 'POST',
+    body: { projectId },
+  })
+}
+
+export type ManualClientPayload = {
+  firstName: string
+  lastName: string
+  phone?: string
+  email?: string
+  addressLine?: string
+  city?: string
+  postalCode?: string
+  montantTotal?: string
+  typeFinancement?: string
+  signedAt?: string
+}
+
+export type DuplicateLeadInfo = {
+  id: string
+  firstName: string | null
+  lastName: string | null
+  status: string
+  hasDossier: boolean
+}
+
+/** Création manuelle d'un dossier client (lead 'manual' + projet + client). 409 → ApiError.data.lead. */
+export async function createManualClient(payload: ManualClientPayload): Promise<ClientResponse> {
+  if (convexAuthEnabled && convexClient) {
+    const clientId = await convexClient.mutation(clientsCreateManualDossier, {
+      firstName: payload.firstName,
+      lastName: payload.lastName,
+      phone: payload.phone || undefined,
+      email: payload.email || undefined,
+      addressLine: payload.addressLine || undefined,
+      city: payload.city || undefined,
+      postalCode: payload.postalCode || undefined,
+      montantTotal: toNum(payload.montantTotal),
+      typeFinancement: payload.typeFinancement || undefined,
+      signedAt: payload.signedAt ? Date.parse(payload.signedAt) || undefined : undefined,
+    })
+    return convexClientById(clientId)
+  }
+  return api<ClientResponse>('/clients/manual', { method: 'POST', body: payload })
+}
+
+export async function getSubsteps(clientId: string): Promise<SubstepResponse[]> {
+  if (convexAuthEnabled && convexClient) {
+    const rows = await convexClient.query(substepsList, { clientId })
+    return rows.map(mapConvexSubstep)
+  }
+  return api<SubstepResponse[]>('/substeps', { query: { clientId } })
+}
+
+async function convexGetSubstep(substepId: string): Promise<SubstepResponse> {
+  const doc = await convexClient!.query(substepsGet, { substepId })
+  if (!doc) throw new ApiError(404, 'Sous-étape introuvable')
+  return mapConvexSubstep(doc)
+}
+
+export async function updateSubstep(
+  substepId: string,
+  patch: UpdateSubstepPatch,
+): Promise<SubstepResponse> {
+  let res: SubstepResponse
+  if (convexAuthEnabled && convexClient) {
+    // workflowSubsteps.update accepte null (effacement) → on transmet tel quel
+    // les champs présents (undefined = non fourni).
+    const args: Record<string, unknown> = { substepId }
+    for (const [k, v] of Object.entries(patch)) if (v !== undefined) args[k] = v
+    await convexClient.mutation(substepsUpdate, args as { substepId: string })
+    res = await convexGetSubstep(substepId) // update renvoie le doc brut → on redécore
+  } else {
+    res = await api<SubstepResponse>(`/substeps/${substepId}`, { method: 'PATCH', body: patch })
+  }
+  bustWorkflowCaches()
+  return res
+}
+
+export async function resolveSubstepProblem(
+  substepId: string,
+  status: SubstepResponse['status'],
+): Promise<SubstepResponse> {
+  let res: SubstepResponse
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(substepsResolveProblem, { substepId, status })
+    res = await convexGetSubstep(substepId)
+  } else {
+    res = await api<SubstepResponse>(`/substeps/${substepId}/resolve-problem`, { method: 'POST', body: { status } })
+  }
+  bustWorkflowCaches()
+  return res
+}
+
+// ─── Finances : acomptes ─────────────────────────────────────
+// listAcomptes/getAcompte serveur exigent `today` (YYYY-MM-DD) pour dériver
+// jalonAtteint/statut « à venir ». On le calcule au moment de l'appel.
+function todayStr(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+const toNum = (v: string | number | null | undefined): number | undefined => {
+  if (v === null || v === undefined || v === '') return undefined
+  const n = Number(v); return Number.isNaN(n) ? undefined : n
+}
+
+// Après une écriture, on renvoie l'acompte fraîchement réassemblé (comme le NestJS).
+async function convexGetAcompte(debriefId: string): Promise<AcompteResponse> {
+  const doc = await convexClient!.query(paymentsGetAcompte, { debriefId, today: todayStr() })
+  if (!doc) throw new ApiError(404, 'Échéancier introuvable')
+  return mapConvexAcompte(doc)
+}
+
+export async function listAcomptes(): Promise<AcompteResponse[]> {
+  if (convexAuthEnabled && convexClient) {
+    const rows = await convexClient.query(paymentsListAcomptes, { today: todayStr() })
+    return rows.map(mapConvexAcompte)
+  }
+  return api<AcompteResponse[]>('/payments/acomptes')
+}
+
+// L'échéancier d'UNE vente (par débrief) — onglet « Mode de paiement ».
+export async function getAcompte(debriefId: string): Promise<AcompteResponse> {
+  if (convexAuthEnabled && convexClient) return convexGetAcompte(debriefId)
+  return api<AcompteResponse>(`/payments/acomptes/${debriefId}`)
+}
+
+// Enregistre l'encaissement d'une tranche de l'échéancier (ordre dans le body).
+export async function recordEcheance(
+  debriefId: string,
+  patch: RecordEcheancePatch,
+): Promise<AcompteResponse> {
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(paymentsRecordEcheance, {
+      debriefId, ordre: patch.ordre, statut: patch.statut,
+      montantReel: toNum(patch.montantReel),
+      dateEncaissement: patch.dateEncaissement ?? undefined,
+      dateEcheance: patch.dateEcheance ?? undefined,
+      notes: patch.notes ?? undefined,
+    })
+    return convexGetAcompte(debriefId)
+  }
+  return api<AcompteResponse>(`/payments/acomptes/${debriefId}/echeances`, { method: 'PATCH', body: patch })
+}
+
+// Édite les données financières d'une vente (back-office finances).
+export async function updateFinancing(
+  debriefId: string,
+  patch: UpdateFinancingPatch,
+): Promise<AcompteResponse> {
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(paymentsUpdateFinancing, {
+      debriefId,
+      montantTotal: toNum(patch.montantTotal),
+      financingType: patch.financingType ?? undefined,
+      paymentSubMethod: patch.paymentSubMethod ?? undefined,
+      financingOrg: patch.financingOrg ?? undefined,
+      acomptePercent: patch.acomptePercent ?? undefined,
+      acompteAmount: toNum(patch.acompteAmount),
+    })
+    return convexGetAcompte(debriefId)
+  }
+  return api<AcompteResponse>(`/payments/acomptes/${debriefId}/financing`, { method: 'PATCH', body: patch })
+}
+
+// Remplace l'échéancier d'une vente par un échéancier personnalisé (tranches/%).
+export async function setEcheancier(
+  debriefId: string,
+  tranches: EcheancierTranchePatch[],
+): Promise<AcompteResponse> {
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(paymentsSetEcheancier, {
+      debriefId,
+      tranches: tranches.map((t) => {
+        const o: Record<string, unknown> = {}
+        if (t.label != null) o.label = t.label
+        if (t.percent != null) o.percent = t.percent
+        if (toNum(t.montantPrevu) !== undefined) o.montantPrevu = toNum(t.montantPrevu)
+        if (t.jalonKey != null) o.jalonKey = t.jalonKey
+        if (t.dateEcheance != null) o.dateEcheance = t.dateEcheance
+        if (t.statut != null) o.statut = t.statut
+        if (toNum(t.montantReel) !== undefined) o.montantReel = toNum(t.montantReel)
+        if (t.dateEncaissement != null) o.dateEncaissement = t.dateEncaissement
+        return o
+      }),
+    })
+    return convexGetAcompte(debriefId)
+  }
+  return api<AcompteResponse>(`/payments/acomptes/${debriefId}/echeancier`, { method: 'PATCH', body: { tranches } })
+}
+
+// Revient à l'échéancier standard (template dérivé du type de financement).
+export async function resetEcheancier(debriefId: string): Promise<AcompteResponse> {
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(paymentsResetEcheancier, { debriefId })
+    return convexGetAcompte(debriefId)
+  }
+  return api<AcompteResponse>(`/payments/acomptes/${debriefId}/echeancier`, { method: 'DELETE' })
+}
+
+async function convexDevisById(devisId: string): Promise<Devis> {
+  const doc = await convexClient!.query(devisGetById, { devisId })
+  if (!doc) throw new ApiError(404, 'Devis introuvable')
+  return mapConvexDevis(doc)
+}
+
+export async function getDevis(devisId: string): Promise<Devis> {
+  if (convexAuthEnabled && convexClient) return convexDevisById(devisId)
+  return api<Devis>(`/devis/${devisId}`)
+}
+
+export async function listDevisByLead(leadId: string): Promise<Devis[]> {
+  if (convexAuthEnabled && convexClient) {
+    const rows = await convexClient.query(devisListByLead, { leadId })
+    return rows.map(mapConvexDevis)
+  }
+  return api<Devis[]>(`/devis/lead/${leadId}`)
+}
+
+export async function markDevisSigned(devisId: string): Promise<Devis> {
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(devisMarkAsSigned, { devisId })
+    return convexDevisById(devisId)
+  }
+  return api<Devis>(`/devis/${devisId}/mark-signed`, { method: 'POST' })
+}
+
+// Patch partiel. Tous les champs sont optionnels ; `null` efface une valeur.
+export async function updateDevis(
+  devisId: string,
+  patch: import('./types').UpdateDevisPatch,
+): Promise<Devis> {
+  if (convexAuthEnabled && convexClient) {
+    // devis.update accepte null (v.union(x, v.null())) → on transmet tel quel,
+    // en retirant seulement les champs absents (undefined).
+    const args: Record<string, unknown> = { devisId }
+    for (const [k, v] of Object.entries(patch)) if (v !== undefined) args[k] = v
+    await convexClient.mutation(devisUpdate, args as { devisId: string })
+    return convexDevisById(devisId)
+  }
+  return api<Devis>(`/devis/${devisId}`, { method: 'PATCH', body: patch })
+}
+
+export async function retryDevisOcr(devisId: string): Promise<Devis> {
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(devisRetryOcr, { devisId })
+    return convexDevisById(devisId)
+  }
+  return api<Devis>(`/devis/${devisId}/retry-ocr`, { method: 'POST' })
+}
+
+export async function deleteDevis(devisId: string): Promise<{ id: string; deleted: true }> {
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(devisRemove, { devisId })
+    return { id: devisId, deleted: true }
+  }
+  return api(`/devis/${devisId}`, { method: 'DELETE' })
+}
+
+/**
+ * Suit l'avancement de l'OCR d'un devis fraîchement déposé : interroge
+ * GET /devis/:id jusqu'à ce que l'OCR soit terminé (`done`) ou en échec
+ * (`failed`), ou jusqu'au timeout. Renvoie le devis final. `onTick` permet de
+ * rafraîchir l'UI à chaque sondage (ex. réafficher la fiche projet).
+ */
+export async function pollDevisOcr(
+  devisId: string,
+  opts: { intervalMs?: number; timeoutMs?: number; onTick?: (d: Devis) => void } = {},
+): Promise<Devis> {
+  const intervalMs = opts.intervalMs ?? 1500
+  const timeoutMs = opts.timeoutMs ?? 90_000
+  const started = Date.now()
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const d = await getDevis(devisId)
+    opts.onTick?.(d)
+    if (d.ocrStatus === 'done' || d.ocrStatus === 'failed') return d
+    if (Date.now() - started > timeoutMs) return d
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+}
+
+export async function downloadDevisPdf(devisId: string, suggestedName?: string): Promise<void> {
+  const res = await fetch(buildApiUrl(`/devis/${devisId}/pdf`), {
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, text || `Téléchargement échoué : ${res.status}`)
+  }
+  const blob = await res.blob()
+  let filename = suggestedName ?? `devis-${devisId}.pdf`
+  const cd = res.headers.get('content-disposition')
+  if (cd) {
+    const utf8Match = cd.match(/filename\*=UTF-8''([^;]+)/i)
+    if (utf8Match) filename = decodeURIComponent(utf8Match[1])
+    else {
+      const plain = cd.match(/filename="([^"]+)"/i)
+      if (plain) filename = plain[1]
+    }
+  }
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+/**
+ * Récupère le PDF d'un devis et renvoie un object URL (à révoquer par l'appelant
+ * via URL.revokeObjectURL). On passe par le blob de la route /devis/:id/pdf (binaire
+ * renvoyé directement) au lieu d'une URL signée, ce qui évite les URL file:// bloquées
+ * par le navigateur en dev.
+ */
+export async function fetchDevisPdfObjectUrl(devisId: string): Promise<string> {
+  const res = await fetch(buildApiUrl(`/devis/${devisId}/pdf`), {
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, text || `Chargement du PDF échoué : ${res.status}`)
+  }
+  const blob = await res.blob()
+  return URL.createObjectURL(blob)
+}
+
+// ─── Projects ─────────────────────────────────────────────
+export async function createProject(input: {
+  leadId: string
+  name: string
+  addressLine?: string | null
+  postalCode?: string | null
+  city?: string | null
+  notes?: string | null
+}): Promise<ProjectResponse> {
+  if (convexAuthEnabled && convexClient) {
+    const args = dropNullish({ leadId: input.leadId, name: input.name, addressLine: input.addressLine, postalCode: input.postalCode, city: input.city, notes: input.notes })
+    const id = await convexClient.mutation(projectsCreate, args as { leadId: string })
+    const doc = await convexClient.query(projectsGet, { projectId: id })
+    if (!doc) throw new ApiError(500, 'Création du projet échouée')
+    return mapConvexProject(doc)
+  }
+  return api<ProjectResponse>('/projects', { method: 'POST', body: input })
+}
+
+// Convex refuse null/undefined dans les args optionnels : on ne garde que les
+// valeurs définies et non nulles.
+function dropNullish(obj: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(obj)) if (v !== null && v !== undefined) out[k] = v
+  return out
+}
+
+// Débrief REST (montants string, dates ISO) → args Convex (montants number,
+// dates ms), en ne transmettant que le sous-ensemble de champs accepté.
+function debriefArgsForConvex(input: Record<string, unknown>): Record<string, unknown> {
+  const KEYS = ['outcome', 'rdvId', 'nonSaleReason', 'reflexionReason', 'suiviReason', 'objection', 'acceptanceFactors', 'notes', 'financingType', 'kits', 'paymentSubMethod', 'financingOrg', 'acomptePercent', 'customEcheancier', 'projectId', 'commercialId']
+  const args = dropNullish(Object.fromEntries(KEYS.map((k) => [k, input[k]])))
+  const num = (v: unknown) => (v === null || v === undefined || v === '' ? undefined : Number(v))
+  const money = num(input.montantTotal); if (money !== undefined && !Number.isNaN(money)) args.montantTotal = money
+  const acompte = num(input.acompteAmount); if (acompte !== undefined && !Number.isNaN(acompte)) args.acompteAmount = acompte
+  if (input.signedAt) { const t = Date.parse(String(input.signedAt)); if (!Number.isNaN(t)) args.signedAt = t }
+  return args
+}
+
+export async function listProjectsByLead(leadId: string): Promise<ProjectResponse[]> {
+  if (convexAuthEnabled && convexClient) {
+    const rows = await convexClient.query(projectsListByLead, { leadId })
+    return rows.map(mapConvexProject)
+  }
+  return api<ProjectResponse[]>(`/projects/lead/${leadId}`)
+}
+
+/**
+ * Fiche client : tous les projets du lead AVEC leur détail (débriefs, devis,
+ * pièces) en un seul aller-retour Convex — la cascade listProjectsByLead puis
+ * getProjectDetail par projet multipliait la latence réseau.
+ */
+export async function listProjectDetailsByLead(leadId: string): Promise<ProjectDetailResponse[]> {
+  if (convexAuthEnabled && convexClient) {
+    const rows = await convexClient.query(projectsFicheByLead, { leadId })
+    return rows.map(({ project, debriefs, devis, attachments }) => ({
+      ...mapConvexProject(project),
+      devis: devis.map(mapConvexDevis),
+      debriefs: debriefs.map(mapConvexDebrief),
+      attachments: attachments.map(mapConvexAttachment),
+    }))
+  }
+  const projects = await api<ProjectResponse[]>(`/projects/lead/${leadId}`)
+  const loaded = await Promise.all(projects.map((p) => getProjectDetail(p.id).catch(() => null)))
+  return loaded.filter((d): d is ProjectDetailResponse => Boolean(d))
+}
+
+export async function getProjectDetail(projectId: string): Promise<ProjectDetailResponse> {
+  if (convexAuthEnabled && convexClient) {
+    // Détail projet en mode Convex : projet + débriefs. Devis et pièces
+    // (project_attachments) pas encore portés → tableaux vides (dégradation
+    // assumée : la carte s'affiche sans erreur, pièces/devis à câbler).
+    const [project, debriefs] = await Promise.all([
+      convexClient.query(projectsGet, { projectId }),
+      convexClient.query(debriefsListByProject, { projectId }),
+    ])
+    if (!project) throw new ApiError(404, 'Projet introuvable')
+    // Devis du projet : listByLead puis filtre sur projectId (pas de listByProject
+    // côté serveur). Pièces : projectAttachments.listByProject.
+    const [leadDevis, attachments] = await Promise.all([
+      convexClient.query(devisListByLead, { leadId: project.leadId }),
+      convexClient.query(projectAttachmentsListByProject, { projectId }),
+    ])
+    return {
+      ...mapConvexProject(project),
+      devis: leadDevis.map(mapConvexDevis).filter((d) => d.projectId === projectId),
+      debriefs: debriefs.map(mapConvexDebrief),
+      attachments: attachments.map(mapConvexAttachment),
+    }
+  }
+  return api<ProjectDetailResponse>(`/projects/${projectId}`)
+}
+
+export function updateProject(
+  projectId: string,
+  patch: { name?: string; status?: ProjectStatus; notes?: string | null; addressLine?: string | null; postalCode?: string | null; city?: string | null },
+): Promise<ProjectResponse> {
+  return api<ProjectResponse>(`/projects/${projectId}`, { method: 'PATCH', body: patch })
+}
+
+export function deleteProject(projectId: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/projects/${projectId}`, { method: 'DELETE' })
+}
+
+// ─── Debriefs ─────────────────────────────────────────────
+async function fetchConvexDebrief(debriefId: string): Promise<DebriefResponse> {
+  const doc = await convexClient!.query(debriefsGet, { debriefId })
+  if (!doc) throw new ApiError(500, 'Création du débrief échouée')
+  return mapConvexDebrief(doc)
+}
+
+export async function createDebrief(
+  projectId: string,
+  input: Partial<Omit<DebriefResponse, 'id' | 'projectId' | 'commercialId' | 'createdAt' | 'updatedAt'>> & { outcome: DebriefResponse['outcome'] },
+): Promise<DebriefResponse> {
+  if (convexAuthEnabled && convexClient) {
+    const id = await convexClient.mutation(debriefsCreate, { ...debriefArgsForConvex(input as Record<string, unknown>), projectId } as { projectId: string; outcome: string })
+    const res = await fetchConvexDebrief(id)
+    bustDebriefCaches()
+    return res
+  }
+  const res = await api<DebriefResponse>(`/projects/${projectId}/debriefs`, { method: 'POST', body: input })
+  bustDebriefCaches()
+  return res
+}
+
+export async function createLeadDebrief(
+  leadId: string,
+  input: Partial<Omit<DebriefResponse, 'id' | 'commercialId' | 'createdAt' | 'updatedAt'>> & { outcome: DebriefResponse['outcome'] },
+): Promise<DebriefResponse> {
+  if (convexAuthEnabled && convexClient) {
+    const id = await convexClient.mutation(debriefsCreateForLead, { ...debriefArgsForConvex(input as Record<string, unknown>), leadId } as { leadId: string; outcome: string })
+    const res = await fetchConvexDebrief(id)
+    bustDebriefCaches()
+    return res
+  }
+  const res = await api<DebriefResponse>(`/leads/${leadId}/debriefs`, { method: 'POST', body: input })
+  bustDebriefCaches()
+  return res
+}
+
+export async function listDebriefsByProject(projectId: string): Promise<DebriefResponse[]> {
+  if (convexAuthEnabled && convexClient) {
+    const rows = await convexClient.query(debriefsListByProject, { projectId })
+    return rows.map(mapConvexDebrief)
+  }
+  return api<DebriefResponse[]>(`/projects/${projectId}/debriefs`)
+}
+
+export async function listDebriefsByLead(leadId: string): Promise<DebriefResponse[]> {
+  if (convexAuthEnabled && convexClient) {
+    const rows = await convexClient.query(debriefsListByLead, { leadId })
+    return rows.map(mapConvexDebrief)
+  }
+  return api<DebriefResponse[]>(`/leads/${leadId}/debriefs`)
+}
+
+export async function deleteDebrief(debriefId: string): Promise<{ ok: true }> {
+  const res = await api<{ ok: true }>(`/debriefs/${debriefId}`, { method: 'DELETE' })
+  bustDebriefCaches()
+  return res
+}
+
+// ─── Project attachments ──────────────────────────────────
+// toSummary Convex → ProjectAttachmentResponse REST (uploadedAt ms → ISO ;
+// uploadedById absent du summary serveur → '' , non affiché).
+function mapConvexAttachment(s: ConvexAttachmentSummary): ProjectAttachmentResponse {
+  return {
+    id: s.id,
+    projectId: s.projectId,
+    uploadedById: s.uploadedById ?? '',
+    kind: s.kind as ProjectAttachmentKind,
+    label: s.label ?? null,
+    filename: s.filename,
+    contentType: s.contentType,
+    sizeBytes: s.sizeBytes,
+    createdAt: new Date(s.uploadedAt).toISOString(),
+    url: s.url,
+  }
+}
+
+/**
+ * URL d'affichage synchrone d'une pièce jointe : privilégie l'URL signée du
+ * storage Convex embarquée dans la réponse (mode Convex, utilisable direct en
+ * <img src>/window.open), et retombe sur le endpoint /raw NestJS sinon.
+ */
+export function attachmentDisplayUrl(a: { id: string; url?: string }): string {
+  return a.url ?? attachmentRawUrl(a.id)
+}
+
+export async function uploadProjectAttachment(
+  projectId: string,
+  file: File,
+  opts: { kind: ProjectAttachmentKind; label?: string | null },
+): Promise<ProjectAttachmentResponse> {
+  if (convexAuthEnabled && convexClient) {
+    // Convex n'autorise que photo|document ; 'autre' retombe sur 'document'.
+    const kind = opts.kind === 'photo' ? 'photo' : 'document'
+    const uploadUrl = await convexClient.mutation(projectAttachmentsGenerateUploadUrl, {})
+    const up = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: file.type ? { 'Content-Type': file.type } : undefined,
+      body: file,
+    })
+    if (!up.ok) throw new ApiError(up.status, `Upload pièce (storage) échoué : ${up.status}`)
+    const { storageId } = (await up.json()) as { storageId: string }
+    const summary = await convexClient.mutation(projectAttachmentsCreate, {
+      projectId,
+      kind,
+      label: opts.label?.trim() || undefined,
+      filename: file.name,
+      contentType: file.type || 'application/octet-stream',
+      sizeBytes: file.size,
+      storageId,
+    })
+    return mapConvexAttachment(summary)
+  }
+  const fd = new FormData()
+  fd.append('file', file)
+  fd.append('kind', opts.kind)
+  if (opts.label) fd.append('label', opts.label)
+  const res = await fetch(buildApiUrl(`/projects/${projectId}/attachments`), {
+    method: 'POST',
+    credentials: 'include',
+    body: fd,
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, text || `Upload attachment failed: ${res.status}`)
+  }
+  return res.json() as Promise<ProjectAttachmentResponse>
+}
+
+export async function listAttachmentsByProject(
+  projectId: string,
+): Promise<ProjectAttachmentResponse[]> {
+  if (convexAuthEnabled && convexClient) {
+    const rows = await convexClient.query(projectAttachmentsListByProject, { projectId })
+    return rows.map(mapConvexAttachment)
+  }
+  return api<ProjectAttachmentResponse[]>(`/projects/${projectId}/attachments`)
+}
+
+export async function getAttachmentSignedUrl(
+  attachmentId: string,
+): Promise<{ url: string; filename: string; contentType: string }> {
+  if (convexAuthEnabled && convexClient) {
+    const res = await convexClient.query(projectAttachmentsGetUrl, { attachmentId })
+    if (!res) throw new ApiError(404, 'Pièce jointe introuvable')
+    return res
+  }
+  return api<{ url: string; filename: string; contentType: string }>(
+    `/attachments/${attachmentId}/url`,
+  )
+}
+
+/**
+ * URL directe vers les octets de l'attachment, streamés par l'API (route
+ * `/attachments/:id/raw`). Utilisable dans un <img src> ou window.open —
+ * fonctionne en dev (local-FS) comme en prod (R2), contrairement à
+ * getAttachmentSignedUrl qui renvoie un file:// inexploitable en local.
+ */
+// ─── Objectifs commerciaux (mensuels, par commercial) ─────
+export async function listCommercialObjectives(period: string): Promise<CommercialObjectiveResponse[]> {
+  return api('/commercial-objectives', { query: { period } })
+}
+
+export async function upsertCommercialObjective(
+  payload: UpsertCommercialObjectivePayload,
+): Promise<CommercialObjectiveResponse> {
+  return api('/commercial-objectives', { method: 'PUT', body: payload })
+}
+
+export function attachmentRawUrl(attachmentId: string): string {
+  return buildApiUrl(`/attachments/${attachmentId}/raw`)
+}
+
+/**
+ * Récupère le binaire d'une pièce jointe (photo/document) via fetch authentifié
+ * (cookie de session) et renvoie un object URL. Indispensable pour afficher une
+ * image dans <img> : le endpoint /attachments/:id/raw est protégé, une URL brute
+ * en src échouerait (401/403). À révoquer (URL.revokeObjectURL) au démontage.
+ */
+export async function fetchAttachmentObjectUrl(attachmentId: string): Promise<string> {
+  if (convexAuthEnabled && convexClient) {
+    // Le storage Convex renvoie une URL publique signée : on la récupère puis on
+    // fetch le binaire pour rester cohérent avec le contrat (object URL révocable).
+    const meta = await convexClient.query(projectAttachmentsGetUrl, { attachmentId })
+    if (!meta) throw new ApiError(404, 'Pièce jointe introuvable')
+    const res = await fetch(meta.url)
+    if (!res.ok) throw new ApiError(res.status, `Chargement du fichier échoué : ${res.status}`)
+    return URL.createObjectURL(await res.blob())
+  }
+  const res = await fetch(buildApiUrl(`/attachments/${attachmentId}/raw`), {
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, text || `Chargement du fichier échoué : ${res.status}`)
+  }
+  const blob = await res.blob()
+  return URL.createObjectURL(blob)
+}
+
+export async function deleteProjectAttachment(attachmentId: string): Promise<{ ok: true }> {
+  if (convexAuthEnabled && convexClient) {
+    return await convexClient.mutation(projectAttachmentsRemove, { attachmentId })
+  }
+  return api<{ ok: true }>(`/attachments/${attachmentId}`, { method: 'DELETE' })
+}
+
+// ─── Documents de sous-étape (pièces du workflow) ─────────
+/** Upload multiple, tout type de fichier, sur une sous-étape. */
+export async function uploadSubstepDocuments(
+  substepId: string,
+  files: File[],
+): Promise<SubstepDocument[]> {
+  if (convexAuthEnabled && convexClient) {
+    // Upload storage par fichier, puis un seul attachToSubstep(files[]).
+    const uploaded = await Promise.all(files.map(async (file) => {
+      const uploadUrl = await convexClient!.mutation(documentsGenerateUploadUrl, {})
+      const up = await fetch(uploadUrl, { method: 'POST', headers: file.type ? { 'Content-Type': file.type } : undefined, body: file })
+      if (!up.ok) throw new ApiError(up.status, `Upload document (storage) échoué : ${up.status}`)
+      const { storageId } = (await up.json()) as { storageId: string }
+      return { storageId, filename: file.name, mimeType: file.type || 'application/octet-stream', sizeBytes: file.size }
+    }))
+    await convexClient.mutation(documentsAttachToSubstep, { substepId, files: uploaded })
+    const rows = await convexClient.query(documentsListBySubstep, { substepId })
+    return rows.map(mapConvexSubstepDocument)
+  }
+  const fd = new FormData()
+  for (const file of files) fd.append('files', file)
+  const res = await fetch(buildApiUrl(`/substeps/${substepId}/documents`), {
+    method: 'POST',
+    credentials: 'include',
+    body: fd,
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, text || `Upload document échoué : ${res.status}`)
+  }
+  return res.json() as Promise<SubstepDocument[]>
+}
+
+export async function deleteSubstepDocument(documentId: string): Promise<{ ok: true }> {
+  if (convexAuthEnabled && convexClient) {
+    return await convexClient.mutation(documentsRemove, { documentId })
+  }
+  return api<{ ok: true }>(`/documents/${documentId}`, { method: 'DELETE' })
+}
+
+/** URL directe (streamée par l'API) pour ouvrir/télécharger un document. */
+export function substepDocumentRawUrl(documentId: string): string {
+  return buildApiUrl(`/documents/${documentId}/raw`)
+}
+
+/**
+ * Détecte le type d'un fichier via ses octets magiques (signatures). Indispensable
+ * quand le mimeType stocké est générique (`application/octet-stream`) ou que le nom
+ * n'a pas d'extension : sans ça l'aperçu tombe en « type non supporté ».
+ */
+function sniffMimeFromBytes(b: Uint8Array): string | null {
+  if (b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return 'application/pdf' // %PDF
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'image/png'
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg'
+  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return 'image/gif'
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return 'image/webp' // RIFF…WEBP
+  return null
+}
+
+/**
+ * Récupère le binaire d'un document de sous-étape via fetch authentifié (cookie
+ * de session) et renvoie un object URL + le type MIME réel. On passe par un blob
+ * (et non l'URL brute en src) car un `blob:` s'affiche toujours inline dans une
+ * <img>/<iframe>, ce qui évite les soucis d'aperçu cross-origin ; et on renifle
+ * les octets pour fiabiliser le type même si le mimeType en base est faux.
+ * À révoquer (URL.revokeObjectURL) au démontage.
+ */
+export async function fetchSubstepDocumentObjectUrl(
+  documentId: string,
+): Promise<{ url: string; mimeType: string | null }> {
+  let res: Response
+  if (convexAuthEnabled && convexClient) {
+    const meta = await convexClient.query(documentsGetUrl, { documentId })
+    if (!meta) throw new ApiError(404, 'Document introuvable')
+    res = await fetch(meta.url)
+  } else {
+    res = await fetch(buildApiUrl(`/documents/${documentId}/raw`), {
+      credentials: 'include',
+    })
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, text || `Chargement du document échoué : ${res.status}`)
+  }
+  const blob = await res.blob()
+  let sniffed: string | null = null
+  try {
+    const head = new Uint8Array(await blob.slice(0, 12).arrayBuffer())
+    sniffed = sniffMimeFromBytes(head)
+  } catch {
+    // arrayBuffer indisponible → on retombe sur blob.type / mimeType en base
+  }
+  const fromBlob = blob.type && blob.type !== 'application/octet-stream' ? blob.type : null
+  return { url: URL.createObjectURL(blob), mimeType: sniffed ?? fromBlob }
+}
+
+// ─── Ads / ROAS (Meta tracking) ───────────────────────────
+// Rapport ROAS cohorte par campagne/adset/ad. Réservé admin + commercial_lead
+// (garde @Roles côté API). `level` pilote le niveau de drill-down.
+export function fetchAdsReport(params: {
+  from: string
+  to: string
+  level?: AdsLevel
+  channel?: AdChannel
+}): Promise<AdsReport> {
+  return api<AdsReport>('/analytics/ads', {
+    query: {
+      from: params.from,
+      to: params.to,
+      level: params.level ?? 'campaign',
+      channel: params.channel ?? 'meta',
+    },
+  })
+}
+
+/** Resync / backfill de la dépense publicitaire (admin). */
+export function resyncAdSpend(body: { from: string; to: string }): Promise<{
+  synced: number
+  totalSpend: string
+  skipped: boolean
+}> {
+  return api('/ad-spend/sync', { method: 'POST', body })
+}
+
+/** Liste du mapping source brute → canal (admin). */
+export function fetchSourceMap(): Promise<SourceMapEntry[]> {
+  return api<SourceMapEntry[]>('/source-map')
+}
+
+/** Sources GHL brutes non encore classées (canal = other), avec leur volume (admin). */
+export function fetchUnmappedSources(): Promise<UnmappedSource[]> {
+  return api<UnmappedSource[]>('/source-map/unmapped')
+}
+
+/** Crée/met à jour un mapping. `reapply` rejoue le classifieur sur les leads existants (admin). */
+export function upsertSourceMap(body: {
+  rawSource: string
+  channel: AdChannel
+  label: string
+  reapply?: boolean
+}): Promise<SourceMapEntry> {
+  return api<SourceMapEntry>('/source-map', { method: 'POST', body })
+}
+
+// ─── Notifications ─────────────────────────────────────────
+export function markNotificationRead(id: string): Promise<NotificationResponse> {
+  return api<NotificationResponse>(`/notifications/${id}/read`, { method: 'PATCH' })
+}
+
+export function markAllNotificationsRead(): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/notifications/read-all', { method: 'POST' })
+}
+
+export { API_BASE }
+
+// ─── Interventions SAV ───────────────────────────────────────────────────────
+function bustInterventionCaches() {
+  notifyRealtimeRefresh({ event: 'intervention:changed', paths: ['/interventions'] })
+}
+
+export async function createIntervention(body: {
+  clientId: string
+  type: InterventionType
+  motif: string
+  technicienId?: string | null
+  datePlanifiee?: string | null
+  heure?: string | null
+}): Promise<InterventionResponse> {
+  const res = await api<InterventionResponse>('/interventions', { method: 'POST', body })
+  bustInterventionCaches()
+  return res
+}
+
+export async function updateIntervention(
+  id: string,
+  patch: Partial<{
+    status: InterventionStatus
+    observations: string | null
+    type: InterventionType
+    motif: string
+    technicienId: string | null
+    datePlanifiee: string | null
+    heure: string | null
+    dateRealisee: string | null
+  }>,
+): Promise<InterventionResponse> {
+  const res = await api<InterventionResponse>(`/interventions/${id}`, { method: 'PATCH', body: patch })
+  bustInterventionCaches()
+  return res
+}
+
+export async function deleteIntervention(id: string): Promise<{ ok: true }> {
+  const res = await api<{ ok: true }>(`/interventions/${id}`, { method: 'DELETE' })
+  bustInterventionCaches()
+  return res
+}
+
+// Upload multipart (champ « files ») — même pattern que uploadSubstepDocuments.
+export async function uploadInterventionFiles(id: string, files: File[]): Promise<InterventionResponse> {
+  const fd = new FormData()
+  for (const file of files) fd.append('files', file)
+  const res = await fetch(buildApiUrl(`/interventions/${id}/files`), {
+    method: 'POST',
+    credentials: 'include',
+    body: fd,
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, text || `Upload fichier intervention échoué : ${res.status}`)
+  }
+  bustInterventionCaches()
+  return res.json() as Promise<InterventionResponse>
+}
+
+export function interventionFileRawUrl(interventionId: string, fileId: string): string {
+  return buildApiUrl(`/interventions/${interventionId}/files/${fileId}/raw`)
+}
+
+export async function deleteInterventionFile(interventionId: string, fileId: string): Promise<{ ok: true }> {
+  const res = await api<{ ok: true }>(`/interventions/${interventionId}/files/${fileId}`, { method: 'DELETE' })
+  bustInterventionCaches()
+  return res
+}
