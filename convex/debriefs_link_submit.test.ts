@@ -95,3 +95,35 @@ describe("rescheduleViaLink", () => {
     expect(rdvRow?.debriefDueAt).toBeUndefined();
   });
 });
+
+describe("submitViaLink — RDV sans commercial (sync GHL non mappée)", () => {
+  it("retombe sur lead.assignedToId et répare le RDV", async () => {
+    const t = makeT();
+    clearGhl();
+    const assignedId = await t.run((ctx) => ctx.db.insert("users", { email: "a@e.fr", name: "Alice", role: "commercial", active: true }));
+    const leadId = await t.run((ctx) => ctx.db.insert("leads", { source: "ghl", status: "qualifie", assignedToId: assignedId } as never));
+    const rdvId = await t.run((ctx) => ctx.db.insert("rdv", { leadId, locationType: "domicile", status: "honore", scheduledAt: 1000 } as never));
+
+    const r = await t.mutation(internal.debriefs.submitViaLink, { rdvId, outcome: "non_vente", nonSaleReason: "trop_cher" });
+    await drain(t);
+    expect(r).toEqual({ ok: true });
+    expect((await t.run((ctx) => ctx.db.get(rdvId)))?.commercialId).toBe(assignedId);
+    const debrief = (await t.run((ctx) => ctx.db.query("debriefs").collect()))[0];
+    expect(debrief.commercialId).toBe(assignedId);
+  });
+
+  it("sans assignedToId : retombe sur le compte générique Commercial ECOI", async () => {
+    const t = makeT();
+    clearGhl();
+    const genericId = await t.run((ctx) =>
+      ctx.db.insert("users", { email: "commercial@electroconceptoi.com", name: "Commercial ECOI", role: "commercial", active: true }),
+    );
+    const leadId = await t.run((ctx) => ctx.db.insert("leads", { source: "ghl", status: "qualifie" } as never));
+    const rdvId = await t.run((ctx) => ctx.db.insert("rdv", { leadId, locationType: "domicile", status: "honore", scheduledAt: 1000 } as never));
+
+    const r = await t.mutation(internal.debriefs.submitViaLink, { rdvId, outcome: "non_vente", nonSaleReason: "trop_cher" });
+    await drain(t);
+    expect(r).toEqual({ ok: true });
+    expect((await t.run((ctx) => ctx.db.get(rdvId)))?.commercialId).toBe(genericId);
+  });
+});

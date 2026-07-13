@@ -344,9 +344,28 @@ export const submitViaLink = internalMutation({
   handler: async (ctx, args) => {
     const rdvRow = await ctx.db.get(args.rdvId);
     if (!rdvRow || rdvRow.deletedAt !== undefined) throw new Error("Rendez-vous introuvable.");
-    if (!rdvRow.leadId || !rdvRow.commercialId) throw new Error("Rendez-vous sans lead ou commercial associé.");
+    if (!rdvRow.leadId) throw new Error("Rendez-vous sans lead associé.");
     const leadId = rdvRow.leadId;
-    const commercialId = rdvRow.commercialId;
+
+    // Les RDV synchronisés depuis GHL peuvent arriver SANS commercial (user GHL
+    // non mappé côté Velora) : plutôt que de bloquer la soumission du débrief,
+    // on retombe sur le commercial assigné au lead, sinon le compte générique
+    // « Commercial ECOI » — et on répare le RDV au passage pour les flux aval
+    // (échéancier, analytics, notifications).
+    let commercialId = rdvRow.commercialId;
+    if (!commercialId) {
+      const lead = await ctx.db.get(leadId);
+      commercialId = lead?.assignedToId ?? undefined;
+      if (!commercialId) {
+        const generic = await ctx.db
+          .query("users")
+          .withIndex("email", (q) => q.eq("email", "commercial@electroconceptoi.com"))
+          .unique();
+        commercialId = generic?._id;
+      }
+      if (!commercialId) throw new Error("Rendez-vous sans commercial associé.");
+      await ctx.db.patch(args.rdvId, { commercialId });
+    }
 
     // Idempotence : un lien magique peut être POSTé deux fois. Si un débrief
     // existe déjà pour ce RDV, on ne réinsère pas (sinon double débrief + double
