@@ -18,6 +18,7 @@ import {
   buildQualifierByLead,
   buildAdminStats,
   buildSetterStats,
+  buildSetterLeaderboard,
   buildCommercialStats,
   isNewLeadInRange,
   isClassifiedLead,
@@ -291,6 +292,40 @@ export const summary = query({
         ? buildAdminStats(leadRows, calls, rdvAll, userRows, range, latestCallByLead, firstRdvByLead)
         : null,
     };
+  },
+});
+
+/**
+ * Classement minimal des setters (carte « Performances setters » de l'Overview) :
+ * appels + qualifiés de la période, mêmes calculs que le tableau admin mais sans
+ * exposer le reste de la vue agrégée. Ouvert aux rôles summary (dont setter).
+ * Défaut : aujourd'hui (days=1).
+ */
+export const setterLeaderboard = query({
+  args: {
+    now: v.number(),
+    days: v.optional(v.number()),
+    from: v.optional(v.string()),
+    to: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, SUMMARY_ROLES);
+    const range = buildRange(args.from, args.to, args.days ?? 1, args.now);
+    const callDocs = await ctx.db
+      .query("callLogs")
+      .withIndex("by_calledAt", (q) => q.gte("calledAt", range.fromMs).lte("calledAt", range.toMs))
+      .collect();
+    const calls = callDocs.map(toCallRow);
+    const calledLeadIds = new Set<string>(calls.map((c) => c.leadId as string).filter(Boolean));
+    const [leadDocs, userDocs] = await Promise.all([
+      ctx.db.query("leads").collect(),
+      ctx.db.query("users").collect(),
+    ]);
+    const leadRows = filterActiveLeads(leadDocs, range, calledLeadIds);
+    const userRows: UserRow[] = userDocs
+      .filter((u) => u.active !== false)
+      .map((u) => ({ id: u._id, name: u.name ?? "", role: roleOf(u) }));
+    return buildSetterLeaderboard(leadRows, calls, userRows, range);
   },
 });
 

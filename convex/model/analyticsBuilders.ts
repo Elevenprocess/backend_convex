@@ -652,6 +652,25 @@ export function groupLeadIdsBySetter(leadsRows: LeadRow[], calls: CallRow[]): Ma
   return map;
 }
 
+/**
+ * Classement minimal des setters (Overview setter) : appels + qualifiés de la
+ * période, mêmes règles de scoping/calcul que la vue admin (buildSetterRows)
+ * mais projection réduite ; les setters sans activité sont filtrés.
+ */
+export function buildSetterLeaderboard(
+  leadsRows: LeadRow[],
+  calls: CallRow[],
+  userRows: UserRow[],
+  range: RangeMs,
+  latestCallByLead = buildLatestCallByLead(calls),
+) {
+  const scopedCalls = filterRange(calls, range, (c) => c.calledAt);
+  const scopedLeads = leadsRows.filter((l) => isLeadActiveInRange(l, range, latestCallByLead));
+  return buildSetterRows(scopedLeads, scopedCalls, userRows)
+    .filter((r) => r.calls > 0 || r.qualified > 0)
+    .map((r) => ({ id: r.id, name: r.name, initials: r.initials, calls: r.calls, qualified: r.qualified }));
+}
+
 // Le commercial_lead (responsable commercial) ferme aussi des dossiers : il doit
 // apparaître dans le classement et compter dans les KPI équipe au même titre
 // qu'un commercial.

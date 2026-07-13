@@ -129,3 +129,29 @@ test("commercial_lead : vue admin ; rôle hors liste (technicien) → throw ; d�
   const adminId2 = await insertUser(t, { role: "admin", email: "a2@e.fr" });
   expect((await asUser(t, adminId2).query(api.analytics.summary, { now: NOW })).days).toBe(365);
 });
+
+test("setterLeaderboard : accessible à un setter, appels+qualifiés, sans setter inactif", async () => {
+  const t = makeT();
+  const { setterId } = await seed(t);
+  // Setter sans aucune activité : ne doit pas apparaître.
+  await insertUser(t, { role: "setter", email: "zero@e.fr", name: "Setter Zéro" });
+  const rows = await asUser(t, setterId).query(api.analytics.setterLeaderboard, {
+    now: NOW,
+    from: "2026-07-01T00:00:00.000Z",
+    to: new Date(Date.now() + 86_400_000).toISOString(),
+  });
+  expect(rows).toHaveLength(1);
+  expect(rows[0].name).toBe("Setter Un");
+  expect(rows[0].calls).toBeGreaterThanOrEqual(1);
+  expect(rows[0].qualified).toBe(1);
+  // Projection minimale : rien de la vue admin (CA, efficiency…).
+  expect(Object.keys(rows[0]).sort()).toEqual(["calls", "id", "initials", "name", "qualified"]);
+});
+
+test("setterLeaderboard : refusé à un rôle hors summary (technicien)", async () => {
+  const t = makeT();
+  const techId = await insertUser(t, { role: "technicien", email: "t@e.fr" });
+  await expect(
+    asUser(t, techId).query(api.analytics.setterLeaderboard, { now: NOW }),
+  ).rejects.toThrow(/non autorisé/);
+});
