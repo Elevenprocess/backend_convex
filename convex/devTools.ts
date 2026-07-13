@@ -61,3 +61,59 @@ export const createAdmin = internalAction({
   },
 });
 
+
+// ─── Fixture de test du lien débrief (internes, CLI uniquement) ──────────────
+// createDebriefLinkFixture : lead + RDV honoré de test (sans externalId GHL →
+// aucun push sortant). purgeDebriefLinkFixture : hard-delete lead/rdv/débriefs/
+// projets/dossiers créés par le test pour ne pas polluer les stats.
+export const createDebriefLinkFixture = internalMutation({
+  args: { commercialId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const leadId = await ctx.db.insert("leads", {
+      source: "manual",
+      status: "rdv_honore",
+      firstName: "TEST",
+      lastName: "LIEN DEBRIEF — à ignorer",
+      createdAt: Date.now(),
+    });
+    const rdvId = await ctx.db.insert("rdv", {
+      leadId,
+      ...(args.commercialId !== undefined ? { commercialId: args.commercialId } : {}),
+      locationType: "domicile",
+      status: "honore",
+      scheduledAt: Date.now() - 60 * 60 * 1000,
+      createdAt: Date.now(),
+    });
+    return { leadId, rdvId };
+  },
+});
+
+export const purgeDebriefLinkFixture = internalMutation({
+  args: { leadId: v.id("leads") },
+  handler: async (ctx, args) => {
+    const lead = await ctx.db.get(args.leadId);
+    if (!lead || !(lead.lastName ?? "").includes("LIEN DEBRIEF")) {
+      throw new Error("Refus : ce lead n'est pas une fixture de test.");
+    }
+    let deleted = 0;
+    const clientsRows = await ctx.db.query("clients").withIndex("by_lead", (q) => q.eq("leadId", args.leadId)).collect();
+    for (const c of clientsRows) {
+      for (const sub of await ctx.db.query("workflowSubsteps").withIndex("by_client", (q) => q.eq("clientId", c._id)).collect()) await ctx.db.delete(sub._id);
+      for (const st of await ctx.db.query("workflowSteps").withIndex("by_client", (q) => q.eq("clientId", c._id)).collect()) await ctx.db.delete(st._id);
+      await ctx.db.delete(c._id);
+      deleted++;
+    }
+    for (const table of ["debriefs", "rdv", "projects"] as const) {
+      const rows = await ctx.db
+        .query(table)
+        .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
+        .collect();
+      for (const r of rows) {
+        await ctx.db.delete(r._id);
+        deleted++;
+      }
+    }
+    await ctx.db.delete(args.leadId);
+    return { deleted: deleted + 1 };
+  },
+});
