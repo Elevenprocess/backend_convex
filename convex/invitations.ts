@@ -21,7 +21,7 @@ function randomToken(): string {
 }
 
 function inviteUrl(token: string): string {
-  const base = (process.env.FRONTEND_URL ?? "https://crm.electroconceptoi.com")
+  const base = (process.env.FRONTEND_URL ?? "https://velora.electroconceptoi.com")
     .split(",")[0].trim().replace(/\/$/, "");
   return `${base}/#/accept-invite/${encodeURIComponent(token)}`;
 }

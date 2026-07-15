@@ -313,7 +313,7 @@ http.route({
 });
 
 function frontendBase(): string {
-  return (process.env.FRONTEND_URL ?? "https://crm.electroconceptoi.com")
+  return (process.env.FRONTEND_URL ?? "https://velora.electroconceptoi.com")
     .split(",")[0].trim().replace(/\/$/, "");
 }
 
