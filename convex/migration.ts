@@ -1,7 +1,8 @@
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
-import type { Doc, TableNames } from "./_generated/dataModel";
+import type { Doc, Id, TableNames } from "./_generated/dataModel";
 import { LEAD_STATUSES } from "./model/enums";
+import { outcomeToResult, outcomeToStatus } from "./debriefs";
 
 // ─── Outillage de migration NestJS/Postgres → Convex ────────────────────────
 // Fonctions INTERNES uniquement (lancées via `npx convex run` avec la deploy
@@ -96,6 +97,68 @@ export const patchLeadStatuses = internalMutation({
       patched++;
     }
     return { patched };
+  },
+});
+
+/**
+ * Réconcilie les RDV avec leurs débriefs importés de Postgres. Le flux wizard
+ * (debriefs.submitViaLink / createForRdv) patche le RDV à la soumission, mais
+ * un débrief importé par migrationPg:catchup arrive APRÈS l'import du RDV et
+ * upsertMigration skippe l'existant : le RDV reste "planifie" sans result ni
+ * debriefFilledAt, et l'overview (KPI construits sur la table rdv) ne compte
+ * jamais ces débriefs. Prudent : ne touche QUE les RDV jamais débriefés
+ * (result ET debriefFilledAt absents) — un RDV travaillé dans VELORA n'est
+ * jamais écrasé. Idempotent ; appelé en fin de catchup et exécutable seul :
+ *   npx convex run migration:reconcileRdvDebriefs '{}'            # dry-run
+ *   npx convex run migration:reconcileRdvDebriefs '{"apply":true}'
+ */
+export const reconcileRdvDebriefs = internalMutation({
+  args: { apply: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
+    const debriefDocs = (await ctx.db.query("debriefs").collect()).filter(
+      (d) => d.deletedAt === undefined && d.rdvId !== undefined,
+    );
+    // Date métier (createdAt Render, repli _creationTime) — même logique que
+    // les KPI datés : les lots d'import partagent tous le même _creationTime.
+    const bizCreatedAt = (d: Doc<"debriefs">) => d.createdAt ?? d._creationTime;
+    // Plusieurs débriefs pour un même RDV (re-soumission côté Render) : seul
+    // le plus récent fait foi.
+    const latestByRdv = new Map<Id<"rdv">, Doc<"debriefs">>();
+    for (const d of debriefDocs) {
+      const current = latestByRdv.get(d.rdvId!);
+      if (!current || bizCreatedAt(d) > bizCreatedAt(current)) latestByRdv.set(d.rdvId!, d);
+    }
+    const diffs: Array<{ rdvId: Id<"rdv">; outcome: string; result?: string; status: string }> = [];
+    for (const [rdvId, d] of latestByRdv) {
+      const rdvRow = await ctx.db.get(rdvId);
+      if (!rdvRow || rdvRow.deletedAt !== undefined) continue;
+      if (rdvRow.debriefFilledAt !== undefined || rdvRow.result !== undefined) continue;
+      const result = outcomeToResult(d.outcome, d.nonSaleReason);
+      const status = outcomeToStatus(d.outcome, d.nonSaleReason);
+      diffs.push({ rdvId, outcome: d.outcome, result, status });
+      if (!args.apply) continue;
+      // Même patch que le flux wizard, plus le status (les KPI « RDV honorés »
+      // filtrent dessus) et la date métier du débrief comme debriefFilledAt.
+      await ctx.db.patch(rdvId, {
+        result,
+        status,
+        debriefFilledAt: bizCreatedAt(d),
+        ...(d.objection !== undefined ? { objections: d.objection } : {}),
+        ...(d.notes !== undefined ? { notes: d.notes } : {}),
+        ...(d.outcome === "non_vente" && d.nonSaleReason !== undefined
+          ? { nonSaleReason: d.nonSaleReason }
+          : {}),
+        ...(d.outcome === "vente"
+          ? {
+              ...(d.montantTotal !== undefined ? { montantTotal: d.montantTotal } : {}),
+              ...(d.kits !== undefined ? { kits: d.kits } : {}),
+              ...(d.financingType !== undefined ? { financingType: d.financingType } : {}),
+              ...(d.signedAt !== undefined ? { signatureAt: d.signedAt } : {}),
+            }
+          : {}),
+      });
+    }
+    return { count: diffs.length, applied: args.apply === true, diffs };
   },
 });
 

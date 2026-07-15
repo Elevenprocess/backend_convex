@@ -205,6 +205,15 @@ export const catchup = internalAction({
         summary.backfillDebriefsCreatedAt = { patched, notFound };
       }
     });
+
+    // Les débriefs remplis côté Render arrivent après l'import de leur RDV et
+    // upsertMigration skippe l'existant → sans cette passe, le RDV resterait
+    // "planifie" sans result/debriefFilledAt et l'overview ne compterait
+    // jamais ces débriefs (bug des débriefs invisibles de juillet 2026).
+    if (order.includes("debriefs")) {
+      const rec: any = await ctx.runMutation(internal.migration.reconcileRdvDebriefs, { apply: true });
+      summary.rdvReconciledFromDebriefs = rec.count;
+    }
     return summary;
   },
 });

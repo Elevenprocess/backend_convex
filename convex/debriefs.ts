@@ -287,6 +287,22 @@ export function outcomeToResult(
   return undefined;
 }
 
+// Mappe l'outcome du débrief vers le champ `status` du RDV (RDV_STATUSES).
+// Un débrief implique que le RDV a eu lieu (honore), sauf no_show et
+// annulations où le contact n'est jamais venu. Utilisé par la réconciliation
+// des débriefs importés (migration.reconcileRdvDebriefs) : les KPI « RDV
+// honorés » filtrent sur status, pas sur result.
+export function outcomeToStatus(
+  outcome: string,
+  reason: string | undefined,
+): "honore" | "no_show" | "annule" {
+  if (outcome === "non_vente") {
+    if (reason === "no_show") return "no_show";
+    if (reason === "contact_annule" || reason === "annulation_administrative") return "annule";
+  }
+  return "honore";
+}
+
 // Données du formulaire de débrief via lien magique (public, lu par l'httpAction
 // après vérif du token). null si RDV introuvable ou supprimé.
 export const linkReadData = internalQuery({
