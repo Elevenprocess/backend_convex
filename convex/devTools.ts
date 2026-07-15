@@ -117,3 +117,48 @@ export const purgeDebriefLinkFixture = internalMutation({
     return { deleted: deleted + 1 };
   },
 });
+
+// Réparation : leads rétrogradés à tort par un résultat d'appel alors qu'ils
+// ont un RDV encore ouvert (bug corrigé dans callLogs.logCall — garde
+// leadHasOpenRdv). Repasse ces leads en « qualifie ». Sans {"apply": true},
+// ne fait que lister les leads concernés (dry-run).
+// `npx convex run devTools:repairQualifiesAvecRdvOuvert '{"apply": true}' --prod`
+export const repairQualifiesAvecRdvOuvert = internalMutation({
+  args: { apply: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
+    // Statuts atteignables par la régression de logCall uniquement : on ne
+    // touche ni aux décisions terminales (perdu/signe) ni aux leads déjà bons.
+    const REGRESSED = new Set(["pas_de_reponse", "a_rappeler", "relance", "pas_qualifie"]);
+    const OPEN = new Set(["planifie", "reporte"]);
+
+    const rdvRows = await ctx.db.query("rdv").collect();
+    const openLeadIds = new Set(
+      rdvRows
+        .filter((r) => r.deletedAt === undefined && OPEN.has(r.status))
+        .map((r) => r.leadId),
+    );
+
+    const repaired: Array<{ leadId: string; from: string; name: string }> = [];
+    for (const leadId of openLeadIds) {
+      const lead = await ctx.db.get(leadId);
+      if (!lead || lead.deletedAt !== undefined || !REGRESSED.has(lead.status)) continue;
+      repaired.push({
+        leadId,
+        from: lead.status,
+        name: [lead.firstName, lead.lastName].filter(Boolean).join(" "),
+      });
+      if (args.apply) {
+        await ctx.db.patch(leadId, { status: "qualifie" });
+        await insertStageHistory(ctx, {
+          leadId,
+          ghlStageName: "qualifie",
+          saasStatus: "qualifie",
+          assignedToId: lead.assignedToId,
+          changedAt: Date.now(),
+          source: "manual",
+        });
+      }
+    }
+    return { applied: args.apply === true, count: repaired.length, leads: repaired };
+  },
+});

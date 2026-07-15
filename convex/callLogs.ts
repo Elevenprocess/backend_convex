@@ -6,6 +6,7 @@ import { callResultValidator } from "./model/enums";
 import type { CallResult, LeadStatus } from "./model/enums";
 import { requireUser, requireLeadWriteRole, roleOf } from "./model/access";
 import { insertStageHistory } from "./model/stageHistory";
+import { OPEN_RDV_STATUSES } from "./rdv";
 
 // Portage de CallLogsService : le résultat d'appel dérive le statut du lead
 // (c'est ce qui fait « bouger » la classification côté leads).
@@ -31,6 +32,19 @@ const LONG_TERM_RELANCE_ELIGIBLE: ReadonlySet<LeadStatus> = new Set([
 const DOWNSTREAM_PROJECT_STATUSES: ReadonlySet<string> = new Set([
   "signe", "signature_en_cours", "devis_en_cours",
 ]);
+
+// Un RDV ouvert (planifié/reporté) gouverne le statut du lead : c'est le
+// cycle de vie du RDV (rdv.update → deriveLeadStatus) qui le fera bouger,
+// pas un simple appel de confirmation tombé sur messagerie.
+async function leadHasOpenRdv(ctx: MutationCtx, leadId: Id<"leads">): Promise<boolean> {
+  const rows = await ctx.db
+    .query("rdv")
+    .withIndex("by_lead", (q) => q.eq("leadId", leadId))
+    .collect();
+  return rows.some(
+    (r) => r.deletedAt === undefined && (OPEN_RDV_STATUSES as readonly string[]).includes(r.status),
+  );
+}
 
 async function leadHasDownstreamProject(ctx: MutationCtx, leadId: Id<"leads">): Promise<boolean> {
   const projects = await ctx.db
@@ -88,11 +102,13 @@ export const logCall = mutation({
     if (lead.setterId === undefined && ["setter", "setter_lead"].includes(roleOf(user))) {
       patch.setterId = user._id;
     }
-    // On ne régresse jamais un lead terminal, ni un lead avec un projet aval.
+    // On ne régresse jamais un lead terminal, un lead avec un projet aval,
+    // ni un lead qualifié avec un RDV encore ouvert.
     if (
       derivedStatus &&
       !TERMINAL_LEAD_STATUSES.has(lead.status) &&
-      !(await leadHasDownstreamProject(ctx, args.leadId))
+      !(await leadHasDownstreamProject(ctx, args.leadId)) &&
+      !(await leadHasOpenRdv(ctx, args.leadId))
     ) {
       // Auto-promotion « relance » : ≥11 jours d'appels distincts, mais seulement
       // pour une action de relance (jamais sur une décision explicite refus/joint).

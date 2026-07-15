@@ -56,6 +56,31 @@ test("logCall() ne régresse pas un lead terminal (rdv_pris/signe)", async () =>
   expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("signe");
 });
 
+test("logCall() ne régresse pas un lead qualifié avec un RDV ouvert", async () => {
+  const t = makeT();
+  const setterId = await insertUser(t, { role: "setter" });
+  const commercialId = await insertUser(t, { role: "commercial", email: "com@ecoi.fr" });
+  const leadId = await asUser(t, setterId).mutation(api.leads.create, { firstName: "Rdv" });
+  await asUser(t, commercialId).mutation(api.rdv.create, {
+    leadId,
+    commercialId,
+    scheduledAt: Date.now() + 86_400_000,
+  });
+  expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("qualifie");
+
+  // Appel de confirmation tombé sur messagerie : le lead reste qualifié.
+  await asUser(t, setterId).mutation(api.callLogs.logCall, { leadId, result: "messagerie" });
+  expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("qualifie");
+
+  // RDV clôturé (honoré) : les appels suivants ne régressent toujours pas
+  // (rdv_honore est terminal).
+  const rdvRows = await t.run((ctx) => ctx.db.query("rdv").collect());
+  await t.run((ctx) => ctx.db.patch(rdvRows[0]._id, { status: "honore" }));
+  await t.run((ctx) => ctx.db.patch(leadId, { status: "rdv_honore" }));
+  await asUser(t, setterId).mutation(api.callLogs.logCall, { leadId, result: "non_joint" });
+  expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("rdv_honore");
+});
+
 test("logCall() refuse un rôle non commercial (technicien)", async () => {
   const t = makeT();
   const setterId = await insertUser(t, { role: "setter" });
