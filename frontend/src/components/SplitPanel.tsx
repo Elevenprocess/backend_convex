@@ -16,7 +16,7 @@ import {
   type UserResponse,
 } from '../lib/types'
 import { useCall, type CallState } from '../lib/call'
-import { useCallLogs, useRdvList, createCallLog, createRdv, updateLead, updateGhlAppointment, useGhlCalendarConfig, useGhlFreeSlots, createGhlAppointment, syncLeadGhlCalendarEvents, type GhlCalendarEvent } from '../lib/hooks'
+import { useCallLogs, useRdvList, useStartCall, createCallLog, createRdv, updateLead, updateGhlAppointment, useGhlCalendarConfig, useGhlFreeSlots, createGhlAppointment, syncLeadGhlCalendarEvents, type GhlCalendarEvent } from '../lib/hooks'
 import { useAuth } from '../lib/auth'
 import { leadDetailPath } from '../lib/leadPaths'
 import { sectorFromCity } from '../lib/sector'
@@ -90,6 +90,7 @@ export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, chi
   const role = useAuth((s) => s.user?.role)
   const [active, setActive] = useState(defaultTab ?? tabs[0].id)
   const callState = useCall()
+  const startCall = useStartCall()
   const isActiveCallForThisLead = callState.active && callState.leadId === lead.id
 
   const commercialName = lead.latestRdvCommercialId
@@ -131,6 +132,23 @@ export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, chi
             </div>
           </div>
         )}
+        {/* Bouton Appel : copie le numéro (Ringover manuel) et ouvre l'historique des appels. */}
+        <button
+          onClick={() => {
+            if (!lead.phone) return
+            startCall({ leadId: lead.id, leadName: fullName(lead), toNumber: lead.phone }).catch((err) => {
+              console.error('Phone copy failed', err)
+              alert(err instanceof Error ? err.message : 'Impossible de copier le numéro')
+            })
+            if (tabs.some((t) => t.id === 'appels')) setActive('appels')
+          }}
+          disabled={!lead.phone}
+          className="w-10 h-10 rounded-full bg-or text-white flex items-center justify-center shadow-sm hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+          title={lead.phone ? 'Appeler (copie le numéro) + historique des appels' : 'Pas de numéro de téléphone'}
+          aria-label="Appeler"
+        >
+          <Icon name="phone" size={14} />
+        </button>
         <Link to={leadDetailPath(role, lead.id)} className="text-xs font-semibold text-or hover:underline whitespace-nowrap">
           Fiche →
         </Link>
@@ -208,7 +226,7 @@ function DefaultPanelContent({
 }) {
   if (active === 'infos') return <InfosTab lead={lead} userMap={userMap} onSaved={onSaved} />
   if (active === 'activite') return <ActiviteTab leadId={lead.id} userMap={userMap} />
-  if (active === 'appels') return <AppelsTab leadId={lead.id} userMap={userMap} />
+  if (active === 'appels') return <AppelsTab lead={lead} userMap={userMap} />
   if (active === 'rdv') return <RdvTab lead={lead} userMap={userMap} onSaved={onSaved} />
   if (active === 'notes') {
     return (
@@ -459,25 +477,59 @@ function ActiviteTab({ leadId, userMap }: { leadId: string; userMap?: Map<string
   return <div className="space-y-3">{items.slice(0, 15).map((i) => i.node)}</div>
 }
 
-function AppelsTab({ leadId, userMap }: { leadId: string; userMap?: Map<string, UserResponse> }) {
-  const { data, loading } = useCallLogs({ leadId, limit: 50 })
-  if (loading) return <LoadingBlock />
+// Badge coloré par famille de résultat : qualifié (vert), à rappeler (cuivre),
+// non qualifié / refus (rouille), sans réponse (gris).
+const CALL_RESULT_BADGE: Record<CallResult, string> = {
+  joint: 'bg-success-tint text-success',
+  rdv_pris: 'bg-success-tint text-success',
+  rappel_planifie: 'bg-cuivre-tint text-cuivre',
+  refus: 'bg-rouille-tint text-rouille',
+  non_joint: 'bg-muted/10 text-muted',
+  injoignable: 'bg-muted/10 text-muted',
+  messagerie: 'bg-muted/10 text-muted',
+}
 
-  if (!data || data.length === 0) return <p className="text-faint">Aucun appel pour ce lead.</p>
+function AppelsTab({ lead, userMap }: { lead: LeadResponse; userMap?: Map<string, UserResponse> }) {
+  const { data, loading } = useCallLogs({ leadId: lead.id, limit: 50 })
+
+  // Setters multi : union de setterId (principal) + assignedSetterIds (collègues auto-assignés).
+  const setterIdSet = new Set<string>()
+  if (lead.setterId) setterIdSet.add(lead.setterId)
+  for (const id of lead.assignedSetterIds ?? []) setterIdSet.add(id)
+  const setterNames = Array.from(setterIdSet)
+    .map((id) => userMap?.get(id)?.name)
+    .filter((n): n is string => Boolean(n))
+
+  if (loading) return <LoadingBlock />
   return (
     <div className="space-y-3">
-      {data.map((c) => (
-        <div key={c.id} className="bg-white/60 border border-line rounded-xl p-3">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] font-bold uppercase tracking-widest text-or">{CALL_RESULT_LABEL[c.result]}</span>
-            <span className="text-[11px] text-faint">{formatDate(c.calledAt)}</span>
-          </div>
-          {userMap?.get(c.setterId)?.name && (
-            <div className="text-xs text-muted">{userMap.get(c.setterId)?.name}</div>
-          )}
-          {c.notes && <p className="text-sm mt-2 text-text whitespace-pre-line">{c.notes}</p>}
+      <div className="bg-or-tint/60 border border-line-soft rounded-xl p-3 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="eyebrow">SETTER ASSIGNÉ</div>
+          <div className="text-sm font-semibold truncate">{setterNames.length > 0 ? setterNames.join(' · ') : 'Aucun'}</div>
         </div>
-      ))}
+        <span className="text-xs text-muted whitespace-nowrap">{(data ?? []).length} appel{(data ?? []).length > 1 ? 's' : ''}</span>
+      </div>
+      {!data || data.length === 0 ? (
+        <p className="text-faint">Aucun appel pour ce lead.</p>
+      ) : (
+        data.map((c) => (
+          <div key={c.id} className="bg-white/60 border border-line rounded-xl p-3">
+            <div className="flex items-center justify-between mb-1 gap-2">
+              <span className={`status-badge ${CALL_RESULT_BADGE[c.result] ?? 'bg-cream-darker text-text'}`}>{CALL_RESULT_LABEL[c.result] ?? c.result}</span>
+              <span className="text-[11px] text-faint whitespace-nowrap">{formatDate(c.calledAt)}</span>
+            </div>
+            <div className="text-xs text-muted flex items-center gap-1">
+              <Icon name="users" size={11} />
+              {userMap?.get(c.setterId)?.name ?? 'Setter inconnu'}
+            </div>
+            {c.nextCallbackAt && (
+              <div className="text-xs text-cuivre mt-1">Rappel prévu : {formatDate(c.nextCallbackAt)}</div>
+            )}
+            {c.notes && <p className="text-sm mt-2 text-text whitespace-pre-line">{c.notes}</p>}
+          </div>
+        ))
+      )}
     </div>
   )
 }
