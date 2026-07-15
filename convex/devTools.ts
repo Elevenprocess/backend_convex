@@ -124,11 +124,19 @@ export const purgeDebriefLinkFixture = internalMutation({
 // ne fait que lister les leads concernés (dry-run).
 // `npx convex run devTools:repairQualifiesAvecRdvOuvert '{"apply": true}' --prod`
 export const repairQualifiesAvecRdvOuvert = internalMutation({
-  args: { apply: v.optional(v.boolean()) },
+  args: {
+    apply: v.optional(v.boolean()),
+    // Restreint la réparation à certains statuts d'origine. Par défaut :
+    // tous les statuts atteignables par la régression, y compris pas_qualifie
+    // (qui vient d'un « refus » explicite — à réparer avec discernement).
+    statuses: v.optional(v.array(v.string())),
+  },
   handler: async (ctx, args) => {
     // Statuts atteignables par la régression de logCall uniquement : on ne
     // touche ni aux décisions terminales (perdu/signe) ni aux leads déjà bons.
-    const REGRESSED = new Set(["pas_de_reponse", "a_rappeler", "relance", "pas_qualifie"]);
+    const REGRESSED = new Set(
+      args.statuses ?? ["pas_de_reponse", "a_rappeler", "relance", "pas_qualifie"],
+    );
     const OPEN = new Set(["planifie", "reporte"]);
 
     const rdvRows = await ctx.db.query("rdv").collect();
