@@ -1425,6 +1425,7 @@ function NotesTab({
             loading={Boolean(agendaLoading || (ghlConfig?.configured && rdvDate && ghlSlotsLoading))}
             leadId={lead.id}
             timeSlots={commercialTimeSlots}
+            ghlManaged={Boolean(ghlConfig?.configured && rdvDate)}
             onSelect={(time) => setRdvAt(`${rdvDate}T${time}`)}
           />
           <p className="text-xs text-muted">
@@ -1483,6 +1484,7 @@ function InlineRdvAgenda({
   loading,
   leadId,
   timeSlots,
+  ghlManaged,
   onSelect,
 }: {
   selectedAt: string
@@ -1490,6 +1492,7 @@ function InlineRdvAgenda({
   loading: boolean
   leadId: string
   timeSlots: string[]
+  ghlManaged: boolean
   onSelect: (time: string) => void
 }) {
   const selectedTime = selectedAt ? selectedAt.split('T')[1] : ''
@@ -1501,8 +1504,13 @@ function InlineRdvAgenda({
     list.push(r)
     byTime.set(slot, list)
   }
-  // Créneaux occupés masqués, sauf ceux du lead en cours ou déjà sélectionnés
+  // Un secteur peut avoir plusieurs commerciaux : un créneau reste libre tant qu'au
+  // moins un est dispo. En mode GHL, l'API free-slots gère déjà cette capacité (un
+  // créneau complet n'est plus renvoyé) — on affiche donc tout ce que GHL renvoie.
+  // En mode local (pas de capacité connue), on masque dès le premier RDV, sauf ceux
+  // du lead en cours ou déjà sélectionnés.
   const visibleSlots = timeSlots.filter((slot) => {
+    if (ghlManaged) return true
     const matches = byTime.get(slot) ?? []
     return matches.length === 0 || matches.some((r) => r.leadId === leadId) || selectedTime === slot
   })
@@ -1520,8 +1528,10 @@ function InlineRdvAgenda({
         {visibleSlots.map((slot) => {
           const slotLabel = slot
           const matches = byTime.get(slotLabel) ?? []
+          const mine = matches.filter((r) => r.leadId === leadId)
+          const others = matches.filter((r) => r.leadId !== leadId)
           const selected = selectedTime === slot
-          const busy = matches.length > 0
+          const busy = !ghlManaged && others.length > 0
           return (
             <button
               key={slot}
@@ -1531,12 +1541,21 @@ function InlineRdvAgenda({
             >
               <div className={`w-14 text-xs font-bold ${selected ? 'text-or-dark' : 'text-muted'}`}>{slotLabel}</div>
               <div className="flex-grow min-w-0">
-                {busy ? matches.map((r) => (
-                  <div key={r.id} className={`text-xs ${r.leadId === leadId ? 'font-bold text-or-dark' : 'text-text'}`}>
-                    {r.leadId === leadId ? 'Ce lead' : 'RDV déjà pris'} · {r.locationType}
-                  </div>
-                )) : (
-                  <div className="text-xs text-faint">Disponible</div>
+                {mine.map((r) => (
+                  <div key={r.id} className="text-xs font-bold text-or-dark">Ce lead · {r.locationType}</div>
+                ))}
+                {ghlManaged ? (
+                  mine.length === 0 && (
+                    <div className="text-xs text-faint">
+                      Disponible{others.length > 0 ? ` · ${others.length} RDV pris, autre commercial dispo` : ''}
+                    </div>
+                  )
+                ) : others.length > 0 ? (
+                  others.map((r) => (
+                    <div key={r.id} className="text-xs text-text">RDV déjà pris · {r.locationType}</div>
+                  ))
+                ) : (
+                  mine.length === 0 && <div className="text-xs text-faint">Disponible</div>
                 )}
               </div>
               {selected && <span className="status-badge bg-or text-white">Choisi</span>}
