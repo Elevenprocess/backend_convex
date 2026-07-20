@@ -2,7 +2,7 @@ import { internalMutation, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { createAccount } from "@convex-dev/auth/server";
 import { internal } from "./_generated/api";
-import { roleValidator, leadStatusValidator } from "./model/enums";
+import { roleValidator, teamValidator, leadStatusValidator } from "./model/enums";
 import { insertStageHistory } from "./model/stageHistory";
 
 // Outils dev uniquement — internes (jamais appelables par un client) : lancés
@@ -58,6 +58,63 @@ export const createAdmin = internalAction({
     });
     await ctx.runMutation(internal.devTools.setRole, { email: args.email, role: "admin" });
     return { userId: user._id, email: args.email, role: "admin" };
+  },
+});
+
+// Nettoyage post-sync mapGhlCommercials : soft-delete des comptes actifs dont
+// le ghlUserId ne figure pas dans l'équipe GHL (source de vérité = page staff
+// GHL). keepEmails protège les comptes à conserver malgré tout (ex. compte de
+// connexion admin). Lancé via
+// `npx convex run devTools:purgeUsersNotInGhl '{"ghlUserIds":["…"],"keepEmails":["…"],"dryRun":true}'`.
+export const purgeUsersNotInGhl = internalMutation({
+  args: {
+    ghlUserIds: v.array(v.string()),
+    keepEmails: v.optional(v.array(v.string())),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const ghlIds = new Set(args.ghlUserIds);
+    const keep = new Set((args.keepEmails ?? []).map((e) => e.trim().toLowerCase()));
+    const purged: string[] = [];
+    const kept: string[] = [];
+    for (const user of await ctx.db.query("users").collect()) {
+      if (user.deletedAt !== undefined) continue;
+      if (user.ghlUserId && ghlIds.has(user.ghlUserId)) continue;
+      const label = `${user.name ?? "?"} (${user.email ?? "sans email"})`;
+      if (keep.has((user.email ?? "").toLowerCase())) {
+        kept.push(label);
+        continue;
+      }
+      if (args.dryRun !== true) await ctx.db.patch(user._id, { deletedAt: Date.now(), active: false });
+      purged.push(label);
+    }
+    return { dryRun: args.dryRun === true, purged, kept };
+  },
+});
+
+// Réparation d'un compte par email : restauration d'un soft-delete (restore)
+// et/ou ajustement role/team — ex. commercial supprimé de Velora mais encore
+// présent dans GHL. `npx convex run devTools:patchUserByEmail '{"email":"…","restore":true}'`.
+export const patchUserByEmail = internalMutation({
+  args: {
+    email: v.string(),
+    restore: v.optional(v.boolean()),
+    role: v.optional(roleValidator),
+    team: v.optional(teamValidator),
+  },
+  handler: async (ctx, args) => {
+    const email = args.email.trim().toLowerCase();
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", email))
+      .unique();
+    if (!user) throw new Error(`Compte introuvable : ${email}`);
+    await ctx.db.patch(user._id, {
+      ...(args.restore === true ? { deletedAt: undefined, active: true } : {}),
+      ...(args.role !== undefined ? { role: args.role } : {}),
+      ...(args.team !== undefined ? { team: args.team } : {}),
+    });
+    return { userId: user._id, email, restored: args.restore === true && user.deletedAt !== undefined };
   },
 });
 

@@ -1,6 +1,7 @@
 /**
  * Client HTTP GoHighLevel partagé (Tranche 8b, réutilisé 8c/8d).
- * GET = 2 tentatives (retry sur erreur réseau seulement), timeout 15 s ;
+ * GET = 2 tentatives (retry sur erreur réseau et réponse 5xx — GHL renvoie
+ * parfois « Command timed out » en 5xx transitoire), timeout 15 s ;
  * mutation = 1 tentative, timeout 8 s. Module simple — pas de fonctions
  * Convex ici, uniquement importé par des actions.
  */
@@ -17,6 +18,10 @@ export class GhlApiError extends Error {}
 
 export function safeJson(text: string): unknown {
   try { return JSON.parse(text); } catch { return text; }
+}
+
+export function isRetryableHttpStatus(status: number): boolean {
+  return status >= 500;
 }
 
 export function isRetryableFetchError(error: unknown): boolean {
@@ -97,7 +102,12 @@ export async function ghlRequest(
       const text = await res.text();
       const data = text ? safeJson(text) : null;
       if (!res.ok) {
-        throw new GhlApiError(`Erreur GHL: ${extractMessage(data) || `${res.status} ${res.statusText}`}`);
+        const apiError = new GhlApiError(`Erreur GHL: ${extractMessage(data) || `${res.status} ${res.statusText}`}`);
+        if (attempt < maxAttempts && isRetryableHttpStatus(res.status)) {
+          lastError = apiError;
+          continue;
+        }
+        throw apiError;
       }
       return data;
     } catch (error) {

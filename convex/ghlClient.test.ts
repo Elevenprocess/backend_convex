@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractMessage, isRetryableFetchError, safeJson } from "./ghlClient";
+import { extractMessage, isRetryableFetchError, isRetryableHttpStatus, safeJson } from "./ghlClient";
 
 describe("ghlClient purs", () => {
   it("safeJson : JSON valide parsé, invalide → texte brut", () => {
@@ -12,6 +12,13 @@ describe("ghlClient purs", () => {
     expect(extractMessage({ error: "e" })).toBe("e");
     expect(extractMessage({ error_description: "d" })).toBe("d");
     expect(extractMessage(42)).toBeUndefined();
+  });
+  it("isRetryableHttpStatus : 5xx retryable (« Command timed out » GHL), 4xx non", () => {
+    expect(isRetryableHttpStatus(500)).toBe(true);
+    expect(isRetryableHttpStatus(504)).toBe(true);
+    expect(isRetryableHttpStatus(429)).toBe(false);
+    expect(isRetryableHttpStatus(404)).toBe(false);
+    expect(isRetryableHttpStatus(200)).toBe(false);
   });
   it("isRetryableFetchError : codes réseau, TimeoutError, cause imbriquée", () => {
     expect(isRetryableFetchError(Object.assign(new Error("x"), { code: "ECONNRESET" }))).toBe(true);
