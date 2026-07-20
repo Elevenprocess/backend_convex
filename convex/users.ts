@@ -53,6 +53,23 @@ export const directory = query({
   },
 });
 
+// Présence « en ligne » (badge Actif/Non actif de la page équipe) : un compte
+// est actif si son heartbeat (users:heartbeat, ~60 s côté front) date de moins
+// de ONLINE_TTL_MS. `now` vient du client : une query Convex ne se réévalue pas
+// avec le temps qui passe, le front change l'arg à chaque tick pour rafraîchir.
+const ONLINE_TTL_MS = 2 * 60_000;
+
+export const onlineIds = query({
+  args: { now: v.number() },
+  handler: async (ctx, args) => {
+    await requireUser(ctx);
+    const rows = await ctx.db.query("users").collect();
+    return rows
+      .filter((u) => u.deletedAt === undefined && (u.lastSeenAt ?? 0) > args.now - ONLINE_TTL_MS)
+      .map((u) => u._id);
+  },
+});
+
 export const create = mutation({
   args: {
     email: v.string(),

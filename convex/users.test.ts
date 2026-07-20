@@ -106,3 +106,24 @@ test("directory : refusé sans authentification", async () => {
   await insertUser(t, { role: "setter" });
   await expect(t.query(api.users.directory, {})).rejects.toThrow(/Non authentifié/);
 });
+
+test("onlineIds : seuls les comptes vus il y a moins de 2 min, hors supprimés", async () => {
+  const t = makeT();
+  const now = 10 * 60_000;
+  const viewerId = await insertUser(t, { role: "setter", email: "v@ecoi.fr" });
+  const onlineId = await insertUser(t, { role: "commercial", email: "on@ecoi.fr" });
+  const staleId = await insertUser(t, { role: "commercial", email: "off@ecoi.fr" });
+  const deletedId = await insertUser(t, { role: "setter", email: "del@ecoi.fr" });
+  await t.run(async (ctx: any) => {
+    await ctx.db.patch(onlineId, { lastSeenAt: now - 30_000 });
+    await ctx.db.patch(staleId, { lastSeenAt: now - 5 * 60_000 });
+    await ctx.db.patch(deletedId, { lastSeenAt: now - 10_000, deletedAt: 1 });
+  });
+  const ids = await asUser(t, viewerId).query(api.users.onlineIds, { now });
+  expect(ids).toEqual([onlineId]);
+});
+
+test("onlineIds : refusé sans authentification", async () => {
+  const t = makeT();
+  await expect(t.query(api.users.onlineIds, { now: 0 })).rejects.toThrow(/Non authentifié/);
+});

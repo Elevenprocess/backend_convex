@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useQuery } from 'convex/react'
 import { io, type Socket } from 'socket.io-client'
 import { API_BASE } from './api'
@@ -6,7 +6,7 @@ import { shouldSurfaceNotification } from './realtimeNotify'
 import { createRealtimeRefreshCoalescer, REALTIME_REFRESH_COOLDOWN_MS } from './realtimeRefreshQueue'
 import { useAuth } from './auth'
 import { convexAuthEnabled, convexClient } from './convex'
-import { leadPresenceList, leadPresenceRelease, leadPresenceTouch } from './convexApi'
+import { leadPresenceList, leadPresenceRelease, leadPresenceTouch, usersHeartbeat, usersOnlineIds } from './convexApi'
 
 export const REALTIME_REFRESH_EVENT = 'ecoi:realtime-refresh'
 
@@ -81,8 +81,7 @@ function notifyOnlineUsersChange() {
   onlineUserSubscribers.forEach((fn) => fn())
 }
 
-// Ensemble des userId actuellement en ligne (au moins un onglet ouvert).
-export function useOnlineUsers(): ReadonlySet<string> {
+function useOnlineUsersSocket(): ReadonlySet<string> {
   return useSyncExternalStore(
     (listener) => {
       onlineUserSubscribers.add(listener)
@@ -92,6 +91,27 @@ export function useOnlineUsers(): ReadonlySet<string> {
     () => onlineUsersSnapshot,
   )
 }
+
+// Mode Convex : "en ligne" = heartbeat users:heartbeat (posé par useRealtimeSocket)
+// vu il y a moins de 2 min côté serveur. L'arg `now` change à chaque tick pour
+// forcer la réévaluation (une query Convex ne se réévalue pas avec l'horloge).
+const ONLINE_TICK_MS = 60_000
+
+function useOnlineUsersConvex(): ReadonlySet<string> {
+  const authed = useAuth((s) => !!s.user)
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), ONLINE_TICK_MS)
+    return () => window.clearInterval(timer)
+  }, [])
+  const ids = useQuery(usersOnlineIds, authed ? { now } : 'skip')
+  return useMemo(() => new Set(ids ?? []) as ReadonlySet<string>, [ids])
+}
+
+// Ensemble des userId actuellement en ligne (au moins un onglet ouvert).
+export const useOnlineUsers: typeof useOnlineUsersSocket = convexAuthEnabled
+  ? useOnlineUsersConvex
+  : useOnlineUsersSocket
 
 let activeSocket: Socket | null = null
 
@@ -164,7 +184,30 @@ const scheduleRealtimeRefresh = createRealtimeRefreshCoalescer(
   REALTIME_REFRESH_COOLDOWN_MS,
 )
 
+// Heartbeat de présence utilisateur (mode Convex) : tant que l'app est ouverte
+// et l'utilisateur connecté, on pose lastSeenAt toutes les 60 s — c'est ce qui
+// rend le badge Actif/Non actif de la page équipe fidèle à la connexion réelle.
+const USER_HEARTBEAT_MS = 60_000
+
 export function useRealtimeSocket() {
+  const userId = useAuth((s) => s.user?.id ?? null)
+
+  useEffect(() => {
+    if (!convexAuthEnabled || !userId || !convexClient) return
+    const beat = () => {
+      if (document.visibilityState !== 'hidden') {
+        void convexClient?.mutation(usersHeartbeat, {}).catch(() => {})
+      }
+    }
+    beat()
+    const timer = window.setInterval(beat, USER_HEARTBEAT_MS)
+    document.addEventListener('visibilitychange', beat)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', beat)
+    }
+  }, [userId])
+
   useEffect(() => {
     // Mode Convex : pas de socket NestJS — les useQuery Convex sont réactifs
     // nativement, le serveur pousse les changements tout seul.

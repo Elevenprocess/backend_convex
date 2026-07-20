@@ -428,6 +428,11 @@ export const usersDirectory = makeFunctionReference<
   ConvexUserDirectoryEntry[]
 >('users:directory')
 
+// Présence "en ligne" : heartbeat périodique (lastSeenAt) + ids des comptes
+// vus il y a moins de 2 min — alimente le badge Actif/Non actif de l'équipe.
+export const usersHeartbeat = makeFunctionReference<'mutation', Record<string, never>, null>('users:heartbeat')
+export const usersOnlineIds = makeFunctionReference<'query', { now: number }, string[]>('users:onlineIds')
+
 export const leadsList = makeFunctionReference<
   'query',
   { status?: string; setterId?: string; assignedToId?: string; city?: string; search?: string; paginationOpts: PaginationOptsArg },
