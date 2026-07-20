@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type DragEvent } from 'react'
 import { formatDate } from '../../lib/suivi'
 import { PROJECT_STATUS_LABEL, type DebriefResponse, type Devis, type ProjectDetailResponse } from '../../lib/types'
 import { Section, Empty, DevisRow, AttachmentRow, DebriefCard, SectionAddButton, NoteEntryRow } from './fiche-parts'
@@ -103,6 +103,57 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
   const photoInput = useRef<HTMLInputElement | null>(null)
   const docInput = useRef<HTMLInputElement | null>(null)
 
+  // Glisser-déposer de fichiers sur le dossier : images → Photos, le reste →
+  // Documents. dragDepth compte les enter/leave imbriqués (les enfants du
+  // conteneur déclenchent leurs propres events) pour ne fermer l'overlay qu'en
+  // sortant réellement de la zone.
+  const [dragActive, setDragActive] = useState(false)
+  const dragDepth = useRef(0)
+  const [dropProgress, setDropProgress] = useState<{ done: number; total: number } | null>(null)
+  const canDrop = !readOnly && (pageMode || !collapsed) && showTab('documents') && dropProgress === null
+
+  const dragHasFiles = (e: DragEvent) => Array.from(e.dataTransfer.types).includes('Files')
+
+  function onDragEnter(e: DragEvent) {
+    if (!canDrop || !dragHasFiles(e)) return
+    e.preventDefault()
+    dragDepth.current += 1
+    setDragActive(true)
+  }
+
+  function onDragOver(e: DragEvent) {
+    if (canDrop && dragHasFiles(e)) e.preventDefault()
+  }
+
+  function onDragLeave(e: DragEvent) {
+    if (!canDrop || !dragHasFiles(e)) return
+    dragDepth.current = Math.max(0, dragDepth.current - 1)
+    if (dragDepth.current === 0) setDragActive(false)
+  }
+
+  async function onDrop(e: DragEvent) {
+    if (!canDrop || !dragHasFiles(e)) return
+    e.preventDefault()
+    dragDepth.current = 0
+    setDragActive(false)
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length === 0) return
+    setError(null)
+    setDropProgress({ done: 0, total: files.length })
+    let failed = 0
+    for (const [i, file] of files.entries()) {
+      try {
+        await uploadProjectAttachment(project.id, file, { kind: file.type.startsWith('image/') ? 'photo' : 'document' })
+      } catch {
+        failed += 1
+      }
+      setDropProgress({ done: i + 1, total: files.length })
+      onChanged?.()
+    }
+    setDropProgress(null)
+    if (failed > 0) setError(failed === 1 ? "Un fichier n'a pas pu être ajouté." : `${failed} fichiers n'ont pas pu être ajoutés.`)
+  }
+
   // Devis triés du plus récent au plus ancien : le devis qu'on vient de scanner
   // apparaît en tête (donc toujours visible, même section repliée).
   const sortedDevis = [...project.devis].sort(
@@ -190,7 +241,29 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
   }
 
   return (
-    <article className={pageMode ? 'space-y-6' : 'space-y-6 rounded-2xl border border-line bg-cream p-5'}>
+    <article
+      className={`relative ${pageMode ? 'space-y-6' : 'space-y-6 rounded-2xl border border-line bg-cream p-5'}`}
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={(e) => void onDrop(e)}
+    >
+      {dragActive && (
+        <div className="pointer-events-none absolute inset-0 z-30 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-or bg-or-tint/85">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-card text-or-dark shadow-sm">
+            <Icon name="download" size={22} />
+          </span>
+          <p className="text-sm font-bold text-or-dark">Déposez vos fichiers ici</p>
+          <p className="text-xs font-medium text-muted">Images → Photos · autres fichiers → Documents</p>
+        </div>
+      )}
+      {dropProgress && (
+        <div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center">
+          <span className="rounded-full bg-card px-3 py-1.5 text-xs font-semibold text-or-dark shadow-md">
+            Ajout des fichiers… {dropProgress.done}/{dropProgress.total}
+          </span>
+        </div>
+      )}
       {!pageMode && (
       <header className={collapsed ? '' : 'border-b border-line pb-3'}>
         <div className="flex items-center gap-2">
@@ -320,6 +393,11 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
             </ul>
             <ShowMore total={documents.length} expanded={docsOpen} onToggle={() => setDocsOpen((v) => !v)} noun="documents" />
           </>
+        )}
+        {!readOnly && (
+          <p className="mt-3 rounded-xl border border-dashed border-line px-3 py-2.5 text-center text-xs text-faint">
+            Glissez-déposez des documents ou images n'importe où sur cette zone — les images rejoignent les Photos, le reste les Documents.
+          </p>
         )}
       </Section>
       )}
