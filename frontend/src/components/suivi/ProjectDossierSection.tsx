@@ -103,14 +103,17 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
   const photoInput = useRef<HTMLInputElement | null>(null)
   const docInput = useRef<HTMLInputElement | null>(null)
 
-  // Glisser-déposer de fichiers sur le dossier : images → Photos, le reste →
-  // Documents. dragDepth compte les enter/leave imbriqués (les enfants du
-  // conteneur déclenchent leurs propres events) pour ne fermer l'overlay qu'en
-  // sortant réellement de la zone.
+  // Glisser-déposer de fichiers sur le dossier : sur l'onglet Devis un PDF
+  // devient un devis (scan OCR), sinon images → Photos et le reste → Documents.
+  // dragDepth compte les enter/leave imbriqués (les enfants du conteneur
+  // déclenchent leurs propres events) pour ne fermer l'overlay qu'en sortant
+  // réellement de la zone.
   const [dragActive, setDragActive] = useState(false)
   const dragDepth = useRef(0)
   const [dropProgress, setDropProgress] = useState<{ done: number; total: number } | null>(null)
-  const canDrop = !readOnly && (pageMode || !collapsed) && showTab('documents') && dropProgress === null
+  const canDrop = !readOnly && (pageMode || !collapsed) && dropProgress === null
+  const dropRoutesDevis = pageMode && activeTab === 'devis'
+  const isPdf = (file: File) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
 
   const dragHasFiles = (e: DragEvent) => Array.from(e.dataTransfer.types).includes('Files')
 
@@ -143,7 +146,13 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
     let failed = 0
     for (const [i, file] of files.entries()) {
       try {
-        await uploadProjectAttachment(project.id, file, { kind: file.type.startsWith('image/') ? 'photo' : 'document' })
+        if (dropRoutesDevis && isPdf(file)) {
+          const created = await uploadDevis(project.leadId, undefined, file, { projectId: project.id })
+          setDevisOpen(true)
+          void pollDevisOcr(created.id, { onTick: () => onChanged?.() }).catch(() => undefined)
+        } else {
+          await uploadProjectAttachment(project.id, file, { kind: file.type.startsWith('image/') ? 'photo' : 'document' })
+        }
       } catch {
         failed += 1
       }
@@ -254,7 +263,9 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
             <Icon name="download" size={22} />
           </span>
           <p className="text-sm font-bold text-or-dark">Déposez vos fichiers ici</p>
-          <p className="text-xs font-medium text-muted">Images → Photos · autres fichiers → Documents</p>
+          <p className="text-xs font-medium text-muted">
+            {dropRoutesDevis ? 'PDF → Devis · images → Photos · autres → Documents' : 'Images → Photos · autres fichiers → Documents'}
+          </p>
         </div>
       )}
       {dropProgress && (
@@ -333,6 +344,11 @@ export function ProjectDossierSection({ project, commercialName, dossier, onChan
             </ul>
             <ShowMore total={project.devis.length} expanded={devisOpen} onToggle={() => setDevisOpen((v) => !v)} noun="devis" />
           </>
+        )}
+        {!readOnly && dropRoutesDevis && (
+          <p className="mt-3 rounded-xl border border-dashed border-line px-3 py-2.5 text-center text-xs text-faint">
+            Glissez-déposez un PDF n'importe où sur cette zone pour ajouter un devis (scan OCR automatique).
+          </p>
         )}
       </Section>
       )}
