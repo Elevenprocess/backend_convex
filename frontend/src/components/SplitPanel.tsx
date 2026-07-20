@@ -1501,18 +1501,23 @@ function InlineRdvAgenda({
     list.push(r)
     byTime.set(slot, list)
   }
+  // Créneaux occupés masqués, sauf ceux du lead en cours ou déjà sélectionnés
+  const visibleSlots = timeSlots.filter((slot) => {
+    const matches = byTime.get(slot) ?? []
+    return matches.length === 0 || matches.some((r) => r.leadId === leadId) || selectedTime === slot
+  })
 
   return (
     <div className="rounded-[18px] border border-line bg-white/70 overflow-hidden">
       <div className="px-3 py-2 border-b border-line-soft flex items-center justify-between gap-2">
         <div>
           <div className="text-[10px] font-bold tracking-widest uppercase text-faint">Agenda du jour</div>
-          <div className="text-xs text-muted">{timeSlots.length} créneau{timeSlots.length > 1 ? 'x' : ''} libre{timeSlots.length > 1 ? 's' : ''}</div>
+          <div className="text-xs text-muted">{visibleSlots.length} créneau{visibleSlots.length > 1 ? 'x' : ''} libre{visibleSlots.length > 1 ? 's' : ''}</div>
         </div>
         {loading && <Spinner size={14} stroke={2} label="Agenda…" />}
       </div>
       <div className="divide-y divide-line-soft max-h-64 overflow-y-auto">
-        {timeSlots.map((slot) => {
+        {visibleSlots.map((slot) => {
           const slotLabel = slot
           const matches = byTime.get(slotLabel) ?? []
           const selected = selectedTime === slot
