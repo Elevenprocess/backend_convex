@@ -10,6 +10,7 @@ import {
 import { mapGhlStageToStatus } from "./model/ghl/stageMapper";
 import { checkWebhookSecret, clientIp, importsDisabled } from "./model/ghl/webhookAuth";
 import { signDebriefToken, verifyDebriefToken } from "./model/debriefLinkToken";
+import { normalizePublicDebriefBody } from "./model/debriefLinkBody";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);
@@ -397,8 +398,14 @@ http.route({
       return corsJson({ ok: true });
     }
 
+    let normalized: Record<string, unknown>;
     try {
-      await ctx.runMutation(internal.debriefs.submitViaLink, { rdvId, ...(body as any) });
+      normalized = normalizePublicDebriefBody(body);
+    } catch (err) {
+      return corsJson({ message: err instanceof Error ? err.message : "Body invalide." }, 400);
+    }
+    try {
+      await ctx.runMutation(internal.debriefs.submitViaLink, { rdvId, ...(normalized as any) });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Enregistrement impossible.";
       const status = /introuvable/i.test(msg) ? 404 : 400;
