@@ -303,6 +303,13 @@ http.route({
         now: Date.now(),
       });
 
+      // Relais vers l'agent Hermes (WhatsApp au commercial) — asynchrone,
+      // no-op si HERMES_WEBHOOK_URL absent. L'email reste porté par GHL.
+      await ctx.scheduler.runAfter(0, internal.hermesDebrief.notifyAgent, {
+        rdvId: resolved.rdvId as any,
+        link: url,
+      });
+
       await ctx.runMutation(internal.webhooks.markProcessed, { eventId });
       return json({ ok: true, eventId, rdvId: resolved.rdvId, url, token, fieldUpdated });
     } catch (err) {

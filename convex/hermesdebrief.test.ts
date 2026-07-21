@@ -1,5 +1,5 @@
-import { afterEach, expect, test } from "vitest";
-import { api } from "./_generated/api";
+import { afterEach, expect, test, vi } from "vitest";
+import { api, internal } from "./_generated/api";
 import { makeT } from "./test.kit";
 import { insertUser } from "./test.helpers";
 import { verifyDebriefToken } from "./model/debriefLinkToken";
@@ -11,6 +11,9 @@ afterEach(() => {
   delete process.env.HERMES_API_KEY;
   delete process.env.DEBRIEF_LINK_SECRET;
   delete process.env.FRONTEND_URL;
+  delete process.env.HERMES_WEBHOOK_URL;
+  delete process.env.HERMES_WEBHOOK_SECRET;
+  vi.unstubAllGlobals();
 });
 
 function arm() {
@@ -119,6 +122,53 @@ test("markSent acquitte (anti-doublon) puis due ne rend plus le RDV", async () =
   expect(again.debriefNotifiedAt).toBe(stamped.debriefNotifiedAt);
   const rows = await t.action(api.hermesDebrief.due, { apiKey: "cle-hermes", now: NOW });
   expect(rows).toHaveLength(0);
+});
+
+test("rowForRdv retourne la ligne d'un RDV à notifier, null si déjà notifié", async () => {
+  arm();
+  const t = makeT();
+  const { rdvId } = await seedRdv(t);
+  const row = await t.query(internal.hermesDebrief.rowForRdv, { rdvId });
+  expect(row).toMatchObject({ rdvId, commercial: { phone: "+262692000001" } });
+  await t.run((ctx: any) => ctx.db.patch(rdvId, { debriefNotifiedAt: NOW }));
+  expect(await t.query(internal.hermesDebrief.rowForRdv, { rdvId })).toBeNull();
+});
+
+test("notifyAgent no-op sans HERMES_WEBHOOK_URL/SECRET", async () => {
+  arm();
+  const t = makeT();
+  const { rdvId } = await seedRdv(t);
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+  await t.action(internal.hermesDebrief.notifyAgent, { rdvId, link: "https://x/#/debrief/t" });
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+test("notifyAgent poste le payload signé HMAC vers le webhook Hermes", async () => {
+  arm();
+  process.env.HERMES_WEBHOOK_URL = "http://vps:9000/webhooks/veloradebrief";
+  process.env.HERMES_WEBHOOK_SECRET = "secret-webhook";
+  const t = makeT();
+  const { rdvId } = await seedRdv(t);
+  const fetchSpy = vi.fn(async () => ({ ok: true, status: 200 }));
+  vi.stubGlobal("fetch", fetchSpy);
+  await t.action(internal.hermesDebrief.notifyAgent, { rdvId, link: "https://x/#/debrief/tok" });
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  const [calledUrl, init] = fetchSpy.mock.calls[0] as any;
+  expect(calledUrl).toBe("http://vps:9000/webhooks/veloradebrief");
+  expect(init.headers["X-Hub-Signature-256"]).toMatch(/^sha256=[0-9a-f]{64}$/);
+  const payload = JSON.parse(init.body);
+  expect(payload).toMatchObject({
+    event: "debrief.send",
+    rdvId,
+    link: "https://x/#/debrief/tok",
+    commercial: { name: "Com Un", phone: "+262692000001" },
+    lead: { firstName: "Léa", city: "Saint-Pierre" },
+  });
+  // RDV déjà notifié → plus de relais.
+  await t.run((ctx: any) => ctx.db.patch(rdvId, { debriefNotifiedAt: NOW }));
+  await t.action(internal.hermesDebrief.notifyAgent, { rdvId, link: "https://x/#/debrief/tok" });
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
 test("markSent refuse une clé invalide", async () => {

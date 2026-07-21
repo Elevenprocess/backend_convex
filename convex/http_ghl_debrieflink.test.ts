@@ -18,10 +18,13 @@ function setupEnv() {
   delete process.env.GHL_PRIVATE_INTEGRATION_TOKEN;
   delete process.env.GHL_API_KEY;
   delete process.env.GHL_LOCATION_ID;
+  // Relais Hermes débranché : notifyAgent planifié no-op.
+  delete process.env.HERMES_WEBHOOK_URL;
+  delete process.env.HERMES_WEBHOOK_SECRET;
 }
 
 async function post(t: ReturnType<typeof makeT>, body: unknown, secret = WEBHOOK_SECRET) {
-  return await t.fetch("/webhooks/ghl/debrief-link", {
+  const res = await t.fetch("/webhooks/ghl/debrief-link", {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -29,6 +32,10 @@ async function post(t: ReturnType<typeof makeT>, body: unknown, secret = WEBHOOK
     },
     body: JSON.stringify(body),
   });
+  // Vide le relais Hermes planifié (notifyAgent) avant la fin du test.
+  await new Promise((r) => setTimeout(r, 25));
+  await t.finishInProgressScheduledFunctions();
+  return res;
 }
 
 async function seed(t: ReturnType<typeof makeT>) {

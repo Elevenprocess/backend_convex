@@ -9,7 +9,7 @@
  */
 
 import { v } from "convex/values";
-import { action, internalQuery, mutation } from "./_generated/server";
+import { action, internalAction, internalQuery, mutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireHermesKey } from "./model/hermesAuth";
 import { signDebriefToken } from "./model/debriefLinkToken";
@@ -109,6 +109,85 @@ export const due = action({
         link: `${base}/#/debrief/${encodeURIComponent(await signDebriefToken(r.rdvId, secret))}`,
       })),
     );
+  },
+});
+
+/**
+ * Ligne d'envoi pour un RDV précis (flux webhook GHL → relais Hermes).
+ * Mêmes exclusions que dueRows ; debriefNotifiedAt posé → null (anti-doublon
+ * si le workflow GHL re-déclenche).
+ */
+export const rowForRdv = internalQuery({
+  args: { rdvId: v.id("rdv") },
+  handler: async (ctx, args): Promise<DueRow | null> => {
+    const r = await ctx.db.get(args.rdvId);
+    if (!r || r.deletedAt !== undefined || r.debriefFilledAt !== undefined || r.debriefNotifiedAt !== undefined) return null;
+    if (r.status === "annule" || r.status === "reporte") return null;
+    if (r.commercialId === undefined) return null;
+    const commercial = await ctx.db.get(r.commercialId);
+    if (!commercial || commercial.deletedAt !== undefined || commercial.active === false) return null;
+    const lead = await ctx.db.get(r.leadId);
+    if (!lead || lead.deletedAt !== undefined) return null;
+    return {
+      rdvId: r._id,
+      scheduledAt: r.scheduledAt ?? null,
+      status: r.status,
+      commercial: {
+        id: commercial._id,
+        name: commercial.name ?? null,
+        phone: commercial.phone ?? null,
+        email: commercial.email ?? null,
+      },
+      lead: {
+        firstName: lead.firstName ?? null,
+        lastName: lead.lastName ?? null,
+        city: lead.city ?? null,
+      },
+    };
+  },
+});
+
+// Signature HMAC-SHA256 hex (style GitHub X-Hub-Signature-256) attendue par
+// le gateway webhook Hermes. crypto.subtle : runtime Convex sans crypto Node.
+async function hmacSha256Hex(payload: string, secret: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+  );
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(payload)));
+  return Array.from(sig).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Relais événementiel vers l'agent Hermes du VPS (route /webhooks/veloradebrief).
+ * Planifié par la route /webhooks/ghl/debrief-link : GHL déclenche en fin de
+ * RDV, l'agent envoie le WhatsApp au commercial et acquitte via markSent.
+ * No-op si HERMES_WEBHOOK_URL / HERMES_WEBHOOK_SECRET absents. Best-effort :
+ * un échec réseau ne casse jamais le flux GHL (le RDV reste dans `due`).
+ */
+export const notifyAgent = internalAction({
+  args: { rdvId: v.id("rdv"), link: v.string() },
+  handler: async (ctx, args) => {
+    const url = process.env.HERMES_WEBHOOK_URL;
+    const secret = process.env.HERMES_WEBHOOK_SECRET;
+    if (!url || !secret) return null;
+    const row: DueRow | null = await ctx.runQuery(internal.hermesDebrief.rowForRdv, { rdvId: args.rdvId });
+    if (!row) return null;
+    const body = JSON.stringify({ event: "debrief.send", ...row, link: args.link });
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Hub-Signature-256": `sha256=${await hmacSha256Hex(body, secret)}`,
+        },
+        body,
+      });
+      if (!res.ok) console.warn(`Relais Hermes débrief ${args.rdvId} : HTTP ${res.status}`);
+    } catch (err) {
+      console.warn(`Relais Hermes débrief ${args.rdvId} échoué : ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return null;
   },
 });
 
