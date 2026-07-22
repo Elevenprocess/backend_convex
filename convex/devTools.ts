@@ -101,6 +101,7 @@ export const patchUserByEmail = internalMutation({
     restore: v.optional(v.boolean()),
     role: v.optional(roleValidator),
     team: v.optional(teamValidator),
+    phone: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const email = args.email.trim().toLowerCase();
@@ -113,6 +114,7 @@ export const patchUserByEmail = internalMutation({
       ...(args.restore === true ? { deletedAt: undefined, active: true } : {}),
       ...(args.role !== undefined ? { role: args.role } : {}),
       ...(args.team !== undefined ? { team: args.team } : {}),
+      ...(args.phone !== undefined ? { phone: args.phone } : {}),
     });
     return { userId: user._id, email, restored: args.restore === true && user.deletedAt !== undefined };
   },

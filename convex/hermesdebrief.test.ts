@@ -179,3 +179,27 @@ test("markSent refuse une clé invalide", async () => {
     "Clé Hermes invalide",
   );
 });
+
+// ─── Cron de rattrapage : sélection pure ─────────────────────────────
+
+test("pickOverdueForRelay : fenêtre, téléphone requis, plus anciens d'abord, 2 max", async () => {
+  const { pickOverdueForRelay } = await import("./hermesDebrief");
+  const row = (id: string, scheduledAt: number | null, phone: string | null) => ({
+    rdvId: id, scheduledAt, status: "planifie",
+    commercial: { id: "u", name: "C", phone, email: "c@e.fr" },
+    lead: { firstName: "L", lastName: "P", city: null },
+  });
+  const H = 3_600_000;
+  const picked = pickOverdueForRelay(
+    [
+      row("recent", NOW - 1 * H, "+262692000001"),      // RDV fini depuis < 2h15 → flux événementiel encore attendu
+      row("sansTel", NOW - 5 * H, null),                 // commercial sans téléphone (ex. indisponible) → exclu
+      row("vieux", NOW - 6 * H, "+262692000002"),        // en retard → relayé
+      row("moyen", NOW - 4 * H, "+262692000003"),        // en retard → relayé
+      row("tresVieux", NOW - 8 * H, "+262692000004"),    // en retard mais au-delà des 2 premiers → coupé
+      row("sansDate", null, "+262692000005"),            // pas de date → exclu
+    ] as any,
+    NOW,
+  );
+  expect(picked.map((r: any) => r.rdvId)).toEqual(["tresVieux", "vieux"]);
+});

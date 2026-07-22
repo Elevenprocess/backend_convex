@@ -1514,7 +1514,12 @@ type CommercialDebriefSource = { id: string; rdv?: RdvResponse; lead?: LeadRespo
 // l'état du débrief Hermes (WhatsApp) à la place : envoyé/non envoyé, et si
 // envoyé, ouvert/non ouvert par le commercial. « Signé » / « Non qualifié »
 // restent tels quels, et un RDV futur reste neutre (le débrief ne part qu'après).
-function prospectDebriefBadges(p: QualifiedProspect): Array<{ label: string; tone: 'ok' | 'warn' | 'muted' }> {
+// Un RDV dure 1h30 et l'envoi automatique part ~30-45 min après la fin :
+// « non envoyé » (alerte) seulement passé ce délai — avant, ce n'est pas une
+// anomalie, juste un RDV en cours ou un envoi en préparation.
+const RDV_DURATION_MS = 90 * 60_000
+const DEBRIEF_SEND_GRACE_MS = 45 * 60_000
+export function prospectDebriefBadges(p: QualifiedProspect, now: number = Date.now()): Array<{ label: string; tone: 'ok' | 'warn' | 'muted' }> {
   if (p.status !== 'En attente') return [{ label: p.status, tone: p.status === 'Signé' ? 'ok' : 'muted' }]
   if (p.debriefFilledAt) return [{ label: 'Débrief rempli', tone: 'ok' }]
   if (p.debriefNotifiedAt) {
@@ -1523,12 +1528,29 @@ function prospectDebriefBadges(p: QualifiedProspect): Array<{ label: string; ton
       p.debriefOpenedAt ? { label: 'Ouvert', tone: 'ok' } : { label: 'Non ouvert', tone: 'warn' },
     ]
   }
-  const isFuture = p.scheduledAt ? new Date(p.scheduledAt).getTime() > Date.now() : false
-  if (isFuture) return [{ label: 'RDV à venir', tone: 'muted' }]
+  const startMs = p.scheduledAt ? new Date(p.scheduledAt).getTime() : null
+  if (startMs !== null && startMs > now) return [{ label: 'RDV à venir', tone: 'muted' }]
+  if (startMs !== null && now < startMs + RDV_DURATION_MS) return [{ label: 'RDV en cours', tone: 'muted' }]
+  if (startMs !== null && now < startMs + RDV_DURATION_MS + DEBRIEF_SEND_GRACE_MS) {
+    return [{ label: 'Envoi du débrief en cours', tone: 'muted' }]
+  }
   return [{ label: 'Débrief non envoyé', tone: 'warn' }]
 }
 
+// Re-rendu chaque minute : les badges ci-dessus dépendent de l'heure (à venir
+// → en cours → envoi → non envoyé) ; sans tick, ils ne basculent qu'au reload.
+// Les données, elles, arrivent déjà en temps réel (Convex useQuery).
+function useMinuteTick(): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(id)
+  }, [])
+  return now
+}
+
 function CommercialQualifiedProspects({ prospects, title = 'Prospects qualifiés', subtitle = 'Liste prioritaire du commercial · données réelles', limit = 8, className }: { prospects: QualifiedProspect[]; title?: string; subtitle?: string; limit?: number; className?: string }) {
+  const now = useMinuteTick()
   return (
     <div className={`overview-air-card overview-commercial-qualified-list${className ? ` ${className}` : ''}`}>
       <div className="shot-card-head">
@@ -1556,7 +1578,7 @@ function CommercialQualifiedProspects({ prospects, title = 'Prospects qualifiés
               )}
             </div>
             <div className="commercial-qualified-meta">
-              {prospectDebriefBadges(prospect).map((badge) => (
+              {prospectDebriefBadges(prospect, now).map((badge) => (
                 <span key={badge.label} className={badge.tone === 'ok' ? '' : `badge-${badge.tone}`}>{badge.label}</span>
               ))}
               <small>{prospect.scheduledAt ? shortDateTime(prospect.scheduledAt) : 'à suivre'}</small>

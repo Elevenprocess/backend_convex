@@ -191,6 +191,69 @@ export const notifyAgent = internalAction({
   },
 });
 
+// Un RDV dure 1h30 et le workflow GHL déclenche l'envoi ~30 min après la fin.
+// Un débrief est « en retard » (le flux événementiel l'a raté : webhook perdu,
+// envoi échoué…) seulement passé ce délai + une marge.
+const RDV_DURATION_MS = 90 * 60_000;
+const EVENT_CHAIN_GRACE_MS = 45 * 60_000;
+const OVERDUE_AFTER_MS = RDV_DURATION_MS + EVENT_CHAIN_GRACE_MS;
+const CATCHUP_LOOKBACK_MS = 24 * 3_600_000;
+// Rythme d'envoi : jamais de rafale (risque de blocage du compte WhatsApp par
+// Meta) — 2 relais max par passage de cron, espacés de 3 min.
+const CATCHUP_MAX_PER_RUN = 2;
+const CATCHUP_STAGGER_MS = 3 * 60_000;
+
+/**
+ * Sélection pure des débriefs à relayer par le cron de rattrapage. Exclut les
+ * commerciaux sans téléphone Velora (ex. commercial indisponible — le flux
+ * événementiel garde, lui, son fallback profil GHL) et ne garde que les RDV
+ * finis depuis assez longtemps pour que le flux événementiel ait eu sa chance.
+ */
+export function pickOverdueForRelay(rows: DueRow[], now: number): DueRow[] {
+  return rows
+    .filter((r) => r.scheduledAt !== null && r.scheduledAt + OVERDUE_AFTER_MS <= now)
+    .filter((r) => r.commercial.phone !== null)
+    .sort((a, b) => (a.scheduledAt ?? 0) - (b.scheduledAt ?? 0))
+    .slice(0, CATCHUP_MAX_PER_RUN);
+}
+
+/**
+ * Filet de sécurité du flux événementiel (cron 30 min) : tout débrief des
+ * dernières 24 h resté non envoyé bien après la fin du RDV est relayé à
+ * l'agent Hermes, qui garde ses garde-fous (vérif de livraison, markSent).
+ * No-op si HERMES_WEBHOOK_URL absent (même bascule que notifyAgent).
+ */
+export const relayOverdue = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    if (!process.env.HERMES_WEBHOOK_URL || !process.env.HERMES_WEBHOOK_SECRET) return null;
+    const secret = debriefSecret();
+    if (!secret) return null;
+    const now = Date.now();
+    const rows: DueRow[] = await ctx.runQuery(internal.hermesDebrief.dueRows, {
+      fromMs: now - CATCHUP_LOOKBACK_MS,
+      toMs: now,
+      limit: MAX_LIMIT,
+    });
+    const picked = pickOverdueForRelay(rows, now);
+    const base = frontendBase();
+    for (let i = 0; i < picked.length; i++) {
+      const r = picked[i];
+      const link = `${base}/#/debrief/${encodeURIComponent(await signDebriefToken(r.rdvId, secret))}`;
+      // rowForRdv re-vérifie debriefNotifiedAt au moment du relais : pas de
+      // doublon si le flux événementiel passe entre-temps.
+      await ctx.scheduler.runAfter(i * CATCHUP_STAGGER_MS, internal.hermesDebrief.notifyAgent, {
+        rdvId: r.rdvId as any,
+        link,
+      });
+    }
+    if (picked.length > 0) {
+      console.log(`Rattrapage Hermes : ${picked.length} débrief(s) relayé(s) (${rows.length} dus sur 24 h).`);
+    }
+    return null;
+  },
+});
+
 /**
  * Acquittement d'envoi par l'agent Hermes. Idempotent : un RDV déjà notifié
  * n'est pas re-stampé (le premier envoi fait foi).
