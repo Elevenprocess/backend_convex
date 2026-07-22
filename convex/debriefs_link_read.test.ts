@@ -26,6 +26,23 @@ describe("linkReadData", () => {
     expect(data?.commercialName).toBe("Paul Payet");
     expect(data?.rdv).toMatchObject({ id: rdvId, scheduledAt: 1000, status: "honore", alreadyDebriefed: true });
     expect(data?.debrief).toMatchObject({ outcome: "vente", montantTotal: 15000 });
+    // sentAt : createdAt prioritaire, sinon _creationTime — jamais absent.
+    expect(typeof data?.debrief?.sentAt).toBe("number");
+  });
+
+  it("sentAt privilégie createdAt ; un débrief supprimé n'est pas exposé", async () => {
+    const t = makeT();
+    const commercialId = await t.run((ctx) => ctx.db.insert("users", { email: "c2@e.fr", name: "C", role: "commercial", active: true }));
+    const leadId = await t.run((ctx) => ctx.db.insert("leads", { source: "ghl", status: "qualifie" }));
+    const rdvId = await t.run((ctx) => ctx.db.insert("rdv", { leadId, commercialId, locationType: "domicile", status: "honore", debriefFilledAt: 2000 }));
+    await t.run((ctx) => ctx.db.insert("debriefs", { leadId, commercialId, outcome: "vente", rdvId, acceptanceFactors: [], customEcheancier: false, createdAt: 4242 }));
+    const data = await t.query(internal.debriefs.linkReadData, { rdvId });
+    expect(data?.debrief?.sentAt).toBe(4242);
+
+    const rdv2 = await t.run((ctx) => ctx.db.insert("rdv", { leadId, commercialId, locationType: "domicile", status: "honore" }));
+    await t.run((ctx) => ctx.db.insert("debriefs", { leadId, commercialId, outcome: "vente", rdvId: rdv2, acceptanceFactors: [], customEcheancier: false, deletedAt: 1 }));
+    const data2 = await t.query(internal.debriefs.linkReadData, { rdvId: rdv2 });
+    expect(data2?.debrief).toBeNull();
   });
 
   it("RDV absent/supprimé → null ; RDV sans débrief → debrief null", async () => {

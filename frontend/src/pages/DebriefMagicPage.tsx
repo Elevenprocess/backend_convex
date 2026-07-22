@@ -3,14 +3,16 @@ import { useParams } from 'react-router-dom'
 import { buildPublicLinkUrl } from '../lib/api'
 import {
   PublicDebriefWizard,
+  PublicDebriefHistory,
   type PublicDebriefPayload,
+  type ExistingDebrief,
 } from '../components/leads/debrief/PublicDebriefWizard'
 
 type LinkData = {
   client: { firstName: string | null; lastName: string | null; email: string | null; phone: string | null } | null
   commercialName: string | null
   rdv: { id: string; scheduledAt: string | null; status: string; alreadyDebriefed: boolean }
-  debrief: unknown | null
+  debrief: ExistingDebrief | null
 }
 
 export function DebriefMagicPage() {
@@ -81,16 +83,30 @@ export function DebriefMagicPage() {
     )
   }
 
+  // Débrief déjà envoyé → historique en lecture seule (le lien est permanent,
+  // le commercial le rouvre pour vérifier que son débrief est bien parti).
+  // Une re-soumission serait de toute façon ignorée côté serveur.
+  const alreadySent = data.rdv.alreadyDebriefed && data.debrief
+
   return (
     <main className="min-h-screen bg-ivoire px-4 py-8 flex justify-center">
       <div className="w-full max-w-lg">
-        <PublicDebriefWizard
-          client={data.client}
-          commercialName={data.commercialName}
-          rdv={data.rdv}
-          onSubmit={submit}
-          onReschedule={reschedule}
-        />
+        {alreadySent ? (
+          <PublicDebriefHistory
+            client={data.client}
+            commercialName={data.commercialName}
+            rdv={data.rdv}
+            debrief={data.debrief!}
+          />
+        ) : (
+          <PublicDebriefWizard
+            client={data.client}
+            commercialName={data.commercialName}
+            rdv={data.rdv}
+            onSubmit={submit}
+            onReschedule={reschedule}
+          />
+        )}
       </div>
     </main>
   )

@@ -925,3 +925,115 @@ function AutoGrowTextarea({ minRows = 3, maxRows = 20, value, className = '', st
   }, [value, minRows, maxRows])
   return <textarea ref={ref} value={value} rows={minRows} className={`resize-none ${className}`} style={style} {...rest} />
 }
+
+// ─── Historique (débrief déjà envoyé) ───────────────────────────────
+// Vue lecture seule affichée par la page lien magique à la place du wizard :
+// le lien est permanent, le commercial peut le rouvrir pour vérifier que son
+// débrief est bien parti sans se connecter à Velora. La re-soumission étant
+// ignorée côté serveur (idempotence submitViaLink), on ne montre pas de
+// formulaire — la correction passe par l'app.
+
+export type ExistingDebrief = {
+  sentAt?: number | null
+  outcome: string
+  nonSaleReason?: string | null
+  objection?: string | null
+  acceptanceFactors?: string[]
+  notes?: string | null
+  montantTotal?: number | null
+  kits?: string | null
+  signedAt?: number | null
+}
+
+function formatSentAt(ms: number | null | undefined): string | null {
+  if (!ms) return null
+  return new Intl.DateTimeFormat('fr-FR', {
+    timeZone: 'Indian/Reunion', weekday: 'long', day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit',
+  }).format(new Date(ms))
+}
+
+function HistoryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3 rounded-xl border border-line bg-cream/40 px-3 py-2.5 text-sm">
+      <span className="shrink-0 text-xs font-bold uppercase tracking-[0.08em] text-faint">{label}</span>
+      <span className="text-right font-medium text-text/90">{value}</span>
+    </div>
+  )
+}
+
+type HistoryProps = {
+  client: Props['client']
+  commercialName: string | null
+  rdv: Props['rdv']
+  debrief: ExistingDebrief
+}
+
+export function PublicDebriefHistory({ client, commercialName, rdv, debrief }: HistoryProps) {
+  const clientName = [client?.firstName, client?.lastName].filter(Boolean).join(' ').trim() || 'Client'
+  const initials = clientName.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || 'C'
+  const isVente = debrief.outcome === 'vente'
+  const sentAt = formatSentAt(debrief.sentAt)
+  const rows: { label: string; value: string }[] = []
+  if (isVente) {
+    if (debrief.montantTotal != null) rows.push({ label: 'Montant', value: `${formatEuro(debrief.montantTotal)} €` })
+    if (debrief.kits) rows.push({ label: 'Kits', value: debrief.kits })
+    if (debrief.signedAt) {
+      rows.push({
+        label: 'Signé le',
+        value: new Intl.DateTimeFormat('fr-FR', { timeZone: 'Indian/Reunion', day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(debrief.signedAt)),
+      })
+    }
+  } else if (debrief.nonSaleReason) {
+    rows.push({ label: 'Raison', value: labelFromNonSaleReason(debrief.nonSaleReason as NonSaleReason) })
+  }
+  if (debrief.objection) rows.push({ label: 'Objection', value: labelFromObjection(debrief.objection as Objection) })
+  if (debrief.acceptanceFactors && debrief.acceptanceFactors.length > 0) {
+    rows.push({ label: 'Acceptation', value: debrief.acceptanceFactors.map((f) => labelFromAcceptance(f as AcceptanceFactor)).join(', ') })
+  }
+  return (
+    <div className="space-y-4">
+      {/* Carte client — même en-tête que le wizard */}
+      <div className="rounded-2xl border border-line bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-or-tint text-base font-black text-or-dark">
+            {initials}
+          </div>
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-black text-text">{clientName}</h1>
+            <div className="text-xs font-bold uppercase tracking-[0.12em] text-faint">Débrief du rendez-vous</div>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-1.5">
+          <InfoRow icon="calendar" text={formatRdvFull(rdv.scheduledAt)} />
+          {commercialName && <InfoRow icon="users" text={`Commercial · ${commercialName}`} />}
+        </div>
+      </div>
+
+      {/* Historique : confirmation d'envoi + récap du débrief */}
+      <div className="rounded-3xl border border-line bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-3 rounded-2xl border border-success/30 bg-success/10 px-4 py-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-success text-white">
+            <Icon name="check" size={18} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-black text-text">Débrief déjà envoyé ✅</div>
+            {sentAt && <div className="text-xs font-medium text-muted">Envoyé le {sentAt}</div>}
+          </div>
+        </div>
+        <div className="mt-4 grid gap-1.5">
+          <HistoryRow label="Résultat" value={isVente ? 'Vente réalisée' : 'Vente non réalisée'} />
+          {rows.map((r) => <HistoryRow key={r.label} label={r.label} value={r.value} />)}
+        </div>
+        {debrief.notes && (
+          <div className="mt-3 rounded-xl border border-line bg-cream/40 px-3 py-2.5">
+            <div className="text-xs font-bold uppercase tracking-[0.08em] text-faint">Notes</div>
+            <p className="mt-1 whitespace-pre-wrap text-sm font-medium leading-relaxed text-text/90">{debrief.notes}</p>
+          </div>
+        )}
+        <p className="mt-4 text-[11px] leading-relaxed text-faint">
+          Rien d'autre à faire — ton débrief est bien enregistré. Besoin de le corriger ? Passe par l'application Velora.
+        </p>
+      </div>
+    </div>
+  )
+}

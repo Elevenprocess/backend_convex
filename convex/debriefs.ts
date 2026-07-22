@@ -312,9 +312,12 @@ export const linkReadData = internalQuery({
     if (!rdvRow || rdvRow.deletedAt !== undefined) return null;
     const lead = rdvRow.leadId ? await ctx.db.get(rdvRow.leadId) : null;
     const commercial = rdvRow.commercialId ? await ctx.db.get(rdvRow.commercialId) : null;
+    // Même règle que submitViaLink : un débrief supprimé ne compte pas (le
+    // formulaire redevient soumissible), donc on ne l'affiche pas non plus.
     const existing = await ctx.db
       .query("debriefs")
       .withIndex("by_rdv", (q) => q.eq("rdvId", args.rdvId))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .order("desc")
       .first();
     return {
@@ -330,6 +333,9 @@ export const linkReadData = internalQuery({
       },
       debrief: existing
         ? {
+            // createdAt = vraie date (antidatable pour le migré Render) ;
+            // _creationTime en secours pour les débriefs nés dans Convex.
+            sentAt: existing.createdAt ?? existing._creationTime,
             outcome: existing.outcome,
             nonSaleReason: existing.nonSaleReason,
             reflexionReason: existing.reflexionReason,
