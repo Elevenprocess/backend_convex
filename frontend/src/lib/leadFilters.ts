@@ -36,13 +36,22 @@ export const DEFAULT_LEAD_FILTERS: LeadListFilters = {
 // Matche la vraie date d'arrivée SaaS (createdAt) sur le jour Réunion (UTC+4, pas de DST).
 // Ne PAS utiliser updatedAt ici : les sync/backfills GHL mettent à jour beaucoup
 // de leads historiques en masse, ce qui faisait gonfler "Aujourd'hui" à 1796.
+// Formatters mis en cache au niveau module : créer un Intl.DateTimeFormat coûte
+// très cher, et ces fonctions tournent en O(leads × filtres) dans les compteurs
+// du rail — les instancier par appel gelait la page Leads plusieurs secondes
+// (~des centaines de milliers de créations pendant le chargement complet).
+const REUNION_DAY_FORMAT = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Indian/Reunion',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+const REUNION_WEEKDAY_FORMAT = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Indian/Reunion',
+  weekday: 'short',
+})
 function reunionDayKey(date: Date): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Indian/Reunion',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date)
+  return REUNION_DAY_FORMAT.format(date)
 }
 
 type DateSource = Pick<
@@ -74,10 +83,7 @@ export function matchesLeadDateRange(
     return dKey === yKey
   }
   // Lundi 00:00 Réunion en clé YYYY-MM-DD. Day-of-week selon TZ Réunion.
-  const reunionWeekday = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Indian/Reunion',
-    weekday: 'short',
-  }).format(now)
+  const reunionWeekday = REUNION_WEEKDAY_FORMAT.format(now)
   const dayOffset = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 }[reunionWeekday as 'Mon'] ?? 0
   if (range === 'this_week') {
     const monday = new Date(now.getTime() - dayOffset * 24 * 60 * 60 * 1000)
