@@ -25,10 +25,9 @@ type ClientDateFilter =
 
 const STATUS_FILTERS: Array<{ key: ClientStatusFilter; label: string; icon: IconName }> = [
   { key: 'all', label: 'Tout', icon: 'inbox' },
-  { key: 'en_attente', label: 'En attente / En réflexion', icon: 'clock' },
-  { key: 'signature_en_cours', label: 'En cours de signature', icon: 'edit' },
-  { key: 'signe', label: 'Signé', icon: 'check' },
-  { key: 'perdu', label: 'Devis perdu', icon: 'x' },
+  { key: 'rdv_a_faire', label: 'RDV à faire', icon: 'calendar' },
+  { key: 'qualifie', label: 'Qualifié', icon: 'check' },
+  { key: 'non_qualifie', label: 'Non qualifié', icon: 'x' },
 ]
 
 const DOC_FILTERS: Array<{ key: ClientDocFilter; label: string; icon: IconName }> = [
@@ -191,10 +190,9 @@ export function ClientsList() {
     )
     return {
       all: base.length,
-      en_attente: base.filter((l) => clientBucketForLead(l) === 'en_attente').length,
-      signature_en_cours: base.filter((l) => clientBucketForLead(l) === 'signature_en_cours').length,
-      signe: base.filter((l) => clientBucketForLead(l) === 'signe').length,
-      perdu: base.filter((l) => clientBucketForLead(l) === 'perdu').length,
+      rdv_a_faire: base.filter((l) => clientBucketForLead(l) === 'rdv_a_faire').length,
+      qualifie: base.filter((l) => clientBucketForLead(l) === 'qualifie').length,
+      non_qualifie: base.filter((l) => clientBucketForLead(l) === 'non_qualifie').length,
     }
   }, [allClients, docFilter, dateFilter, dateFieldFilter, commercialFilter])
 

@@ -165,7 +165,9 @@ const DEBRIEF_STATUS_META: Record<DebriefStatus, { label: string; badgeClass: st
 }
 
 function resolveDebriefStatus(result: RdvResult | null | undefined): DebriefStatus {
-  if (!result || result === 'reporte' || result === 'reflexion') return 'en_attente'
+  // Décision user 2026-07-22 : « réflexion » compte comme Non qualifié côté
+  // commercial (le débrief est fait, la vente n'a pas eu lieu).
+  if (!result || result === 'reporte') return 'en_attente'
   if (result === 'signe') return 'signe'
   return 'non_qualifie'
 }

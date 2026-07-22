@@ -107,11 +107,11 @@ describe('ClientsList — replier une section = exclure le filtre', () => {
     authStateRef.user = makeUser('u-alice', 'Alice Martin', 'commercial')
     render(<ClientsList />)
 
-    // Le client (statut « en_attente ») est visible au départ.
+    // Le client (bucket « RDV à faire ») est visible au départ.
     expect(screen.getByText('Jean Dupont')).toBeInTheDocument()
 
     // On filtre sur un autre statut → le client disparaît.
-    fireEvent.click(screen.getByText('En cours de signature'))
+    fireEvent.click(screen.getByText('Qualifié'))
     expect(screen.queryByText('Jean Dupont')).not.toBeInTheDocument()
 
     // Replier la section Statut remet le filtre à « Tout » → le client revient.
