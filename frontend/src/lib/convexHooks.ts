@@ -6,6 +6,8 @@ import { analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analy
 import type { ConvexUserDoc, SetterLeaderboardEntry } from './convexApi'
 import { mapConvexAcompte, mapConvexCallLog, mapConvexClient, mapConvexCommercialObjective, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexSubstep, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
+import { fetchCache } from './fetchCacheStore'
+import { persistEntry } from './cachePersist'
 import type {
   AcompteResponse,
   AnalyticsCommercialSummary,
@@ -40,6 +42,27 @@ const noop = () => {}
 const PAGE_SIZE = 200
 // Leads : fenêtre plus petite car chargée à la demande (scroll), pas d'un bloc.
 const LEADS_PAGE_SIZE = 100
+
+// ─── Persistance disque des listes (stale-while-revalidate) ──────────────────
+// Demande user 2026-07-22 : une fois les prospects/clients chargés, ils doivent
+// repeindre instantanément au prochain passage (cache disque via cachePersist /
+// fetchCache, hydraté au boot dans main.tsx) puis se mettre à jour tout seuls —
+// les useQuery Convex restent la source de vérité et réécrivent le cache au fil
+// du travail. Le cache est par utilisateur PERÇU (viewAs compris) et vidé au
+// logout (clearFetchCache). Pas de cache pour les recherches (résultats volatils).
+const LEADS_CACHE_MAX_ROWS = 1500
+
+function leadsCacheKey(userId: string | undefined, filters: {
+  status?: LeadStatus; setterId?: string; assignedToId?: string; city?: string; scope?: 'clients'
+}): string {
+  return `convex:leads:${userId ?? 'anon'}:${JSON.stringify({
+    status: filters.status ?? null,
+    setterId: filters.setterId ?? null,
+    assignedToId: filters.assignedToId ?? null,
+    city: filters.city ?? null,
+    scope: filters.scope ?? null,
+  })}`
+}
 
 export function useConvexLeads(filters?: {
   status?: LeadStatus
@@ -87,11 +110,37 @@ export function useConvexLeads(filters?: {
   }, [status, loadMore])
 
   const data = useMemo(() => results.map(mapConvexLead), [results])
+
+  // Cache disque : sert la liste de la dernière session pendant le chargement,
+  // puis la donnée live prend le relais et réécrit le cache en continu.
+  const userId = useAuth((s) => s.user?.id)
+  const cacheKey = filters === null || search ? null : leadsCacheKey(userId, filters)
+  const cached = useMemo(
+    () => (cacheKey ? ((fetchCache.get(cacheKey)?.data as LeadResponse[] | undefined) ?? null) : null),
+    [cacheKey],
+  )
+  const liveReady = status !== 'LoadingFirstPage'
+  // Page « scope=clients » : elle déroule toute la pagination — on garde le
+  // cache complet à l'écran tant que le drain live n'a pas rattrapé, pour
+  // éviter que la liste rétrécisse puis regrossisse à chaque visite. Les pages
+  // fenêtrées (leads) basculent sur le live dès la première page (sinon une
+  // suppression côté serveur laisserait la liste figée sur le cache).
+  const keepCacheDuringDrain = filters?.scope === 'clients'
+  const showLive = liveReady && (!keepCacheDuringDrain || !canLoadMore || !cached || data.length >= cached.length)
+  useEffect(() => {
+    if (!cacheKey || !liveReady || data.length === 0) return
+    const maxRows = filters?.scope === 'clients' ? LEADS_CACHE_MAX_ROWS : LEADS_PAGE_SIZE
+    const entry = { data: data.slice(0, maxRows), timestamp: Date.now() }
+    fetchCache.set(cacheKey, entry)
+    persistEntry(cacheKey, entry)
+  }, [cacheKey, data, liveReady, filters?.scope])
+
   return {
-    data: filters === null ? null : data,
-    loading: status === 'LoadingFirstPage' && filters !== null,
-    // backgroundLoading = fenêtre suivante en cours (pas d'hydratation de fond globale).
-    backgroundLoading: status === 'LoadingMore',
+    data: filters === null ? null : showLive ? data : cached,
+    loading: status === 'LoadingFirstPage' && filters !== null && !cached,
+    // backgroundLoading = fenêtre suivante en cours, ou premier chargement
+    // pendant qu'on affiche le cache de la session précédente.
+    backgroundLoading: status === 'LoadingMore' || (!showLive && filters !== null),
     canLoadMore,
     loadMore: doLoadMore,
     error: null,
