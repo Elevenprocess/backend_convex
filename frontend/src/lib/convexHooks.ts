@@ -122,7 +122,7 @@ export function useConvexLeads(filters?: {
   // Cache disque : sert la liste de la dernière session pendant le chargement,
   // puis la donnée live prend le relais et réécrit le cache en continu.
   const userId = useAuth((s) => s.user?.id)
-  const cacheKey = filters === null || search ? null : leadsCacheKey(userId, filters)
+  const cacheKey = filters === null || search ? null : leadsCacheKey(userId, filters ?? {})
   const cached = useMemo(
     () => (cacheKey ? ((fetchCache.get(cacheKey)?.data as LeadResponse[] | undefined) ?? null) : null),
     [cacheKey],
