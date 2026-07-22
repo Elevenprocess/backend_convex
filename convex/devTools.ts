@@ -1,4 +1,4 @@
-import { internalMutation, internalAction } from "./_generated/server";
+import { internalMutation, internalAction, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { createAccount } from "@convex-dev/auth/server";
 import { internal } from "./_generated/api";
@@ -225,5 +225,48 @@ export const repairQualifiesAvecRdvOuvert = internalMutation({
       }
     }
     return { applied: args.apply === true, count: repaired.length, leads: repaired };
+  },
+});
+
+// Diagnostic attribution commercial/setter d'un lead (par téléphone) : renvoie
+// le lead, ses RDV et la résolution des users référencés — pour comprendre les
+// « non assigné » de l'Overview. Lecture seule.
+// `npx convex run devTools:debugRdvAttribution '{"phone":"+262692470465"}'`
+export const debugRdvAttribution = internalQuery({
+  args: { phone: v.string() },
+  handler: async (ctx, args) => {
+    const digits = args.phone.replace(/\D/g, "").slice(-9);
+    const leads = (await ctx.db.query("leads").collect()).filter(
+      (l) => l.deletedAt === undefined && (l.phone ?? "").replace(/\D/g, "").endsWith(digits),
+    );
+    const userInfo = async (id: any) => {
+      if (!id) return null;
+      const u = await ctx.db.get(id as any);
+      if (!u) return { id, missing: true };
+      const anyU = u as any;
+      return { id, name: anyU.name, role: anyU.role, active: anyU.active, deletedAt: anyU.deletedAt ?? null, ghlUserId: anyU.ghlUserId ?? null };
+    };
+    const out = [];
+    for (const l of leads) {
+      const rdvs = await ctx.db
+        .query("rdv")
+        .withIndex("by_lead", (q) => q.eq("leadId", l._id))
+        .collect();
+      out.push({
+        lead: {
+          id: l._id, name: `${l.firstName ?? ""} ${l.lastName ?? ""}`.trim(), phone: l.phone,
+          status: l.status, source: l.source, ghlContactId: l.ghlContactId ?? null, externalId: l.externalId ?? null,
+          setter: await userInfo(l.setterId), assignedTo: await userInfo(l.assignedToId),
+          latestRdvCommercial: await userInfo((l as any).latestRdvCommercialId),
+          assignedSetterIds: (l as any).assignedSetterIds ?? null,
+        },
+        rdvs: await Promise.all(rdvs.filter((r) => r.deletedAt === undefined).map(async (r) => ({
+          id: r._id, scheduledAt: r.scheduledAt ? new Date(r.scheduledAt).toISOString() : null,
+          status: r.status, ghlEventId: r.ghlEventId ?? null, externalId: r.externalId ?? null,
+          commercial: await userInfo(r.commercialId),
+        }))),
+      });
+    }
+    return out;
   },
 });
