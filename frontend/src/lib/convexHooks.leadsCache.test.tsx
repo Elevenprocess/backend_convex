@@ -56,14 +56,27 @@ describe('useConvexLeads — cache disque stale-while-revalidate', () => {
     expect(result.current.data).toHaveLength(2)
   })
 
-  it('le live remplace le cache dès la première page et réécrit le disque', () => {
+  it('pendant le drain le cache reste affiché, puis le live prend le relais et réécrit le disque', () => {
     fetchCache.set(KEY_DEFAULT, { data: [cachedLead('a'), cachedLead('b'), cachedLead('c')], timestamp: Date.now() })
     paginated.results = [doc('l1')]
     paginated.status = 'CanLoadMore'
-    const { result } = renderHook(() => useConvexLeads({}))
-    // Page fenêtrée : bascule immédiate sur le live même s'il est plus court.
+    const { result, rerender } = renderHook(() => useConvexLeads({}))
+    // Drain en cours et live plus court que le cache → on garde le cache.
+    expect(result.current.data).toHaveLength(3)
+    // Drain terminé → live affiché même s'il est plus court (suppressions).
+    paginated.status = 'Exhausted'
+    rerender()
     expect(result.current.data?.map((l) => l.id)).toEqual(['l1'])
     expect(persisted.some((p) => p.key === KEY_DEFAULT && p.rows === 1)).toBe(true)
+  })
+
+  it("le drain automatique enchaîne les pages tant qu'il en reste", () => {
+    const calls: number[] = []
+    paginated.loadMore = (n) => calls.push(n)
+    paginated.results = [doc('l1')]
+    paginated.status = 'CanLoadMore'
+    renderHook(() => useConvexLeads({}))
+    expect(calls.length).toBeGreaterThan(0)
   })
 
   it('scope=clients : le cache reste affiché pendant le drain, le live prend le relais à la fin', () => {

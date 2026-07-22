@@ -1,6 +1,6 @@
 // Vue commercial — 100% indépendante de pages/leads/LeadsList.tsx.
 // Côté commercial, un "lead qualifié" est appelé un "client".
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
@@ -139,13 +139,9 @@ export function ClientsList() {
     : me?.id
       ? { assignedToId: me.id, scope: 'clients' as const, fullLimit: 1000 }
       : { scope: 'clients' as const, fullLimit: 1000 }
-  const { data, loading, error, refetch, canLoadMore, loadMore } = useLeadsProgressive(leadsFilter)
-  // Les filtres et compteurs du rail portent sur TOUTE la population client
-  // (bornée, ~centaines de dossiers) : on déroule la pagination jusqu'au bout
-  // au lieu de rester sur la première fenêtre.
-  useEffect(() => {
-    if (canLoadMore && loadMore) loadMore()
-  }, [canLoadMore, loadMore, data])
+  // La pagination se déroule automatiquement jusqu'au bout dans le hook :
+  // filtres et compteurs du rail voient toute la population client.
+  const { data, loading, error, refetch } = useLeadsProgressive(leadsFilter)
   const { data: usersData } = useUsers()
   const allClients = data ?? []
   const [filter, setFilter] = useState<ClientStatusFilter>('all')

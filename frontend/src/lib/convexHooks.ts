@@ -40,8 +40,13 @@ type AsyncProgressive<T> = Async<T> & {
 
 const noop = () => {}
 const PAGE_SIZE = 200
-// Leads : fenêtre plus petite car chargée à la demande (scroll), pas d'un bloc.
-const LEADS_PAGE_SIZE = 100
+// Leads : pages de 300, déroulées automatiquement jusqu'au bout (demande user
+// 2026-07-22 : « je ne veux pas que les prospects soient bloqués à 100 » — les
+// compteurs et filtres du rail portent sur la liste chargée, donc elle doit
+// être complète). Garde-fou LEADS_DRAIN_MAX : au-delà, on s'arrête (une base
+// de dizaines de milliers de leads saturerait la RAM de l'onglet).
+const LEADS_PAGE_SIZE = 300
+const LEADS_DRAIN_MAX = 5000
 
 // ─── Persistance disque des listes (stale-while-revalidate) ──────────────────
 // Demande user 2026-07-22 : une fois les prospects/clients chargés, ils doivent
@@ -50,7 +55,7 @@ const LEADS_PAGE_SIZE = 100
 // les useQuery Convex restent la source de vérité et réécrivent le cache au fil
 // du travail. Le cache est par utilisateur PERÇU (viewAs compris) et vidé au
 // logout (clearFetchCache). Pas de cache pour les recherches (résultats volatils).
-const LEADS_CACHE_MAX_ROWS = 1500
+const LEADS_CACHE_MAX_ROWS = 5000
 
 function leadsCacheKey(userId: string | undefined, filters: {
   status?: LeadStatus; setterId?: string; assignedToId?: string; city?: string; scope?: 'clients'
@@ -101,13 +106,16 @@ export function useConvexLeads(filters?: {
       }
   const { results, status, loadMore } = usePaginatedQuery(leadsListEnriched, args, { initialNumItems: LEADS_PAGE_SIZE })
 
-  // Chargement fenêtré : on NE déroule PAS toute la pagination (10k–50k leads
-  // saturent la RAM et crashent l'onglet). On expose loadMore/canLoadMore et la
-  // liste virtualisée déclenche la fenêtre suivante quand on approche du bas.
   const canLoadMore = status === 'CanLoadMore'
   const doLoadMore = useCallback(() => {
     if (status === 'CanLoadMore') loadMore(LEADS_PAGE_SIZE)
   }, [status, loadMore])
+  // Drain automatique : la pagination se déroule toute seule jusqu'au bout
+  // (ou jusqu'au garde-fou), page après page — la liste, les compteurs et les
+  // filtres voient TOUTE la population, pas une fenêtre de 100.
+  useEffect(() => {
+    if (status === 'CanLoadMore' && results.length < LEADS_DRAIN_MAX) loadMore(LEADS_PAGE_SIZE)
+  }, [status, results.length, loadMore])
 
   const data = useMemo(() => results.map(mapConvexLead), [results])
 
@@ -120,20 +128,18 @@ export function useConvexLeads(filters?: {
     [cacheKey],
   )
   const liveReady = status !== 'LoadingFirstPage'
-  // Page « scope=clients » : elle déroule toute la pagination — on garde le
-  // cache complet à l'écran tant que le drain live n'a pas rattrapé, pour
-  // éviter que la liste rétrécisse puis regrossisse à chaque visite. Les pages
-  // fenêtrées (leads) basculent sur le live dès la première page (sinon une
-  // suppression côté serveur laisserait la liste figée sur le cache).
-  const keepCacheDuringDrain = filters?.scope === 'clients'
-  const showLive = liveReady && (!keepCacheDuringDrain || !canLoadMore || !cached || data.length >= cached.length)
+  // Toutes les listes se drainent en entier : on garde le cache complet à
+  // l'écran tant que le live n'a pas rattrapé sa taille, pour éviter que la
+  // liste rétrécisse puis regrossisse à chaque visite. À la fin du drain
+  // (canLoadMore false), le live fait foi même s'il est plus court
+  // (suppressions côté serveur).
+  const showLive = liveReady && (!canLoadMore || !cached || data.length >= cached.length)
   useEffect(() => {
     if (!cacheKey || !liveReady || data.length === 0) return
-    const maxRows = filters?.scope === 'clients' ? LEADS_CACHE_MAX_ROWS : LEADS_PAGE_SIZE
-    const entry = { data: data.slice(0, maxRows), timestamp: Date.now() }
+    const entry = { data: data.slice(0, LEADS_CACHE_MAX_ROWS), timestamp: Date.now() }
     fetchCache.set(cacheKey, entry)
     persistEntry(cacheKey, entry)
-  }, [cacheKey, data, liveReady, filters?.scope])
+  }, [cacheKey, data, liveReady])
 
   return {
     data: filters === null ? null : showLive ? data : cached,
