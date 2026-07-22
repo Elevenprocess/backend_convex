@@ -2,7 +2,8 @@ import { create } from 'zustand'
 import { api, ApiError } from './api'
 import type { UserResponse, Role } from './types'
 import { clearFetchCache } from './fetchCacheStore'
-import { convexAuthEnabled } from './convex'
+import { convexAuthEnabled, convexClient } from './convex'
+import { usersSetViewAs, usersClearViewAs } from './convexApi'
 
 const VIEW_AS_KEY = 'ecoi.viewAsUserId'
 
@@ -176,12 +177,25 @@ export const useAuth = create<AuthState>((set, get) => ({
     const me = get().realUser
     if (!me || target.id === me.id) return
     if (!impersonationAllowed(me.role, target.role)) return
-    if (typeof window !== 'undefined') window.localStorage.setItem(VIEW_AS_KEY, target.id)
+    if (convexAuthEnabled) {
+      // L'overlay vit côté serveur (users.viewAsUserId) : toutes les requêtes
+      // Convex voient le profil exploré. Set optimiste local, le pont confirme
+      // via users:sessionContext (réactif).
+      void convexClient?.mutation(usersSetViewAs, { userId: target.id }).catch(() => {
+        set({ viewAsUser: null, user: get().realUser })
+      })
+    } else if (typeof window !== 'undefined') {
+      window.localStorage.setItem(VIEW_AS_KEY, target.id)
+    }
     set({ viewAsUser: target, user: target })
   },
 
   exitViewAs: () => {
-    if (typeof window !== 'undefined') window.localStorage.removeItem(VIEW_AS_KEY)
+    if (convexAuthEnabled) {
+      void convexClient?.mutation(usersClearViewAs, {}).catch(() => undefined)
+    } else if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(VIEW_AS_KEY)
+    }
     const real = get().realUser
     set({ viewAsUser: null, user: real })
   },

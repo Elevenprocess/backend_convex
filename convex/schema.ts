@@ -44,6 +44,11 @@ export default defineSchema({
     lastActionType: v.optional(v.string()),
     createdById: v.optional(v.id("users")),
     deletedAt: v.optional(v.number()),
+    // Mode « Explorer un profil » (Settings) : id du user dont on emprunte la
+    // vue. Appliqué au centre par getCurrentUser (model/access.ts) — toutes les
+    // requêtes voient le profil exploré sans changement. Posé/levé par
+    // users.setViewAs / users.clearViewAs.
+    viewAsUserId: v.optional(v.id("users")),
   })
     // Convex Auth exige un index littéralement nommé "email" (rattachement par
     // email vérifié au login OAuth Google → pas de doublon de compte).

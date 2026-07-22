@@ -414,6 +414,16 @@ type PaginationOptsArg = { numItems: number; cursor: string | null }
 
 export const usersMe = makeFunctionReference<'query', Record<string, never>, ConvexUserDoc | null>('users:me')
 
+// Mode « Explorer un profil » : contexte de session (user réel + overlay) et
+// mutations qui posent/lèvent l'overlay serveur (users.viewAsUserId).
+export const usersSessionContext = makeFunctionReference<
+  'query',
+  Record<string, never>,
+  { real: ConvexUserDoc; viewAs: ConvexUserDoc | null } | null
+>('users:sessionContext')
+export const usersSetViewAs = makeFunctionReference<'mutation', { userId: string }, null>('users:setViewAs')
+export const usersClearViewAs = makeFunctionReference<'mutation', Record<string, never>, null>('users:clearViewAs')
+
 export const usersGet = makeFunctionReference<'query', { userId: string }, ConvexUserDoc | null>('users:get')
 
 export const usersList = makeFunctionReference<

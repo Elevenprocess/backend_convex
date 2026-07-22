@@ -1,11 +1,52 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { roleValidator, teamValidator } from "./model/enums";
-import { getCurrentUser, requireUser, requireRole } from "./model/access";
+import { getCurrentUser, requireUser, requireRole, getRealUser, resolveViewAs, impersonationAllowed, roleOf } from "./model/access";
 
 export const me = query({
   args: {},
   handler: async (ctx) => getCurrentUser(ctx),
+});
+
+// ─── Mode « Explorer un profil » (Settings) ──────────────────────────────────
+// L'overlay vit en base (users.viewAsUserId) et est appliqué au centre par
+// getCurrentUser : toutes les requêtes de l'app voient le profil exploré.
+// sessionContext alimente le pont d'auth frontend (user réel + overlay) pour
+// le bandeau « voir en tant que ».
+
+export const sessionContext = query({
+  args: {},
+  handler: async (ctx) => {
+    const real = await getRealUser(ctx);
+    if (!real) return null;
+    return { real, viewAs: await resolveViewAs(ctx, real) };
+  },
+});
+
+export const setViewAs = mutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const real = await getRealUser(ctx);
+    if (!real || real.active === false) throw new Error("Non authentifié");
+    if (args.userId === real._id) throw new Error("Impossible d'explorer son propre profil");
+    const target = await ctx.db.get(args.userId);
+    if (!target || target.deletedAt !== undefined) throw new Error("Profil introuvable");
+    if (!impersonationAllowed(roleOf(real), roleOf(target))) {
+      throw new Error("Exploration non autorisée pour ce profil");
+    }
+    await ctx.db.patch(real._id, { viewAsUserId: args.userId });
+    return null;
+  },
+});
+
+export const clearViewAs = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const real = await getRealUser(ctx);
+    if (!real) return null;
+    if (real.viewAsUserId !== undefined) await ctx.db.patch(real._id, { viewAsUserId: undefined });
+    return null;
+  },
 });
 
 // Profil d'un membre (pages /team/setters/:id et /team/commerciaux/:id).

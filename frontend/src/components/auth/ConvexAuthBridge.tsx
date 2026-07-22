@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useConvexAuth, useQuery } from 'convex/react'
 import { useAuthActions } from '@convex-dev/auth/react'
-import { usersMe } from '../../lib/convexApi'
+import { usersSessionContext } from '../../lib/convexApi'
 import { mapConvexUser } from '../../lib/convexMappers'
 import { configureAuthBackend, useAuth } from '../../lib/auth'
 
@@ -11,7 +11,10 @@ import { configureAuthBackend, useAuth } from '../../lib/auth'
 export function ConvexAuthBridge() {
   const { signIn, signOut } = useAuthActions()
   const { isLoading, isAuthenticated } = useConvexAuth()
-  const me = useQuery(usersMe, isAuthenticated ? {} : 'skip')
+  // Contexte complet (user réel + overlay « Explorer un profil ») : réactif,
+  // l'overlay posé par users:setViewAs arrive tout seul — et survit au reload
+  // puisqu'il vit en base, plus dans localStorage.
+  const me = useQuery(usersSessionContext, isAuthenticated ? {} : 'skip')
 
   useEffect(() => {
     configureAuthBackend({
@@ -44,8 +47,9 @@ export function ConvexAuthBridge() {
       useAuth.setState({ status: 'loading' })
       return
     }
-    const mapped = mapConvexUser(me)
-    useAuth.setState({ user: mapped, realUser: mapped, viewAsUser: null, status: 'authed', error: null })
+    const real = mapConvexUser(me.real)
+    const overlay = me.viewAs ? mapConvexUser(me.viewAs) : null
+    useAuth.setState({ user: overlay ?? real, realUser: real, viewAsUser: overlay, status: 'authed', error: null })
   }, [isLoading, isAuthenticated, me])
 
   return null
