@@ -272,3 +272,26 @@ export const debugRdvAttribution = internalQuery({
     return out;
   },
 });
+
+// Diagnostic : derniers débriefs avec le statut actuel de leur lead — pour
+// comprendre les écarts « débrief non-vente mais lead à rappeler ». Lecture seule.
+// `npx convex run devTools:debugRecentDebriefs '{"limit":15}'`
+export const debugRecentDebriefs = internalQuery({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query("debriefs").order("desc").take(Math.min(args.limit ?? 15, 50));
+    return Promise.all(rows.map(async (d) => {
+      const lead = d.leadId ? await ctx.db.get(d.leadId) : null;
+      const commercial = d.commercialId ? await ctx.db.get(d.commercialId) : null;
+      return {
+        at: new Date(d.createdAt ?? d._creationTime).toISOString(),
+        outcome: d.outcome,
+        nonSaleReason: d.nonSaleReason ?? null,
+        reflexionReason: (d as any).reflexionReason ?? null,
+        suiviReason: (d as any).suiviReason ?? null,
+        commercial: (commercial as any)?.name ?? null,
+        lead: lead ? { id: lead._id, name: `${(lead as any).firstName ?? ""} ${(lead as any).lastName ?? ""}`.trim(), status: (lead as any).status, ghlStageName: (lead as any).ghlStageName ?? null } : null,
+      };
+    }));
+  },
+});
