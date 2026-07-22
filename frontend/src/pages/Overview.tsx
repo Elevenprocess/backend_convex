@@ -722,6 +722,14 @@ function OverviewCommercialLead() {
     return { upcoming, debriefs }
   }, [rdvs, allLeads])
 
+  // RDV du jour de toute l'équipe avec l'état du débrief (mêmes badges que la
+  // carte admin : à venir / en cours / envoyé + ouvert ou non / non envoyé).
+  const todayProspects = useMemo(() => {
+    const todayIso = new Date().toISOString().slice(0, 10)
+    return adminFunnelProspects(rdvs ?? [], allLeads ?? [], users ?? [])
+      .filter((p) => (p.scheduledAt ?? '').slice(0, 10) === todayIso)
+  }, [rdvs, allLeads, users])
+
   const caPct = targets.ca > 0 ? Math.round((team.ca / targets.ca) * 100) : undefined
   const ventesPct = targets.ventes > 0 ? Math.round((team.signed / targets.ventes) * 100) : undefined
   const rdvPct = targets.rdv > 0 ? Math.round((team.honored / targets.rdv) * 100) : undefined
@@ -785,6 +793,13 @@ function OverviewCommercialLead() {
           <CommercialLeaderboard rows={leaderboardRows} onEditObjectives={() => setObjOpen(true)} />
 
           <div className="overview-lead-side">
+            <CommercialQualifiedProspects
+              prospects={todayProspects}
+              title="RDV du jour"
+              subtitle="Suivi des débriefs de l'équipe · temps réel"
+              limit={12}
+            />
+
             <div className="overview-air-card">
               <CardHead title="Débriefs à remplir" icon="phone" />
               <CommercialDebriefsToFill debriefs={debriefs} limit={6} />
