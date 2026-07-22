@@ -40,12 +40,15 @@ type AsyncProgressive<T> = Async<T> & {
 
 const noop = () => {}
 const PAGE_SIZE = 200
-// Leads : pages de 300, déroulées automatiquement jusqu'au bout (demande user
+// Leads : première page PETITE pour peindre l'écran vite (l'enrichissement
+// serveur — appels/RDV/devis par lead — domine la latence), puis le drain
+// enchaîne automatiquement des pages plus grosses jusqu'au bout (demande user
 // 2026-07-22 : « je ne veux pas que les prospects soient bloqués à 100 » — les
 // compteurs et filtres du rail portent sur la liste chargée, donc elle doit
 // être complète). Garde-fou LEADS_DRAIN_MAX : au-delà, on s'arrête (une base
 // de dizaines de milliers de leads saturerait la RAM de l'onglet).
-const LEADS_PAGE_SIZE = 300
+const LEADS_FIRST_PAGE = 100
+const LEADS_DRAIN_PAGE = 400
 const LEADS_DRAIN_MAX = 5000
 
 // ─── Persistance disque des listes (stale-while-revalidate) ──────────────────
@@ -104,17 +107,17 @@ export function useConvexLeads(filters?: {
         scope: filters?.scope,
         now,
       }
-  const { results, status, loadMore } = usePaginatedQuery(leadsListEnriched, args, { initialNumItems: LEADS_PAGE_SIZE })
+  const { results, status, loadMore } = usePaginatedQuery(leadsListEnriched, args, { initialNumItems: LEADS_FIRST_PAGE })
 
   const canLoadMore = status === 'CanLoadMore'
   const doLoadMore = useCallback(() => {
-    if (status === 'CanLoadMore') loadMore(LEADS_PAGE_SIZE)
+    if (status === 'CanLoadMore') loadMore(LEADS_DRAIN_PAGE)
   }, [status, loadMore])
   // Drain automatique : la pagination se déroule toute seule jusqu'au bout
   // (ou jusqu'au garde-fou), page après page — la liste, les compteurs et les
   // filtres voient TOUTE la population, pas une fenêtre de 100.
   useEffect(() => {
-    if (status === 'CanLoadMore' && results.length < LEADS_DRAIN_MAX) loadMore(LEADS_PAGE_SIZE)
+    if (status === 'CanLoadMore' && results.length < LEADS_DRAIN_MAX) loadMore(LEADS_DRAIN_PAGE)
   }, [status, results.length, loadMore])
 
   const data = useMemo(() => results.map(mapConvexLead), [results])
