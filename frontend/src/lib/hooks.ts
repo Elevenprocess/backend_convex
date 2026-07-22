@@ -327,6 +327,7 @@ function useLeadsProgressiveRest(filters?: {
   quickLimit?: number
   fullLimit?: number
   notInAirtable?: boolean
+  scope?: 'clients'
 } | null): AsyncProgressive<LeadResponse[]> {
   const quickLimit = clampLimit(filters?.quickLimit, 50, LEADS_LIMIT_MAX)
   const fullLimit = clampLimit(filters?.fullLimit, 500, LEADS_LIMIT_MAX)

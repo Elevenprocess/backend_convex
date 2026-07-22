@@ -70,6 +70,10 @@ export function useConvexLeads(filters?: {
         assignedToId: filters?.assignedToId,
         city: filters?.city,
         search: search ? search : undefined,
+        // Page client : population « chemin positif » filtrée côté serveur
+        // (leads:listEnriched scope=clients) — sans lui, la page recevait la
+        // fenêtre des leads récents toute population confondue.
+        scope: filters?.scope,
         now,
       }
   const { results, status, loadMore } = usePaginatedQuery(leadsListEnriched, args, { initialNumItems: LEADS_PAGE_SIZE })

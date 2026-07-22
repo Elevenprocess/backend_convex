@@ -1,6 +1,6 @@
 // Vue commercial — 100% indépendante de pages/leads/LeadsList.tsx.
 // Côté commercial, un "lead qualifié" est appelé un "client".
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
@@ -8,7 +8,7 @@ import { Icon, type IconName } from '../../components/Icon'
 import { EmptyState } from '../../components/EmptyState'
 import { LoadingBlock } from '../../components/Spinner'
 import { useAuth } from '../../lib/auth'
-import { useLeads, useUsers } from '../../lib/hooks'
+import { useLeadsProgressive, useUsers } from '../../lib/hooks'
 import { useLeadSidebar } from '../../lib/leadSidebar'
 import type { LeadDateField } from '../../lib/leadFilters'
 import { fullName, type LeadResponse, type UserResponse } from '../../lib/types'
@@ -136,11 +136,17 @@ export function ClientsList() {
   // (chemin positif), filtré côté backend via scope=clients. limit relevée car le
   // chemin positif dépasse 250 → sinon les compteurs du rail seraient tronqués.
   const leadsFilter = seesFullPortfolio
-    ? { scope: 'clients' as const, limit: 1000 }
+    ? { scope: 'clients' as const, fullLimit: 1000 }
     : me?.id
-      ? { assignedToId: me.id, scope: 'clients' as const, limit: 1000 }
-      : { scope: 'clients' as const, limit: 1000 }
-  const { data, loading, error, refetch } = useLeads(leadsFilter)
+      ? { assignedToId: me.id, scope: 'clients' as const, fullLimit: 1000 }
+      : { scope: 'clients' as const, fullLimit: 1000 }
+  const { data, loading, error, refetch, canLoadMore, loadMore } = useLeadsProgressive(leadsFilter)
+  // Les filtres et compteurs du rail portent sur TOUTE la population client
+  // (bornée, ~centaines de dossiers) : on déroule la pagination jusqu'au bout
+  // au lieu de rester sur la première fenêtre.
+  useEffect(() => {
+    if (canLoadMore && loadMore) loadMore()
+  }, [canLoadMore, loadMore, data])
   const { data: usersData } = useUsers()
   const allClients = data ?? []
   const [filter, setFilter] = useState<ClientStatusFilter>('all')

@@ -15,6 +15,7 @@ const useLeadsMock = vi.fn()
 const useUsersMock = vi.fn()
 vi.mock('../../lib/hooks', () => ({
   useLeads: (...a: unknown[]) => useLeadsMock(...a),
+  useLeadsProgressive: (...a: unknown[]) => useLeadsMock(...a),
   useUsers: (...a: unknown[]) => useUsersMock(...a),
   assignLead: (...a: unknown[]) => assignLeadMock(...a),
 }))

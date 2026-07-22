@@ -8,6 +8,7 @@ import type { Role } from "./model/enums";
 import { normalizeSource } from "./model/acquisitionChannel";
 import { insertStageHistory } from "./model/stageHistory";
 import { enrichLead } from "./model/enrichLead";
+import { CLIENT_VISIBLE_STATUSES, isClientVisibleLead } from "./model/clientScope";
 
 export const get = query({
   args: { leadId: v.id("leads") },
@@ -65,6 +66,7 @@ async function paginateLeadsPage(
     assignedToId?: Id<"users">;
     city?: string;
     search?: string;
+    scope?: "clients";
     paginationOpts: { numItems: number; cursor: string | null };
   },
 ) {
@@ -91,6 +93,18 @@ async function paginateLeadsPage(
     let ordered = q.order("desc").filter((f) => f.eq(f.field("deletedAt"), undefined));
     if (args.status !== undefined && !statusViaIndex) {
       ordered = ordered.filter((f) => f.eq(f.field("status"), args.status!));
+    }
+    // Page client : pré-filtre superset (statuts du chemin positif + leads sans
+    // stage GHL, filet de secours). Le post-filtre exact par stage se fait dans
+    // listEnriched après enrichissement (il a besoin de latestRdvAt/hasDevis).
+    if (args.scope === "clients" && args.status === undefined) {
+      ordered = ordered.filter((f) =>
+        f.or(
+          f.eq(f.field("ghlStageName"), undefined),
+          f.eq(f.field("ghlStageName"), ""),
+          ...CLIENT_VISIBLE_STATUSES.map((s) => f.eq(f.field("status"), s)),
+        ),
+      );
     }
     if (args.city !== undefined) {
       ordered = ordered.filter((f) => f.eq(f.field("city"), args.city!));
@@ -494,6 +508,7 @@ export const listEnriched = query({
     assignedToId: v.optional(v.id("users")),
     city: v.optional(v.string()),
     search: v.optional(v.string()),
+    scope: v.optional(v.literal("clients")),
     now: v.number(),
     paginationOpts: paginationOptsValidator,
   },
@@ -502,6 +517,11 @@ export const listEnriched = query({
     const { now, ...rest } = args;
     const page = await paginateLeadsPage(ctx, rest);
     const enriched = await Promise.all(page.page.map((lead) => enrichLead(ctx, lead, now)));
-    return { ...page, page: enriched };
+    // Page client : post-filtre autoritaire (stage exact, filet RDV/devis) — la
+    // page peut raccourcir, le curseur reste valide (le client recharge la suite).
+    const kept = args.scope === "clients"
+      ? enriched.filter((l) => isClientVisibleLead(l, l))
+      : enriched;
+    return { ...page, page: kept };
   },
 });

@@ -456,7 +456,7 @@ export const leadsList = makeFunctionReference<
 // `now` doit être stable entre les rendus (cf. useStableNow) sous peine de boucle.
 export const leadsListEnriched = makeFunctionReference<
   'query',
-  { status?: string; setterId?: string; assignedToId?: string; city?: string; search?: string; now: number; paginationOpts: PaginationOptsArg },
+  { status?: string; setterId?: string; assignedToId?: string; city?: string; search?: string; scope?: 'clients'; now: number; paginationOpts: PaginationOptsArg },
   PaginationResult<ConvexLeadDoc>
 >('leads:listEnriched')
 
