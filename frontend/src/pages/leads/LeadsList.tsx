@@ -735,7 +735,18 @@ function LeadsAdmin() {
         ) : error ? (
           <div className="py-16 text-center text-rouille text-sm">Erreur : {error}</div>
         ) : filtered.length === 0 ? (
-          <div className="py-16 text-center text-faint text-sm">Aucun prospect ne correspond aux filtres.</div>
+          <div className="py-16 text-center text-faint text-sm">
+            <p>Aucun prospect ne correspond aux filtres.</p>
+            {(leadFiltersActive(leadFilters) || setterFilter !== 'all' || commercialFilter !== 'all' || query) && (
+              <button
+                type="button"
+                onClick={() => { setLeadFilters(DEFAULT_LEAD_FILTERS); setSetterFilter('all'); setCommercialFilter('all'); setQuery('') }}
+                className="mt-3 text-xs font-bold text-muted underline underline-offset-4"
+              >
+                Réinitialiser les filtres
+              </button>
+            )}
+          </div>
         ) : (
           <div className="glass-card !p-0 overflow-hidden flex-grow min-h-0">
             <div ref={tableScrollRef} data-preserve-scroll="true" className="overflow-auto h-full">
@@ -1448,22 +1459,26 @@ function AdminLeadsRail({
     })
   }
 
-  const statusCounts = useMemo(() => {
-    const c: Record<string, number> = { all: leads.length }
-    for (const lead of leads) c[lead.status] = (c[lead.status] ?? 0) + 1
-    return c
-  }, [leads])
-
-  const lastCallCounts = useMemo(() => ({
-    all: leads.length,
-    never: leads.filter((l) => l.joursSansContact === null).length,
-    today: leads.filter((l) => l.joursSansContact === 0).length,
-    older_3d: leads.filter((l) => l.joursSansContact !== null && l.joursSansContact >= 3).length,
-    older_7d: leads.filter((l) => l.joursSansContact !== null && l.joursSansContact >= 7).length,
-  } as Record<LeadLastCallFilter, number>), [leads])
-
   // Compteurs croisés : chaque dimension compte sur les leads qui passent
-  // tous les AUTRES filtres (sauf la dimension elle-même).
+  // tous les AUTRES filtres (sauf la dimension elle-même). Sinon le rail
+  // affiche « Qualifié 571 » alors qu'un filtre actif ailleurs (Nouveaux
+  // uniquement, période, devis…) rend la liste vide au clic.
+  const statusCounts = useMemo(() => {
+    const out: Record<string, number> = {}
+    for (const item of ADMIN_STATUS_FILTERS) {
+      out[item.key] = applyLeadFilters(leads, { ...leadFilters, status: item.key }).length
+    }
+    return out
+  }, [leads, leadFilters])
+
+  const lastCallCounts = useMemo(() => {
+    const out = {} as Record<LeadLastCallFilter, number>
+    for (const item of ADMIN_LAST_CALL_FILTERS) {
+      out[item.key] = applyLeadFilters(leads, { ...leadFilters, lastCall: item.key }).length
+    }
+    return out
+  }, [leads, leadFilters])
+
   const dateRangeCounts = useMemo(() => {
     const base = applyLeadFilters(leads, { ...leadFilters, arrivedAt: 'all' })
     const out = {} as Record<LeadArrivedAtFilter, number>
@@ -1544,7 +1559,7 @@ function AdminLeadsRail({
       >
         <span className="sb-item-icon"><Icon name="sparkles" size={15} strokeWidth={1.75} /></span>
         <span className="sb-item-label">Nouveaux uniquement</span>
-        <span className="leads-rail-count">{leads.filter((l) => l.status === 'nouveau').length}</span>
+        <span className="leads-rail-count">{applyLeadFilters(leads, { ...leadFilters, onlyNew: true }).length}</span>
       </button>
 
       <CollapsibleSection storageKey="ecoi.leads.admin.section.statut" label="Statut">
