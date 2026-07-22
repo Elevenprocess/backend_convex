@@ -530,6 +530,9 @@ export type RdvResponse = {
   notes: string | null
   debriefFilledAt: string | null
   debriefDueAt: string | null
+  // Envoi du lien débrief par l'agent Hermes (WhatsApp) / première ouverture du lien.
+  debriefNotifiedAt: string | null
+  debriefOpenedAt: string | null
   hasDevisEnAttente: boolean
   // Signalement annulation/report par l'accueil (numéro central) → alerte commercial.
   cancelReason: string | null

@@ -352,6 +352,19 @@ export const linkReadData = internalQuery({
   },
 });
 
+// Première ouverture du lien débrief par le commercial (GET /debrief-link/ après
+// vérif du token). Idempotent : la première ouverture fait foi. Alimente le badge
+// « Ouvert / Non ouvert » de l'Overview admin à côté de « Débrief envoyé ».
+export const markLinkOpened = internalMutation({
+  args: { rdvId: v.id("rdv") },
+  handler: async (ctx, args) => {
+    const r = await ctx.db.get(args.rdvId);
+    if (!r || r.deletedAt !== undefined || r.debriefOpenedAt !== undefined) return null;
+    await ctx.db.patch(args.rdvId, { debriefOpenedAt: Date.now() });
+    return null;
+  },
+});
+
 // Enregistre un débrief via lien magique (public, autorisé par le token vérifié
 // dans l'httpAction). Miroir de createForLead(rdvId) + du patch RDV in-app, avec
 // dérivation du statut lead (que le contrôleur NestJS oubliait).

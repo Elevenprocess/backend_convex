@@ -10,7 +10,7 @@ function rdv(over: Partial<RdvResponse>): RdvResponse {
     scheduledAt: '2026-06-09T08:00:00.000Z', locationType: 'domicile',
     status: 'honore', result: null, signatureAt: null, montantTotal: null,
     financingType: null, objections: null, nonSaleReason: null, kits: null,
-    notes: null, debriefFilledAt: null, debriefDueAt: null,
+    notes: null, debriefFilledAt: null, debriefDueAt: null, debriefNotifiedAt: null, debriefOpenedAt: null,
     hasDevisEnAttente: false, cancelReason: null, receptionAlertAt: null, receptionAlertKind: null,
     createdAt: NOW, updatedAt: NOW, lead: null,
     ...over,

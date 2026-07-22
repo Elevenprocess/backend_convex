@@ -148,6 +148,8 @@ export function mapConvexRdv(doc: ConvexRdvDoc): RdvResponse {
     notes: doc.notes ?? null,
     debriefFilledAt: iso(doc.debriefFilledAt),
     debriefDueAt: iso(doc.debriefDueAt),
+    debriefNotifiedAt: iso(doc.debriefNotifiedAt),
+    debriefOpenedAt: iso(doc.debriefOpenedAt),
     hasDevisEnAttente: false,
     cancelReason: doc.cancelReason ?? null,
     receptionAlertAt: iso(doc.receptionAlertAt),

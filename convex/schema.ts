@@ -290,6 +290,9 @@ export default defineSchema({
     // Envoi du lien débrief au commercial par l'agent Hermes (WhatsApp/SMS
     // depuis le VPS). Posé par hermesDebrief.markSent — évite les doublons.
     debriefNotifiedAt: v.optional(v.number()),
+    // Première ouverture du lien débrief par le commercial (GET /debrief-link/
+    // après vérif du token). Première ouverture fait foi.
+    debriefOpenedAt: v.optional(v.number()),
     deletedAt: v.optional(v.number()),
     // Signalement d'annulation/report par l'accueil (responsable_technique /
     // back_office) reçu par appel ou WhatsApp sur le numéro central. Alimente

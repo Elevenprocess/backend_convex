@@ -819,6 +819,8 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
+.commercial-qualified-meta span.badge-warn { color: var(--color-rouille, #B4532A); }
+.commercial-qualified-meta span.badge-muted { color: var(--color-muted); }
 .commercial-debrief-card {
   min-height: 330px;
   display: flex;

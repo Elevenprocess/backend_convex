@@ -1507,8 +1507,26 @@ function LeadEvolutionChart({ points, comparePoints = [], granularity, range, ra
 const PIE_COLORS = ['#1F7857', '#3DA86A', '#3E9A6F', '#6B7C8C', '#145A41', '#7C6A46']
 
 type LeadSegment = { label: string; value: number; description?: string }
-type QualifiedProspect = { id: string; name: string; phone: string | null; city: string | null; status: string; scheduledAt: string | null; commercialName?: string | null; setterName?: string | null }
+type QualifiedProspect = { id: string; name: string; phone: string | null; city: string | null; status: string; scheduledAt: string | null; commercialName?: string | null; setterName?: string | null; debriefFilledAt?: string | null; debriefNotifiedAt?: string | null; debriefOpenedAt?: string | null }
 type CommercialDebriefSource = { id: string; rdv?: RdvResponse; lead?: LeadResponse }
+
+// Badge(s) de la colonne de droite. Pour un RDV « En attente », on affiche
+// l'état du débrief Hermes (WhatsApp) à la place : envoyé/non envoyé, et si
+// envoyé, ouvert/non ouvert par le commercial. « Signé » / « Non qualifié »
+// restent tels quels, et un RDV futur reste neutre (le débrief ne part qu'après).
+function prospectDebriefBadges(p: QualifiedProspect): Array<{ label: string; tone: 'ok' | 'warn' | 'muted' }> {
+  if (p.status !== 'En attente') return [{ label: p.status, tone: p.status === 'Signé' ? 'ok' : 'muted' }]
+  if (p.debriefFilledAt) return [{ label: 'Débrief rempli', tone: 'ok' }]
+  if (p.debriefNotifiedAt) {
+    return [
+      { label: 'Débrief envoyé', tone: 'ok' },
+      p.debriefOpenedAt ? { label: 'Ouvert', tone: 'ok' } : { label: 'Non ouvert', tone: 'warn' },
+    ]
+  }
+  const isFuture = p.scheduledAt ? new Date(p.scheduledAt).getTime() > Date.now() : false
+  if (isFuture) return [{ label: 'RDV à venir', tone: 'muted' }]
+  return [{ label: 'Débrief non envoyé', tone: 'warn' }]
+}
 
 function CommercialQualifiedProspects({ prospects, title = 'Prospects qualifiés', subtitle = 'Liste prioritaire du commercial · données réelles', limit = 8, className }: { prospects: QualifiedProspect[]; title?: string; subtitle?: string; limit?: number; className?: string }) {
   return (
@@ -1538,7 +1556,9 @@ function CommercialQualifiedProspects({ prospects, title = 'Prospects qualifiés
               )}
             </div>
             <div className="commercial-qualified-meta">
-              <span>{prospect.status}</span>
+              {prospectDebriefBadges(prospect).map((badge) => (
+                <span key={badge.label} className={badge.tone === 'ok' ? '' : `badge-${badge.tone}`}>{badge.label}</span>
+              ))}
               <small>{prospect.scheduledAt ? shortDateTime(prospect.scheduledAt) : 'à suivre'}</small>
             </div>
           </div>
@@ -2202,6 +2222,9 @@ function adminFunnelProspects(rdvs: RdvResponse[], leads: LeadResponse[], users:
         scheduledAt: rdv.scheduledAt,
         commercialName,
         setterName,
+        debriefFilledAt: rdv.debriefFilledAt,
+        debriefNotifiedAt: rdv.debriefNotifiedAt,
+        debriefOpenedAt: rdv.debriefOpenedAt,
       }
     })
     .sort((a, b) => {

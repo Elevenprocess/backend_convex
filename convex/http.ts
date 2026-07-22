@@ -370,6 +370,11 @@ http.route({
     if (!payload) return corsJson({ message: "Lien invalide ou expiré." }, 410);
     const data = await ctx.runQuery(internal.debriefs.linkReadData, { rdvId: payload.rdvId as any });
     if (!data) return corsJson({ message: "Rendez-vous introuvable." }, 404);
+    // Trace d'ouverture (badge « Ouvert / Non ouvert » Overview admin). Best-effort :
+    // un échec ne doit pas empêcher le commercial de charger son formulaire.
+    try {
+      await ctx.runMutation(internal.debriefs.markLinkOpened, { rdvId: payload.rdvId as any });
+    } catch { /* ignore */ }
     return corsJson(data);
   }),
 });

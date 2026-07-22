@@ -98,6 +98,9 @@ export type ConvexRdvDoc = {
   notes?: string
   debriefFilledAt?: number
   debriefDueAt?: number
+  // Envoi du lien débrief par Hermes (WhatsApp) / première ouverture par le commercial.
+  debriefNotifiedAt?: number
+  debriefOpenedAt?: number
   deletedAt?: number
   // Signalement annulation/report par l'accueil (numéro central).
   cancelReason?: string
