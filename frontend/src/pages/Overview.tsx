@@ -706,7 +706,7 @@ function OverviewCommercialLead() {
     avatarUrl: avatarByCommercial.get(perf.id) ?? null,
   }))
 
-  const { upcoming, debriefs } = useMemo(() => {
+  const { upcoming } = useMemo(() => {
     const list = rdvs ?? []
     const leadById = new Map((allLeads ?? []).map((l) => [l.id, l]))
     const todayIso = new Date().toISOString().slice(0, 10)
@@ -714,12 +714,7 @@ function OverviewCommercialLead() {
       .filter((r) => r.status === 'planifie' && (r.scheduledAt ?? '') >= todayIso)
       .sort((a, b) => (a.scheduledAt ?? '').localeCompare(b.scheduledAt ?? ''))
       .map((r) => ({ rdv: r, lead: r.lead ?? leadById.get(r.leadId) }))
-    // Débriefs triés par date de RDV, du plus proche (récent) au plus loin (ancien).
-    const debriefs = list
-      .filter(needsDebrief)
-      .sort((a, b) => (b.scheduledAt ?? '').localeCompare(a.scheduledAt ?? ''))
-      .map((r) => ({ rdv: r, lead: r.lead ?? leadById.get(r.leadId) }))
-    return { upcoming, debriefs }
+    return { upcoming }
   }, [rdvs, allLeads])
 
   // RDV du jour de toute l'équipe avec l'état du débrief (mêmes badges que la
@@ -799,11 +794,6 @@ function OverviewCommercialLead() {
               subtitle="Suivi des débriefs de l'équipe · temps réel"
               limit={12}
             />
-
-            <div className="overview-air-card">
-              <CardHead title="Débriefs à remplir" icon="phone" />
-              <CommercialDebriefsToFill debriefs={debriefs} limit={6} />
-            </div>
 
             <div className="overview-air-card">
               <CardHead title="Prochains RDV équipe" icon="phone" />
