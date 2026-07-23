@@ -31,6 +31,7 @@ import type {
   SubstepResponse,
   VtCalendarEntry,
 } from './types'
+export { SharedLeadsKeeper, useSharedLeads } from './convexHooks'
 import { fetchCache, type FetchCacheEntry } from './fetchCacheStore'
 import { persistEntry, loadAllEntries, migrateLegacyLocalStorage } from './cachePersist'
 import { convexAuthEnabled, convexClient } from './convex'

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { create } from 'zustand'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 import { getFunctionName } from 'convex/server'
 import { convexClient } from './convex'
@@ -60,6 +61,28 @@ const LEADS_DRAIN_MAX = 5000
 // logout (clearFetchCache). Pas de cache pour les recherches (résultats volatils).
 const LEADS_CACHE_MAX_ROWS = 5000
 
+// ─── `now` de session (listes réactives) ─────────────────────────────────────
+// useStableNow (bucket 5 min mémoïsé PAR MONTAGE) sert de TTL aux one-shots
+// analytics — mais pour les listes réactives paginées, un `now` qui change au
+// remontage change les args de TOUTES les pages : chaque navigation pouvait
+// ré-exécuter le drain complet côté serveur. Ce `now`-ci vit au niveau module :
+// stable toute la session, rollover au changement de jour Réunion (les champs
+// dérivés — callsToday, joursSansContact — sont à granularité jour).
+const REUNION_OFFSET_MS = 4 * 60 * 60 * 1000
+const reunionDayIndex = (ms: number) => Math.floor((ms + REUNION_OFFSET_MS) / 86_400_000)
+const sessionNowStore = create<{ now: number }>(() => ({ now: Math.floor(Date.now() / 300_000) * 300_000 }))
+if (typeof window !== 'undefined') {
+  window.setInterval(() => {
+    const { now } = sessionNowStore.getState()
+    if (reunionDayIndex(Date.now()) !== reunionDayIndex(now)) {
+      sessionNowStore.setState({ now: Math.floor(Date.now() / 300_000) * 300_000 })
+    }
+  }, 60_000)
+}
+function useSessionNow(): number {
+  return sessionNowStore((s) => s.now)
+}
+
 function leadsCacheKey(userId: string | undefined, filters: {
   status?: LeadStatus; setterId?: string; assignedToId?: string; city?: string; scope?: 'clients'
 }): string {
@@ -90,9 +113,9 @@ export function useConvexLeads(filters?: {
   // searchIndex Convex). Changer un de ces args réinitialise la pagination du curseur.
   const search = filters?.search?.trim()
   // Liste ENRICHIE : chaque lead arrive avec ses agrégats (callsToday, joursRelance,
-  // dernier RDV…) — les jauges appels 4/jour et 11 jours en dépendent. `now` stable
-  // (bucket 5 min) sinon chaque rendu relancerait la query.
-  const now = useStableNow()
+  // dernier RDV…) — les jauges appels 4/jour et 11 jours en dépendent. `now` de
+  // session (stable au niveau module) sinon chaque remontage relancerait le drain.
+  const now = useSessionNow()
   const args = filters === null
     ? ('skip' as const)
     : {
@@ -157,6 +180,38 @@ export function useConvexLeads(filters?: {
   }
 }
 
+// ─── Drain leads partagé (rôles non commerciaux) ─────────────────────────────
+// usePaginatedQuery ne se déduplique PAS entre instances (id de pagination
+// propre à chaque hook) : chaque montage de page — Topbar compris — re-souscrivait
+// et re-téléchargeait toute la population enrichie. L'abonnement vit maintenant
+// UNE fois au niveau du layout authentifié (<SharedLeadsKeeper/> dans
+// RequireAuth) et les consommateurs (Topbar, liste setter, liste admin sans
+// filtre) lisent ce store — la navigation ne coûte plus rien.
+type SharedLeadsState = AsyncProgressive<LeadResponse[]>
+const emptySharedLeads: SharedLeadsState = {
+  data: null,
+  loading: true,
+  error: null,
+  refetch: noop,
+  backgroundLoading: false,
+  canLoadMore: false,
+  loadMore: undefined,
+}
+const sharedLeadsStore = create<SharedLeadsState>(() => emptySharedLeads)
+
+export function SharedLeadsKeeper(): null {
+  const state = useConvexLeads({})
+  useEffect(() => {
+    sharedLeadsStore.setState(state)
+  }, [state.data, state.loading, state.error, state.backgroundLoading, state.canLoadMore, state.loadMore])
+  useEffect(() => () => sharedLeadsStore.setState(emptySharedLeads), [])
+  return null
+}
+
+export function useSharedLeads(): SharedLeadsState {
+  return sharedLeadsStore()
+}
+
 // Compteurs des stat cards : servis par la query agrégée leads:stats (comptes
 // exacts sur toute la base), et non par le comptage des leads chargés — qui, en
 // mode fenêtré, ne verrait que la fenêtre courante.
@@ -218,7 +273,7 @@ export function useConvexRdvList(filters?: {
 export function useConvexLead(id: string | undefined): Async<LeadResponse> {
   // Variante enrichie : la fiche détail a besoin d'assignedSetterIds (setters
   // dérivés des appels — les leads GHL natifs n'ont pas de setterId principal).
-  const now = useStableNow()
+  const now = useSessionNow()
   const res = useQuery(leadsGetEnriched, id ? { leadId: id, now } : 'skip')
   const data = useMemo(() => (res ? mapConvexLead(res) : (res === null ? null : null)), [res])
   return { data, loading: !!id && res === undefined, error: null, refetch: noop }

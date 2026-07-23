@@ -6,7 +6,8 @@ import 'ldrs/react/Grid.css'
 import { Icon } from '../Icon'
 import { useDisplayUser } from '../../lib/role'
 import { useAuth } from '../../lib/auth'
-import { useLeads, useRdvList } from '../../lib/hooks'
+import { useLeads, useRdvList, useSharedLeads } from '../../lib/hooks'
+import { convexAuthEnabled } from '../../lib/convex'
 import { useNetworkActivity } from '../../lib/networkActivity'
 import { useNavSidebar } from '../../lib/navSidebar'
 import { useTheme } from '../../lib/theme'
@@ -40,7 +41,13 @@ export function Topbar(_props: TopbarProps) {
   const isCommercialTeam = isCommercial || authUser?.role === 'commercial_lead'
   const leadNotificationFilters = isCommercial && authUser?.id ? { assignedToId: authUser.id, limit: 250 } : { limit: 250 }
   const rdvNotificationFilters = isCommercial && authUser?.id ? { commercialId: authUser.id, limit: 200 } : { limit: 200 }
-  const { data: leadsData } = useLeads(leadNotificationFilters)
+  // Rôles non commerciaux : la liste vient du drain partagé monté dans
+  // RequireAuth — la Topbar re-montait sinon un abonnement complet à chaque
+  // navigation. Le commercial garde sa liste scopée (assignedToId).
+  const sharedLeads = useSharedLeads()
+  const ownLeadsNeeded = isCommercial || !convexAuthEnabled
+  const { data: ownLeadsData } = useLeads(ownLeadsNeeded ? leadNotificationFilters : null)
+  const leadsData = ownLeadsNeeded ? ownLeadsData : sharedLeads.data
   const { data: rdvsData } = useRdvList(rdvNotificationFilters)
   const [seenNotificationVersion, setSeenNotificationVersion] = useState(0)
   const notificationCount = useMemo(

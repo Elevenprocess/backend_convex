@@ -7,7 +7,8 @@ import { Icon, type IconName } from '../../components/Icon'
 import { EmptyState } from '../../components/EmptyState'
 import { LoadingBlock } from '../../components/Spinner'
 import { useAuth } from '../../lib/auth'
-import { deleteLead, useLeadStats, useLeads, useLeadsProgressive, useUsers, useStartCall, useRdvList } from '../../lib/hooks'
+import { deleteLead, useLeadStats, useLeads, useLeadsProgressive, useSharedLeads, useUsers, useStartCall, useRdvList } from '../../lib/hooks'
+import { convexAuthEnabled } from '../../lib/convex'
 import { useLeadSidebar } from '../../lib/leadSidebar'
 import { emitLeadDeselect, emitLeadSelect, useLeadLocks, type LeadLockInfo } from '../../lib/realtime'
 import { normalizeSearchText, phoneMatches, phoneSearchVariants } from '../../lib/searchText'
@@ -230,16 +231,23 @@ function LeadsSetter() {
   )
   // Côté setter, l'écran s'ouvre directement sur les nouveaux leads.
   // Le filtre global "Tous" n'est pas affiché aux setters.
-  // On reste dans la limite backend (/leads max 500) pour éviter les erreurs 400.
-  const baseLeadsState = useLeadsProgressive({ quickLimit: 100, fullLimit: 500 })
-  const searchTerm = query.trim()
-  const searchLeadsState = useLeadsProgressive(searchTerm ? { quickLimit: 100, fullLimit: 500, search: searchTerm } : null)
-  const data = searchTerm ? searchLeadsState.data : baseLeadsState.data
-  const loading = searchTerm ? searchLeadsState.loading : baseLeadsState.loading
-  const error = searchTerm ? searchLeadsState.error : baseLeadsState.error
-  const backgroundLoading = searchTerm ? searchLeadsState.backgroundLoading : baseLeadsState.backgroundLoading
-  const canLoadMore = searchTerm ? searchLeadsState.canLoadMore : baseLeadsState.canLoadMore
-  const loadMore = searchTerm ? searchLeadsState.loadMore : baseLeadsState.loadMore
+  // Mode Convex : la liste vient du drain partagé (RequireAuth) — le montage
+  // de la page ne re-télécharge plus rien. REST : fetch propre inchangé.
+  const sharedLeads = useSharedLeads()
+  const ownBaseState = useLeadsProgressive(convexAuthEnabled ? null : { quickLimit: 100, fullLimit: 500 })
+  const baseLeadsState = convexAuthEnabled ? sharedLeads : ownBaseState
+  // Recherche : locale tant que la population est complète (drain fini) — le
+  // filtre de `filtered` ci-dessous suffit et répond frappe par frappe. On ne
+  // repasse par le serveur (débouncé) que si le drain est plafonné.
+  const searchTerm = useDebouncedValue(query.trim(), 300)
+  const needsServerSearch = Boolean(searchTerm) && Boolean(baseLeadsState.canLoadMore)
+  const searchLeadsState = useLeadsProgressive(needsServerSearch ? { quickLimit: 100, fullLimit: 500, search: searchTerm } : null)
+  const data = needsServerSearch ? searchLeadsState.data : baseLeadsState.data
+  const loading = needsServerSearch ? searchLeadsState.loading : baseLeadsState.loading
+  const error = needsServerSearch ? searchLeadsState.error : baseLeadsState.error
+  const backgroundLoading = needsServerSearch ? searchLeadsState.backgroundLoading : baseLeadsState.backgroundLoading
+  const canLoadMore = needsServerSearch ? searchLeadsState.canLoadMore : baseLeadsState.canLoadMore
+  const loadMore = needsServerSearch ? searchLeadsState.loadMore : baseLeadsState.loadMore
   const { data: usersList } = useUsers()
   const mine = data ?? []
   const userMap = useMemo(() => {
@@ -250,26 +258,28 @@ function LeadsSetter() {
 
   const categoryLeads = mine
 
-  // Horloge interne rafraîchie toutes les 15 s pour réévaluer la fenêtre "rappel imminent"
-  // sans recharger la page.
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 15_000)
-    return () => window.clearInterval(id)
-  }, [])
-
   // Leads "à rappeler" dont l'heure de rappel tombe dans les 3 prochaines minutes
   // (futur proche uniquement ; les rappels déjà dépassés ne déclenchent pas).
-  const imminentCallbackIds = useMemo(() => {
-    const horizon = now + 3 * 60 * 1000
-    return categoryLeads
-      .filter((l) => isCallbackLead(l) && l.nextCallbackAt)
-      .filter((l) => {
-        const t = new Date(l.nextCallbackAt as string).getTime()
-        return t > now && t <= horizon
-      })
-      .map((l) => l.id)
-  }, [categoryLeads, now])
+  // Réévalués toutes les 15 s, mais on ne re-rend la page QUE si la liste change
+  // réellement — l'ancien tick d'horloge re-rendait tout le tableau à chaque fois.
+  const [imminentCallbackIds, setImminentCallbackIds] = useState<string[]>([])
+  useEffect(() => {
+    const compute = () => {
+      const now = Date.now()
+      const horizon = now + 3 * 60 * 1000
+      const ids = categoryLeads
+        .filter((l) => isCallbackLead(l) && l.nextCallbackAt)
+        .filter((l) => {
+          const t = new Date(l.nextCallbackAt as string).getTime()
+          return t > now && t <= horizon
+        })
+        .map((l) => l.id)
+      setImminentCallbackIds((prev) => (prev.length === ids.length && prev.every((id, i) => id === ids[i]) ? prev : ids))
+    }
+    compute()
+    const id = window.setInterval(compute, 15_000)
+    return () => window.clearInterval(id)
+  }, [categoryLeads])
 
   // Accusé de réception : on mémorise les leads dont le sidebar dynamique a été ouvert.
   const [acknowledgedCallbackIds, setAcknowledgedCallbackIds] = useState<Set<string>>(() => new Set())
@@ -526,7 +536,12 @@ function LeadsAdmin() {
     setterId: setterFilter !== 'all' ? setterFilter : undefined,
     assignedToId: commercialFilter !== 'all' ? commercialFilter : undefined,
   }), [searchTerm, setterFilter, commercialFilter])
-  const baseLeadsState = useLeadsProgressive(serverFilters)
+  // Sans filtre ni recherche (l'écran par défaut), la liste vient du drain
+  // partagé (RequireAuth) : revenir sur la page ne re-télécharge plus rien.
+  const sharedLeadsState = useSharedLeads()
+  const unfiltered = convexAuthEnabled && !searchTerm && setterFilter === 'all' && commercialFilter === 'all'
+  const ownLeadsState = useLeadsProgressive(unfiltered ? null : serverFilters)
+  const baseLeadsState = unfiltered ? sharedLeadsState : ownLeadsState
   const leadsData = baseLeadsState.data
   const loading = baseLeadsState.loading
   const error = baseLeadsState.error
