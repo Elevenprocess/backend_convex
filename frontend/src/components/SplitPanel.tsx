@@ -668,11 +668,40 @@ function EditRdvForm({ rdv, lead, onCancel, onSaved }: { rdv: RdvResponse; lead:
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Créneaux libres GHL pour la date choisie — même source que la prise de RDV
+  // (secteur déduit de la ville du lead). L'heure actuelle du RDV reste
+  // proposée à date inchangée : côté GHL son créneau est occupé par ce RDV
+  // lui-même, il ne remonte donc pas dans free-slots.
+  const currentDate = isoToReunionDateInput(rdv.scheduledAt)
+  const currentTime = isoToReunionTimeInput(rdv.scheduledAt)
+  const sector = useMemo(() => {
+    const s = sectorFromCity(info.city.trim() || lead.city || '')
+    return s === 'Autre' ? '' : s
+  }, [info.city, lead.city])
+  const { data: ghlConfig } = useGhlCalendarConfig(true)
+  const sectorConfig = ghlConfig?.sectors.find((item) => normalizeSectorKey(item.sector) === normalizeSectorKey(sector))
+  const slotRange = sector && date ? buildDayRange(date) : null
+  const { data: slotsData, loading: slotsLoading } = useGhlFreeSlots({
+    sector: sector || undefined,
+    calendarId: sectorConfig?.calendarId || undefined,
+    from: slotRange?.from,
+    to: slotRange?.to,
+    timezone: 'Indian/Reunion',
+  })
+  const ghlManaged = Boolean(ghlConfig?.configured && sector && date)
+  const timeOptions = useMemo(() => {
+    const free = (slotsData?.slots ?? []).map((slot) => slotToReunionTime(slot.startTime)).filter(Boolean)
+    return uniqueStrings(date === currentDate ? [currentTime, ...free] : free).sort()
+  }, [slotsData, date, currentDate, currentTime])
+
   async function save() {
     setSaving(true)
     setError(null)
     try {
       if (!date || !time) throw new Error('Renseigne la date et l’heure du RDV.')
+      if (ghlManaged && !slotsLoading && !timeOptions.includes(time)) {
+        throw new Error('Ce créneau n’est plus libre dans GHL : choisis une heure dans la liste.')
+      }
       const email = info.email.trim()
       if (email && !isValidEmail(email)) throw new Error('Email invalide : corrige ou vide le champ email.')
       const payload = {
@@ -712,12 +741,41 @@ function EditRdvForm({ rdv, lead, onCancel, onSaved }: { rdv: RdvResponse; lead:
       {rdv.externalId && <p className="text-[11px] text-muted">Les changements sont aussi poussés vers GHL (RDV + contact).</p>}
 
       <div className="grid grid-cols-2 gap-2">
-        <DateOnlyInput label="Date" value={date} onChange={setDate} />
+        <DateOnlyInput
+          label="Date"
+          value={date}
+          onChange={(v) => { setDate(v); setTime(v === currentDate ? currentTime : '') }}
+        />
         <div>
           <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-1">Heure</div>
-          <input type="time" step={60} value={time} onChange={(e) => setTime(e.target.value)} className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full" />
+          {ghlManaged ? (
+            <select
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              disabled={slotsLoading}
+              className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full disabled:opacity-60"
+            >
+              <option value="">{slotsLoading ? 'Chargement…' : 'Choisir un créneau'}</option>
+              {timeOptions.map((slot) => (
+                <option key={slot} value={slot}>
+                  {slot}{date === currentDate && slot === currentTime ? ' (heure actuelle)' : ''}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input type="time" step={60} value={time} onChange={(e) => setTime(e.target.value)} className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full" />
+          )}
         </div>
       </div>
+      {ghlManaged && (
+        <p className="text-[11px] text-muted -mt-1">
+          {slotsLoading
+            ? 'Chargement des créneaux libres GHL…'
+            : timeOptions.length === 0
+              ? 'Aucun créneau libre GHL sur cette date — choisis une autre date.'
+              : `Créneaux libres GHL · secteur ${sector}.`}
+        </p>
+      )}
       <div>
         <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-1">Note transmise</div>
         <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full h-20 resize-none" placeholder="Note pour le commercial…" />
