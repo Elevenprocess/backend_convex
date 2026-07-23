@@ -637,7 +637,9 @@ export function useConvexUsers(): Async<UserResponse[]> {
   // users:list (fiche complète) exige un rôle lead/admin côté serveur — les
   // autres rôles chargent l'annuaire minimal users:directory (id, nom, rôle)
   // pour que les noms setter/commercial restent résolus (appels, fiches, suivi).
-  const role = useAuth((s) => s.realUser?.role)
+  // Rôle perçu (s.user), pas realUser : le serveur applique l'overlay viewAs,
+  // un admin qui explore un profil non-lead doit basculer sur directory.
+  const role = useAuth((s) => s.user?.role)
   const known = role !== undefined && role !== null
   const allowed = known && USERS_LIST_ROLES.has(role)
   const rows = useQuery(usersList, allowed ? {} : 'skip')
