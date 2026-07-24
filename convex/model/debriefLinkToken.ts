@@ -68,7 +68,10 @@ export async function verifyDebriefToken(
   opts: { nowMs?: number } = {},
 ): Promise<{ rdvId: string; exp: number } | null> {
   if (!secret || !token) return null;
-  const parts = token.split(".");
+  // L'agent VPS écrit parfois le token avec une ponctuation finale (« token. »),
+  // qui part telle quelle dans l'URL du bouton WhatsApp — on tolère ces suffixes
+  // pour que les liens déjà envoyés restent valides.
+  const parts = token.trim().replace(/[.\s]+$/, "").split(".");
   if (parts.length !== 2) return null;
   let payload: Uint8Array;
   let sig: Uint8Array;

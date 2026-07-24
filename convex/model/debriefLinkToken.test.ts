@@ -37,6 +37,13 @@ describe("token débrief (Web Crypto)", () => {
     expect(await verifyDebriefToken(token, SECRET, { nowMs: 4_102_444_800_000 })).toEqual({ rdvId: RDV, exp: 0 });
   });
 
+  it("ponctuation finale tolérée (« token. » écrit par l'agent VPS)", async () => {
+    const token = await signDebriefToken(RDV, SECRET);
+    expect(await verifyDebriefToken(`${token}.`, SECRET)).toEqual({ rdvId: RDV, exp: 0 });
+    expect(await verifyDebriefToken(`${token}...`, SECRET)).toEqual({ rdvId: RDV, exp: 0 });
+    expect(await verifyDebriefToken(` ${token}. \n`, SECRET)).toEqual({ rdvId: RDV, exp: 0 });
+  });
+
   it("malformé / secret vide → null ; sign sans secret → lève", async () => {
     expect(await verifyDebriefToken("pas-de-point", SECRET)).toBeNull();
     expect(await verifyDebriefToken("aaa.bbb", SECRET)).toBeNull();
