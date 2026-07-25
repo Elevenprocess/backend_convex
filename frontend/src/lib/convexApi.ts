@@ -443,6 +443,14 @@ export const usersDirectory = makeFunctionReference<
 
 // Présence "en ligne" : heartbeat périodique (lastSeenAt) + ids des comptes
 // vus il y a moins de 2 min — alimente le badge Actif/Non actif de l'équipe.
+// Édition/suppression admin d'un membre (modale utilisateur des réglages).
+export const usersAdminUpdate = makeFunctionReference<
+  'mutation',
+  { userId: string; name?: string; phone?: string | null; role?: string; team?: string; active?: boolean },
+  null
+>('users:adminUpdate')
+export const usersRemove = makeFunctionReference<'mutation', { userId: string }, null>('users:remove')
+
 export const usersHeartbeat = makeFunctionReference<'mutation', Record<string, never>, null>('users:heartbeat')
 export const usersOnlineIds = makeFunctionReference<'query', { now: number }, string[]>('users:onlineIds')
 

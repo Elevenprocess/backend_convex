@@ -127,3 +127,58 @@ test("onlineIds : refusé sans authentification", async () => {
   const t = makeT();
   await expect(t.query(api.users.onlineIds, { now: 0 })).rejects.toThrow(/Non authentifié/);
 });
+
+test("adminUpdate() modifie nom/téléphone/rôle, phone null efface", async () => {
+  const t = makeT();
+  const adminId = await insertUser(t, { role: "admin" });
+  const targetId = await insertUser(t, { role: "commercial", email: "c@ecoi.fr" });
+  await t.run(async (ctx: any) => ctx.db.patch(targetId, { phone: "+262692000000" }));
+  await asUser(t, adminId).mutation(api.users.adminUpdate, {
+    userId: targetId, name: "Cynthia B.", role: "commercial_lead", team: "closing",
+  });
+  let target = await t.run((ctx) => ctx.db.get(targetId));
+  expect(target?.name).toBe("Cynthia B.");
+  expect(target?.role).toBe("commercial_lead");
+  expect(target?.phone).toBe("+262692000000");
+  await asUser(t, adminId).mutation(api.users.adminUpdate, { userId: targetId, phone: null });
+  target = await t.run((ctx) => ctx.db.get(targetId));
+  expect(target?.phone).toBeUndefined();
+});
+
+test("adminUpdate() refusé pour un non-admin ; user supprimé introuvable", async () => {
+  const t = makeT();
+  const leadId = await insertUser(t, { role: "commercial_lead" });
+  const adminId = await insertUser(t, { role: "admin", email: "a@ecoi.fr" });
+  const targetId = await insertUser(t, { role: "setter", email: "s@ecoi.fr" });
+  await expect(
+    asUser(t, leadId).mutation(api.users.adminUpdate, { userId: targetId, name: "X" }),
+  ).rejects.toThrow(/non autorisé/);
+  await t.run(async (ctx: any) => ctx.db.patch(targetId, { deletedAt: 1 }));
+  await expect(
+    asUser(t, adminId).mutation(api.users.adminUpdate, { userId: targetId, name: "X" }),
+  ).rejects.toThrow(/introuvable/);
+});
+
+test("remove() : soft delete, disparaît de list(), historique conservé", async () => {
+  const t = makeT();
+  const adminId = await insertUser(t, { role: "admin" });
+  const targetId = await insertUser(t, { role: "commercial", email: "c@ecoi.fr" });
+  await asUser(t, adminId).mutation(api.users.remove, { userId: targetId });
+  const target = await t.run((ctx) => ctx.db.get(targetId));
+  expect(target?.deletedAt).toBeGreaterThan(0);
+  expect(target?.active).toBe(false);
+  const listed = await asUser(t, adminId).query(api.users.list, {});
+  expect(listed.map((u) => u._id)).not.toContain(targetId);
+});
+
+test("remove() : refusé pour un non-admin et sur soi-même", async () => {
+  const t = makeT();
+  const adminId = await insertUser(t, { role: "admin" });
+  const setterId = await insertUser(t, { role: "setter", email: "s@ecoi.fr" });
+  await expect(
+    asUser(t, setterId).mutation(api.users.remove, { userId: adminId }),
+  ).rejects.toThrow(/non autorisé/);
+  await expect(
+    asUser(t, adminId).mutation(api.users.remove, { userId: adminId }),
+  ).rejects.toThrow(/propre compte/);
+});

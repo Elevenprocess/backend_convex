@@ -133,6 +133,47 @@ export const create = mutation({
   },
 });
 
+// Édition admin de la fiche membre (modale « Modifier l'utilisateur »).
+// phone: null efface le numéro (même contrat que le PATCH REST historique).
+export const adminUpdate = mutation({
+  args: {
+    userId: v.id("users"),
+    name: v.optional(v.string()),
+    phone: v.optional(v.union(v.string(), v.null())),
+    role: v.optional(roleValidator),
+    team: v.optional(teamValidator),
+    active: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    await requireRole(ctx, ["admin"]);
+    const target = await ctx.db.get(args.userId);
+    if (!target || target.deletedAt !== undefined) throw new Error("Utilisateur introuvable");
+    const patch: Record<string, unknown> = {};
+    if (args.name !== undefined) patch.name = args.name;
+    if (args.phone !== undefined) patch.phone = args.phone ?? undefined;
+    if (args.role !== undefined) patch.role = args.role;
+    if (args.team !== undefined) patch.team = args.team;
+    if (args.active !== undefined) patch.active = args.active;
+    if (Object.keys(patch).length > 0) await ctx.db.patch(args.userId, patch);
+    return null;
+  },
+});
+
+// Suppression douce (bouton « Supprimer l'utilisateur ») : le compte disparaît
+// des listes et ne peut plus se connecter, l'historique (leads, RDV, appels)
+// reste rattaché à son id.
+export const remove = mutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const admin = await requireRole(ctx, ["admin"]);
+    if (admin._id === args.userId) throw new Error("Impossible de supprimer son propre compte");
+    const target = await ctx.db.get(args.userId);
+    if (!target || target.deletedAt !== undefined) throw new Error("Utilisateur introuvable");
+    await ctx.db.patch(args.userId, { deletedAt: Date.now(), active: false });
+    return null;
+  },
+});
+
 export const updateRole = mutation({
   args: { userId: v.id("users"), role: roleValidator },
   handler: async (ctx, args) => {

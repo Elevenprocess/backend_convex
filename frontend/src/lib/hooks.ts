@@ -37,8 +37,9 @@ import { persistEntry, loadAllEntries, migrateLegacyLocalStorage } from './cache
 import { convexAuthEnabled, convexClient } from './convex'
 import { callLogsLogCall, leadsCreate, leadsGet, leadsSoftDelete, leadsUpdate, rdvCreate, rdvFlagByReception, rdvGet, rdvUpdate,
   ghlCalendarGetConfig, ghlCalendarListUsers, ghlCalendarMySector, ghlCalendarFreeSlots, ghlCalendarEventsAction,
-  ghlCalendarSyncEvents, ghlCalendarSyncLeadEvents, ghlAppointmentsCreate, ghlAppointmentsUpdate } from './convexApi'
-import { mapConvexLead, mapConvexRdv } from './convexMappers'
+  ghlCalendarSyncEvents, ghlCalendarSyncLeadEvents, ghlAppointmentsCreate, ghlAppointmentsUpdate,
+  usersAdminUpdate, usersRemove, usersGet } from './convexApi'
+import { mapConvexLead, mapConvexRdv, mapConvexUser } from './convexMappers'
 import {
   useConvexAcomptes,
   useConvexAnalyticsFunnel,
@@ -630,6 +631,19 @@ export type UpdateUserPayload = {
 }
 
 export async function updateUser(id: string, input: UpdateUserPayload): Promise<UserResponse> {
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(usersAdminUpdate, {
+      userId: id,
+      name: input.name,
+      phone: input.phone,
+      role: input.role,
+      team: input.team ?? undefined,
+      active: input.active,
+    })
+    const fresh = await convexClient.query(usersGet, { userId: id })
+    if (!fresh) throw new Error('Utilisateur introuvable')
+    return mapConvexUser(fresh)
+  }
   return api<UserResponse>(`/users/${id}`, { method: 'PATCH', body: input })
 }
 
@@ -658,6 +672,10 @@ export async function renewUser(id: string, input: RenewUserPayload): Promise<Re
 }
 
 export async function deleteUser(id: string): Promise<{ ok: true }> {
+  if (convexAuthEnabled && convexClient) {
+    await convexClient.mutation(usersRemove, { userId: id })
+    return { ok: true }
+  }
   return api<{ ok: true }>(`/users/${id}`, { method: 'DELETE' })
 }
 
