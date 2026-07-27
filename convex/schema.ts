@@ -190,6 +190,27 @@ export default defineSchema({
     updatedAt: v.optional(v.number()),
   }).index("by_rawSource", ["rawSource"]),
 
+  // Dépense publicitaire quotidienne (portage ad_spend_daily NestJS) : une ligne
+  // par jour × canal × campagne/adset/annonce, alimentée par la sync Windsor.ai
+  // (adSpend.ts). Unicité par convention d'écriture via by_upsert_key (l'upsert
+  // matche date+channel+noms, les ids Meta pouvant manquer sur certaines lignes).
+  adSpendDaily: defineTable({
+    date: v.string(), // YYYY-MM-DD (jour du compte publicitaire)
+    channel: adChannelValidator,
+    campaign: v.optional(v.string()),
+    adset: v.optional(v.string()),
+    ad: v.optional(v.string()),
+    campaignId: v.optional(v.string()),
+    adsetId: v.optional(v.string()),
+    adId: v.optional(v.string()),
+    spend: v.number(),
+    impressions: v.number(),
+    clicks: v.number(),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_channel_date", ["channel", "date"])
+    .index("by_upsert_key", ["date", "channel", "campaign", "adset", "ad"]),
+
   // Invitations d'onboarding (ajout/réactivation de commerciaux & équipiers).
   // Portage de userInvitations (NestJS) adapté à Convex Auth : l'invité s'inscrit
   // via le flux auth, puis `accept` applique rôle/équipe/activation. Token stocké

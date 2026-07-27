@@ -3,7 +3,7 @@ import { create } from 'zustand'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 import { getFunctionName } from 'convex/server'
 import { convexClient } from './convex'
-import { analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsListEnriched, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, substepsList, usersGet, usersList, usersDirectory, leadsGetEnriched, analyticsSetterLeaderboard } from './convexApi'
+import { adsReport, analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsListEnriched, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, substepsList, usersGet, usersList, usersDirectory, leadsGetEnriched, analyticsSetterLeaderboard } from './convexApi'
 import type { ConvexUserDoc, SetterLeaderboardEntry } from './convexApi'
 import { mapConvexAcompte, mapConvexCallLog, mapConvexClient, mapConvexCommercialObjective, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexSubstep, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
@@ -11,6 +11,9 @@ import { fetchCache } from './fetchCacheStore'
 import { persistEntry } from './cachePersist'
 import type {
   AcompteResponse,
+  AdChannel,
+  AdsLevel,
+  AdsReport,
   AnalyticsCommercialSummary,
   AnalyticsFunnelResponse,
   AnalyticsSetterSummary,
@@ -478,6 +481,38 @@ export function useConvexDebriefAnalytics(filters?: {
   return {
     data: allowed ? ((sticky ?? null) as DebriefStats | null) : null,
     loading: allowed && res === undefined,
+    error: null,
+    refetch: noop,
+  }
+}
+
+// Rapport ROAS pubs (ads:report, rôles alignés sur convex/ads.ts). Query
+// RÉACTIVE : la resync dépense (action adSpend:sync) écrit adSpendDaily et la
+// donnée se rafraîchit toute seule — refetch est donc un no-op.
+const ADS_ROLES = new Set<Role>(['admin', 'commercial_lead'])
+
+export function useConvexAdsReport(params: {
+  from: string
+  to: string
+  level?: AdsLevel
+  channel?: AdChannel
+} | null): Async<AdsReport> {
+  const role = useAuth((s) => s.user?.role)
+  const allowed = !!role && ADS_ROLES.has(role)
+  const res = useQuery(
+    adsReport,
+    allowed && params !== null
+      ? {
+          from: params.from,
+          to: params.to,
+          level: params.level ?? 'campaign',
+          channel: params.channel ?? 'meta',
+        }
+      : 'skip',
+  )
+  return {
+    data: (res ?? null) as AdsReport | null,
+    loading: allowed && params !== null && res === undefined,
     error: null,
     refetch: noop,
   }

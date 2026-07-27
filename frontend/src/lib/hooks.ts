@@ -48,6 +48,7 @@ import {
   useConvexClients,
   useConvexCommercialAnalytics,
   useConvexCommercialObjectives,
+  useConvexAdsReport,
   useConvexDebriefAnalytics,
   useConvexSetterStats,
   useConvexSetterLeaderboard,
@@ -784,7 +785,7 @@ export function prefetchAnalyticsFunnel(filters?: {
 // Rapport ROAS cohorte. Path-keyed cache (cf. useAnalyticsSummary) : chaque
 // (from, to, level, channel) a sa propre entrée — le drill-down adset/ad
 // déclenche un fetch indépendant mémorisé.
-export function useAdsReport(params: {
+function useAdsReportRest(params: {
   from: string
   to: string
   level?: AdsLevel
@@ -801,6 +802,11 @@ export function useAdsReport(params: {
     silentInitialLoading: true,
   })
 }
+
+// Mode Convex : query réactive ads:report (la resync dépense se reflète seule).
+export const useAdsReport: typeof useAdsReportRest = convexAuthEnabled
+  ? (useConvexAdsReport as unknown as typeof useAdsReportRest)
+  : useAdsReportRest
 
 // ─── Debrief analytics ──────────────────────────────────────
 // Agrégation des débriefs réels (table debriefs) — alimente les cartes

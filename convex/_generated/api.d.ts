@@ -9,6 +9,8 @@
  */
 
 import type * as acompteReminders from "../acompteReminders.js";
+import type * as adSpend from "../adSpend.js";
+import type * as ads from "../ads.js";
 import type * as analytics from "../analytics.js";
 import type * as auth from "../auth.js";
 import type * as callLogs from "../callLogs.js";
@@ -38,10 +40,12 @@ import type * as model_access from "../model/access.js";
 import type * as model_acompteEcheancier from "../model/acompteEcheancier.js";
 import type * as model_acompteGuard from "../model/acompteGuard.js";
 import type * as model_acquisitionChannel from "../model/acquisitionChannel.js";
+import type * as model_adsReport from "../model/adsReport.js";
 import type * as model_analyticsBuilders from "../model/analyticsBuilders.js";
 import type * as model_analyticsRange from "../model/analyticsRange.js";
 import type * as model_assembleEcheancier from "../model/assembleEcheancier.js";
 import type * as model_audit from "../model/audit.js";
+import type * as model_clientScope from "../model/clientScope.js";
 import type * as model_debriefLinkBody from "../model/debriefLinkBody.js";
 import type * as model_debriefLinkToken from "../model/debriefLinkToken.js";
 import type * as model_delivrabilitePermissions from "../model/delivrabilitePermissions.js";
@@ -99,6 +103,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   acompteReminders: typeof acompteReminders;
+  adSpend: typeof adSpend;
+  ads: typeof ads;
   analytics: typeof analytics;
   auth: typeof auth;
   callLogs: typeof callLogs;
@@ -128,10 +134,12 @@ declare const fullApi: ApiFromModules<{
   "model/acompteEcheancier": typeof model_acompteEcheancier;
   "model/acompteGuard": typeof model_acompteGuard;
   "model/acquisitionChannel": typeof model_acquisitionChannel;
+  "model/adsReport": typeof model_adsReport;
   "model/analyticsBuilders": typeof model_analyticsBuilders;
   "model/analyticsRange": typeof model_analyticsRange;
   "model/assembleEcheancier": typeof model_assembleEcheancier;
   "model/audit": typeof model_audit;
+  "model/clientScope": typeof model_clientScope;
   "model/debriefLinkBody": typeof model_debriefLinkBody;
   "model/debriefLinkToken": typeof model_debriefLinkToken;
   "model/delivrabilitePermissions": typeof model_delivrabilitePermissions;

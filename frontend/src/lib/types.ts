@@ -430,9 +430,22 @@ export interface AdsReportRow {
   unmatched?: 'spend_no_leads' | 'leads_no_spend' | null
 }
 
+// Point quotidien de la série d'évolution (graphes de la page Ads).
+export interface AdsSeriesPoint {
+  date: string // YYYY-MM-DD (jour Réunion)
+  spend: number
+  impressions: number
+  clicks: number
+  leads: number
+  devisSignes: number
+  ca: number
+}
+
 export interface AdsReport {
   rows: AdsReportRow[]
   totals: Omit<AdsReportRow, 'level' | 'campaign' | 'campaignId'>
+  // Absente du legacy NestJS — fournie par le backend Convex (ads:report).
+  series?: AdsSeriesPoint[]
 }
 
 // Mapping éditable source GHL brute → canal normalisé.

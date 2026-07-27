@@ -29,7 +29,7 @@ import type {
 } from './types'
 import { notifyRealtimeRefresh } from './realtime'
 import { convexAuthEnabled, convexClient } from './convex'
-import { clientsAssignTechniciens, clientsBootstrap, clientsCreateManualDossier, clientsList, debriefsCreate, debriefsCreateForLead, debriefsGet, debriefsListByLead, debriefsListByProject, devisCreate, devisGenerateUploadUrl, devisGetById, devisListByLead, devisMarkAsSigned, devisRemove, devisRetryOcr, devisUpdate, documentsAttachToSubstep, documentsGenerateUploadUrl, documentsGetUrl, documentsListBySubstep, documentsRemove, paymentsGetAcompte, paymentsListAcomptes, paymentsRecordEcheance, paymentsResetEcheancier, paymentsSetEcheancier, paymentsUpdateFinancing, projectAttachmentsCreate, projectAttachmentsGenerateUploadUrl, projectAttachmentsGetUrl, projectAttachmentsListByProject, projectAttachmentsRemove, projectsCreate, projectsFicheByLead, projectsGet, projectsListByLead, substepsGet, substepsList, substepsResolveProblem, substepsUpdate, type ConvexAttachmentSummary } from './convexApi'
+import { adSpendSync, clientsAssignTechniciens, clientsBootstrap, clientsCreateManualDossier, clientsList, debriefsCreate, debriefsCreateForLead, debriefsGet, debriefsListByLead, debriefsListByProject, devisCreate, devisGenerateUploadUrl, devisGetById, devisListByLead, devisMarkAsSigned, devisRemove, devisRetryOcr, devisUpdate, documentsAttachToSubstep, documentsGenerateUploadUrl, documentsGetUrl, documentsListBySubstep, documentsRemove, leadsSourceMapList, leadsSourceMapUnmapped, leadsSourceMapUpsert, paymentsGetAcompte, paymentsListAcomptes, paymentsRecordEcheance, paymentsResetEcheancier, paymentsSetEcheancier, paymentsUpdateFinancing, projectAttachmentsCreate, projectAttachmentsGenerateUploadUrl, projectAttachmentsGetUrl, projectAttachmentsListByProject, projectAttachmentsRemove, projectsCreate, projectsFicheByLead, projectsGet, projectsListByLead, substepsGet, substepsList, substepsResolveProblem, substepsUpdate, type ConvexAttachmentSummary, type ConvexSourceMapDoc } from './convexApi'
 import { mapConvexAcompte, mapConvexClient, mapConvexDebrief, mapConvexDevis, mapConvexProject, mapConvexSubstep, mapConvexSubstepDocument } from './convexMappers'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
@@ -1100,16 +1100,32 @@ export function resyncAdSpend(body: { from: string; to: string }): Promise<{
   totalSpend: string
   skipped: boolean
 }> {
+  if (convexAuthEnabled && convexClient) return convexClient.action(adSpendSync, body)
   return api('/ad-spend/sync', { method: 'POST', body })
+}
+
+function mapConvexSourceMapEntry(doc: ConvexSourceMapDoc): SourceMapEntry {
+  return {
+    id: doc._id,
+    rawSource: doc.rawSource,
+    channel: doc.channel as AdChannel,
+    label: doc.label,
+    createdAt: new Date(doc._creationTime).toISOString(),
+    updatedAt: new Date(doc.updatedAt ?? doc._creationTime).toISOString(),
+  }
 }
 
 /** Liste du mapping source brute → canal (admin). */
 export function fetchSourceMap(): Promise<SourceMapEntry[]> {
+  if (convexAuthEnabled && convexClient) {
+    return convexClient.query(leadsSourceMapList, {}).then((rows) => rows.map(mapConvexSourceMapEntry))
+  }
   return api<SourceMapEntry[]>('/source-map')
 }
 
 /** Sources GHL brutes non encore classées (canal = other), avec leur volume (admin). */
 export function fetchUnmappedSources(): Promise<UnmappedSource[]> {
+  if (convexAuthEnabled && convexClient) return convexClient.query(leadsSourceMapUnmapped, {})
   return api<UnmappedSource[]>('/source-map/unmapped')
 }
 
@@ -1120,6 +1136,19 @@ export function upsertSourceMap(body: {
   label: string
   reapply?: boolean
 }): Promise<SourceMapEntry> {
+  if (convexAuthEnabled && convexClient) {
+    // La mutation Convex renvoie {reapplied} ; les appelants rechargent la liste
+    // derrière (onSaved → reload), on synthétise l'entrée pour garder le contrat.
+    const now = new Date().toISOString()
+    return convexClient.mutation(leadsSourceMapUpsert, body).then(() => ({
+      id: body.rawSource,
+      rawSource: body.rawSource,
+      channel: body.channel,
+      label: body.label,
+      createdAt: now,
+      updatedAt: now,
+    }))
+  }
   return api<SourceMapEntry>('/source-map', { method: 'POST', body })
 }
 

@@ -703,3 +703,60 @@ export type ConvexAcompteState = {
   tranches: Array<{ ordre: number; label: string; jalonKey: string | null; statut: string; montantPrevu: number | null; dateEcheance: string | null }>
 } | null
 export const paymentsAcompteStateByClient = makeFunctionReference<'query', { clientId: string }, ConvexAcompteState>('payments:acompteStateByClient')
+
+// ─── Ads / ROAS (dépense Windsor + cohorte leads) ─────────────────────────────
+export type ConvexAdsReport = {
+  rows: Array<{
+    level: 'campaign' | 'adset' | 'ad'
+    campaignId: string | null
+    campaign: string | null
+    adsetId?: string | null
+    adset?: string | null
+    adId?: string | null
+    ad?: string | null
+    spend: number
+    impressions: number
+    clicks: number
+    leads: number
+    cpl: number
+    devisSignes: number
+    ca: number
+    roas: number
+    tauxSignature: number
+    unmatched: 'spend_no_leads' | 'leads_no_spend' | null
+  }>
+  totals: {
+    spend: number; impressions: number; clicks: number; leads: number
+    cpl: number; devisSignes: number; ca: number; roas: number; tauxSignature: number
+  }
+  series: Array<{
+    date: string; spend: number; impressions: number; clicks: number
+    leads: number; devisSignes: number; ca: number
+  }>
+}
+export const adsReport = makeFunctionReference<
+  'query',
+  { from: string; to: string; level: string; channel: string; now?: number },
+  ConvexAdsReport
+>('ads:report')
+export const adSpendSync = makeFunctionReference<
+  'action',
+  { from: string; to: string },
+  { synced: number; totalSpend: string; skipped: boolean }
+>('adSpend:sync')
+
+export type ConvexSourceMapDoc = {
+  _id: string
+  _creationTime: number
+  rawSource: string
+  channel: string
+  label: string
+  updatedAt?: number
+}
+export const leadsSourceMapList = makeFunctionReference<'query', Record<string, never>, ConvexSourceMapDoc[]>('leads:sourceMapList')
+export const leadsSourceMapUnmapped = makeFunctionReference<'query', Record<string, never>, Array<{ raw: string; n: number }>>('leads:sourceMapUnmapped')
+export const leadsSourceMapUpsert = makeFunctionReference<
+  'mutation',
+  { rawSource: string; channel: string; label: string; reapply?: boolean },
+  { reapplied: number }
+>('leads:sourceMapUpsert')

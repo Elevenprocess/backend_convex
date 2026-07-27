@@ -1,4 +1,16 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  Area,
+  AreaChart,
+  Bar,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Spinner } from '../components/Spinner'
@@ -17,6 +29,7 @@ import {
   type AdsLevel,
   type AdsReport,
   type AdsReportRow,
+  type AdsSeriesPoint,
   type SourceMapEntry,
   type UnmappedSource,
 } from '../lib/types'
@@ -151,6 +164,19 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
           <MagicKpi label="ROAS" value={fmtRoas(totals?.roas)} sub="CA / dépense" accent={roasAccent(totals?.roas)} icon="chart" />
           <MagicKpi label="TX SIGNATURE" value={fmtPct(totals?.tauxSignature)} sub="Devis signés / prospects" accent="success" icon="check" progress={pctValue(totals?.tauxSignature)} />
         </div>
+
+        {(data?.series?.some((p) => p.spend > 0 || p.leads > 0) ?? false) && (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
+            <div className="glass-card p-6">
+              <SectionHead icon="chart" eyebrow="ÉVOLUTION" title="Dépense & prospects par jour" />
+              <DailySpendLeadsChart series={data!.series!} />
+            </div>
+            <div className="glass-card p-6">
+              <SectionHead icon="trophy" eyebrow="RENTABILITÉ CUMULÉE" title="Dépense vs CA signé (cumulés)" hint="le CA passe au-dessus = campagne rentable" />
+              <CumulativeRoasChart series={data!.series!} />
+            </div>
+          </div>
+        )}
 
         {(rows.length > 0 || (totals?.impressions ?? 0) > 0) && (
           <>
@@ -599,6 +625,129 @@ function SectionHead({ icon, eyebrow, title, hint }: {
         </div>
       </div>
       {hint && <span className="eyebrow text-faint text-right whitespace-nowrap">{hint}</span>}
+    </div>
+  )
+}
+
+// ── Graphes d'évolution (série quotidienne ads:report.series) ───────────────
+// Palette alignée sur le thème Velora (cf. TerrainMonthlyChart).
+const CHART_SPEND = '#B59241'   // cuivre — dépense
+const CHART_LEADS = '#1F7857'   // vert forêt — prospects
+const CHART_CA = '#3E9A6F'      // vert clair — CA signé
+const CHART_GRID = '#E1EBE3'
+const CHART_TICK = '#5E7264'
+
+function chartDayLabel(day: string): string {
+  return `${day.slice(8, 10)}/${day.slice(5, 7)}`
+}
+
+type SeriesTooltipEntry = { name: string; value: number; color?: string; stroke?: string; fill?: string }
+
+function SeriesTooltip({ active, payload, label, euros }: {
+  active?: boolean
+  payload?: SeriesTooltipEntry[]
+  label?: string
+  euros: Set<string>
+}) {
+  if (!active || !payload?.length) return null
+  return (
+    <div style={{
+      background: 'var(--color-card, #fff)',
+      border: '1px solid #DCE8DE',
+      borderRadius: 10,
+      padding: '9px 13px',
+      fontSize: 12,
+      boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
+    }}>
+      <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 11, letterSpacing: '0.04em' }}>{label}</div>
+      {payload.map((entry) => (
+        <div key={entry.name} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: entry.color ?? entry.stroke ?? entry.fill, flexShrink: 0 }} />
+          <span style={{ color: CHART_TICK }}>{entry.name}</span>
+          <span style={{ fontWeight: 700, marginLeft: 'auto' }}>
+            {euros.has(entry.name) ? fmtEur(entry.value) : fmtInt(entry.value)}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Barres dépense (€) + courbe prospects, axes gauche/droite.
+function DailySpendLeadsChart({ series }: { series: AdsSeriesPoint[] }) {
+  const rows = useMemo(
+    () => series.map((p) => ({ ...p, day: chartDayLabel(p.date) })),
+    [series],
+  )
+  return (
+    <div>
+      <div className="h-[240px]">
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={rows} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+          <CartesianGrid stroke={CHART_GRID} strokeDasharray="3 3" vertical={false} />
+          <XAxis dataKey="day" tick={{ fontSize: 10, fill: CHART_TICK }} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={18} />
+          <YAxis yAxisId="spend" tick={{ fontSize: 10, fill: CHART_TICK }} tickLine={false} axisLine={false} width={44} tickFormatter={(v: number) => `${Math.round(v)} €`} />
+          <YAxis yAxisId="leads" orientation="right" allowDecimals={false} tick={{ fontSize: 10, fill: CHART_TICK }} tickLine={false} axisLine={false} width={30} />
+          <Tooltip content={<SeriesTooltip euros={new Set(['Dépense'])} />} cursor={{ fill: 'rgba(181, 146, 65, 0.08)' }} />
+          <Bar yAxisId="spend" dataKey="spend" name="Dépense" fill={CHART_SPEND} radius={[4, 4, 0, 0]} maxBarSize={22} />
+          <Line yAxisId="leads" type="monotone" dataKey="leads" name="Prospects" stroke={CHART_LEADS} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+        </ComposedChart>
+      </ResponsiveContainer>
+      </div>
+      <ChartLegend items={[{ label: 'Dépense (€)', color: CHART_SPEND }, { label: 'Prospects / jour', color: CHART_LEADS }]} />
+    </div>
+  )
+}
+
+// Aires cumulées dépense vs CA signé : le croisement matérialise le seuil de
+// rentabilité (ROAS 1×) dans le temps.
+function CumulativeRoasChart({ series }: { series: AdsSeriesPoint[] }) {
+  const rows = useMemo(() => {
+    let cumSpend = 0
+    let cumCa = 0
+    return series.map((p) => {
+      cumSpend += p.spend
+      cumCa += p.ca
+      return { day: chartDayLabel(p.date), cumSpend: Math.round(cumSpend), cumCa: Math.round(cumCa) }
+    })
+  }, [series])
+  return (
+    <div>
+      <div className="h-[240px]">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={rows} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id="adsCumSpend" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={CHART_SPEND} stopOpacity={0.35} />
+              <stop offset="100%" stopColor={CHART_SPEND} stopOpacity={0.04} />
+            </linearGradient>
+            <linearGradient id="adsCumCa" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={CHART_CA} stopOpacity={0.4} />
+              <stop offset="100%" stopColor={CHART_CA} stopOpacity={0.05} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid stroke={CHART_GRID} strokeDasharray="3 3" vertical={false} />
+          <XAxis dataKey="day" tick={{ fontSize: 10, fill: CHART_TICK }} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={18} />
+          <YAxis tick={{ fontSize: 10, fill: CHART_TICK }} tickLine={false} axisLine={false} width={52} tickFormatter={(v: number) => `${Math.round(v).toLocaleString('fr-FR')} €`} />
+          <Tooltip content={<SeriesTooltip euros={new Set(['Dépense cumulée', 'CA signé cumulé'])} />} />
+          <Area type="monotone" dataKey="cumSpend" name="Dépense cumulée" stroke={CHART_SPEND} strokeWidth={2} fill="url(#adsCumSpend)" />
+          <Area type="monotone" dataKey="cumCa" name="CA signé cumulé" stroke={CHART_CA} strokeWidth={2.5} fill="url(#adsCumCa)" />
+        </AreaChart>
+      </ResponsiveContainer>
+      </div>
+      <ChartLegend items={[{ label: 'Dépense cumulée', color: CHART_SPEND }, { label: 'CA signé cumulé', color: CHART_CA }]} />
+    </div>
+  )
+}
+
+function ChartLegend({ items }: { items: Array<{ label: string; color: string }> }) {
+  return (
+    <div className="flex items-center gap-4 pt-1 text-[11px] text-faint font-semibold">
+      {items.map((it) => (
+        <span key={it.label} className="flex items-center gap-1.5">
+          <i className="w-2.5 h-2.5 rounded-sm" style={{ background: it.color }} /> {it.label}
+        </span>
+      ))}
     </div>
   )
 }
