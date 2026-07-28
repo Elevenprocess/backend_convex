@@ -3,7 +3,7 @@ import { create } from 'zustand'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 import { getFunctionName } from 'convex/server'
 import { convexClient } from './convex'
-import { adsReport, analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsListEnriched, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, substepsList, usersGet, usersList, usersDirectory, leadsGetEnriched, analyticsSetterLeaderboard } from './convexApi'
+import { adsReport, simulatorFunnel, type ConvexSimulatorFunnel, analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsListEnriched, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, substepsList, usersGet, usersList, usersDirectory, leadsGetEnriched, analyticsSetterLeaderboard } from './convexApi'
 import type { ConvexUserDoc, SetterLeaderboardEntry } from './convexApi'
 import { mapConvexAcompte, mapConvexCallLog, mapConvexClient, mapConvexCommercialObjective, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexSubstep, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
@@ -512,6 +512,24 @@ export function useConvexAdsReport(params: {
   )
   return {
     data: (res ?? null) as AdsReport | null,
+    loading: allowed && params !== null && res === undefined,
+    error: null,
+    refetch: noop,
+  }
+}
+
+// Tunnel simulateur — même garde de rôles et même réactivité que le rapport ads.
+export function useConvexSimulatorFunnel(
+  params: { from: string; to: string } | null,
+): Async<ConvexSimulatorFunnel> {
+  const role = useAuth((s) => s.user?.role)
+  const allowed = !!role && ADS_ROLES.has(role)
+  const res = useQuery(
+    simulatorFunnel,
+    allowed && params !== null ? { from: params.from, to: params.to } : 'skip',
+  )
+  return {
+    data: (res ?? null) as ConvexSimulatorFunnel | null,
     loading: allowed && params !== null && res === undefined,
     error: null,
     refetch: noop,

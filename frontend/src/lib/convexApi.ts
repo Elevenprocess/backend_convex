@@ -745,6 +745,26 @@ export const adSpendSync = makeFunctionReference<
   { synced: number; totalSpend: string; skipped: boolean }
 >('adSpend:sync')
 
+// Tunnel simulateur (simulatorStats.ts) : agrégat sessions/étapes/soumissions.
+export type ConvexSimulatorFunnel = {
+  sessions: number
+  formSubmits: number
+  ctaClicks: number
+  stepSessions: number[]
+  hasData: boolean
+  series: Array<{ day: string; sessions: number; formSubmits: number }>
+}
+export const simulatorFunnel = makeFunctionReference<
+  'query',
+  { from: string; to: string; now?: number },
+  ConvexSimulatorFunnel
+>('simulatorStats:funnel')
+export const simulatorStatsSync = makeFunctionReference<
+  'action',
+  { from: string; to: string },
+  { days: number; sessions: number; skipped: boolean }
+>('simulatorStats:sync')
+
 export type ConvexSourceMapDoc = {
   _id: string
   _creationTime: number

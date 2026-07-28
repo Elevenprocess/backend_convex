@@ -21,6 +21,9 @@ crons.daily("acompte-reminders", { hourUTC: 5, minuteUTC: 0 }, internal.acompteR
 // glissante 7 j. No-op propre tant que WINDSOR_API_KEY est absente.
 crons.daily("ad-spend-sync", { hourUTC: 23, minuteUTC: 0 }, internal.adSpend.syncScheduled, {});
 
+// Tunnel simulateur : agrégats Supabase → simulatorDaily (23:20 UTC = 03:20 Réunion).
+crons.daily("simulator-stats-sync", { hourUTC: 23, minuteUTC: 20 }, internal.simulatorStats.syncScheduled, {});
+
 // Filet de sécurité des débriefs WhatsApp : relaie à l'agent Hermes les
 // débriefs des dernières 24 h que le flux événementiel n'a pas envoyés
 // (2 max par passage, espacés — jamais de rafale WhatsApp).

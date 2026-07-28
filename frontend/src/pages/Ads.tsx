@@ -17,6 +17,8 @@ import { Spinner } from '../components/Spinner'
 import { Icon, type IconName } from '../components/Icon'
 import { useAuth } from '../lib/auth'
 import { useAdsReport } from '../lib/hooks'
+import { useConvexSimulatorFunnel } from '../lib/convexHooks'
+import type { ConvexSimulatorFunnel } from '../lib/convexApi'
 import {
   fetchSourceMap,
   fetchUnmappedSources,
@@ -87,6 +89,7 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
   const range = buildPeriodRange(period)
   const [channel, setChannel] = useState<AdChannel>('meta')
   const { data, loading, error, refetch } = useAdsReport({ from: range.from, to: range.to, level: 'campaign', channel })
+  const { data: simFunnel } = useConvexSimulatorFunnel({ from: range.from, to: range.to })
   const [resyncState, setResyncState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [resyncMsg, setResyncMsg] = useState<string | null>(null)
 
@@ -112,7 +115,7 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
       const res = await resyncAdSpend({ from: range.from, to: range.to })
       setResyncState('done')
       setResyncMsg(res.skipped
-        ? 'Sync sautée (clé Windsor absente côté serveur).'
+        ? 'Sync sautée (aucune source de dépense configurée côté serveur).'
         : `${res.synced} lignes synchronisées · ${res.totalSpend} € de dépense.`)
       refetch()
     } catch (e) {
@@ -165,9 +168,8 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
       <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 overflow-y-auto space-y-4 sm:space-y-6 flex-grow">
         {demoMode && (
           <div className="rounded-2xl border border-or/30 bg-or-tint/50 px-4 py-3 text-sm font-semibold text-or-dark">
-            Aperçu de démonstration — les chiffres ci-dessous sont fictifs. Les vraies dépenses Meta
-            s'afficheront automatiquement dès que la connexion Windsor.ai sera rebranchée ; les
-            prospects et le CA réels remplaceront la démo dès qu'ils existeront sur la période.
+            Aperçu de démonstration — les chiffres ci-dessous sont fictifs. Les vraies données
+            (dépense Meta, prospects, CA) remplaceront la démo dès qu'elles existeront sur la période.
           </div>
         )}
         {resyncMsg && (
@@ -221,6 +223,24 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
               </div>
             )}
           </>
+        )}
+
+        {simFunnel?.hasData && (
+          <div className="glass-card p-6">
+            <SectionHead
+              icon="filter"
+              eyebrow="TUNNEL SIMULATEUR"
+              title="Du clic pub à l'arrivée en prospect"
+              hint="sessions du simulateur solaire, cohorte par jour d'arrivée"
+            />
+            <SimulatorFunnel funnel={simFunnel} clicks={totals?.clicks} leads={totals?.leads} demo={demoMode} />
+          </div>
+        )}
+        {isAdmin && simFunnel !== null && !simFunnel?.hasData && (
+          <div className="rounded-2xl border border-line-soft bg-white/60 px-4 py-3 text-sm font-semibold text-muted">
+            Tunnel simulateur : aucune donnée synchronisée sur la période — la clé Supabase du
+            simulateur doit être configurée côté serveur pour activer cette section.
+          </div>
         )}
 
         <div className="glass-card p-6">
@@ -848,6 +868,55 @@ function AcquisitionFunnel({ totals }: { totals?: AdsTotals }) {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+// Tunnel simulateur : barres horizontales clic pub → session → étapes → envoi →
+// prospect. Les étapes sont dynamiques (une barre par étape atteinte ≥ 2, la
+// session démarrant à l'étape 1). En démo ads, clics/prospects sont fictifs :
+// on n'affiche alors que la partie simulateur (données réelles).
+function SimulatorFunnel({ funnel, clicks, leads, demo }: {
+  funnel: ConvexSimulatorFunnel
+  clicks?: number
+  leads?: number
+  demo: boolean
+}) {
+  const stages: Array<{ label: string; value: number; sub?: string }> = []
+  if (!demo && (clicks ?? 0) > 0) stages.push({ label: 'Clics pub', value: Math.round(clicks!), sub: 'Meta' })
+  stages.push({ label: 'Arrivées simulateur', value: funnel.sessions, sub: 'sessions' })
+  funnel.stepSessions.forEach((n, i) => {
+    if (i >= 1 && n > 0) stages.push({ label: `Étape ${i + 1} atteinte`, value: n })
+  })
+  stages.push({ label: 'Formulaire envoyé', value: funnel.formSubmits })
+  if (!demo && (leads ?? 0) > 0) stages.push({ label: 'Prospects créés', value: Math.round(leads!), sub: 'dans Velora' })
+
+  const maxVal = Math.max(...stages.map((s) => s.value), 1)
+  return (
+    <div className="space-y-2">
+      {stages.map((s, i) => {
+        const prev = i > 0 ? stages[i - 1].value : 0
+        const conv = i > 0 && prev > 0 ? Math.round((s.value / prev) * 100) : null
+        return (
+          <div key={s.label} className="grid grid-cols-[minmax(140px,180px)_1fr_64px] items-center gap-3">
+            <div className="text-sm font-bold truncate">
+              {s.label}
+              {s.sub && <span className="ml-1.5 text-[11px] text-faint font-semibold">{s.sub}</span>}
+            </div>
+            <div className="h-6 rounded-lg bg-line-soft/60 overflow-hidden">
+              <div
+                className="h-full rounded-lg bg-or flex items-center px-2"
+                style={{ width: `${Math.max(4, (s.value / maxVal) * 100)}%` }}
+              >
+                <span className="text-[11px] font-extrabold text-white tabular-nums">{fmtInt(s.value)}</span>
+              </div>
+            </div>
+            <div className="text-right text-sm font-extrabold text-or-dark tabular-nums">
+              {conv != null ? `${conv}%` : ''}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

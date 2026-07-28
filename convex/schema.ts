@@ -211,6 +211,19 @@ export default defineSchema({
     .index("by_channel_date", ["channel", "date"])
     .index("by_upsert_key", ["date", "channel", "campaign", "adset", "ad"]),
 
+  // Tunnel du simulateur (simulateur.electroconceptoi.com, events Supabase) :
+  // une ligne par jour Réunion, cohorte par jour d'arrivée de la session.
+  // Alimentée par simulatorStats.ts (sync Supabase analytics_events).
+  simulatorDaily: defineTable({
+    date: v.string(), // YYYY-MM-DD (jour Réunion du 1er event de la session)
+    sessions: v.number(), // sessions distinctes arrivées ce jour
+    stepSessions: v.array(v.number()), // sessions ayant atteint l'étape i+1
+    formSubmits: v.number(), // sessions ayant soumis le formulaire
+    ctaClicks: v.number(),
+    events: v.number(), // volume brut d'events (contrôle)
+    updatedAt: v.number(),
+  }).index("by_date", ["date"]),
+
   // Invitations d'onboarding (ajout/réactivation de commerciaux & équipiers).
   // Portage de userInvitations (NestJS) adapté à Convex Auth : l'invité s'inscrit
   // via le flux auth, puis `accept` applique rôle/équipe/activation. Token stocké
