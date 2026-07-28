@@ -35,7 +35,7 @@ import {
   type SourceMapEntry,
   type UnmappedSource,
 } from '../lib/types'
-import { MagicKpi, type KpiAccent } from '../components/kpi/MagicKpi'
+import { MagicKpi } from '../components/kpi/MagicKpi'
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
 import { DEFAULT_PERIOD, buildPeriodRange, type PeriodState } from '../lib/period'
 import { buildDemoAdsData, isEmptyAdsReport, type DemoAdsData } from '../lib/adsDemo'
@@ -57,9 +57,9 @@ export function Ads() {
 
   return (
     <AppShell blobsKey="admin" flat>
-      <Topbar eyebrow="ACQUISITION / PUBLICITÉ" title="Performance publicitaire — ROAS Meta" />
+      <Topbar eyebrow="ACQUISITION / PUBLICITÉ" title="Performance publicitaire — Meta" />
       <div className="px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 flex items-center gap-2 flex-shrink-0">
-        <TabButton active={tab === 'rapport'} onClick={() => setTab('rapport')}>Rapport ROAS</TabButton>
+        <TabButton active={tab === 'rapport'} onClick={() => setTab('rapport')}>Rapport</TabButton>
         {isAdmin && (
           <TabButton active={tab === 'sources'} onClick={() => setTab('sources')}>Sources à classer</TabButton>
         )}
@@ -83,7 +83,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   )
 }
 
-// ===== Rapport ROAS =====
+// ===== Rapport =====
 function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
   const [period, setPeriod] = useState<PeriodState>({ ...DEFAULT_PERIOD, mode: 'this_month' })
   const range = buildPeriodRange(period)
@@ -128,7 +128,7 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
     <>
       <div className="px-4 sm:px-6 md:px-8 pt-3 flex items-center justify-between gap-2 sm:gap-4 flex-shrink-0 flex-wrap">
         <div className="text-xs text-faint font-semibold">
-          Cohorte ROAS : {range.label}.
+          Cohorte : {range.label}.
           {demoMode && (
             <span className="ml-2 inline-flex items-center rounded-full bg-or-tint px-2 py-0.5 text-[10px] font-extrabold text-or-dark border border-or/30">
               DÉMO
@@ -182,12 +182,11 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
           </div>
         )}
 
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 lg:gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 lg:gap-6">
           <MagicKpi label="DÉPENSE" value={fmtEur(totals?.spend)} sub={`${fmtInt(totals?.impressions)} impressions`} accent="gold" icon="tag" />
           <MagicKpi label="PROSPECTS" value={fmtInt(totals?.leads)} sub={`${fmtInt(totals?.clicks)} clics`} accent="info" icon="users" />
           <MagicKpi label="CPL" value={fmtEur(totals?.cpl)} sub="Coût par lead" accent="green" icon="target" />
           <MagicKpi label="CA SIGNÉ" value={fmtEur(totals?.ca)} sub={`${fmtInt(totals?.devisSignes)} devis signés`} accent="gold" icon="trophy" />
-          <MagicKpi label="ROAS" value={fmtRoas(totals?.roas)} sub="CA / dépense" accent={roasAccent(totals?.roas)} icon="chart" />
           <MagicKpi label="TX SIGNATURE" value={fmtPct(totals?.tauxSignature)} sub="Devis signés / prospects" accent="success" icon="check" progress={pctValue(totals?.tauxSignature)} />
         </div>
 
@@ -216,12 +215,6 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
                 <SpendDonut rows={rows} />
               </div>
             </div>
-            {rows.length > 0 && (
-              <div className="glass-card p-6">
-                <SectionHead icon="trophy" eyebrow="RENTABILITÉ" title="ROAS par campagne" hint="repère vertical = seuil 1×" />
-                <RoasByCampaign rows={rows} />
-              </div>
-            )}
           </>
         )}
 
@@ -264,7 +257,7 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
 }
 
 // ===== Table avec dépliage in-place =====
-type SortKey = 'spend' | 'leads' | 'cpl' | 'ca' | 'roas' | 'tauxSignature'
+type SortKey = 'spend' | 'leads' | 'cpl' | 'ca' | 'tauxSignature'
 
 function AdsTable({ rows, unmatchedRows, from, to, channel, demo }: {
   rows: AdsReportRow[]
@@ -304,7 +297,7 @@ function AdsTable({ rows, unmatchedRows, from, to, channel, demo }: {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm min-w-[920px]">
+      <table className="w-full text-sm min-w-[840px]">
         <thead className="bg-or-tint">
           <tr className="text-left eyebrow">
             <th className="px-3 py-2.5">CAMPAGNE / ADSET / ANNONCE</th>
@@ -312,7 +305,6 @@ function AdsTable({ rows, unmatchedRows, from, to, channel, demo }: {
             <SortableTh label="PROSPECTS" k="leads" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
             <SortableTh label="CPL" k="cpl" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
             <SortableTh label="CA" k="ca" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-            <SortableTh label="ROAS" k="roas" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
             <SortableTh label="TX SIGN." k="tauxSignature" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
           </tr>
         </thead>
@@ -331,7 +323,7 @@ function AdsTable({ rows, unmatchedRows, from, to, channel, demo }: {
           ))}
           {unmatchedRows.length > 0 && (
             <>
-              <tr><td colSpan={7} className="px-3 pt-5 pb-1 eyebrow text-rouille">⚠ Lignes non rapprochées</td></tr>
+              <tr><td colSpan={6} className="px-3 pt-5 pb-1 eyebrow text-rouille">⚠ Lignes non rapprochées</td></tr>
               {unmatchedRows.map((row, i) => (
                 <DataRow key={`u:${row.campaignId ?? row.campaign ?? i}`} row={row} depth={0} unmatched />
               ))}
@@ -391,13 +383,13 @@ function ChildLevel({ parent, level, from, to, channel, expanded, onToggle, demo
   const children = useMemo(() => filterChildren(data, parent, level), [data, parent, level])
 
   if (loading && !data) {
-    return <tr><td colSpan={7} className="px-3 py-3 pl-10 text-faint"><Spinner size={16} /> Chargement {level === 'adset' ? 'des adsets' : 'des annonces'}…</td></tr>
+    return <tr><td colSpan={6} className="px-3 py-3 pl-10 text-faint"><Spinner size={16} /> Chargement {level === 'adset' ? 'des adsets' : 'des annonces'}…</td></tr>
   }
   if (error) {
-    return <tr><td colSpan={7} className="px-3 py-3 pl-10 text-rouille text-xs">Erreur : {error}</td></tr>
+    return <tr><td colSpan={6} className="px-3 py-3 pl-10 text-rouille text-xs">Erreur : {error}</td></tr>
   }
   if (children.length === 0) {
-    return <tr><td colSpan={7} className="px-3 py-3 pl-10 text-faint text-xs">Aucun {level === 'adset' ? 'adset' : 'annonce'} rattaché.</td></tr>
+    return <tr><td colSpan={6} className="px-3 py-3 pl-10 text-faint text-xs">Aucun {level === 'adset' ? 'adset' : 'annonce'} rattaché.</td></tr>
   }
 
   return (
@@ -486,7 +478,6 @@ function DataRow({ row, depth, expandable = false, open = false, onClick, unmatc
       <td className="px-3 py-2.5">{fmtInt(row.leads)}</td>
       <td className="px-3 py-2.5">{fmtEur(row.cpl)}</td>
       <td className="px-3 py-2.5 font-semibold text-or-dark">{fmtEur(row.ca)}</td>
-      <td className={`px-3 py-2.5 font-bold ${roasClass(row.roas)}`}>{fmtRoas(row.roas)}</td>
       <td className="px-3 py-2.5">{fmtPct(row.tauxSignature)}</td>
     </tr>
   )
@@ -886,7 +877,7 @@ function SimulatorFunnel({ funnel, clicks, leads, demo }: {
   if (!demo && (clicks ?? 0) > 0) stages.push({ label: 'Clics pub', value: Math.round(clicks!), sub: 'Meta' })
   stages.push({ label: 'Arrivées simulateur', value: funnel.sessions, sub: 'sessions' })
   funnel.stepSessions.forEach((n, i) => {
-    if (i >= 1 && n > 0) stages.push({ label: `Étape ${i + 1} atteinte`, value: n })
+    if (n > 0) stages.push({ label: `Étape ${i + 1} atteinte`, value: n })
   })
   stages.push({ label: 'Formulaire envoyé', value: funnel.formSubmits })
   if (!demo && (leads ?? 0) > 0) stages.push({ label: 'Prospects créés', value: Math.round(leads!), sub: 'dans Velora' })
@@ -984,54 +975,6 @@ function SpendDonut({ rows }: { rows: AdsReportRow[] }) {
   )
 }
 
-// Barres classées par ROAS, colorées vert/rouille autour du seuil 1×.
-function RoasByCampaign({ rows }: { rows: AdsReportRow[] }) {
-  const list = useMemo(
-    () => rows.filter((r) => (r.spend ?? 0) > 0).sort((a, b) => (b.roas ?? 0) - (a.roas ?? 0)).slice(0, 8),
-    [rows],
-  )
-  if (list.length === 0) return <ChartEmpty message="Aucune campagne avec dépense sur la période." />
-
-  const maxRoas = Math.max(...list.map((r) => r.roas ?? 0), 2)
-  const breakEven = (1 / maxRoas) * 100
-
-  return (
-    <div className="space-y-3">
-      {list.map((r, i) => {
-        const roas = r.roas ?? 0
-        const good = roas >= 1
-        const pct = Math.min(100, (roas / maxRoas) * 100)
-        return (
-          <div key={r.campaignId ?? r.campaign ?? i}>
-            <div className="flex items-baseline justify-between gap-3 mb-1">
-              <span className="text-sm font-semibold truncate min-w-0">{r.campaign?.trim() || '— (sans nom)'}</span>
-              <span className="text-sm font-bold tabular-nums flex-shrink-0">
-                <span className={good ? 'text-success' : 'text-rouille'}>{fmtRoas(roas)}</span>
-                <span className="text-faint font-semibold"> · {fmtEur(r.spend)}</span>
-              </span>
-            </div>
-            <div className="relative h-3 rounded-full bg-line-soft overflow-hidden">
-              <div
-                className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-500"
-                style={{ width: `${pct}%`, background: good ? '#1F7857' : '#A85D2E' }}
-              />
-              <div
-                className="absolute top-[-2px] bottom-[-2px] w-px bg-faint/70"
-                style={{ left: `${breakEven}%` }}
-                aria-hidden="true"
-              />
-            </div>
-          </div>
-        )
-      })}
-      <div className="flex items-center gap-4 pt-1 text-[11px] text-faint font-semibold">
-        <span className="flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: '#1F7857' }} /> rentable (≥ 1×)</span>
-        <span className="flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm" style={{ background: '#A85D2E' }} /> à perte (&lt; 1×)</span>
-      </div>
-    </div>
-  )
-}
-
 function ChartEmpty({ message }: { message: string }) {
   return (
     <div className="rounded-2xl border border-line-soft bg-white/50 p-6 text-center text-sm text-muted">{message}</div>
@@ -1079,11 +1022,6 @@ function fmtEur(n: number | null | undefined): string {
   return `${Math.round(Number(n ?? 0)).toLocaleString('fr-FR')} €`
 }
 
-function fmtRoas(n: number | null | undefined): string {
-  const v = Number(n ?? 0)
-  return `${v.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}×`
-}
-
 function fmtPct(n: number | null | undefined): string {
   // Le backend renvoie un ratio 0..1 (tauxSignature). On l'affiche en %.
   return `${Math.round(Number(n ?? 0) * 100)}%`
@@ -1093,13 +1031,3 @@ function pctValue(n: number | null | undefined): number {
   return Math.min(100, Math.round(Number(n ?? 0) * 100))
 }
 
-// ROAS vert au-dessus de ~1, rouge en dessous.
-function roasClass(roas: number | null | undefined): string {
-  const v = Number(roas ?? 0)
-  if (v >= 1) return 'text-success'
-  return 'text-rouille'
-}
-
-function roasAccent(roas: number | null | undefined): KpiAccent {
-  return Number(roas ?? 0) >= 1 ? 'success' : 'rust'
-}
