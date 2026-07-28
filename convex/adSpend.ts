@@ -14,6 +14,7 @@ import { action, internalAction, internalMutation, internalQuery, type ActionCtx
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { requireRole } from "./model/access";
+import { requireHermesKey } from "./model/hermesAuth";
 import { reunionDayKey } from "./model/analyticsRange";
 
 interface MetaInsightRow {
@@ -234,6 +235,26 @@ function dayOf(iso: string): string {
   if (Number.isNaN(ms)) throw new Error(`Date invalide : ${iso}`);
   return reunionDayKey(ms);
 }
+
+/**
+ * Ingestion service (relais VPS Hermes) : le VPS fetch les insights Meta via
+ * son CLI Composio et pousse les lignes ici, gardé par HERMES_API_KEY —
+ * chemin de secours tant que COMPOSIO_API_KEY n'est pas posée côté Convex.
+ */
+export const ingestRows = action({
+  args: { apiKey: v.string(), rows: v.array(upsertRowValidator) },
+  handler: async (ctx, args) => {
+    requireHermesKey(args.apiKey);
+    for (let i = 0; i < args.rows.length; i += 100) {
+      await ctx.runMutation(internal.adSpend.upsertRows, {
+        rows: args.rows.slice(i, i + 100),
+        now: Date.now(),
+      });
+    }
+    const total = args.rows.reduce((s, r) => s + r.spend, 0);
+    return { ingested: args.rows.length, totalSpend: total.toFixed(2) };
+  },
+});
 
 /** Totaux de contrôle de la table adSpendDaily (vérif backfill/sync via CLI). */
 export const stats = internalQuery({
