@@ -443,19 +443,28 @@ export const debriefStats = query({
     const fromMs = args.from ? new Date(args.from).getTime() : undefined;
     const toMs = args.to ? new Date(args.to).getTime() : undefined;
 
-    // Filtrage sur la date MÉTIER (createdAt Render) et non _creationTime : sinon
-    // les débriefs migrés se regrouperaient tous sur le jour de migration. Scan
-    // complet (table petite) + repli _creationTime pour les débriefs live.
+    // Date métier d'un débrief = date du RDV débriefé (scheduledAt), repli
+    // createdAt Render puis _creationTime. Aligne ces cartes sur le taux de
+    // vente / funnel, qui rattachent les ventes à la date du RDV : un RDV du 28
+    // débriefé le 29 compte le 28 des deux côtés. Scan complet (table petite).
     const all = await ctx.db.query("debriefs").collect();
-    const rows = all.filter((d) => {
-      const created = bizCreatedAt(d);
-      return (
-        d.deletedAt === undefined &&
-        (!commercialId || d.commercialId === commercialId) &&
-        (fromMs === undefined || created >= fromMs) &&
-        (toMs === undefined || created <= toMs)
-      );
-    });
+    const candidates = all.filter(
+      (d) => d.deletedAt === undefined && (!commercialId || d.commercialId === commercialId),
+    );
+    const rows =
+      fromMs === undefined && toMs === undefined
+        ? candidates
+        : (
+            await Promise.all(
+              candidates.map(async (d) => {
+                const rdv = d.rdvId ? await ctx.db.get(d.rdvId) : null;
+                const at = rdv?.scheduledAt ?? bizCreatedAt(d);
+                const inRange =
+                  (fromMs === undefined || at >= fromMs) && (toMs === undefined || at <= toMs);
+                return inRange ? d : null;
+              }),
+            )
+          ).filter((d): d is (typeof candidates)[number] => d !== null);
 
     const outcomeCounts = { vente: 0, non_vente: 0, en_reflexion: 0, suivi_prevu: 0 };
     const acceptanceFactorCounts: Record<string, number> = {};

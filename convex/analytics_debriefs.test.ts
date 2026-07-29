@@ -45,6 +45,35 @@ test("debriefStats : commercial forcé sur SES débriefs même s'il demande un a
   expect(res.outcomeCounts.vente).toBe(0);
 });
 
+test("debriefStats : un débrief lié à un RDV est daté du RDV, pas du débrief", async () => {
+  const t = makeT();
+  const { adminId, c1, leadId } = await seed(t);
+  // RDV du 10/03, débriefé « aujourd'hui » (createdAt = now du test)
+  const rdvDay = new Date("2026-03-10T14:00:00.000Z").getTime();
+  const rdvId = await asUser(t, c1).mutation(api.rdv.create, {
+    leadId, commercialId: c1, scheduledAt: rdvDay,
+  });
+  await asUser(t, c1).mutation(api.debriefs.createForLead, {
+    leadId, rdvId, outcome: "vente", montantTotal: 3000, financingType: "comptant",
+    acceptanceFactors: ["roi"],
+  });
+  // Fenêtre du jour du RDV → le débrief compte ce jour-là
+  const onRdvDay = await asUser(t, adminId).query(api.analytics.debriefStats, {
+    from: "2026-03-10T00:00:00.000Z",
+    to: "2026-03-11T00:00:00.000Z",
+  });
+  expect(onRdvDay.total).toBe(1);
+  expect(onRdvDay.acceptanceFactorCounts).toEqual({ roi: 1 });
+  // Fenêtre autour de la date de création du débrief → il n'y compte pas
+  const now = Date.now();
+  const onDebriefDay = await asUser(t, adminId).query(api.analytics.debriefStats, {
+    from: new Date(now - 3_600_000).toISOString(),
+    to: new Date(now + 3_600_000).toISOString(),
+  });
+  expect(onDebriefDay.outcomeCounts.vente).toBe(2); // les 2 ventes sans RDV du seed, pas celle-ci
+  expect(onDebriefDay.acceptanceFactorCounts.roi).toBeUndefined();
+});
+
 test("debriefStats : filtre from/to et rôle refusé (setter)", async () => {
   const t = makeT();
   const { adminId } = await seed(t);
