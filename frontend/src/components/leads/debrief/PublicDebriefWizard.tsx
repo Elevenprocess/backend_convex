@@ -118,7 +118,7 @@ function isFinancingComplete(form: FormState): boolean {
 }
 
 function isVenteDetailsComplete(form: FormState): boolean {
-  return form.quoteAmount.trim() !== '' && form.kits.length > 0 && isFinancingComplete(form)
+  return form.quoteAmount.trim() !== '' && isFinancingComplete(form)
 }
 
 function canAdvanceStep(stepId: WizardStepId, form: FormState): boolean {
@@ -676,7 +676,7 @@ function Step4VDetails({ form, update }: StepProps) {
         </div>
       </div>
 
-      <FieldGroup label="Kits vendus" required>
+      <FieldGroup label="Kits vendus">
         <div className="flex gap-2">
           <input type="text" value={kitInput} onChange={(e) => setKitInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addKit() } }} placeholder="Ex. : 8 PV, batterie 5 kWh…" className="w-full rounded-xl border border-line bg-cream py-2 px-3 text-sm text-text outline-none focus:border-or" />
           <button type="button" onClick={addKit} disabled={!kitInput.trim()} className="shrink-0 rounded-xl border border-or bg-or px-3 py-2 text-sm font-black text-white disabled:opacity-40">Ajouter</button>

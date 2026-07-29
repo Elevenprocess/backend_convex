@@ -138,7 +138,6 @@ function isFinancingComplete(form: FormState): boolean {
 function isVenteDetailsComplete(form: FormState): boolean {
   return (
     form.quoteAmount.trim() !== '' &&
-    form.kits.length > 0 &&
     isFinancingComplete(form)
   )
 }
@@ -784,7 +783,7 @@ function Step4VDetails({ form, update }: StepProps) {
         </div>
       </div>
 
-      <FieldGroup label="Kits vendus" required>
+      <FieldGroup label="Kits vendus">
         <div className="flex gap-2">
           <input
             type="text"
