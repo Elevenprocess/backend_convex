@@ -211,6 +211,18 @@ export default defineSchema({
     .index("by_channel_date", ["channel", "date"])
     .index("by_upsert_key", ["date", "channel", "campaign", "adset", "ad"]),
 
+  // Dépôts de solde publicitaire (saisie admin — l'API Meta n'expose pas
+  // l'historique de facturation du compte). Le dernier dépôt borne les KPI
+  // « budget en cours » de la page Ads (adDeposits.budget).
+  adDeposits: defineTable({
+    date: v.string(), // YYYY-MM-DD (jour Réunion du dépôt)
+    amount: v.number(), // EUR
+    channel: adChannelValidator,
+    note: v.optional(v.string()),
+    createdBy: v.optional(v.id("users")),
+    updatedAt: v.optional(v.number()),
+  }).index("by_channel_date", ["channel", "date"]),
+
   // Tunnel du simulateur (simulateur.electroconceptoi.com, events Supabase) :
   // une ligne par jour Réunion, cohorte par jour d'arrivée de la session.
   // Alimentée par simulatorStats.ts (sync Supabase analytics_events).

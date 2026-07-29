@@ -9,6 +9,7 @@
  */
 
 import type * as acompteReminders from "../acompteReminders.js";
+import type * as adDeposits from "../adDeposits.js";
 import type * as adSpend from "../adSpend.js";
 import type * as ads from "../ads.js";
 import type * as analytics from "../analytics.js";
@@ -89,6 +90,7 @@ import type * as projectAttachments from "../projectAttachments.js";
 import type * as projects from "../projects.js";
 import type * as rdv from "../rdv.js";
 import type * as referrers from "../referrers.js";
+import type * as simulatorStats from "../simulatorStats.js";
 import type * as testSeed from "../testSeed.js";
 import type * as users from "../users.js";
 import type * as webhooks from "../webhooks.js";
@@ -103,6 +105,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   acompteReminders: typeof acompteReminders;
+  adDeposits: typeof adDeposits;
   adSpend: typeof adSpend;
   ads: typeof ads;
   analytics: typeof analytics;
@@ -183,6 +186,7 @@ declare const fullApi: ApiFromModules<{
   projects: typeof projects;
   rdv: typeof rdv;
   referrers: typeof referrers;
+  simulatorStats: typeof simulatorStats;
   testSeed: typeof testSeed;
   users: typeof users;
   webhooks: typeof webhooks;

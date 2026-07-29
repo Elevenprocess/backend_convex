@@ -745,6 +745,27 @@ export const adSpendSync = makeFunctionReference<
   { synced: number; totalSpend: string; skipped: boolean }
 >('adSpend:sync')
 
+// Dépôts de solde publicitaire (adDeposits.ts) : saisie admin + KPI « budget
+// en cours » depuis le dernier dépôt.
+export type ConvexAdDeposit = { id: string; date: string; amount: number; note: string | null }
+export type ConvexAdBudget = {
+  deposit: ConvexAdDeposit | null
+  spend: number
+  leads: number
+  impressions: number
+  clicks: number
+  cpl: number
+  remaining: number
+}
+export const adBudget = makeFunctionReference<'query', { channel: string }, ConvexAdBudget>('adDeposits:budget')
+export const adDepositsList = makeFunctionReference<'query', { channel: string }, ConvexAdDeposit[]>('adDeposits:list')
+export const adDepositAdd = makeFunctionReference<
+  'mutation',
+  { date: string; amount: number; channel: string; note?: string },
+  string
+>('adDeposits:add')
+export const adDepositRemove = makeFunctionReference<'mutation', { id: string }, null>('adDeposits:remove')
+
 // Tunnel simulateur (simulatorStats.ts) : agrégat sessions/étapes/soumissions.
 export type ConvexSimulatorFunnel = {
   sessions: number

@@ -29,7 +29,7 @@ import type {
 } from './types'
 import { notifyRealtimeRefresh } from './realtime'
 import { convexAuthEnabled, convexClient } from './convex'
-import { adSpendSync, clientsAssignTechniciens, clientsBootstrap, clientsCreateManualDossier, clientsList, debriefsCreate, debriefsCreateForLead, debriefsGet, debriefsListByLead, debriefsListByProject, devisCreate, devisGenerateUploadUrl, devisGetById, devisListByLead, devisMarkAsSigned, devisRemove, devisRetryOcr, devisUpdate, documentsAttachToSubstep, documentsGenerateUploadUrl, documentsGetUrl, documentsListBySubstep, documentsRemove, leadsSourceMapList, leadsSourceMapUnmapped, leadsSourceMapUpsert, paymentsGetAcompte, paymentsListAcomptes, paymentsRecordEcheance, paymentsResetEcheancier, paymentsSetEcheancier, paymentsUpdateFinancing, projectAttachmentsCreate, projectAttachmentsGenerateUploadUrl, projectAttachmentsGetUrl, projectAttachmentsListByProject, projectAttachmentsRemove, projectsCreate, projectsFicheByLead, projectsGet, projectsListByLead, substepsGet, substepsList, substepsResolveProblem, substepsUpdate, type ConvexAttachmentSummary, type ConvexSourceMapDoc } from './convexApi'
+import { adSpendSync, adDepositAdd, adDepositRemove, clientsAssignTechniciens, clientsBootstrap, clientsCreateManualDossier, clientsList, debriefsCreate, debriefsCreateForLead, debriefsGet, debriefsListByLead, debriefsListByProject, devisCreate, devisGenerateUploadUrl, devisGetById, devisListByLead, devisMarkAsSigned, devisRemove, devisRetryOcr, devisUpdate, documentsAttachToSubstep, documentsGenerateUploadUrl, documentsGetUrl, documentsListBySubstep, documentsRemove, leadsSourceMapList, leadsSourceMapUnmapped, leadsSourceMapUpsert, paymentsGetAcompte, paymentsListAcomptes, paymentsRecordEcheance, paymentsResetEcheancier, paymentsSetEcheancier, paymentsUpdateFinancing, projectAttachmentsCreate, projectAttachmentsGenerateUploadUrl, projectAttachmentsGetUrl, projectAttachmentsListByProject, projectAttachmentsRemove, projectsCreate, projectsFicheByLead, projectsGet, projectsListByLead, substepsGet, substepsList, substepsResolveProblem, substepsUpdate, type ConvexAttachmentSummary, type ConvexSourceMapDoc } from './convexApi'
 import { mapConvexAcompte, mapConvexClient, mapConvexDebrief, mapConvexDevis, mapConvexProject, mapConvexSubstep, mapConvexSubstepDocument } from './convexMappers'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
@@ -1102,6 +1102,18 @@ export function resyncAdSpend(body: { from: string; to: string }): Promise<{
 }> {
   if (convexAuthEnabled && convexClient) return convexClient.action(adSpendSync, body)
   return api('/ad-spend/sync', { method: 'POST', body })
+}
+
+/** Enregistre un dépôt de solde publicitaire (admin, Convex uniquement). */
+export function addAdDeposit(body: { date: string; amount: number; channel: AdChannel; note?: string }): Promise<string> {
+  if (!convexAuthEnabled || !convexClient) throw new Error('Dépôts publicitaires disponibles uniquement sur Convex.')
+  return convexClient.mutation(adDepositAdd, body)
+}
+
+/** Supprime un dépôt saisi par erreur (admin, Convex uniquement). */
+export function removeAdDeposit(id: string): Promise<null> {
+  if (!convexAuthEnabled || !convexClient) throw new Error('Dépôts publicitaires disponibles uniquement sur Convex.')
+  return convexClient.mutation(adDepositRemove, { id })
 }
 
 function mapConvexSourceMapEntry(doc: ConvexSourceMapDoc): SourceMapEntry {

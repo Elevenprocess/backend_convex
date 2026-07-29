@@ -3,7 +3,7 @@ import { create } from 'zustand'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 import { getFunctionName } from 'convex/server'
 import { convexClient } from './convex'
-import { adsReport, simulatorFunnel, type ConvexSimulatorFunnel, analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsListEnriched, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, substepsList, usersGet, usersList, usersDirectory, leadsGetEnriched, analyticsSetterLeaderboard } from './convexApi'
+import { adsReport, adBudget, adDepositsList, type ConvexAdBudget, type ConvexAdDeposit, simulatorFunnel, type ConvexSimulatorFunnel, analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsListEnriched, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, substepsList, usersGet, usersList, usersDirectory, leadsGetEnriched, analyticsSetterLeaderboard } from './convexApi'
 import type { ConvexUserDoc, SetterLeaderboardEntry } from './convexApi'
 import { mapConvexAcompte, mapConvexCallLog, mapConvexClient, mapConvexCommercialObjective, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexSubstep, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
@@ -513,6 +513,34 @@ export function useConvexAdsReport(params: {
   return {
     data: (res ?? null) as AdsReport | null,
     loading: allowed && params !== null && res === undefined,
+    error: null,
+    refetch: noop,
+  }
+}
+
+// Budget publicitaire en cours (adDeposits:budget) : KPI depuis le dernier
+// dépôt de solde. Réactif — la saisie d'un dépôt ou la sync dépense rafraîchit
+// la carte toute seule.
+export function useConvexAdBudget(channel: AdChannel): Async<ConvexAdBudget> {
+  const role = useAuth((s) => s.user?.role)
+  const allowed = !!role && ADS_ROLES.has(role)
+  const res = useQuery(adBudget, allowed ? { channel } : 'skip')
+  return {
+    data: (res ?? null) as ConvexAdBudget | null,
+    loading: allowed && res === undefined,
+    error: null,
+    refetch: noop,
+  }
+}
+
+// Historique des dépôts (dialog admin « Nouveau dépôt »).
+export function useConvexAdDeposits(channel: AdChannel, enabled: boolean): Async<ConvexAdDeposit[]> {
+  const role = useAuth((s) => s.user?.role)
+  const allowed = !!role && ADS_ROLES.has(role)
+  const res = useQuery(adDepositsList, allowed && enabled ? { channel } : 'skip')
+  return {
+    data: (res ?? null) as ConvexAdDeposit[] | null,
+    loading: allowed && enabled && res === undefined,
     error: null,
     refetch: noop,
   }
