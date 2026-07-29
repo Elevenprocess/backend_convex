@@ -179,13 +179,7 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
 
         <AdBudgetSection channel={channel} isAdmin={isAdmin} />
 
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 lg:gap-6">
-          <MagicKpi label="DÉPENSE" value={fmtEur(totals?.spend)} sub={`${fmtInt(totals?.impressions)} impressions`} accent="gold" icon="tag" />
-          <MagicKpi label="PROSPECTS" value={fmtInt(totals?.leads)} sub={`${fmtInt(totals?.clicks)} clics`} accent="info" icon="users" />
-          <MagicKpi label="CPL" value={fmtEur(totals?.cpl)} sub="Coût par lead" accent="green" icon="target" />
-          <MagicKpi label="CA SIGNÉ" value={fmtEur(totals?.ca)} sub={`${fmtInt(totals?.devisSignes)} devis signés`} accent="gold" icon="trophy" />
-          <MagicKpi label="TX SIGNATURE" value={fmtPct(totals?.tauxSignature)} sub="Devis signés / prospects" accent="success" icon="check" progress={pctValue(totals?.tauxSignature)} />
-        </div>
+        <PeriodKpis totals={totals} simFunnel={simFunnel} />
 
         {(report?.series?.some((p) => p.spend > 0 || p.leads > 0) ?? false) && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
@@ -487,6 +481,69 @@ function SortableTh({ label, k, sortKey, sortDir, onSort }: {
         <span className="text-[10px]">{active ? (sortDir === 'desc' ? '▾' : '▴') : ''}</span>
       </button>
     </th>
+  )
+}
+
+// ===== KPI de période : le parcours complet du budget au formulaire ==========
+// Dépense → impressions (CPM) → clics (CTR/CPC) → arrivées au formulaire
+// (dernière étape du simulateur) → formulaires remplis (→ prospects créés).
+
+function PeriodKpis({ totals, simFunnel }: {
+  totals?: AdsTotals
+  simFunnel: ConvexSimulatorFunnel | null
+}) {
+  const spend = totals?.spend ?? 0
+  const impressions = totals?.impressions ?? 0
+  const clicks = totals?.clicks ?? 0
+  const leads = totals?.leads ?? 0
+  // Arrivée au formulaire = sessions ayant atteint la dernière étape du simulateur.
+  const steps = simFunnel?.stepSessions ?? []
+  const formReached = steps.length > 0 ? steps[steps.length - 1] : 0
+  const formSubmits = simFunnel?.formSubmits ?? 0
+
+  const cpm = impressions > 0 ? (spend / impressions) * 1000 : 0
+  const ctr = impressions > 0 ? ((clicks / impressions) * 100).toFixed(1) : null
+  const cpc = clicks > 0 ? spend / clicks : 0
+
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 lg:gap-6">
+      <MagicKpi
+        label="DÉPENSE"
+        value={fmtEur(spend)}
+        sub={leads > 0 ? `CPL ${fmtEur(totals?.cpl)} · ${fmtInt(leads)} prospects` : 'sur la période'}
+        accent="gold"
+        icon="tag"
+      />
+      <MagicKpi
+        label="IMPRESSIONS"
+        value={fmtInt(impressions)}
+        sub={impressions > 0 ? `CPM ${cpm.toFixed(2)} €` : 'affichages de la pub'}
+        accent="info"
+        icon="eye"
+      />
+      <MagicKpi
+        label="CLICS"
+        value={fmtInt(clicks)}
+        sub={ctr ? `CTR ${ctr}% · CPC ${cpc.toFixed(2)} €` : 'clics sur la pub'}
+        accent="green"
+        icon="target"
+      />
+      <MagicKpi
+        label="ARRIVÉS AU FORMULAIRE"
+        value={fmtInt(formReached)}
+        sub={`${fmtInt(simFunnel?.sessions)} arrivées simulateur`}
+        accent="info"
+        icon="filter"
+      />
+      <MagicKpi
+        label="FORMULAIRES REMPLIS"
+        value={fmtInt(formSubmits)}
+        sub={formReached > 0 ? `${Math.round((formSubmits / formReached) * 100)}% des arrivés au formulaire` : 'envois du formulaire'}
+        accent="success"
+        icon="check"
+        {...(formReached > 0 ? { progress: Math.min(100, Math.round((formSubmits / formReached) * 100)) } : {})}
+      />
+    </div>
   )
 }
 
@@ -1214,9 +1271,5 @@ function fmtEur(n: number | null | undefined): string {
 function fmtPct(n: number | null | undefined): string {
   // Le backend renvoie un ratio 0..1 (tauxSignature). On l'affiche en %.
   return `${Math.round(Number(n ?? 0) * 100)}%`
-}
-
-function pctValue(n: number | null | undefined): number {
-  return Math.min(100, Math.round(Number(n ?? 0) * 100))
 }
 
