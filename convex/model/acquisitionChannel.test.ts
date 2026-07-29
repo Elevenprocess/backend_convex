@@ -41,6 +41,22 @@ describe("deriveAcquisitionChannel", () => {
     const map = new Map([["x", "organic"]]);
     expect(deriveAcquisitionChannel({ fbclid: "a", gclid: "b", canalAcquisition: "x" }, map)).toBe("meta");
   });
+  it("le mapping admin outrank Manual/CRM Workflows (leads simulateur → meta)", () => {
+    const map = new Map([["[01.2] new lead | simulateur", "meta"]]);
+    expect(
+      deriveAcquisitionChannel(
+        { medium: "Manual", sessionSource: "CRM Workflows", canalAcquisition: "[01.2] New Lead | Simulateur" },
+        map,
+      ),
+    ).toBe("meta");
+    // Sans mapping, l'heuristique CRM reprend la main (organic, pas other).
+    expect(
+      deriveAcquisitionChannel(
+        { medium: "Manual", sessionSource: "CRM Workflows", canalAcquisition: "[01.2] New Lead | Simulateur" },
+        empty,
+      ),
+    ).toBe("organic");
+  });
 });
 
 describe("normalizeSource", () => {

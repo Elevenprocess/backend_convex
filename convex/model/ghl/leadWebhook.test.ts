@@ -57,4 +57,44 @@ describe("mapGhlLeadPayload", () => {
     expect(m.externalId).toBeUndefined();
     expect(m.data.firstName).toBeUndefined();
   });
+
+  it("attribution IMBRIQUÉE lue : contact.attributionSource (payload workflow réel)", () => {
+    const m = mapGhlLeadPayload({
+      contact_id: "abc",
+      contact: { attributionSource: { sessionSource: "CRM Workflows", medium: "Manual", mediumId: null } },
+      workflow: { id: "w1", name: "[01.2] New Lead | Simulateur" },
+    });
+    expect(m.signals).toMatchObject({
+      medium: "Manual",
+      sessionSource: "CRM Workflows",
+      canalAcquisition: "[01.2] New Lead | Simulateur",
+    });
+    expect(m.data.attributionMedium).toBe("Manual");
+    expect(m.data.attributionSessionSource).toBe("CRM Workflows");
+  });
+
+  it("attribution imbriquée : contact.attributionSource prime sur lastAttributionSource, clés à plat priment sur tout", () => {
+    const nested = mapGhlLeadPayload({
+      lastAttributionSource: { medium: "form", utmSource: "old" },
+      contact: { attributionSource: { medium: "facebook", fbclid: "f1" } },
+    });
+    expect(nested.signals.medium).toBe("facebook");
+    expect(nested.signals.fbclid).toBe("f1");
+    expect(nested.signals.utmSource).toBe("old"); // fusion : le champ absent remonte
+    const flat = mapGhlLeadPayload({
+      medium: "instagram",
+      contact: { attributionSource: { medium: "form" } },
+    });
+    expect(flat.signals.medium).toBe("instagram");
+  });
+
+  it("canalAcquisition : repli sur le nom du workflow quand source absente", () => {
+    expect(
+      mapGhlLeadPayload({ workflow: { name: "[01.2] New Lead | Simulateur" } }).data.canalAcquisition,
+    ).toBe("[01.2] New Lead | Simulateur");
+    // source contact prioritaire sur le workflow
+    expect(
+      mapGhlLeadPayload({ source: "site", workflow: { name: "W" } }).data.canalAcquisition,
+    ).toBe("site");
+  });
 });

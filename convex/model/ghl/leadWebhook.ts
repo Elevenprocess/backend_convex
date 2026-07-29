@@ -41,6 +41,9 @@ export interface MappedGhlLead {
   };
 }
 
+const obj = (v: unknown): Record<string, unknown> =>
+  v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+
 export function mapGhlLeadPayload(p: Record<string, unknown>): MappedGhlLead {
   const externalId = pick(p.contact_id, p.contactId, p.id);
   let firstName = pick(p.first_name, p.firstName);
@@ -50,16 +53,36 @@ export function mapGhlLeadPayload(p: Record<string, unknown>): MappedGhlLead {
     firstName = split.firstName;
     lastName = split.lastName;
   }
-  const canalAcquisition = pick(p.canal_acquisition, p.canalAcquisition, p.source);
+
+  // L'attribution GHL réelle est IMBRIQUÉE : le payload standard des workflows
+  // porte contact.attributionSource (et lastAttributionSource en historique),
+  // pas des clés à plat. On fusionne les sources par fiabilité croissante —
+  // contact.attributionSource écrase lastAttributionSource — et les clés à
+  // plat (payload composé à la main) restent prioritaires via pick().
+  const contact = obj(p.contact);
+  const attr = {
+    ...obj(p.lastAttributionSource),
+    ...obj(contact.lastAttributionSource),
+    ...obj(p.attributionSource),
+    ...obj(contact.attributionSource),
+  };
+
+  // Source brute pour le mapping admin « Sources à classer » : à défaut de
+  // source contact, le NOM DU WORKFLOW créateur (ex. « [01.2] New Lead |
+  // Simulateur ») — c'est lui qui identifie le tunnel d'entrée du lead.
+  const workflow = obj(p.workflow);
+  const canalAcquisition = pick(
+    p.canal_acquisition, p.canalAcquisition, p.source, contact.source, workflow.name,
+  );
 
   return {
     externalId,
     signals: {
-      fbclid: pick(p.fbclid),
-      gclid: pick(p.gclid),
-      utmSource: pick(p.utm_source, p.utmSource),
-      medium: pick(p.medium),
-      sessionSource: pick(p.session_source, p.sessionSource),
+      fbclid: pick(p.fbclid, attr.fbclid),
+      gclid: pick(p.gclid, attr.gclid),
+      utmSource: pick(p.utm_source, p.utmSource, attr.utmSource, attr.utm_source),
+      medium: pick(p.medium, attr.medium),
+      sessionSource: pick(p.session_source, p.sessionSource, attr.sessionSource, attr.session_source),
       canalAcquisition,
     },
     data: {
@@ -69,18 +92,18 @@ export function mapGhlLeadPayload(p: Record<string, unknown>): MappedGhlLead {
       addressLine: pick(p.address1, p.address),
       city: pick(p.city),
       postalCode: pick(p.postal_code, p.postalCode),
-      utmSource: pick(p.utm_source, p.utmSource),
-      utmMedium: pick(p.utm_medium, p.utmMedium),
-      utmCampaign: pick(p.utm_campaign, p.utmCampaign),
-      campaign: pick(p.campaign),
+      utmSource: pick(p.utm_source, p.utmSource, attr.utmSource, attr.utm_source),
+      utmMedium: pick(p.utm_medium, p.utmMedium, attr.utmMedium, attr.utm_medium),
+      utmCampaign: pick(p.utm_campaign, p.utmCampaign, attr.utmCampaign, attr.utm_campaign),
+      campaign: pick(p.campaign, attr.campaign),
       adset: pick(p.adset),
       ad: pick(p.ad),
       canalAcquisition,
-      campaignId: pick(p.campaign_id, p.campaignId),
-      adsetId: pick(p.adset_id, p.adsetId),
-      adId: pick(p.ad_id, p.adId),
-      attributionMedium: pick(p.medium),
-      attributionSessionSource: pick(p.session_source, p.sessionSource),
+      campaignId: pick(p.campaign_id, p.campaignId, attr.campaignId, attr.campaign_id),
+      adsetId: pick(p.adset_id, p.adsetId, attr.adsetId, attr.adset_id),
+      adId: pick(p.ad_id, p.adId, attr.adId, attr.ad_id),
+      attributionMedium: pick(p.medium, attr.medium),
+      attributionSessionSource: pick(p.session_source, p.sessionSource, attr.sessionSource, attr.session_source),
     },
   };
 }

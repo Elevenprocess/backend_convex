@@ -5,10 +5,12 @@
  * l'event d'audit survive à l'échec du traitement (parité NestJS).
  */
 import { v } from "convex/values";
-import { internalMutation } from "./_generated/server";
+import { internalAction, internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { webhookProviderValidator, leadStatusValidator } from "./model/enums";
+import { mapGhlLeadPayload } from "./model/ghl/leadWebhook";
 import { mapGhlStageToStatus } from "./model/ghl/stageMapper";
 import { ensureDossier } from "./model/ensureDossier";
 import { deriveAcquisitionChannel } from "./model/acquisitionChannel";
@@ -307,5 +309,85 @@ export const syncProjectFromLead = internalMutation({
   handler: async (ctx, args) => {
     await syncProjectFromLeadStatus(ctx, args.leadId, args.leadStatus);
     return null;
+  },
+});
+
+/**
+ * Backfill : rejoue un lot de webhookEvents contact.created pour reclassifier
+ * les leads restés en « other » (bug historique : l'attribution GHL imbriquée
+ * sous contact.attributionSource n'était jamais lue → aucun signal → other).
+ * Ne reclasse JAMAIS un lead déjà hors « other » ; pose aussi canalAcquisition
+ * et l'attribution manquants pour le mapping admin. Piloté par
+ * reclassifyFromEvents (batches par _creationTime).
+ */
+export const reclassifyBatch = internalMutation({
+  args: { after: v.optional(v.number()), batch: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const batch = args.batch ?? 50;
+    const rows = await ctx.db.query("acquisitionSourceMap").collect();
+    const sourceMap = new Map(rows.map((r) => [r.rawSource, r.channel as string]));
+
+    const events = await ctx.db
+      .query("webhookEvents")
+      .filter((q) => q.gt(q.field("_creationTime"), args.after ?? 0))
+      .order("asc")
+      .take(batch);
+
+    let patched = 0;
+    let cursor = args.after ?? 0;
+    for (const ev of events) {
+      cursor = ev._creationTime;
+      if (ev.eventType !== "contact.created") continue;
+      let payload: Record<string, unknown>;
+      try {
+        payload = JSON.parse(ev.payload) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      const mapped = mapGhlLeadPayload(payload);
+      if (mapped.externalId === undefined) continue;
+      const lead = await findLeadByGhlContact(ctx, mapped.externalId);
+      if (!lead || lead.deletedAt !== undefined) continue;
+
+      const patch: Record<string, unknown> = {};
+      if (lead.canalAcquisition === undefined && mapped.data.canalAcquisition !== undefined) {
+        patch.canalAcquisition = mapped.data.canalAcquisition;
+      }
+      if (lead.attributionMedium === undefined && mapped.data.attributionMedium !== undefined) {
+        patch.attributionMedium = mapped.data.attributionMedium;
+      }
+      if (lead.attributionSessionSource === undefined && mapped.data.attributionSessionSource !== undefined) {
+        patch.attributionSessionSource = mapped.data.attributionSessionSource;
+      }
+      if ((lead.acquisitionChannel ?? "other") === "other") {
+        const channel = deriveAcquisitionChannel(mapped.signals, sourceMap);
+        if (channel !== lead.acquisitionChannel) patch.acquisitionChannel = channel;
+      }
+      if (Object.keys(patch).length > 0) {
+        await ctx.db.patch(lead._id, patch);
+        patched += 1;
+      }
+    }
+    return { scanned: events.length, patched, cursor, done: events.length < batch };
+  },
+});
+
+/** Backfill complet : boucle reclassifyBatch jusqu'à épuisement des events. */
+export const reclassifyFromEvents = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    let after = 0;
+    let scanned = 0;
+    let patched = 0;
+    for (;;) {
+      const r: { scanned: number; patched: number; cursor: number; done: boolean } =
+        await ctx.runMutation(internal.webhooks.reclassifyBatch, { after, batch: 50 });
+      scanned += r.scanned;
+      patched += r.patched;
+      if (r.done) break;
+      after = r.cursor;
+    }
+    console.log(`Reclassification : ${scanned} events scannés, ${patched} leads corrigés`);
+    return { scanned, patched };
   },
 });

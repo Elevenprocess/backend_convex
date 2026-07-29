@@ -40,9 +40,9 @@ const present = (v: string | undefined): boolean =>
  *  1. Meta   : medium fb/ig · fbclid · utm meta · sessionSource Paid Social/Social media
  *  2. Referral : medium whatsapp
  *  3. Google : gclid · utm google
- *  4. Organic : sessionSource Organic Search · medium form · medium Manual / sessionSource CRM (simulateur)
- *  5. Direct  : sessionSource Direct traffic
- *  6. lookup table de mapping (source GHL brute normalisée)
+ *  4. lookup table de mapping admin (source brute ou nom de workflow normalisé)
+ *  5. Organic : sessionSource Organic Search · medium form · medium Manual / sessionSource CRM
+ *  6. Direct  : sessionSource Direct traffic
  *  7. other
  */
 export function deriveAcquisitionChannel(
@@ -64,16 +64,22 @@ export function deriveAcquisitionChannel(
   // 3. Google
   if (present(s.gclid) || GOOGLE_UTM.has(utm)) return "google";
 
-  // 4. Organique : recherche organique, formulaire site, ou simulateur/CRM
-  //    (ECOI SaaS = simulateur créé via CRM Workflows / medium Manual → organic).
+  // 4. Mapping admin sur la source brute (contact.source ou nom du workflow
+  //    créateur) : une décision EXPLICITE de l'admin (page Ads → Sources à
+  //    classer) outrank les heuristiques faibles ci-dessous — c'est ce qui
+  //    permet de rattacher les leads du workflow Simulateur au canal Meta
+  //    alors que GHL les tague Manual/CRM Workflows.
+  const raw = normalizeSource(s.canalAcquisition);
+  const mapped = raw ? sourceMap.get(raw) : undefined;
+  if (mapped !== undefined) return mapped as AdChannel;
+
+  // 5. Organique : recherche organique, formulaire site, ou création CRM
+  //    (medium Manual / CRM Workflows) non mappée par l'admin.
   if (session === "organic search" || medium === "form") return "organic";
   if (medium === "manual" || session === "crm workflows" || session === "crm ui") return "organic";
 
-  // 5. Direct
+  // 6. Direct
   if (session === "direct traffic") return "direct";
 
-  // 6. Fallback : table de mapping sur la source brute (contact.source)
-  const raw = normalizeSource(s.canalAcquisition);
-  const mapped = raw ? sourceMap.get(raw) : undefined;
-  return (mapped as AdChannel) ?? "other";
+  return "other";
 }
