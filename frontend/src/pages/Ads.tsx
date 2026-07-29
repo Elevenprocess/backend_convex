@@ -40,7 +40,6 @@ import {
 import { MagicKpi } from '../components/kpi/MagicKpi'
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
 import { DEFAULT_PERIOD, buildPeriodRange, type PeriodState } from '../lib/period'
-import { buildDemoAdsData, isEmptyAdsReport, type DemoAdsData } from '../lib/adsDemo'
 
 // Les seuls canaux pour lesquels on dispose d'une dépense (Windsor.ai pull Meta
 // pour l'instant). Le sélecteur reste extensible aux autres canaux ad.
@@ -95,16 +94,15 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
   const [resyncState, setResyncState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [resyncMsg, setResyncMsg] = useState<string | null>(null)
 
-  // Mode démonstration : tant qu'aucune donnée réelle n'existe sur la période
-  // (dépense Meta pas encore synchronisée — clé Windsor absente), on affiche un
-  // jeu fictif complet pour montrer la page finie. Purement front : dès que de
-  // vraies données arrivent, la démo disparaît toute seule.
-  const demoMode = !loading && !error && isEmptyAdsReport(data)
-  const demo: DemoAdsData | null = useMemo(
-    () => (demoMode ? buildDemoAdsData(range.from, range.to) : null),
-    [demoMode, range.from, range.to],
-  )
-  const report = demoMode ? demo!.campaign : data
+  const report = data
+  // Période sans aucune donnée réelle (ni dépense, ni prospect) : état vide
+  // honnête — plus de mode démo depuis que les données Meta sont live.
+  const emptyPeriod =
+    !loading && !error && report !== null &&
+    report.rows.length === 0 &&
+    (report.totals?.spend ?? 0) === 0 &&
+    (report.totals?.leads ?? 0) === 0 &&
+    (report.totals?.impressions ?? 0) === 0
 
   const totals = report?.totals
   const rows = useMemo(() => (report?.rows ?? []).filter((r) => !r.unmatched), [report])
@@ -131,11 +129,6 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
       <div className="px-4 sm:px-6 md:px-8 pt-3 flex items-center justify-between gap-2 sm:gap-4 flex-shrink-0 flex-wrap">
         <div className="text-xs text-faint font-semibold">
           Cohorte : {range.label}.
-          {demoMode && (
-            <span className="ml-2 inline-flex items-center rounded-full bg-or-tint px-2 py-0.5 text-[10px] font-extrabold text-or-dark border border-or/30">
-              DÉMO
-            </span>
-          )}
           {loading && <InlineLoading />}
           {error ? ` Erreur: ${error}` : ''}
         </div>
@@ -168,10 +161,10 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
       </div>
 
       <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 overflow-y-auto space-y-4 sm:space-y-6 flex-grow">
-        {demoMode && (
-          <div className="rounded-2xl border border-or/30 bg-or-tint/50 px-4 py-3 text-sm font-semibold text-or-dark">
-            Aperçu de démonstration — les chiffres ci-dessous sont fictifs. Les vraies données
-            (dépense Meta, prospects, CA) remplaceront la démo dès qu'elles existeront sur la période.
+        {emptyPeriod && (
+          <div className="rounded-2xl border border-line-soft bg-white/60 px-4 py-3 text-sm font-semibold text-muted">
+            Aucune donnée publicitaire sur cette période. La dépense Meta se synchronise chaque
+            nuit (03h10, heure Réunion) — les chiffres d'aujourd'hui apparaîtront demain matin.
           </div>
         )}
         {resyncMsg && (
@@ -230,7 +223,7 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
               title="Du clic pub à l'arrivée en prospect"
               hint="sessions du simulateur solaire, cohorte par jour d'arrivée"
             />
-            <SimulatorFunnel funnel={simFunnel} clicks={totals?.clicks} leads={totals?.leads} demo={demoMode} />
+            <SimulatorFunnel funnel={simFunnel} clicks={totals?.clicks} leads={totals?.leads} />
           </div>
         )}
         {isAdmin && simFunnel !== null && !simFunnel?.hasData && (
@@ -252,7 +245,7 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
               Aucune donnée publicitaire sur cette période.
             </div>
           ) : (
-            <AdsTable rows={rows} unmatchedRows={unmatchedRows} from={range.from} to={range.to} channel={channel} demo={demo} />
+            <AdsTable rows={rows} unmatchedRows={unmatchedRows} from={range.from} to={range.to} channel={channel} />
           )}
         </div>
       </main>
@@ -263,13 +256,12 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
 // ===== Table avec dépliage in-place =====
 type SortKey = 'spend' | 'leads' | 'cpl' | 'ca' | 'tauxSignature'
 
-function AdsTable({ rows, unmatchedRows, from, to, channel, demo }: {
+function AdsTable({ rows, unmatchedRows, from, to, channel }: {
   rows: AdsReportRow[]
   unmatchedRows: AdsReportRow[]
   from: string
   to: string
   channel: AdChannel
-  demo?: DemoAdsData | null
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [sortKey, setSortKey] = useState<SortKey>('spend')
@@ -322,7 +314,6 @@ function AdsTable({ rows, unmatchedRows, from, to, channel, demo }: {
               from={from}
               to={to}
               channel={channel}
-              demo={demo}
             />
           ))}
           {unmatchedRows.length > 0 && (
@@ -340,14 +331,13 @@ function AdsTable({ rows, unmatchedRows, from, to, channel, demo }: {
 }
 
 // Une campagne (niveau 0) +, si dépliée, ses adsets (fetch level=adset).
-function CampaignRows({ row, expanded, onToggle, from, to, channel, demo }: {
+function CampaignRows({ row, expanded, onToggle, from, to, channel }: {
   row: AdsReportRow
   expanded: Set<string>
   onToggle: (id: string) => void
   from: string
   to: string
   channel: AdChannel
-  demo?: DemoAdsData | null
 }) {
   const id = `c:${row.campaignId ?? row.campaign ?? ''}`
   const open = expanded.has(id)
@@ -363,16 +353,14 @@ function CampaignRows({ row, expanded, onToggle, from, to, channel, demo }: {
           channel={channel}
           expanded={expanded}
           onToggle={onToggle}
-          demo={demo}
         />
       )}
     </>
   )
 }
 
-// Charge les enfants (adset ou ad) d'une ligne parente et les rend. En mode
-// démo, les niveaux enfants sortent du jeu fictif — aucun appel backend.
-function ChildLevel({ parent, level, from, to, channel, expanded, onToggle, demo }: {
+// Charge les enfants (adset ou ad) d'une ligne parente et les rend.
+function ChildLevel({ parent, level, from, to, channel, expanded, onToggle }: {
   parent: AdsReportRow
   level: AdsLevel
   from: string
@@ -380,10 +368,8 @@ function ChildLevel({ parent, level, from, to, channel, expanded, onToggle, demo
   channel: AdChannel
   expanded: Set<string>
   onToggle: (id: string) => void
-  demo?: DemoAdsData | null
 }) {
-  const { data: fetched, loading, error } = useAdsReport(demo ? null : { from, to, level, channel })
-  const data = demo ? (level === 'ad' ? demo.ad : demo.adset) : fetched
+  const { data, loading, error } = useAdsReport({ from, to, level, channel })
   const children = useMemo(() => filterChildren(data, parent, level), [data, parent, level])
 
   if (loading && !data) {
@@ -414,7 +400,6 @@ function ChildLevel({ parent, level, from, to, channel, expanded, onToggle, demo
                   channel={channel}
                   expanded={expanded}
                   onToggle={onToggle}
-                  demo={demo}
                 />
               )}
             </span>
@@ -1072,20 +1057,19 @@ function AcquisitionFunnel({ totals }: { totals?: AdsTotals }) {
 // prospect. Les étapes sont dynamiques (une barre par étape atteinte ≥ 2, la
 // session démarrant à l'étape 1). En démo ads, clics/prospects sont fictifs :
 // on n'affiche alors que la partie simulateur (données réelles).
-function SimulatorFunnel({ funnel, clicks, leads, demo }: {
+function SimulatorFunnel({ funnel, clicks, leads }: {
   funnel: ConvexSimulatorFunnel
   clicks?: number
   leads?: number
-  demo: boolean
 }) {
   const stages: Array<{ label: string; value: number; sub?: string }> = []
-  if (!demo && (clicks ?? 0) > 0) stages.push({ label: 'Clics pub', value: Math.round(clicks!), sub: 'Meta' })
+  if ((clicks ?? 0) > 0) stages.push({ label: 'Clics pub', value: Math.round(clicks!), sub: 'Meta' })
   stages.push({ label: 'Arrivées simulateur', value: funnel.sessions, sub: 'sessions' })
   funnel.stepSessions.forEach((n, i) => {
     if (n > 0) stages.push({ label: `Étape ${i + 1} atteinte`, value: n })
   })
   stages.push({ label: 'Formulaire envoyé', value: funnel.formSubmits })
-  if (!demo && (leads ?? 0) > 0) stages.push({ label: 'Prospects créés', value: Math.round(leads!), sub: 'dans Velora' })
+  if ((leads ?? 0) > 0) stages.push({ label: 'Prospects créés', value: Math.round(leads!), sub: 'dans Velora' })
 
   const maxVal = Math.max(...stages.map((s) => s.value), 1)
   return (
