@@ -244,7 +244,9 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
               </div>
               <div className="glass-card p-6 lg:col-span-2">
                 <SectionHead icon="tag" eyebrow="RÉPARTITION" title="Dépense par campagne" />
-                <SpendDonut rows={rows} />
+                {/* Lignes non rapprochées incluses : la dépense d'une campagne
+                    existe même quand aucun prospect n'a pu lui être rattaché. */}
+                <SpendDonut rows={[...rows, ...unmatchedRows]} />
               </div>
             </div>
           </>
