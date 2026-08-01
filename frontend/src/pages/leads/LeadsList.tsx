@@ -839,6 +839,23 @@ function LeadsAdmin() {
 
 // ===== Helpers =====
 
+// Contact déjà connu qui a renvoyé le formulaire (re-simulation) : signal fort
+// de recontact — le webhook GHL a marqué resubmittedAt (et repassé les leads
+// perdus/sans réponse en « à rappeler »).
+function ResubmittedBadge({ lead }: { lead: LeadResponse }) {
+  if (!lead.resubmittedAt) return null
+  const d = new Date(lead.resubmittedAt)
+  const label = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.08em] text-or-dark"
+      title={`A refait une simulation le ${d.toLocaleDateString('fr-FR')} — à recontacter`}
+    >
+      <Icon name="sparkles" size={10} /> re-simulation {label}
+    </span>
+  )
+}
+
 function isCallbackLead(lead: LeadResponse): boolean {
   return lead.status === 'a_rappeler' || lead.status === 'relance'
 }
@@ -1107,6 +1124,7 @@ function renderSetterCell(
               ) : lead.city && (
                 <span className="lead-name-sub" title={lead.city}>{lead.city}</span>
               )}
+              <ResubmittedBadge lead={lead} />
             </div>
           </div>
         </Td>
@@ -1184,7 +1202,12 @@ function renderAdminCell(
   actions: { onDelete: (lead: LeadResponse) => void; deletingLeadId: string | null },
 ) {
   switch (key) {
-    case 'nom': return <Td key={key} className="lead-sticky-cell"><span className="block max-w-[155px] font-semibold truncate" title={fullName(lead)}>{fullName(lead)}</span></Td>
+    case 'nom': return (
+      <Td key={key} className="lead-sticky-cell">
+        <span className="block max-w-[155px] font-semibold truncate" title={fullName(lead)}>{fullName(lead)}</span>
+        <ResubmittedBadge lead={lead} />
+      </Td>
+    )
     case 'statut': return <Td key={key}><span className={`status-badge ${statusBadgeForLead(lead)}`}>{statusLabelForLead(lead)}</span></Td>
     case 'email': return <Td key={key} className="text-muted truncate" title={lead.email ?? undefined}>{lead.email ?? '—'}</Td>
     case 'telephone': return <Td key={key} className="text-muted truncate" title={lead.phone ?? undefined}>{lead.phone ?? '—'}</Td>

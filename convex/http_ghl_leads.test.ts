@@ -70,12 +70,28 @@ describe("POST /webhooks/elevenprocess", () => {
     expect(JSON.parse(event.payload)).toMatchObject({ contact_id: "c1" });
   });
 
-  it("doublon → duplicate:true sans recréation", async () => {
+  it("doublon → duplicate:true sans recréation, resubmittedAt marqué", async () => {
     const t = makeT();
     await post(t, { contact_id: "c1" }, { [SECRET_HEADER]: "test-secret" });
     const res = await post(t, { contact_id: "c1" }, { [SECRET_HEADER]: "test-secret" });
     expect(await res.json()).toMatchObject({ ok: true, duplicate: true });
-    expect(await t.run((ctx) => ctx.db.query("leads").collect())).toHaveLength(1);
+    const leads = await t.run((ctx) => ctx.db.query("leads").collect());
+    expect(leads).toHaveLength(1);
+    expect(leads[0].resubmittedAt).toBeTypeOf("number");
+    expect(leads[0].status).toBe("nouveau"); // statut actif : inchangé
+  });
+
+  it("doublon d'un lead perdu/sans réponse → repasse « à rappeler »", async () => {
+    const t = makeT();
+    await post(t, { contact_id: "c1" }, { [SECRET_HEADER]: "test-secret" });
+    await t.run(async (ctx) => {
+      const [lead] = await ctx.db.query("leads").collect();
+      await ctx.db.patch(lead._id, { status: "perdu" });
+    });
+    await post(t, { contact_id: "c1" }, { [SECRET_HEADER]: "test-secret" });
+    const [lead] = await t.run((ctx) => ctx.db.query("leads").collect());
+    expect(lead.status).toBe("a_rappeler");
+    expect(lead.resubmittedAt).toBeTypeOf("number");
   });
 
   it("IMPORTS_DISABLED=true → event processed + skipped, AUCUN lead", async () => {

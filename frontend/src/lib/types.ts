@@ -101,6 +101,8 @@ export type LeadResponse = {
   assignedToId: string | null
   referrerId: string | null
   lastContactAt: string | null
+  /** Dernier renvoi de formulaire par ce contact déjà connu (re-simulation). */
+  resubmittedAt: string | null
   latestCallAt: string | null
   firstCallAt: string | null
   latestCallComment: string | null

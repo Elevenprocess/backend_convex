@@ -34,6 +34,8 @@ type MagicKpiProps = {
   progress?: number
   size?: 'sm' | 'md'
   onClick?: () => void
+  /** Explication détaillée au survol de la carte (attribut title natif). */
+  tooltip?: string
 }
 
 // Pointer → CSS custom props on the card itself. No React state, so the value
@@ -112,7 +114,7 @@ function Ring({ value, accent }: { value: number; accent: KpiAccent }) {
 
 export function MagicKpi({
   label, value, delta, deltaTone = 'success', sub, accent = 'green',
-  icon, trend, progress, size = 'md', onClick,
+  icon, trend, progress, size = 'md', onClick, tooltip,
 }: MagicKpiProps) {
   const a = ACCENTS[accent]
   const interactive = Boolean(onClick)
@@ -127,6 +129,7 @@ export function MagicKpi({
       onPointerLeave={handlePointerLeave}
       onClick={onClick}
       {...(interactive ? { role: 'button', tabIndex: 0 } : {})}
+      {...(tooltip ? { title: tooltip } : {})}
     >
       <span className="mkpi-aurora" aria-hidden="true" />
       <span className="mkpi-spot" aria-hidden="true" />

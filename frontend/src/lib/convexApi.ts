@@ -49,6 +49,7 @@ export type ConvexLeadDoc = {
   assignedToId?: string
   referrerId?: string
   lastContactAt?: number
+  resubmittedAt?: number
   latestCallAt?: number
   firstCallAt?: number
   latestCallComment?: string

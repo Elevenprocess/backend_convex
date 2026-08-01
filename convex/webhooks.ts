@@ -264,8 +264,10 @@ function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
 
 /**
  * Création lead depuis contact.created. Dédup par externalId : lead existant
- * → aucune écriture (parité du TODO reclassify NestJS non résolu). La
- * sourceMap est chargée DANS la transaction (cohérence classification).
+ * → pas de nouvelle fiche, mais on marque la re-soumission (resubmittedAt) —
+ * un contact connu qui refait une simulation est un signal de recontact. S'il
+ * était perdu/sans réponse, il repasse « à rappeler » pour retomber dans la
+ * file des setters. La sourceMap est chargée DANS la transaction.
  */
 export const createLeadFromWebhook = internalMutation({
   args: {
@@ -280,7 +282,16 @@ export const createLeadFromWebhook = internalMutation({
   handler: async (ctx, args) => {
     if (args.externalId !== undefined) {
       const existing = await findLeadByGhlContact(ctx, args.externalId);
-      if (existing) return { leadId: existing._id, duplicate: true };
+      if (existing) {
+        const patch: { resubmittedAt: number; status?: "a_rappeler" } = {
+          resubmittedAt: Date.now(),
+        };
+        if (existing.status === "perdu" || existing.status === "pas_de_reponse") {
+          patch.status = "a_rappeler";
+        }
+        await ctx.db.patch(existing._id, patch);
+        return { leadId: existing._id, duplicate: true };
+      }
     }
 
     const rows = await ctx.db.query("acquisitionSourceMap").collect();
@@ -369,6 +380,89 @@ export const reclassifyBatch = internalMutation({
       }
     }
     return { scanned: events.length, patched, cursor, done: events.length < batch };
+  },
+});
+
+/**
+ * Backfill des re-soumissions : rejoue les contact.created stockés et marque
+ * resubmittedAt sur les leads qui existaient déjà AVANT l'événement (> 1 h
+ * d'écart = re-soumission, pas l'événement de création lui-même). Le passage
+ * en « à rappeler » n'est appliqué qu'aux re-soumissions récentes
+ * (recontactWindowMs, défaut 14 j) sur les statuts perdu/pas_de_reponse.
+ */
+export const resubmissionsBackfillBatch = internalMutation({
+  args: {
+    after: v.optional(v.number()),
+    batch: v.optional(v.number()),
+    now: v.number(),
+    recontactWindowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const batch = args.batch ?? 50;
+    const recontactWindow = args.recontactWindowMs ?? 14 * 86_400_000;
+    const events = await ctx.db
+      .query("webhookEvents")
+      .filter((q) => q.gt(q.field("_creationTime"), args.after ?? 0))
+      .order("asc")
+      .take(batch);
+
+    let marked = 0;
+    let recontact = 0;
+    let cursor = args.after ?? 0;
+    for (const ev of events) {
+      cursor = ev._creationTime;
+      if (ev.eventType !== "contact.created") continue;
+      let payload: Record<string, unknown>;
+      try {
+        payload = JSON.parse(ev.payload) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      const mapped = mapGhlLeadPayload(payload);
+      if (mapped.externalId === undefined) continue;
+      const lead = await findLeadByGhlContact(ctx, mapped.externalId);
+      if (!lead || lead.deletedAt !== undefined) continue;
+      const leadCreatedAt = lead.createdAt ?? lead._creationTime;
+      if (ev._creationTime - leadCreatedAt < 3_600_000) continue; // event de création
+
+      const patch: { resubmittedAt?: number; status?: "a_rappeler" } = {};
+      if ((lead.resubmittedAt ?? 0) < ev._creationTime) patch.resubmittedAt = ev._creationTime;
+      if (
+        args.now - ev._creationTime <= recontactWindow &&
+        (lead.status === "perdu" || lead.status === "pas_de_reponse")
+      ) {
+        patch.status = "a_rappeler";
+        recontact += 1;
+      }
+      if (Object.keys(patch).length > 0) {
+        await ctx.db.patch(lead._id, patch);
+        marked += 1;
+      }
+    }
+    return { scanned: events.length, marked, recontact, cursor, done: events.length < batch };
+  },
+});
+
+/** Boucle resubmissionsBackfillBatch jusqu'à épuisement des events. */
+export const resubmissionsBackfill = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    let after = 0;
+    let scanned = 0;
+    let marked = 0;
+    let recontact = 0;
+    for (;;) {
+      const r: { scanned: number; marked: number; recontact: number; cursor: number; done: boolean } =
+        await ctx.runMutation(internal.webhooks.resubmissionsBackfillBatch, { after, batch: 50, now });
+      scanned += r.scanned;
+      marked += r.marked;
+      recontact += r.recontact;
+      if (r.done) break;
+      after = r.cursor;
+    }
+    console.log(`Re-soumissions : ${scanned} events, ${marked} leads marqués, ${recontact} repassés à rappeler`);
+    return { scanned, marked, recontact };
   },
 });
 

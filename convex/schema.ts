@@ -109,6 +109,9 @@ export default defineSchema({
     assignedToId: v.optional(v.id("users")),
     referrerId: v.optional(v.id("referrers")),
     lastContactAt: v.optional(v.number()),
+    // Dernier renvoi de formulaire d'acquisition par un contact DÉJÀ connu
+    // (webhook GHL en doublon — ex. re-simulation) : signal de recontact.
+    resubmittedAt: v.optional(v.number()),
     datePassageRelance: v.optional(v.number()),
     // pont GHL (non alimenté cette tranche)
     monetaryValue: v.optional(v.number()),

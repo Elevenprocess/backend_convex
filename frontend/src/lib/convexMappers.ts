@@ -90,6 +90,7 @@ export function mapConvexLead(doc: ConvexLeadDoc): LeadResponse {
     assignedToId: doc.assignedToId ?? null,
     referrerId: doc.referrerId ?? null,
     lastContactAt: iso(doc.lastContactAt),
+    resubmittedAt: iso(doc.resubmittedAt),
     latestCallAt: iso(doc.latestCallAt),
     firstCallAt: iso(doc.firstCallAt),
     latestCallComment: doc.latestCallComment ?? null,

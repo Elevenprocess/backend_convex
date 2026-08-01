@@ -259,9 +259,46 @@ export const debugLeadsByContact = internalQuery({
         channel: l.acquisitionChannel ?? null,
         canalAcquisition: l.canalAcquisition ?? null,
         source: l.source,
+        status: l.status,
         createdAt: new Date(l.createdAt ?? l._creationTime).toISOString(),
+        resubmittedAt: l.resubmittedAt ? new Date(l.resubmittedAt).toISOString() : null,
         deleted: l.deletedAt !== undefined,
       }));
+  },
+});
+
+/** Événements webhook d'une fenêtre dont le payload contient un des motifs. */
+export const debugWebhookEventsByPayload = internalQuery({
+  args: { fromMs: v.number(), toMs: v.number(), needles: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const events = await ctx.db
+      .query("webhookEvents")
+      .filter((q) =>
+        q.and(
+          q.gt(q.field("_creationTime"), args.fromMs),
+          q.lt(q.field("_creationTime"), args.toMs),
+        ),
+      )
+      .collect();
+    const needles = args.needles.map((n) => n.toLowerCase());
+    return {
+      total: events.length,
+      byType: events.reduce<Record<string, number>>((acc, e) => {
+        acc[e.eventType] = (acc[e.eventType] ?? 0) + 1;
+        return acc;
+      }, {}),
+      matches: events
+        .filter((e) => {
+          const p = e.payload.toLowerCase();
+          return needles.some((n) => p.includes(n));
+        })
+        .map((e) => ({
+          at: new Date(e._creationTime).toISOString(),
+          eventType: e.eventType,
+          status: e.status,
+          excerpt: e.payload.slice(0, 200),
+        })),
+    };
   },
 });
 

@@ -596,6 +596,9 @@ function PeriodKpis({ totals, simFunnel }: {
           : 'arrivés dans Velora'}
         accent="success"
         icon="check"
+        tooltip={simCovers && alreadyKnown > 0
+          ? `${fmtInt(formSubmits)} formulaires envoyés sur la période : ${fmtInt(leads)} nouvelles personnes → ${fmtInt(leads)} fiches créées dans Velora. Les ${fmtInt(alreadyKnown)} autres étaient des contacts DÉJÀ dans Velora qui ont refait une simulation : GHL reconnaît leur téléphone/email et met à jour leur fiche existante au lieu de créer un doublon. Rien n'est perdu — ces retours sont marqués « re-simulation » dans la liste des leads et repassent « à rappeler » s'ils étaient perdus ou sans réponse.`
+          : `Prospects réellement créés dans Velora sur la période. Un envoi de formulaire d'un contact déjà connu ne crée pas de doublon : sa fiche existante est mise à jour et marquée « re-simulation ».`}
         {...(simCovers ? { progress: Math.min(100, Math.round((leads / formSubmits) * 100)) } : {})}
       />
     </div>
