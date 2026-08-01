@@ -549,6 +549,12 @@ function PeriodKpis({ totals, simFunnel }: {
   const cpm = impressions > 0 ? (spend / impressions) * 1000 : 0
   const ctr = impressions > 0 ? ((clicks / impressions) * 100).toFixed(1) : null
   const cpc = clicks > 0 ? spend / clicks : 0
+  // La donnée simulateur couvre la période quand il y a au moins autant
+  // d'envois que de nouveaux prospects. Écart envois − nouveaux = contacts
+  // déjà dans Velora qui ont refait une simulation (GHL déduplique par
+  // téléphone/email, pas de nouvelle fiche) — rien n'est perdu.
+  const simCovers = formSubmits > 0 && formSubmits >= leads
+  const alreadyKnown = simCovers ? formSubmits - leads : 0
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 lg:gap-6">
@@ -581,12 +587,16 @@ function PeriodKpis({ totals, simFunnel }: {
         icon="filter"
       />
       <MagicKpi
-        label="PROSPECTS CRÉÉS"
+        label="NOUVEAUX PROSPECTS"
         value={fmtInt(leads)}
-        sub={formSubmits >= leads && formSubmits > 0 ? `sur ${fmtInt(formSubmits)} formulaires envoyés` : 'arrivés dans Velora'}
+        sub={simCovers
+          ? alreadyKnown > 0
+            ? `${fmtInt(formSubmits)} envois · ${fmtInt(alreadyKnown)} déjà connus`
+            : `${fmtInt(formSubmits)} formulaires envoyés`
+          : 'arrivés dans Velora'}
         accent="success"
         icon="check"
-        {...(formSubmits >= leads && formSubmits > 0 ? { progress: Math.min(100, Math.round((leads / formSubmits) * 100)) } : {})}
+        {...(simCovers ? { progress: Math.min(100, Math.round((leads / formSubmits) * 100)) } : {})}
       />
     </div>
   )
