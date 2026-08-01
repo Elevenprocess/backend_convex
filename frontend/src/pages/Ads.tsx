@@ -583,10 +583,10 @@ function PeriodKpis({ totals, simFunnel }: {
       <MagicKpi
         label="PROSPECTS CRÉÉS"
         value={fmtInt(leads)}
-        sub={formSubmits > 0 ? `sur ${fmtInt(formSubmits)} formulaires envoyés` : 'arrivés dans Velora'}
+        sub={formSubmits >= leads && formSubmits > 0 ? `sur ${fmtInt(formSubmits)} formulaires envoyés` : 'arrivés dans Velora'}
         accent="success"
         icon="check"
-        {...(formSubmits > 0 ? { progress: Math.min(100, Math.round((leads / formSubmits) * 100)) } : {})}
+        {...(formSubmits >= leads && formSubmits > 0 ? { progress: Math.min(100, Math.round((leads / formSubmits) * 100)) } : {})}
       />
     </div>
   )

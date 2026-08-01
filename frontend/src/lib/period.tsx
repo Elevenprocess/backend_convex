@@ -92,9 +92,12 @@ export function buildPeriodRange(period: PeriodState): PeriodRange {
     if (from > to) [from, to] = [startOfDay(to), endOfDay(from)]
   }
 
+  // endOfDay - startOfDay = N jours - 1 ms : le +1 ms AVANT la division donne
+  // exactement N (l'ancien « arrondi + 1 » comptait un jour de trop partout —
+  // « Aujourd'hui » valait 2 jours et les graphes horaires ne s'affichaient pas).
   const days = forcedDays ?? Math.max(
     1,
-    Math.round((endOfDay(to).getTime() - startOfDay(from).getTime()) / 86_400_000) + 1,
+    Math.round((endOfDay(to).getTime() + 1 - startOfDay(from).getTime()) / 86_400_000),
   )
   const option = PERIOD_OPTIONS.find((p) => p.id === period.mode)?.label ?? 'Période'
   return {

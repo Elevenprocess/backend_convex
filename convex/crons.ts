@@ -21,8 +21,10 @@ crons.daily("acompte-reminders", { hourUTC: 5, minuteUTC: 0 }, internal.acompteR
 // 03:00 à La Réunion, fenêtre glissante 7 j. No-op propre sans aucune clé.
 crons.daily("ad-spend-sync", { hourUTC: 23, minuteUTC: 0 }, internal.adSpend.syncScheduled, {});
 
-// Tunnel simulateur : agrégats Supabase → simulatorDaily (23:20 UTC = 03:20 Réunion).
-crons.daily("simulator-stats-sync", { hourUTC: 23, minuteUTC: 20 }, internal.simulatorStats.syncScheduled, {});
+// Tunnel simulateur : agrégats Supabase → simulatorDaily. Toutes les 30 min
+// (fenêtre glissante 3 j) pour que le jour en cours reste juste sur la page
+// Ads — en quotidien, « Aujourd'hui » affichait un tunnel quasi vide.
+crons.interval("simulator-stats-sync", { minutes: 30 }, internal.simulatorStats.syncScheduled, {});
 
 // Filet de sécurité des débriefs WhatsApp : relaie à l'agent Hermes les
 // débriefs des dernières 24 h que le flux événementiel n'a pas envoyés

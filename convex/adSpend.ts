@@ -18,7 +18,7 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { requireRole } from "./model/access";
 import { requireHermesKey } from "./model/hermesAuth";
-import { reunionDayKey } from "./model/analyticsRange";
+import { reunionDayKey, reunionDayRange } from "./model/analyticsRange";
 
 interface MetaInsightRow {
   date: string; // YYYY-MM-DD
@@ -262,12 +262,6 @@ async function runSync(
   return { synced: rows.length, totalSpend: total.toFixed(2), skipped: false };
 }
 
-/** Jour Réunion YYYY-MM-DD depuis une borne ISO du DateRangePicker. */
-function dayOf(iso: string): string {
-  const ms = Date.parse(iso);
-  if (Number.isNaN(ms)) throw new Error(`Date invalide : ${iso}`);
-  return reunionDayKey(ms);
-}
 
 /**
  * Ingestion service (relais VPS Hermes) : le VPS fetch les insights Meta via
@@ -312,7 +306,10 @@ export const sync = action({
   args: { from: v.string(), to: v.string() },
   handler: async (ctx, args) => {
     await ctx.runQuery(internal.adSpend.assertAdmin, {});
-    return await runSync(ctx, { from: dayOf(args.from), to: dayOf(args.to) });
+    // Mêmes jours calendaires que le rapport, quel que soit le fuseau du
+    // navigateur (un resync sur « Hier » débordait sur aujourd'hui).
+    const { fromDay, toDay } = reunionDayRange(args.from, args.to, 1, Date.parse(args.to));
+    return await runSync(ctx, { from: fromDay, to: toDay });
   },
 });
 

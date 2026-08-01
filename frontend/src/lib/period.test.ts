@@ -26,6 +26,23 @@ describe('buildPeriodRange (last_n_days)', () => {
   })
 })
 
+describe('buildPeriodRange (nombre de jours)', () => {
+  it("« Aujourd'hui » compte 1 jour (déclenche le graphe horaire)", () => {
+    const r = buildPeriodRange({ mode: 'today', customFrom: '', customTo: '' })
+    expect(r.days).toBe(1)
+  })
+
+  it('plage personnalisée d\'un seul jour = 1 jour', () => {
+    const r = buildPeriodRange({ mode: 'custom', customFrom: '2026-07-10', customTo: '2026-07-10' })
+    expect(r.days).toBe(1)
+  })
+
+  it('plage personnalisée juillet = 31 jours', () => {
+    const r = buildPeriodRange({ mode: 'custom', customFrom: '2026-07-01', customTo: '2026-07-31' })
+    expect(r.days).toBe(31)
+  })
+})
+
 describe('previousRange', () => {
   it('renvoie la même durée se terminant la veille du from', () => {
     const current = buildPeriodRange({ mode: 'last_n_days', customFrom: '', customTo: '', lastN: 7, includeToday: true })
