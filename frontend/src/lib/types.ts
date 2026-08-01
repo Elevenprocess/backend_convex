@@ -446,6 +446,9 @@ export interface AdsReport {
   totals: Omit<AdsReportRow, 'level' | 'campaign' | 'campaignId'>
   // Absente du legacy NestJS — fournie par le backend Convex (ads:report).
   series?: AdsSeriesPoint[]
+  // Répartition horaire des prospects (heure Réunion), fournie uniquement
+  // quand la plage sélectionnée fait un seul jour. La dépense reste quotidienne.
+  hourly?: Array<{ hour: number; leads: number }> | null
 }
 
 // Mapping éditable source GHL brute → canal normalisé.

@@ -733,6 +733,7 @@ export type ConvexAdsReport = {
     date: string; spend: number; impressions: number; clicks: number
     leads: number; devisSignes: number; ca: number
   }>
+  hourly: Array<{ hour: number; leads: number }> | null
 }
 export const adsReport = makeFunctionReference<
   'query',

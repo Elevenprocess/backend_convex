@@ -108,6 +108,31 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
   const rows = useMemo(() => (report?.rows ?? []).filter((r) => !r.unmatched), [report])
   const unmatchedRows = useMemo(() => (report?.rows ?? []).filter((r) => r.unmatched), [report])
 
+  // Granularité des graphes d'évolution selon la plage sélectionnée :
+  // 1 jour → par heure, ≤ ~3 mois → par jour, au-delà → par mois.
+  const granularity: 'hour' | 'day' | 'month' =
+    range.days === 1 ? 'hour' : range.days > 92 ? 'month' : 'day'
+  const displaySeries = useMemo(() => {
+    const s = report?.series ?? []
+    if (granularity !== 'month') return s
+    const byMonth = new Map<string, AdsSeriesPoint>()
+    for (const p of s) {
+      const key = p.date.slice(0, 7)
+      let agg = byMonth.get(key)
+      if (!agg) {
+        agg = { date: `${key}-01`, spend: 0, impressions: 0, clicks: 0, leads: 0, devisSignes: 0, ca: 0 }
+        byMonth.set(key, agg)
+      }
+      agg.spend += p.spend
+      agg.impressions += p.impressions
+      agg.clicks += p.clicks
+      agg.leads += p.leads
+      agg.devisSignes += p.devisSignes
+      agg.ca += p.ca
+    }
+    return [...byMonth.values()].sort((a, b) => (a.date < b.date ? -1 : 1))
+  }, [report, granularity])
+
   async function handleResync() {
     setResyncState('running')
     setResyncMsg(null)
@@ -181,18 +206,34 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
 
         <PeriodKpis totals={totals} simFunnel={simFunnel} />
 
-        {(report?.series?.some((p) => p.spend > 0 || p.leads > 0) ?? false) && (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
-            <div className="glass-card p-6">
-              <SectionHead icon="chart" eyebrow="ÉVOLUTION" title="Dépense & prospects par jour" />
-              <DailySpendLeadsChart series={report!.series!} />
-            </div>
-            <div className="glass-card p-6">
-              <SectionHead icon="trophy" eyebrow="RENTABILITÉ CUMULÉE" title="Dépense vs CA signé (cumulés)" hint="le CA passe au-dessus = campagne rentable" />
-              <CumulativeRoasChart series={report!.series!} />
-            </div>
-          </div>
-        )}
+        {granularity === 'hour'
+          ? (report?.hourly?.some((h) => h.leads > 0) ?? false) && (
+              <div className="glass-card p-6">
+                <SectionHead
+                  icon="chart"
+                  eyebrow="ÉVOLUTION"
+                  title="Prospects par heure"
+                  hint="heure Réunion — la dépense Meta n'existe qu'à la journée"
+                />
+                <HourlyLeadsChart hourly={report!.hourly!} />
+              </div>
+            )
+          : displaySeries.some((p) => p.spend > 0 || p.leads > 0) && (
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
+                <div className="glass-card p-6">
+                  <SectionHead
+                    icon="chart"
+                    eyebrow="ÉVOLUTION"
+                    title={granularity === 'month' ? 'Dépense & prospects par mois' : 'Dépense & prospects par jour'}
+                  />
+                  <DailySpendLeadsChart series={displaySeries} monthly={granularity === 'month'} />
+                </div>
+                <div className="glass-card p-6">
+                  <SectionHead icon="trophy" eyebrow="RENTABILITÉ CUMULÉE" title="Dépense vs CA signé (cumulés)" hint="le CA passe au-dessus = campagne rentable" />
+                  <CumulativeRoasChart series={displaySeries} monthly={granularity === 'month'} />
+                </div>
+              </div>
+            )}
 
         {(rows.length > 0 || (totals?.impressions ?? 0) > 0) && (
           <>
@@ -933,6 +974,10 @@ function chartDayLabel(day: string): string {
   return `${day.slice(8, 10)}/${day.slice(5, 7)}`
 }
 
+function chartMonthLabel(day: string): string {
+  return `${day.slice(5, 7)}/${day.slice(0, 4)}`
+}
+
 type SeriesTooltipEntry = { name: string; value: number; color?: string; stroke?: string; fill?: string }
 
 function SeriesTooltip({ active, payload, label, euros }: {
@@ -966,10 +1011,10 @@ function SeriesTooltip({ active, payload, label, euros }: {
 }
 
 // Barres dépense (€) + courbe prospects, axes gauche/droite.
-function DailySpendLeadsChart({ series }: { series: AdsSeriesPoint[] }) {
+function DailySpendLeadsChart({ series, monthly = false }: { series: AdsSeriesPoint[]; monthly?: boolean }) {
   const rows = useMemo(
-    () => series.map((p) => ({ ...p, day: chartDayLabel(p.date) })),
-    [series],
+    () => series.map((p) => ({ ...p, day: monthly ? chartMonthLabel(p.date) : chartDayLabel(p.date) })),
+    [series, monthly],
   )
   return (
     <div>
@@ -986,23 +1031,48 @@ function DailySpendLeadsChart({ series }: { series: AdsSeriesPoint[] }) {
         </ComposedChart>
       </ResponsiveContainer>
       </div>
-      <ChartLegend items={[{ label: 'Dépense (€)', color: CHART_SPEND }, { label: 'Prospects / jour', color: CHART_LEADS }]} />
+      <ChartLegend items={[{ label: 'Dépense (€)', color: CHART_SPEND }, { label: monthly ? 'Prospects / mois' : 'Prospects / jour', color: CHART_LEADS }]} />
+    </div>
+  )
+}
+
+// Répartition horaire des prospects (plage d'un seul jour). La dépense Meta
+// n'existant qu'à la journée, seul le volume de prospects est ventilé.
+function HourlyLeadsChart({ hourly }: { hourly: Array<{ hour: number; leads: number }> }) {
+  const rows = useMemo(
+    () => hourly.map((h) => ({ ...h, day: `${String(h.hour).padStart(2, '0')}h` })),
+    [hourly],
+  )
+  return (
+    <div>
+      <div className="h-[240px]">
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={rows} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+          <CartesianGrid stroke={CHART_GRID} strokeDasharray="3 3" vertical={false} />
+          <XAxis dataKey="day" tick={{ fontSize: 10, fill: CHART_TICK }} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={14} />
+          <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: CHART_TICK }} tickLine={false} axisLine={false} width={30} />
+          <Tooltip content={<SeriesTooltip euros={new Set()} />} cursor={{ fill: 'rgba(31, 120, 87, 0.08)' }} />
+          <Bar dataKey="leads" name="Prospects" fill={CHART_LEADS} radius={[4, 4, 0, 0]} maxBarSize={22} />
+        </ComposedChart>
+      </ResponsiveContainer>
+      </div>
+      <ChartLegend items={[{ label: 'Prospects / heure', color: CHART_LEADS }]} />
     </div>
   )
 }
 
 // Aires cumulées dépense vs CA signé : le croisement matérialise le seuil de
 // rentabilité (ROAS 1×) dans le temps.
-function CumulativeRoasChart({ series }: { series: AdsSeriesPoint[] }) {
+function CumulativeRoasChart({ series, monthly = false }: { series: AdsSeriesPoint[]; monthly?: boolean }) {
   const rows = useMemo(() => {
     let cumSpend = 0
     let cumCa = 0
     return series.map((p) => {
       cumSpend += p.spend
       cumCa += p.ca
-      return { day: chartDayLabel(p.date), cumSpend: Math.round(cumSpend), cumCa: Math.round(cumCa) }
+      return { day: monthly ? chartMonthLabel(p.date) : chartDayLabel(p.date), cumSpend: Math.round(cumSpend), cumCa: Math.round(cumCa) }
     })
-  }, [series])
+  }, [series, monthly])
   return (
     <div>
       <div className="h-[240px]">

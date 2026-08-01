@@ -136,6 +136,29 @@ describe("ads.report", () => {
     expect(d10).toMatchObject({ spend: 400, leads: 1, ca: 8000 });
   });
 
+  it("plage d'un jour : répartition horaire des prospects (heure Réunion)", async () => {
+    const t = makeT();
+    const { admin } = await seed(t);
+    // « Le 10 juillet » vu d'un navigateur UTC+3.
+    const report = await admin.query(api.ads.report, {
+      from: "2026-07-09T21:00:00.000Z",
+      to: "2026-07-10T20:59:59.999Z",
+      channel: "meta",
+      level: "campaign",
+    });
+    expect(report.series.length).toBe(1);
+    // Lead créé à 08:00 UTC = 12h à La Réunion.
+    expect(report.hourly).toHaveLength(24);
+    expect(report.hourly!.filter((h) => h.leads > 0)).toEqual([{ hour: 12, leads: 1 }]);
+  });
+
+  it("plage multi-jours : pas de répartition horaire", async () => {
+    const t = makeT();
+    const { admin } = await seed(t);
+    const report = await admin.query(api.ads.report, { ...RANGE, level: "campaign" });
+    expect(report.hourly).toBeNull();
+  });
+
   it("drill-down adset : clés adset présentes", async () => {
     const t = makeT();
     const { admin } = await seed(t);
