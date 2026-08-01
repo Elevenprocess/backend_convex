@@ -17,8 +17,8 @@ crons.interval(
 // Relances d'acomptes dus (à encaisser / en retard) — 09:00 à La Réunion.
 crons.daily("acompte-reminders", { hourUTC: 5, minuteUTC: 0 }, internal.acompteReminders.run, {});
 
-// Dépense publicitaire Meta via Windsor.ai — 03:00 à La Réunion, fenêtre
-// glissante 7 j. No-op propre tant que WINDSOR_API_KEY est absente.
+// Dépense publicitaire Meta (API Graph directe, fallback Composio/Windsor) —
+// 03:00 à La Réunion, fenêtre glissante 7 j. No-op propre sans aucune clé.
 crons.daily("ad-spend-sync", { hourUTC: 23, minuteUTC: 0 }, internal.adSpend.syncScheduled, {});
 
 // Tunnel simulateur : agrégats Supabase → simulatorDaily (23:20 UTC = 03:20 Réunion).

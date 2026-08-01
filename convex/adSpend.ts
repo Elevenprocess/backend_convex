@@ -1,12 +1,15 @@
 /**
- * Sync de la dépense publicitaire Meta. Deux sources possibles, par ordre
+ * Sync de la dépense publicitaire Meta. Trois sources possibles, par ordre
  * de préférence :
- *  1. Composio (COMPOSIO_API_KEY + META_AD_ACCOUNT_ID) — exécute le tool
+ *  1. API Graph directe (META_ACCESS_TOKEN + META_AD_ACCOUNT_ID) — token
+ *     utilisateur longue durée (~60 j, à renouveler) ; un seul appel avec
+ *     time_increment=1 pour des lignes quotidiennes au niveau ad.
+ *  2. Composio (COMPOSIO_API_KEY + META_AD_ACCOUNT_ID) — exécute le tool
  *     METAADS_GET_INSIGHTS sur le compte Meta connecté dans Composio, qui
  *     gère le refresh du token OAuth. Le tool n'expose pas time_increment,
  *     donc un appel par jour (time_range since=until) pour des lignes
  *     quotidiennes au niveau ad.
- *  2. Windsor.ai (WINDSOR_API_KEY) — chemin historique du module NestJS.
+ *  3. Windsor.ai (WINDSOR_API_KEY) — chemin historique du module NestJS.
  * Sans aucune clé, la sync sort proprement en skipped (l'app reste intacte).
  */
 
@@ -41,6 +44,10 @@ function windsorApiKey(): string | undefined {
 
 function composioApiKey(): string | undefined {
   return process.env.COMPOSIO_API_KEY || undefined;
+}
+
+function metaAccessToken(): string | undefined {
+  return process.env.META_ACCESS_TOKEN || undefined;
 }
 
 const GRAPH_INSIGHT_FIELDS = [
@@ -85,6 +92,30 @@ function mapGraphRow(day: string, r: GraphInsightRow): MetaInsightRow {
     impressions: Number(r.impressions ?? 0) || 0,
     clicks: Number(r.clicks ?? 0) || 0,
   };
+}
+
+async function fetchMetaInsightsGraph(range: { from: string; to: string }): Promise<MetaInsightRow[]> {
+  const accountId = process.env.META_AD_ACCOUNT_ID;
+  if (!accountId) throw new Error("META_AD_ACCOUNT_ID absente (ex. act_928367685155102)");
+  const base = process.env.META_GRAPH_BASE_URL ?? "https://graph.facebook.com/v21.0";
+  const params = new URLSearchParams({
+    level: "ad",
+    fields: GRAPH_INSIGHT_FIELDS.join(","),
+    time_range: JSON.stringify({ since: range.from, until: range.to }),
+    time_increment: "1",
+    limit: "500",
+    access_token: metaAccessToken()!,
+  });
+  const rows: MetaInsightRow[] = [];
+  let url: string | undefined = `${base}/${accountId}/insights?${params}`;
+  while (url) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Meta Graph API ${res.status}: ${await res.text()}`);
+    const json = (await res.json()) as { data?: GraphInsightRow[]; paging?: { next?: string } };
+    for (const r of json.data ?? []) rows.push(mapGraphRow(range.from, r));
+    url = json.paging?.next;
+  }
+  return rows;
 }
 
 async function fetchMetaInsightsComposio(range: { from: string; to: string }): Promise<MetaInsightRow[]> {
@@ -211,13 +242,15 @@ async function runSync(
   ctx: ActionCtx,
   range: { from: string; to: string },
 ): Promise<{ synced: number; totalSpend: string; skipped: boolean }> {
-  if (!composioApiKey() && !windsorApiKey()) {
-    console.warn("COMPOSIO_API_KEY et WINDSOR_API_KEY absentes — sync Meta sautée");
+  if (!metaAccessToken() && !composioApiKey() && !windsorApiKey()) {
+    console.warn("META_ACCESS_TOKEN, COMPOSIO_API_KEY et WINDSOR_API_KEY absentes — sync Meta sautée");
     return { synced: 0, totalSpend: "0", skipped: true };
   }
-  const rows = composioApiKey()
-    ? await fetchMetaInsightsComposio(range)
-    : await fetchMetaInsights(range);
+  const rows = metaAccessToken()
+    ? await fetchMetaInsightsGraph(range)
+    : composioApiKey()
+      ? await fetchMetaInsightsComposio(range)
+      : await fetchMetaInsights(range);
   const total = rows.reduce((s, r) => s + r.spend, 0);
   // Batches : borne la taille des mutations (une journée Meta = qq dizaines de lignes).
   for (let i = 0; i < rows.length; i += 100) {
