@@ -4,6 +4,7 @@ import { createAccount } from "@convex-dev/auth/server";
 import { internal } from "./_generated/api";
 import { roleValidator, teamValidator, leadStatusValidator } from "./model/enums";
 import { insertStageHistory } from "./model/stageHistory";
+import { enrichLead } from "./model/enrichLead";
 
 // Outils dev uniquement — internes (jamais appelables par un client) : lancés
 // via `npx convex run devTools:setRole '{"email":"…","role":"admin"}'` avec la
@@ -234,6 +235,36 @@ export const repairQualifiesAvecRdvOuvert = internalMutation({
 // le lead, ses RDV et la résolution des users référencés — pour comprendre les
 // « non assigné » de l'Overview. Lecture seule.
 // `npx convex run devTools:debugRdvAttribution '{"phone":"+262692470465"}'`
+/**
+ * Retrouve des leads par email OU téléphone (normalisé sur les 9 derniers
+ * chiffres) — audit de l'écart formulaires simulateur ↔ prospects Velora.
+ */
+export const debugLeadsByContact = internalQuery({
+  args: { emails: v.array(v.string()), phones: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const wantedEmails = new Set(args.emails.map((e) => e.trim().toLowerCase()));
+    const tail = (p: string) => p.replace(/\D/g, "").slice(-9);
+    const wantedPhones = new Set(args.phones.map(tail).filter((p) => p.length >= 9));
+    const all = await ctx.db.query("leads").collect();
+    return all
+      .filter((l) =>
+        (l.email && wantedEmails.has(l.email.trim().toLowerCase())) ||
+        (l.phone && wantedPhones.has(tail(l.phone))),
+      )
+      .map((l) => ({
+        email: l.email ?? null,
+        phone: l.phone ?? null,
+        firstName: l.firstName ?? null,
+        lastName: l.lastName ?? null,
+        channel: l.acquisitionChannel ?? null,
+        canalAcquisition: l.canalAcquisition ?? null,
+        source: l.source,
+        createdAt: new Date(l.createdAt ?? l._creationTime).toISOString(),
+        deleted: l.deletedAt !== undefined,
+      }));
+  },
+});
+
 export const debugRdvAttribution = internalQuery({
   args: { phone: v.string() },
   handler: async (ctx, args) => {
@@ -293,5 +324,23 @@ export const debugRecentDebriefs = internalQuery({
         lead: lead ? { id: lead._id, name: `${(lead as any).firstName ?? ""} ${(lead as any).lastName ?? ""}`.trim(), status: (lead as any).status, ghlStageName: (lead as any).ghlStageName ?? null } : null,
       };
     }));
+  },
+});
+
+// Sonde de latence : mesure le coût serveur d'une page leads:listEnriched
+// (pagination + enrichissement) sans passer par l'auth. Lecture seule.
+// `npx convex run devTools:timeListEnriched '{"numItems":100}'`
+export const timeListEnriched = internalQuery({
+  args: { numItems: v.optional(v.number()), scope: v.optional(v.literal("clients")) },
+  handler: async (ctx, args) => {
+    const t0 = Date.now();
+    let q = ctx.db.query("leads").withIndex("by_createdAt").order("desc")
+      .filter((f) => f.eq(f.field("deletedAt"), undefined));
+    const page = await q.paginate({ numItems: Math.min(args.numItems ?? 100, 500), cursor: null });
+    const t1 = Date.now();
+    const now = Date.now();
+    const enriched = await Promise.all(page.page.map((lead) => enrichLead(ctx, lead, now)));
+    const t2 = Date.now();
+    return { rows: enriched.length, paginateMs: t1 - t0, enrichMs: t2 - t1, totalMs: t2 - t0 };
   },
 });

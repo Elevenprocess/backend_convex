@@ -1200,7 +1200,9 @@ function SimulatorFunnel({ funnel, clicks, leads }: {
     if (n > 0) stages.push({ label: `Étape ${i + 1} atteinte`, value: n })
   })
   stages.push({ label: 'Formulaire envoyé', value: funnel.formSubmits })
-  if ((leads ?? 0) > 0) stages.push({ label: 'Prospects créés', value: Math.round(leads!), sub: 'dans Velora' })
+  // « Nouveaux » : un contact déjà connu de GHL qui refait une simulation ne
+  // recrée pas de fiche — l'écart avec « Formulaire envoyé » vient de là.
+  if ((leads ?? 0) > 0) stages.push({ label: 'Nouveaux prospects', value: Math.round(leads!), sub: 'dans Velora' })
 
   const maxVal = Math.max(...stages.map((s) => s.value), 1)
   return (
