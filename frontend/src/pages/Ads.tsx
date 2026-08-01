@@ -484,9 +484,11 @@ function SortableTh({ label, k, sortKey, sortDir, onSort }: {
   )
 }
 
-// ===== KPI de période : le parcours complet du budget au formulaire ==========
+// ===== KPI de période : le parcours complet du budget au prospect ============
 // Dépense → impressions (CPM) → clics (CTR/CPC) → arrivées au formulaire
-// (dernière étape du simulateur) → formulaires remplis (→ prospects créés).
+// (dernière étape du simulateur) → prospects créés. Le dernier KPI affiche les
+// prospects réellement arrivés dans Velora, pas les envois de formulaire du
+// simulateur (doublons/échecs : ~868 envois pour 601 prospects en juillet).
 
 function PeriodKpis({ totals, simFunnel }: {
   totals?: AdsTotals
@@ -536,12 +538,12 @@ function PeriodKpis({ totals, simFunnel }: {
         icon="filter"
       />
       <MagicKpi
-        label="FORMULAIRES REMPLIS"
-        value={fmtInt(formSubmits)}
-        sub={formReached > 0 ? `${Math.round((formSubmits / formReached) * 100)}% des arrivés au formulaire` : 'envois du formulaire'}
+        label="PROSPECTS CRÉÉS"
+        value={fmtInt(leads)}
+        sub={formSubmits > 0 ? `sur ${fmtInt(formSubmits)} formulaires envoyés` : 'arrivés dans Velora'}
         accent="success"
         icon="check"
-        {...(formReached > 0 ? { progress: Math.min(100, Math.round((formSubmits / formReached) * 100)) } : {})}
+        {...(formSubmits > 0 ? { progress: Math.min(100, Math.round((leads / formSubmits) * 100)) } : {})}
       />
     </div>
   )

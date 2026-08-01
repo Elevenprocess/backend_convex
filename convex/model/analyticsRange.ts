@@ -45,6 +45,35 @@ export function buildRange(
   return { fromMs, toMs, days };
 }
 
+export type DayRangeMs = RangeMs & { fromDay: string; toDay: string };
+
+/**
+ * Plage recalée sur les jours calendaires VOULUS par l'utilisateur, alignés
+ * Réunion. Les bornes ISO du DateRangePicker sont minuit → 23:59:59 dans le
+ * fuseau du NAVIGATEUR (inconnu, pas forcément UTC+4) : prendre
+ * reunionDayKey(fromMs/toMs) directement décale la plage d'un jour dès que
+ * l'émetteur n'est pas en UTC+4 (ex. « juillet » depuis UTC+3 débordait sur le
+ * 1er août). On se recale au milieu du jour émetteur (±12 h) avant de prendre
+ * la clé — exact pour tout fuseau de UTC-8 à UTC+16 — puis on réaligne les
+ * bornes ms sur ces jours Réunion, pour que buckets quotidiens (date) et
+ * cohortes (timestamps) partagent la même fenêtre.
+ */
+export function reunionDayRange(
+  fromIso: string | undefined,
+  toIso: string | undefined,
+  fallbackDays: number,
+  nowMs: number,
+): DayRangeMs {
+  const base = buildRange(fromIso, toIso, fallbackDays, nowMs);
+  const fromDay = reunionDayKey(base.fromMs + DAY_MS / 2);
+  let toDay = reunionDayKey(base.toMs - DAY_MS / 2);
+  if (toDay < fromDay) toDay = fromDay;
+  const fromMs = Date.parse(`${fromDay}T00:00:00Z`) - REUNION_OFFSET_MS;
+  const toMs = Date.parse(`${toDay}T00:00:00Z`) + DAY_MS - REUNION_OFFSET_MS - 1;
+  const days = Math.round((toMs + 1 - fromMs) / DAY_MS);
+  return { fromMs, toMs, days, fromDay, toDay };
+}
+
 export function isInRange(ms: number | null | undefined, range: RangeMs): boolean {
   return ms != null && ms >= range.fromMs && ms <= range.toMs;
 }

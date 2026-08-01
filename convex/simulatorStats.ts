@@ -11,11 +11,11 @@
  * bloquée par RLS en lecture). Sans clé, la sync sort proprement en skipped.
  */
 
-import { action, internalAction, internalMutation, query, type ActionCtx } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery, query, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { requireRole } from "./model/access";
-import { buildRange, reunionDayKey } from "./model/analyticsRange";
+import { reunionDayKey, reunionDayRange } from "./model/analyticsRange";
 
 const DEFAULT_SUPABASE_URL = "https://kzlpwqtnwnsewgikkbdc.supabase.co";
 const ADS_ROLES = ["admin", "commercial_lead"] as const;
@@ -172,6 +172,39 @@ export const sync = action({
   },
 });
 
+/** Totaux de contrôle de simulatorDaily (vérif backfill/sync via CLI). */
+export const stats = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const docs = await ctx.db.query("simulatorDaily").collect();
+    let sessions = 0, formSubmits = 0, events = 0;
+    const stepSessions: number[] = [];
+    let from: string | undefined, to: string | undefined;
+    for (const d of docs) {
+      sessions += d.sessions;
+      formSubmits += d.formSubmits;
+      events += d.events;
+      d.stepSessions.forEach((n, i) => {
+        stepSessions[i] = (stepSessions[i] ?? 0) + n;
+      });
+      if (!from || d.date < from) from = d.date;
+      if (!to || d.date > to) to = d.date;
+    }
+    return { days: docs.length, sessions, formSubmits, events, stepSessions, from, to };
+  },
+});
+
+/** Backfill CLI (admin deploy key, sans session utilisateur) : bornes ISO. */
+export const backfill = internalAction({
+  args: { from: v.string(), to: v.string() },
+  handler: async (ctx, args) => {
+    const fromMs = Date.parse(args.from);
+    const toMs = Date.parse(args.to);
+    if (Number.isNaN(fromMs) || Number.isNaN(toMs)) throw new Error("Dates invalides");
+    return await runSync(ctx, fromMs, toMs);
+  },
+});
+
 /** Cron quotidien : fenêtre glissante 3 jours (les sessions du jour bougent). */
 export const syncScheduled = internalAction({
   args: {},
@@ -192,9 +225,7 @@ export const funnel = query({
   },
   handler: async (ctx, args) => {
     await requireRole(ctx, [...ADS_ROLES]);
-    const range = buildRange(args.from, args.to, 30, args.now ?? Date.parse(args.to));
-    const fromDay = reunionDayKey(range.fromMs);
-    const toDay = reunionDayKey(range.toMs);
+    const { fromDay, toDay } = reunionDayRange(args.from, args.to, 30, args.now ?? Date.parse(args.to));
     const docs = await ctx.db
       .query("simulatorDaily")
       .withIndex("by_date", (q) => q.gte("date", fromDay).lte("date", toDay))
