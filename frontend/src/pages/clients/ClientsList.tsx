@@ -8,7 +8,7 @@ import { Icon, type IconName } from '../../components/Icon'
 import { EmptyState } from '../../components/EmptyState'
 import { LoadingBlock } from '../../components/Spinner'
 import { useAuth } from '../../lib/auth'
-import { useLeadsProgressive, useUsers } from '../../lib/hooks'
+import { useLeadsProgressive, useUsers, syncGhlCalendarEvents } from '../../lib/hooks'
 import { useLeadSidebar } from '../../lib/leadSidebar'
 import type { LeadDateField } from '../../lib/leadFilters'
 import { fullName, type LeadResponse, type UserResponse } from '../../lib/types'
@@ -153,6 +153,33 @@ export function ClientsList() {
   // Client en cours d'attribution (responsable commercial / admin uniquement).
   const [assignTarget, setAssignTarget] = useState<LeadResponse | null>(null)
   const [manualOpen, setManualOpen] = useState(false)
+  const [ghlSyncBusy, setGhlSyncBusy] = useState(false)
+  const [ghlSyncMsg, setGhlSyncMsg] = useState<string | null>(null)
+
+  // Rapatrie la vérité GHL (commercial assigné, date/heure des RDV) dans Velora,
+  // même fenêtre que le cron 15 min : −3 j / +60 j. Les cartes se rafraîchissent
+  // toutes seules (données live Convex).
+  async function syncFromGhl() {
+    if (ghlSyncBusy) return
+    setGhlSyncBusy(true)
+    setGhlSyncMsg(null)
+    try {
+      const now = Date.now()
+      const r = await syncGhlCalendarEvents({
+        from: new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString(),
+        to: new Date(now + 60 * 24 * 60 * 60 * 1000).toISOString(),
+      })
+      setGhlSyncMsg(
+        r.configured
+          ? `GHL synchronisé : ${r.updated} RDV mis à jour, ${r.created} créé(s)`
+          : 'GHL non configuré.',
+      )
+    } catch (err) {
+      setGhlSyncMsg(`Erreur : ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setGhlSyncBusy(false)
+    }
+  }
 
   const teamCommerciaux = useMemo(
     () => (usersData ?? []).filter((u) => (u.role === 'commercial' || u.role === 'commercial_lead') && u.active),
@@ -288,6 +315,21 @@ export function ClientsList() {
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-faint font-semibold whitespace-nowrap">{clients.length}/{allClients.length}</span>
+              {ghlSyncMsg && (
+                <span className={`text-xs font-semibold whitespace-nowrap ${ghlSyncMsg.startsWith('Erreur') ? 'text-rouille' : 'text-success'}`}>
+                  {ghlSyncMsg}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={syncFromGhl}
+                disabled={ghlSyncBusy}
+                title="Rapatrier depuis GHL le commercial assigné et la date/heure des RDV (GHL fait foi)"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-white px-3 py-2 text-xs font-black text-text shadow-sm hover:border-or disabled:opacity-50"
+              >
+                <Icon name="download" size={14} />
+                {ghlSyncBusy ? 'Synchronisation…' : 'Synchroniser GHL'}
+              </button>
               <button
                 type="button"
                 onClick={() => setManualOpen(true)}
