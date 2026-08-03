@@ -924,70 +924,55 @@ function ChartLegend({ items }: { items: Array<{ label: string; color: string }>
   )
 }
 
-// Entonnoir tapered : Impressions → Clics → Leads → Devis signés.
-const FUNNEL_COLORS = ['#6B8C7C', '#3E9A6F', '#1F7857', '#B59241']
+// Entonnoir à paliers ordinaux : la largeur marque l'ORDRE des étapes, pas les
+// volumes — avec 4 ordres de grandeur entre impressions et devis, toute largeur
+// proportionnelle s'écrase en filet illisible. Les volumes = les chiffres ;
+// l'info utile = les taux de conversion entre paliers, en vraie précision
+// (l'ancien arrondi entier affichait « 2 % » pour un CTR réel de 1,7 %).
+const FUNNEL_RAMP = ['#8ABB9E', '#5FA37F', '#3B8A62', '#1F7857'] // rampe ordinale 1 teinte, light→dark
+const FUNNEL_WIDTHS = ['100%', '86%', '72%', '58%']
+
+// Pourcentage fin : 2 décimales sous 1 %, 1 décimale sous 10 %, entier au-delà.
+function pctFine(a: number, b: number): string {
+  if (b <= 0) return '—'
+  const p = (a / b) * 100
+  const digits = p >= 10 || p === 0 ? 0 : p < 1 ? 2 : 1
+  return `${p.toLocaleString('fr-FR', { minimumFractionDigits: digits, maximumFractionDigits: digits })} %`
+}
 
 function AcquisitionFunnel({ totals }: { totals?: AdsTotals }) {
   const stages = [
-    { label: 'Impressions', value: Math.round(totals?.impressions ?? 0) },
-    { label: 'Clics', value: Math.round(totals?.clicks ?? 0) },
-    { label: 'Prospects', value: Math.round(totals?.leads ?? 0) },
-    { label: 'Devis signés', value: Math.round(totals?.devisSignes ?? 0) },
+    { label: 'Impressions', sub: 'annonces affichées (Meta)', value: Math.round(totals?.impressions ?? 0) },
+    { label: 'Clics', sub: 'clics sur l’annonce', value: Math.round(totals?.clicks ?? 0) },
+    { label: 'Prospects', sub: 'nouveaux contacts (Velora)', value: Math.round(totals?.leads ?? 0) },
+    { label: 'Devis signés', sub: 'dossiers signés', value: Math.round(totals?.devisSignes ?? 0) },
   ]
-  const maxVal = Math.max(stages[0].value, 1)
-  const W = 360
-  const bandH = 50
-  const gap = 30
-  const cx = W / 2
-  const maxW = W - 40
-  const widthFor = (v: number) => Math.max(12, (v / maxVal) * maxW)
-  const H = stages.length * bandH + (stages.length - 1) * gap
-
-  const conversions = [
-    { label: 'CTR', sub: 'clic / impression', v: pct1(stages[1].value, stages[0].value) },
-    { label: 'Conv. prospect', sub: 'prospect / clic', v: pct1(stages[2].value, stages[1].value) },
-    { label: 'Signature', sub: 'devis / lead', v: pct1(stages[3].value, stages[2].value) },
-  ]
+  const bridges = ['taux de clic (CTR)', 'clic → prospect', 'prospect → devis signé']
 
   return (
-    <div className="grid sm:grid-cols-[1fr_minmax(150px,200px)] gap-6 items-center">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="Entonnoir d'acquisition">
-        {stages.map((s, i) => {
-          const y = i * (bandH + gap)
-          const topW = widthFor(s.value)
-          const botW = widthFor(stages[i + 1]?.value ?? s.value)
-          const points = `${cx - topW / 2},${y} ${cx + topW / 2},${y} ${cx + botW / 2},${y + bandH} ${cx - botW / 2},${y + bandH}`
-          const conv = i < stages.length - 1 && s.value > 0 ? Math.round((stages[i + 1].value / s.value) * 100) : null
-          return (
-            <g key={s.label}>
-              <polygon points={points} fill={FUNNEL_COLORS[i]} />
-              <text x={cx} y={y + bandH / 2 - 3} textAnchor="middle" fill="#ffffff" fontWeight={800} fontSize={17}>{fmtInt(s.value)}</text>
-              <text x={cx} y={y + bandH / 2 + 13} textAnchor="middle" fill="#ffffff" fillOpacity={0.85} fontSize={10} fontWeight={700} letterSpacing={0.4}>{s.label.toUpperCase()}</text>
-              {conv != null && (
-                <>
-                  <rect x={cx - 30} y={y + bandH + gap / 2 - 11} width={60} height={20} rx={10} fill="var(--color-or-tint)" />
-                  <text x={cx} y={y + bandH + gap / 2 + 3} textAnchor="middle" fill="var(--color-or-dark)" fontSize={11} fontWeight={800}>▾ {conv}%</text>
-                </>
-              )}
-            </g>
-          )
-        })}
-      </svg>
-
-      <div className="space-y-2.5">
-        {conversions.map((c) => (
-          <div key={c.label} className="rounded-2xl border border-line-soft bg-white/55 px-3.5 py-2.5">
-            <div className="flex items-baseline justify-between">
-              <span className="text-sm font-bold">{c.label}</span>
-              <span className="text-lg font-extrabold text-or-dark tabular-nums">{c.v}%</span>
+    <div className="max-w-lg mx-auto pt-1" role="img" aria-label="Entonnoir d'acquisition, du clic au devis signé">
+      {stages.map((s, i) => (
+        <div key={s.label}>
+          <div
+            className="mx-auto rounded-2xl border border-line-soft bg-white/55 px-4 py-3 flex items-center justify-between gap-3"
+            style={{ width: FUNNEL_WIDTHS[i], borderLeft: `4px solid ${FUNNEL_RAMP[i]}` }}
+          >
+            <div className="min-w-0">
+              <div className="text-[11px] font-extrabold tracking-wider text-muted">{s.label.toUpperCase()}</div>
+              <div className="text-[11px] text-faint truncate">{s.sub}</div>
             </div>
-            <div className="text-[11px] text-faint">{c.sub}</div>
-            <div className="mt-1.5 h-1.5 rounded-full bg-line-soft overflow-hidden">
-              <div className="h-full rounded-full bg-or" style={{ width: `${Math.min(100, c.v)}%` }} />
-            </div>
+            <div className="text-xl sm:text-2xl font-extrabold tabular-nums whitespace-nowrap">{fmtInt(s.value)}</div>
           </div>
-        ))}
-      </div>
+          {i < stages.length - 1 && (
+            <div className="flex items-center justify-center gap-2 py-2">
+              <span className="inline-flex items-center gap-1 rounded-full bg-or-tint px-2.5 py-0.5 text-[11px] font-extrabold text-or-dark tabular-nums">
+                ▾ {pctFine(stages[i + 1].value, s.value)}
+              </span>
+              <span className="text-[11px] text-faint font-semibold">{bridges[i]}</span>
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   )
 }
@@ -1128,10 +1113,6 @@ function arcPath(outer: number, inner: number, a0: number, a1: number): string {
     'A', inner, inner, 0, large, 1, isx, isy,
     'Z',
   ].join(' ')
-}
-
-function pct1(a: number, b: number): number {
-  return b > 0 ? Math.round((a / b) * 100) : 0
 }
 
 // ===== Helpers d'affichage =====
