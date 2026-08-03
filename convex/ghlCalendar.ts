@@ -680,9 +680,19 @@ export const syncStaffScheduled = internalAction({
 
       const memberCalendars = new Map<string, string[]>();
       for (const { calendarId } of sectors) {
-        const raw = (await ghlRequest(`/calendars/${encodeURIComponent(calendarId)}`)) as
-          | { calendar?: { teamMembers?: Array<{ userId?: string }> } }
-          | null;
+        // Timeout GHL intermittent : on saute le calendrier plutôt que de
+        // perdre toute la passe (idempotent, rattrapé au prochain passage).
+        let raw: { calendar?: { teamMembers?: Array<{ userId?: string }> } } | null = null;
+        try {
+          raw = (await ghlRequest(`/calendars/${encodeURIComponent(calendarId)}`)) as {
+            calendar?: { teamMembers?: Array<{ userId?: string }> };
+          } | null;
+        } catch (error) {
+          console.warn(
+            `Sync staff GHL : calendrier ${calendarId} illisible (${error instanceof Error ? error.message : String(error)})`,
+          );
+          continue;
+        }
         for (const member of raw?.calendar?.teamMembers ?? []) {
           if (!member.userId) continue;
           const list = memberCalendars.get(member.userId) ?? [];
