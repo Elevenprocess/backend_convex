@@ -593,7 +593,10 @@ type CreativeSortKey = 'spend' | 'leads' | 'cpl' | 'rdvs' | 'devisSignes' | 'ca'
 function CreativesView() {
   const [period, setPeriod] = useState<PeriodState>({ ...DEFAULT_PERIOD, mode: 'this_month' })
   const range = buildPeriodRange(period)
-  const { data, loading, error } = useAdsReport({ from: range.from, to: range.to, level: 'ad', channel: 'meta' })
+  // Tous les canaux, pas que la pub : la nomenclature UTM est unifiée — les
+  // leads du site web portent aussi un utm_content (ex. « page d'accueil »).
+  const [channel, setChannel] = useState<AdChannel>('meta')
+  const { data, loading, error } = useAdsReport({ from: range.from, to: range.to, level: 'ad', channel })
   const [sortKey, setSortKey] = useState<CreativeSortKey>('rdvs')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
@@ -636,7 +639,21 @@ function CreativesView() {
           {loading && <InlineLoading />}
           {error ? ` Erreur: ${error}` : ''}
         </div>
-        <DateRangePicker value={period} onChange={setPeriod} align="right" />
+        <div className="flex items-center gap-2 flex-wrap">
+          <label className="flex items-center gap-2 text-sm font-semibold">
+            <span className="text-faint">Canal</span>
+            <select
+              value={channel}
+              onChange={(e) => setChannel(e.target.value as AdChannel)}
+              className="rounded-xl border border-line-soft bg-white/70 px-3 py-1.5 text-sm font-semibold"
+            >
+              {ALL_CHANNELS.map((c) => (
+                <option key={c} value={c}>{AD_CHANNEL_LABEL[c]}</option>
+              ))}
+            </select>
+          </label>
+          <DateRangePicker value={period} onChange={setPeriod} align="right" />
+        </div>
       </div>
 
       <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 overflow-y-auto space-y-4 sm:space-y-6 flex-grow">
@@ -660,7 +677,7 @@ function CreativesView() {
               <table className="w-full text-sm min-w-[900px]">
                 <thead className="bg-or-tint">
                   <tr className="text-left eyebrow">
-                    <th className="px-3 py-2.5">CRÉATIVE</th>
+                    <th className="px-3 py-2.5">CRÉATIVE / CONTENU</th>
                     <SortableTh label="DÉPENSE" k="spend" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                     <SortableTh label="PROSPECTS" k="leads" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                     <SortableTh label="CPL" k="cpl" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
@@ -687,8 +704,8 @@ function CreativesView() {
           <div className="rounded-2xl border border-line-soft bg-white/60 px-4 py-3 text-sm font-semibold text-muted">
             <span className="font-extrabold text-text">{fmtInt(orphan.leads)} prospect{orphan.leads > 1 ? 's' : ''} sans créative identifiée</span>
             {' '}({fmtInt(orphan.rdvs)} RDV · {fmtInt(orphan.devisSignes)} vente{orphan.devisSignes > 1 ? 's' : ''} · {fmtEur(orphan.ca)} de CA) —
-            arrivés sans utm_content ni identifiant d'annonce. Les paramètres UTM ajoutés aux
-            publicités Meta le 03/08 rattacheront les prochains prospects à leur créative.
+            arrivés sans utm_content ni identifiant d'annonce.
+            {channel === 'meta' && ' Les paramètres UTM ajoutés aux publicités Meta le 03/08 rattacheront les prochains prospects à leur créative.'}
           </div>
         )}
       </main>

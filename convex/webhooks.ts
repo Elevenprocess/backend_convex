@@ -13,7 +13,7 @@ import { webhookProviderValidator, leadStatusValidator } from "./model/enums";
 import { mapGhlLeadPayload } from "./model/ghl/leadWebhook";
 import { mapGhlStageToStatus } from "./model/ghl/stageMapper";
 import { ensureDossier } from "./model/ensureDossier";
-import { deriveAcquisitionChannel } from "./model/acquisitionChannel";
+import { deriveAcquisitionChannel, isSiteWebUtm } from "./model/acquisitionChannel";
 import { syncProjectFromLeadStatus } from "./model/ghl/projectSync";
 
 // Résolution d'un contact GHL vers son lead — les deux familles d'ids :
@@ -381,7 +381,10 @@ export const reclassifyBatch = internalMutation({
           patch[key] = mapped.data[key];
         }
       }
-      if ((lead.acquisitionChannel ?? "other") === "other") {
+      // Reclasse les « other » ET les leads site web comptés Meta à tort
+      // (le mapping admin du workflow simulateur les rattachait à Meta avant
+      // que l'utm_source « site web » ne soit pris en compte).
+      if ((lead.acquisitionChannel ?? "other") === "other" || isSiteWebUtm(mapped.signals.utmSource)) {
         const channel = deriveAcquisitionChannel(mapped.signals, sourceMap);
         if (channel !== lead.acquisitionChannel) patch.acquisitionChannel = channel;
       }

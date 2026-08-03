@@ -21,6 +21,20 @@ describe("deriveAcquisitionChannel", () => {
     expect(deriveAcquisitionChannel({ gclid: "x" }, empty)).toBe("google");
     expect(deriveAcquisitionChannel({ utmSource: "adwords" }, empty)).toBe("google");
   });
+  it("Site web : utm_source du site vitrine → organic, même si le workflow est mappé Meta", () => {
+    const simuMap = new Map([["[01.2] new lead | simulateur", "meta"]]);
+    expect(
+      deriveAcquisitionChannel(
+        { utmSource: "site web", canalAcquisition: "[01.2] new lead | simulateur" },
+        simuMap,
+      ),
+    ).toBe("organic");
+    expect(deriveAcquisitionChannel({ utmSource: "SEO" }, empty)).toBe("organic");
+    // un utm Meta reste prioritaire
+    expect(
+      deriveAcquisitionChannel({ utmSource: "fb", canalAcquisition: "x" }, simuMap),
+    ).toBe("meta");
+  });
   it("Organic : Organic Search / form / Manual / CRM", () => {
     expect(deriveAcquisitionChannel({ sessionSource: "Organic Search" }, empty)).toBe("organic");
     expect(deriveAcquisitionChannel({ medium: "form" }, empty)).toBe("organic");

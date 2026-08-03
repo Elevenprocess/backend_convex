@@ -22,6 +22,15 @@ export interface AttributionSignals {
 
 const META_UTM = new Set(["fb", "ig", "facebook", "instagram", "meta"]);
 const GOOGLE_UTM = new Set(["google", "adwords", "google_ads"]);
+// utm_source posé par le site vitrine (bouton simulateur, cf. réunion
+// 2026-08-03) : un utm explicite prime sur le mapping admin du workflow —
+// sans quoi les leads site web passés par le simulateur seraient comptés Meta.
+const ORGANIC_UTM = new Set(["site web", "siteweb", "site_web", "website", "seo"]);
+
+/** utm_source du site vitrine ? (exposé pour le backfill de reclassification) */
+export function isSiteWebUtm(value: string | null | undefined): boolean {
+  return ORGANIC_UTM.has(normalizeSource(value));
+}
 // Signaux GHL réels (cf. scan de 600 contacts) : le canal vit dans
 // attributionSource.medium / .sessionSource, pas dans contact.source (null ~63%).
 const META_MEDIUM = new Set(["facebook", "instagram"]);
@@ -63,6 +72,10 @@ export function deriveAcquisitionChannel(
 
   // 3. Google
   if (present(s.gclid) || GOOGLE_UTM.has(utm)) return "google";
+
+  // 3bis. Site web / SEO : utm explicite du site vitrine, avant le mapping
+  //       admin (qui rattache TOUT le workflow simulateur à Meta).
+  if (ORGANIC_UTM.has(utm)) return "organic";
 
   // 4. Mapping admin sur la source brute (contact.source ou nom du workflow
   //    créateur) : une décision EXPLICITE de l'admin (page Ads → Sources à
