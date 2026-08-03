@@ -686,6 +686,11 @@ export const ghlAppointmentsUpdate = makeFunctionReference<
   },
   { ok: boolean }
 >('ghlAppointments:updateAppointment')
+export const ghlAppointmentsReassign = makeFunctionReference<
+  'action',
+  { rdvId: string; commercialId: string },
+  { ok: boolean }
+>('ghlAppointments:reassignAppointment')
 
 // ─── Présence « setter en cours sur ce lead » (remplace le socket NestJS) ─────
 export const leadPresenceTouch = makeFunctionReference<'mutation', { leadId: string }, null>('leadPresence:touch')

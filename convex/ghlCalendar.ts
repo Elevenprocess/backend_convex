@@ -663,3 +663,61 @@ export const mapGhlCommercials = internalMutation({
     return { dryRun: args.dryRun === true, ...report };
   },
 });
+
+// ─── Synchro quotidienne équipe GHL → comptes Velora ─────────────────────────
+// Reconstruit les paires (membre des calendriers secteur → user GHL) et les
+// passe à mapGhlCommercials (idempotent, additif — la purge des partants reste
+// manuelle : devTools:purgeUsersNotInGhl). No-op tant que
+// GHL_SYNC_ENABLED !== "true". Best-effort : ne throw jamais.
+export const syncStaffScheduled = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    if (process.env.GHL_SYNC_ENABLED !== "true") return null;
+    if (!isGhlConfigured()) return null;
+    try {
+      const sectors = sectorsFromEnv();
+      if (sectors.length === 0) return null;
+
+      const memberCalendars = new Map<string, string[]>();
+      for (const { calendarId } of sectors) {
+        const raw = (await ghlRequest(`/calendars/${encodeURIComponent(calendarId)}`)) as
+          | { calendar?: { teamMembers?: Array<{ userId?: string }> } }
+          | null;
+        for (const member of raw?.calendar?.teamMembers ?? []) {
+          if (!member.userId) continue;
+          const list = memberCalendars.get(member.userId) ?? [];
+          list.push(calendarId);
+          memberCalendars.set(member.userId, list);
+        }
+      }
+      if (memberCalendars.size === 0) return null;
+
+      const users = normalizeGhlUsers(
+        await ghlRequest("/users/", { query: { locationId: requireGhlLocationId() } }),
+      );
+      const byId = new Map(users.map((u) => [u.id, u]));
+      const pairs = [...memberCalendars.entries()].flatMap(([ghlUserId, calendarIds]) => {
+        const user = byId.get(ghlUserId);
+        if (!user?.email) return [];
+        return [{
+          ghlUserId,
+          email: user.email,
+          name: user.name,
+          ...(calendarIds.length === 1 ? { calendarId: calendarIds[0] } : {}),
+        }];
+      });
+      if (pairs.length === 0) return null;
+
+      const report: { linked: string[]; created: string[]; already: string[] } =
+        await ctx.runMutation(internal.ghlCalendar.mapGhlCommercials, { pairs });
+      if (report.linked.length || report.created.length) {
+        console.log(
+          `Sync staff GHL auto : ${report.linked.length} relié(s), ${report.created.length} créé(s), ${report.already.length} déjà à jour`,
+        );
+      }
+    } catch (error) {
+      console.warn(`Sync staff GHL auto échouée : ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return null;
+  },
+});

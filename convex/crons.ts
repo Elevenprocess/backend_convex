@@ -14,6 +14,11 @@ crons.interval(
   internal.ghlDebriefLink.syncDebriefLinksScheduled, {},
 );
 
+// Synchro équipe GHL → comptes Velora (mapGhlCommercials, additif — la purge
+// des partants reste manuelle) — 05:30 à La Réunion. No-op tant que
+// GHL_SYNC_ENABLED !== "true".
+crons.daily("ghl-staff-sync", { hourUTC: 1, minuteUTC: 30 }, internal.ghlCalendar.syncStaffScheduled, {});
+
 // Relances d'acomptes dus (à encaisser / en retard) — 09:00 à La Réunion.
 crons.daily("acompte-reminders", { hourUTC: 5, minuteUTC: 0 }, internal.acompteReminders.run, {});
 

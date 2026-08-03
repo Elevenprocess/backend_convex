@@ -37,7 +37,7 @@ import { persistEntry, loadAllEntries, migrateLegacyLocalStorage } from './cache
 import { convexAuthEnabled, convexClient } from './convex'
 import { callLogsLogCall, leadsCreate, leadsGet, leadsSoftDelete, leadsUpdate, rdvCreate, rdvFlagByReception, rdvGet, rdvUpdate,
   ghlCalendarGetConfig, ghlCalendarListUsers, ghlCalendarMySector, ghlCalendarFreeSlots, ghlCalendarEventsAction,
-  ghlCalendarSyncEvents, ghlCalendarSyncLeadEvents, ghlAppointmentsCreate, ghlAppointmentsUpdate,
+  ghlCalendarSyncEvents, ghlCalendarSyncLeadEvents, ghlAppointmentsCreate, ghlAppointmentsUpdate, ghlAppointmentsReassign,
   usersAdminUpdate, usersRemove, usersGet } from './convexApi'
 import { mapConvexLead, mapConvexRdv, mapConvexUser } from './convexMappers'
 import {
@@ -1406,6 +1406,15 @@ export async function updateGhlAppointment(rdvId: string, input: UpdateGhlAppoin
   })
   notifyRealtimeRefresh({ event: 'rdv:updated', paths: ['/rdv', '/leads', '/analytics/summary', '/analytics/funnel', '/ghl-calendar/events'] })
   return updated
+}
+
+// Réattribue un RDV à un autre commercial (admin). Le backend pousse vers GHL
+// (assignedUserId de l'appointment + owner du contact) puis aligne le local.
+export async function reassignGhlAppointment(rdvId: string, commercialId: string): Promise<{ ok: boolean }> {
+  if (!convexAuthEnabled || !convexClient) throw new Error('Réattribution disponible uniquement en mode Convex.')
+  const res = await convexClient.action(ghlAppointmentsReassign, { rdvId, commercialId })
+  notifyRealtimeRefresh({ event: 'rdv:updated', paths: ['/rdv', '/leads', '/ghl-calendar/events'] })
+  return res
 }
 
 export async function createRdv(input: CreateRdvInput): Promise<RdvResponse> {

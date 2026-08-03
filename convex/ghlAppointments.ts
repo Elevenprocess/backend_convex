@@ -22,7 +22,7 @@ import { Doc } from "./_generated/dataModel";
 import { ghlRequest, isGhlConfigured, requireGhlLocationId } from "./ghlClient";
 import { calendarIdForSector, parseSectorCalendars } from "./model/ghl/sectorConfig";
 import { buildGhlProspectRemark } from "./model/ghl/prospectRemark";
-import { requireUser } from "./model/access";
+import { requireRole, requireUser } from "./model/access";
 import { rdvLocationValidator } from "./model/enums";
 import { OPEN_RDV_STATUSES } from "./rdv";
 
@@ -427,6 +427,142 @@ export const updateAppointment = action({
     }
 
     await ctx.runMutation(internal.ghlAppointments.applyAppointmentUpdate, args);
+    return { ok: true };
+  },
+});
+
+// ─── Réattribution d'un RDV à un autre commercial (admin) ────────────────────
+// Pousse GHL d'abord (assignedUserId de l'appointment + owner du contact), puis
+// aligne le local (rdv.commercialId, lead.assignedToId). Si le commercial n'est
+// pas membre du calendrier secteur du RDV, il y est ajouté en priorité 0
+// (assignable, mais ne reçoit pas de RDV du round-robin).
+
+export const assertAdmin = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireRole(ctx, ["admin"]);
+    return { userId: user._id };
+  },
+});
+
+export const rdvForReassign = internalQuery({
+  args: { rdvId: v.id("rdv"), commercialId: v.id("users") },
+  handler: async (ctx, args) => {
+    const rdv = await ctx.db.get(args.rdvId);
+    if (!rdv || rdv.deletedAt !== undefined) throw new Error("RDV introuvable.");
+    const commercial = await ctx.db.get(args.commercialId);
+    if (!commercial || commercial.deletedAt !== undefined || commercial.active === false) {
+      throw new Error("Commercial introuvable ou inactif.");
+    }
+    if (commercial.role !== "commercial" && commercial.role !== "commercial_lead") {
+      throw new Error("Le compte choisi n'est pas un commercial.");
+    }
+    const lead = await ctx.db.get(rdv.leadId);
+    return {
+      ghlEventId: rdv.ghlEventId ?? rdv.externalId ?? null,
+      ghlContactId:
+        lead && lead.deletedAt === undefined ? lead.ghlContactId ?? lead.externalId ?? null : null,
+      ghlUserId: commercial.ghlUserId ?? null,
+      commercialName: commercial.name ?? commercial.email,
+    };
+  },
+});
+
+export const applyReassignment = internalMutation({
+  args: { rdvId: v.id("rdv"), commercialId: v.id("users") },
+  handler: async (ctx, args) => {
+    const rdv = await ctx.db.get(args.rdvId);
+    if (!rdv || rdv.deletedAt !== undefined) throw new Error("RDV introuvable.");
+    await ctx.db.patch(args.rdvId, { commercialId: args.commercialId });
+    const lead = await ctx.db.get(rdv.leadId);
+    if (lead && lead.deletedAt === undefined) {
+      await ctx.db.patch(rdv.leadId, { assignedToId: args.commercialId });
+    }
+    return null;
+  },
+});
+
+async function ensureCalendarTeamMember(calendarId: string, ghlUserId: string): Promise<void> {
+  const read = async () => {
+    const raw = (await ghlRequest(`/calendars/${encodeURIComponent(calendarId)}`)) as
+      | { calendar?: Record<string, unknown> }
+      | null;
+    const calendar = raw?.calendar;
+    const members = Array.isArray(calendar?.teamMembers)
+      ? (calendar.teamMembers as Array<Record<string, unknown>>)
+      : [];
+    return { calendar, members };
+  };
+  const { calendar, members } = await read();
+  // Un GET en timeout GHL renvoie une équipe vide : un PUT derrière effacerait
+  // toute l'équipe du calendrier.
+  if (!calendar || members.length === 0) {
+    throw new Error("Équipe du calendrier GHL illisible — réattribution annulée.");
+  }
+  if (members.some((member) => member.userId === ghlUserId)) return;
+
+  const template = members[0];
+  await ghlRequest(`/calendars/${encodeURIComponent(calendarId)}`, {
+    method: "PUT",
+    body: {
+      teamMembers: [
+        ...members,
+        {
+          priority: 0,
+          selected: true,
+          userId: ghlUserId,
+          isZoomAdded: "false",
+          zoomOauthId: "",
+          msTeamsOauthId: "",
+          meetingLocation: template.meetingLocation ?? "",
+          locationConfigurations: template.locationConfigurations ?? [],
+        },
+      ],
+      // Un PUT teamMembers réinitialise slotDuration s'il n'est pas dans le body.
+      slotDuration: (calendar.slotDuration as number | undefined) ?? 90,
+      slotDurationUnit: (calendar.slotDurationUnit as string | undefined) ?? "mins",
+    },
+  });
+  const after = await read();
+  if (!after.members.some((member) => member.userId === ghlUserId)) {
+    throw new Error("Ajout du commercial au calendrier GHL non confirmé — réattribution annulée.");
+  }
+}
+
+export const reassignAppointment = action({
+  args: { rdvId: v.id("rdv"), commercialId: v.id("users") },
+  handler: async (ctx, args) => {
+    await ctx.runQuery(internal.ghlAppointments.assertAdmin, {});
+    const info = await ctx.runQuery(internal.ghlAppointments.rdvForReassign, args);
+
+    if (isGhlConfigured() && info.ghlEventId) {
+      if (!info.ghlUserId) {
+        throw new Error(`${info.commercialName} n'est pas relié à un compte GHL (ghlUserId manquant).`);
+      }
+      const raw = (await ghlRequest(
+        `/calendars/events/appointments/${encodeURIComponent(info.ghlEventId)}`,
+      )) as { appointment?: { calendarId?: string } } | null;
+      const calendarId = raw?.appointment?.calendarId;
+      if (calendarId) await ensureCalendarTeamMember(calendarId, info.ghlUserId);
+      await ghlRequest(`/calendars/events/appointments/${encodeURIComponent(info.ghlEventId)}`, {
+        method: "PUT",
+        body: { assignedUserId: info.ghlUserId, ignoreFreeSlotValidation: true, toNotify: false },
+      });
+      if (info.ghlContactId) {
+        try {
+          await ghlRequest(`/contacts/${encodeURIComponent(info.ghlContactId)}`, {
+            method: "PUT",
+            body: { assignedTo: info.ghlUserId },
+          });
+        } catch (err) {
+          console.warn(
+            `Owner du contact GHL non mis à jour (${info.ghlContactId}) : ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+    }
+
+    await ctx.runMutation(internal.ghlAppointments.applyReassignment, args);
     return { ok: true };
   },
 });

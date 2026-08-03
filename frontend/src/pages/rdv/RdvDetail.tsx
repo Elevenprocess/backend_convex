@@ -4,7 +4,7 @@ import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
 import { LoadingScreen } from '../../components/Spinner'
-import { useRdv, useLead, useUsers, useCallLogs } from '../../lib/hooks'
+import { useRdv, useLead, useUsers, useCallLogs, reassignGhlAppointment } from '../../lib/hooks'
 import { useRole } from '../../lib/role'
 import { RdvReceptionFlagModal } from '../../components/rdv/RdvReceptionFlagModal'
 import {
@@ -49,6 +49,10 @@ export function RdvDetail() {
   const role = useRole((s) => s.role)
   const [showFlag, setShowFlag] = useState(false)
   const canFlag = role === 'admin' || role === 'responsable_technique' || role === 'back_office'
+  const [editingCommercial, setEditingCommercial] = useState(false)
+  const [selectedCommercial, setSelectedCommercial] = useState('')
+  const [reassignBusy, setReassignBusy] = useState(false)
+  const [reassignError, setReassignError] = useState<string | null>(null)
 
   if (rdvLoading) {
     return (
@@ -74,6 +78,23 @@ export function RdvDetail() {
   }
 
   const commercial = users?.find((u) => u.id === rdv.commercialId)
+  const commercials = (users ?? []).filter(
+    (u) => u.active && (u.role === 'commercial' || u.role === 'commercial_lead'),
+  )
+
+  async function submitReassign() {
+    if (!rdv || !selectedCommercial || selectedCommercial === rdv.commercialId || reassignBusy) return
+    setReassignBusy(true)
+    setReassignError(null)
+    try {
+      await reassignGhlAppointment(rdv.id, selectedCommercial)
+      setEditingCommercial(false)
+    } catch (err) {
+      setReassignError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setReassignBusy(false)
+    }
+  }
   const setterIds = Array.from(new Set([
     lead?.setterId,
     ...(lead?.assignedSetterIds ?? []),
@@ -126,9 +147,52 @@ export function RdvDetail() {
               <Field label="STATUT" value={RDV_STATUS_LABEL[rdv.status]} />
               <Field label="DÉBRIEF DÛ AVANT" value={rdv.debriefDueAt ? formatDateLong(rdv.debriefDueAt) : '—'} />
               <Field label="COMMERCIAL">
-                {commercial
-                  ? <PersonChip name={commercial.name} tint="bg-or-tint" />
-                  : <span className="text-faint">—</span>}
+                {editingCommercial ? (
+                  <div className="space-y-2">
+                    <select
+                      value={selectedCommercial}
+                      onChange={(e) => setSelectedCommercial(e.target.value)}
+                      disabled={reassignBusy}
+                      className="w-full border border-line rounded-xl px-2 py-1.5 text-sm bg-white/70"
+                    >
+                      <option value="">Choisir un commercial…</option>
+                      {commercials.map((u) => (
+                        <option key={u.id} value={u.id}>{u.name}</option>
+                      ))}
+                    </select>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={submitReassign}
+                        disabled={!selectedCommercial || selectedCommercial === rdv.commercialId || reassignBusy}
+                        className="btn-primary px-3 py-1.5 rounded-xl text-xs disabled:opacity-50"
+                      >
+                        {reassignBusy ? 'Réattribution…' : 'Réattribuer'}
+                      </button>
+                      <button
+                        onClick={() => { setEditingCommercial(false); setReassignError(null) }}
+                        disabled={reassignBusy}
+                        className="btn-secondary px-3 py-1.5 rounded-xl text-xs"
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                    {reassignError && <div className="text-xs text-rouille">{reassignError}</div>}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    {commercial
+                      ? <PersonChip name={commercial.name} tint="bg-or-tint" />
+                      : <span className="text-faint">—</span>}
+                    {role === 'admin' && (
+                      <button
+                        onClick={() => { setSelectedCommercial(rdv.commercialId ?? ''); setEditingCommercial(true) }}
+                        className="text-xs font-semibold text-or hover:underline"
+                      >
+                        Changer
+                      </button>
+                    )}
+                  </div>
+                )}
               </Field>
               <Field label="SETTER (RDV PRIS PAR)">
                 {setters.length
