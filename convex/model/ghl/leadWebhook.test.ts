@@ -88,6 +88,33 @@ describe("mapGhlLeadPayload", () => {
     expect(flat.signals.medium).toBe("instagram");
   });
 
+  it("UTM Meta imbriqués captés, dont utm_content (nomenclature créative 2026-08-03)", () => {
+    // Ce que GHL portera une fois les paramètres d'URL posés sur les pubs Meta :
+    // utm_campaign={{campaign.name}}, utm_medium={{adset.name}},
+    // utm_content={{ad.name}}, campaign_id={{campaign.id}}.
+    const m = mapGhlLeadPayload({
+      contact_id: "abc",
+      contact: {
+        attributionSource: {
+          utmSource: "fb",
+          utmMedium: "Broad 2554 | Réunion | Advantage+",
+          utmCampaign: "Offre 499€ | 3 kWc | 974",
+          utmContent: "Vidéo témoignage | V2",
+          campaignId: "cmp_42",
+        },
+      },
+    });
+    expect(m.data).toMatchObject({
+      utmSource: "fb",
+      utmMedium: "Broad 2554 | Réunion | Advantage+",
+      utmCampaign: "Offre 499€ | 3 kWc | 974",
+      utmContent: "Vidéo témoignage | V2",
+      campaignId: "cmp_42",
+    });
+    // Variante snake_case à plat (payload composé à la main dans le workflow).
+    expect(mapGhlLeadPayload({ utm_content: "Créa A" }).data.utmContent).toBe("Créa A");
+  });
+
   it("canalAcquisition : repli sur le nom du workflow quand source absente", () => {
     expect(
       mapGhlLeadPayload({ workflow: { name: "[01.2] New Lead | Simulateur" } }).data.canalAcquisition,

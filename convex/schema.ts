@@ -94,6 +94,7 @@ export default defineSchema({
     utmSource: v.optional(v.string()),
     utmMedium: v.optional(v.string()),
     utmCampaign: v.optional(v.string()),
+    utmContent: v.optional(v.string()),
     campaign: v.optional(v.string()),
     adset: v.optional(v.string()),
     ad: v.optional(v.string()),

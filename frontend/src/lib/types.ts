@@ -93,6 +93,7 @@ export type LeadResponse = {
   utmSource: string | null
   utmMedium: string | null
   utmCampaign: string | null
+  utmContent: string | null
   campaign: string | null
   adset: string | null
   ad: string | null
@@ -425,6 +426,7 @@ export interface AdsReportRow {
   clicks: number
   leads: number
   cpl: number
+  rdvs: number
   devisSignes: number
   ca: number
   roas: number

@@ -34,7 +34,7 @@ export interface MappedGhlLead {
   data: {
     firstName?: string; lastName?: string; email?: string; phone?: string;
     addressLine?: string; city?: string; postalCode?: string;
-    utmSource?: string; utmMedium?: string; utmCampaign?: string;
+    utmSource?: string; utmMedium?: string; utmCampaign?: string; utmContent?: string;
     campaign?: string; adset?: string; ad?: string;
     canalAcquisition?: string; campaignId?: string; adsetId?: string; adId?: string;
     attributionMedium?: string; attributionSessionSource?: string;
@@ -95,6 +95,9 @@ export function mapGhlLeadPayload(p: Record<string, unknown>): MappedGhlLead {
       utmSource: pick(p.utm_source, p.utmSource, attr.utmSource, attr.utm_source),
       utmMedium: pick(p.utm_medium, p.utmMedium, attr.utmMedium, attr.utm_medium),
       utmCampaign: pick(p.utm_campaign, p.utmCampaign, attr.utmCampaign, attr.utm_campaign),
+      // Nomenclature Meta convenue (2026-08-03) : utm_content = nom de la
+      // créative — c'est la clé du rapport « Performance créative ».
+      utmContent: pick(p.utm_content, p.utmContent, attr.utmContent, attr.utm_content),
       campaign: pick(p.campaign, attr.campaign),
       adset: pick(p.adset),
       ad: pick(p.ad),

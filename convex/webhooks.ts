@@ -248,7 +248,8 @@ const leadDataValidator = v.object({
   addressLine: v.optional(v.string()), city: v.optional(v.string()),
   postalCode: v.optional(v.string()),
   utmSource: v.optional(v.string()), utmMedium: v.optional(v.string()),
-  utmCampaign: v.optional(v.string()), campaign: v.optional(v.string()),
+  utmCampaign: v.optional(v.string()), utmContent: v.optional(v.string()),
+  campaign: v.optional(v.string()),
   adset: v.optional(v.string()), ad: v.optional(v.string()),
   canalAcquisition: v.optional(v.string()), campaignId: v.optional(v.string()),
   adsetId: v.optional(v.string()), adId: v.optional(v.string()),
@@ -369,6 +370,16 @@ export const reclassifyBatch = internalMutation({
       }
       if (lead.attributionSessionSource === undefined && mapped.data.attributionSessionSource !== undefined) {
         patch.attributionSessionSource = mapped.data.attributionSessionSource;
+      }
+      // Tracking pub : rattrape les champs UTM/campagne jamais posés (utmContent
+      // notamment, capté seulement depuis le 2026-08-03). Ne remplit que les trous.
+      for (const key of [
+        "utmSource", "utmMedium", "utmCampaign", "utmContent",
+        "campaign", "adset", "ad", "campaignId", "adsetId", "adId",
+      ] as const) {
+        if (lead[key] === undefined && mapped.data[key] !== undefined) {
+          patch[key] = mapped.data[key];
+        }
       }
       if ((lead.acquisitionChannel ?? "other") === "other") {
         const channel = deriveAcquisitionChannel(mapped.signals, sourceMap);

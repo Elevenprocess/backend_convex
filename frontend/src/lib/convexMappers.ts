@@ -82,6 +82,7 @@ export function mapConvexLead(doc: ConvexLeadDoc): LeadResponse {
     utmSource: doc.utmSource ?? null,
     utmMedium: doc.utmMedium ?? null,
     utmCampaign: doc.utmCampaign ?? null,
+    utmContent: doc.utmContent ?? null,
     campaign: doc.campaign ?? null,
     adset: doc.adset ?? null,
     ad: doc.ad ?? null,

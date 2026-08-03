@@ -20,6 +20,7 @@ export interface AdsReportRow {
   clicks: number;
   leads: number;
   cpl: number;
+  rdvs: number;
   devisSignes: number;
   ca: number;
   roas: number;
@@ -70,6 +71,7 @@ export interface LeadAggRow {
   adId?: string | null;
   ad?: string | null;
   leads: number;
+  rdvs: number;
   devisSignes: number;
   ca: number;
 }
@@ -132,6 +134,7 @@ export function mergeAdsRows(
   for (const { spend: s, lead: l } of merged.values()) {
     const spend = s?.spend ?? 0;
     const leadsCount = l?.leads ?? 0;
+    const rdvs = l?.rdvs ?? 0;
     const devisSignes = l?.devisSignes ?? 0;
     const ca = l?.ca ?? 0;
 
@@ -148,6 +151,7 @@ export function mergeAdsRows(
       clicks: s?.clicks ?? 0,
       leads: leadsCount,
       cpl: leadsCount > 0 ? spend / leadsCount : 0,
+      rdvs,
       devisSignes,
       ca,
       roas: spend > 0 ? ca / spend : 0,
@@ -171,11 +175,12 @@ export function mergeAdsRows(
       acc.impressions += r.impressions;
       acc.clicks += r.clicks;
       acc.leads += r.leads;
+      acc.rdvs += r.rdvs;
       acc.devisSignes += r.devisSignes;
       acc.ca += r.ca;
       return acc;
     },
-    { spend: 0, impressions: 0, clicks: 0, leads: 0, cpl: 0, devisSignes: 0, ca: 0, roas: 0, tauxSignature: 0 },
+    { spend: 0, impressions: 0, clicks: 0, leads: 0, cpl: 0, rdvs: 0, devisSignes: 0, ca: 0, roas: 0, tauxSignature: 0 },
   );
   totals.cpl = totals.leads > 0 ? totals.spend / totals.leads : 0;
   totals.roas = totals.spend > 0 ? totals.ca / totals.spend : 0;

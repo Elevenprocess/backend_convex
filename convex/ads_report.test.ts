@@ -10,7 +10,7 @@ describe("mergeAdsRows", () => {
   it("match par id prioritaire : campagne renommée absorbée", () => {
     const { rows, totals } = mergeAdsRows(
       [{ campaignId: "c1", campaign: "Nouveau nom", spend: 100, impressions: 1000, clicks: 50 }],
-      [{ campaignId: "c1", campaign: "Ancien nom", leads: 4, devisSignes: 1, ca: 900 }],
+      [{ campaignId: "c1", campaign: "Ancien nom", leads: 4, rdvs: 2, devisSignes: 1, ca: 900 }],
       "campaign",
     );
     expect(rows).toHaveLength(1);
@@ -23,7 +23,7 @@ describe("mergeAdsRows", () => {
   it("fallback par nom normalisé quand l'id manque d'un côté", () => {
     const { rows } = mergeAdsRows(
       [{ campaignId: "c1", campaign: " Solaire Été ", spend: 50, impressions: 10, clicks: 5 }],
-      [{ campaignId: null, campaign: "solaire été", leads: 2, devisSignes: 0, ca: 0 }],
+      [{ campaignId: null, campaign: "solaire été", leads: 2, rdvs: 0, devisSignes: 0, ca: 0 }],
       "campaign",
     );
     expect(rows).toHaveLength(1);
@@ -33,7 +33,7 @@ describe("mergeAdsRows", () => {
   it("flags unmatched : dépense sans lead / lead sans dépense", () => {
     const { rows } = mergeAdsRows(
       [{ campaignId: "c1", campaign: "A", spend: 10, impressions: 1, clicks: 1 }],
-      [{ campaignId: "c2", campaign: "B", leads: 3, devisSignes: 0, ca: 0 }],
+      [{ campaignId: "c2", campaign: "B", leads: 3, rdvs: 0, devisSignes: 0, ca: 0 }],
       "campaign",
     );
     const byName = Object.fromEntries(rows.map((r) => [r.campaign, r.unmatched]));

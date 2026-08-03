@@ -41,6 +41,7 @@ export type ConvexLeadDoc = {
   utmSource?: string
   utmMedium?: string
   utmCampaign?: string
+  utmContent?: string
   campaign?: string
   adset?: string
   ad?: string
@@ -725,6 +726,7 @@ export type ConvexAdsReport = {
     clicks: number
     leads: number
     cpl: number
+    rdvs: number
     devisSignes: number
     ca: number
     roas: number
@@ -733,7 +735,7 @@ export type ConvexAdsReport = {
   }>
   totals: {
     spend: number; impressions: number; clicks: number; leads: number
-    cpl: number; devisSignes: number; ca: number; roas: number; tauxSignature: number
+    cpl: number; rdvs: number; devisSignes: number; ca: number; roas: number; tauxSignature: number
   }
   series: Array<{
     date: string; spend: number; impressions: number; clicks: number

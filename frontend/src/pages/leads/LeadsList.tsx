@@ -61,9 +61,10 @@ const ADMIN_COLUMNS: ColumnChoice[] = [
   { key: 'codePostal', label: 'Code Postal' },
   { key: 'leadGenere', label: 'Date/heure lead généré' },
   { key: 'canal', label: "Canal d'acquisition" },
+  { key: 'source', label: 'Source' },
   { key: 'campagne', label: 'Campagne' },
-  { key: 'adset', label: 'Adset' },
-  { key: 'ad', label: 'Ad' },
+  { key: 'adset', label: 'Medium' },
+  { key: 'ad', label: 'Content' },
   { key: 'creationLead', label: 'Date de création du lead' },
   { key: 'datePassageRelance', label: 'Date de passage en Relance' },
   { key: 'setter', label: 'Setter assigné' },
@@ -80,7 +81,6 @@ const ADMIN_COLUMNS: ColumnChoice[] = [
   { key: 'dernierAppel', label: 'Dernier appel (date/heure)' },
   { key: 'appelDate', label: "Date/heure de l'appel (from Appels)" },
   { key: 'pctLeadAppele5min', label: '% lead appelé < 5min' },
-  { key: 'campagnes', label: 'Campagnes' },
   { key: 'jaugeAppels', label: 'Jauge appels (4/jour)' },
   { key: 'prochainRappel', label: 'Date/heure prochain rappel (à partir de Appels)' },
   { key: 'relanceMax', label: 'Jour relance max' },
@@ -1006,9 +1006,6 @@ function campaignName(l: Pick<LeadResponse, 'campaign' | 'utmCampaign'>): string
   return l.campaign ?? l.utmCampaign ?? null
 }
 
-function campaignSummary(l: Pick<LeadResponse, 'campaign' | 'utmCampaign' | 'adset' | 'utmMedium' | 'ad' | 'utmSource'>): string {
-  return [campaignName(l), l.adset ?? l.utmMedium, l.ad ?? l.utmSource].filter(Boolean).join(' / ') || '—'
-}
 
 function rdvLabel(l: Pick<LeadResponse, 'latestRdvAt' | 'latestRdvStatus'>): string {
   if (!l.latestRdvAt) return '—'
@@ -1156,9 +1153,10 @@ function renderAdminHeader(key: ColumnKey, sort?: { callbackDir: CallbackSort; o
     case 'codePostal': return <Th key={key} className="w-[120px]">CODE POSTAL</Th>
     case 'leadGenere': return <Th key={key} className="w-[180px]">DATE/HEURE LEAD GÉNÉRÉ</Th>
     case 'canal': return <Th key={key} className="w-[180px]">CANAL D'ACQUISITION</Th>
+    case 'source': return <Th key={key} className="w-[140px]">SOURCE</Th>
     case 'campagne': return <Th key={key} className="w-[180px]">CAMPAGNE</Th>
-    case 'adset': return <Th key={key} className="w-[160px]">ADSET</Th>
-    case 'ad': return <Th key={key} className="w-[160px]">AD</Th>
+    case 'adset': return <Th key={key} className="w-[160px]">MEDIUM</Th>
+    case 'ad': return <Th key={key} className="w-[160px]">CONTENT</Th>
     case 'creationLead': return <Th key={key} className="w-[190px]">DATE DE CRÉATION DU LEAD</Th>
     case 'datePassageRelance': return <Th key={key} className="w-[190px]">DATE DE PASSAGE EN RELANCE</Th>
     case 'setter': return <Th key={key} className="w-[210px]">SETTER ASSIGNÉ</Th>
@@ -1175,7 +1173,6 @@ function renderAdminHeader(key: ColumnKey, sort?: { callbackDir: CallbackSort; o
     case 'dernierAppel': return <Th key={key} className="w-[180px]">DERNIER APPEL</Th>
     case 'appelDate': return <Th key={key} className="w-[190px]">DATE/HEURE DE L'APPEL</Th>
     case 'pctLeadAppele5min': return <Th key={key} className="w-[160px]">% LEAD APPELÉ &lt; 5MIN</Th>
-    case 'campagnes': return <Th key={key} className="w-[240px]">CAMPAGNES</Th>
     case 'jaugeAppels': return <Th key={key} className="w-[160px]">JAUGE APPELS (4/JOUR)</Th>
     case 'prochainRappel': return <SortableTh key={key} className="w-[220px]" dir={sort?.callbackDir ?? null} onToggle={sort?.onToggleCallback}>DATE/HEURE PROCHAIN RAPPEL</SortableTh>
     case 'relanceMax': return <Th key={key} className="w-[160px]">JOUR RELANCE MAX</Th>
@@ -1216,9 +1213,10 @@ function renderAdminCell(
     case 'codePostal': return <Td key={key} className="text-muted truncate" title={lead.postalCode ?? undefined}>{lead.postalCode ?? '—'}</Td>
     case 'leadGenere': return <Td key={key} className="text-faint">{fullDateTime(lead.createdAt)}</Td>
     case 'canal': return <Td key={key} className="text-muted truncate" title={prettySource(lead)}>{prettySource(lead)}</Td>
+    case 'source': return <Td key={key} className="text-muted truncate" title={lead.utmSource ?? undefined}>{lead.utmSource ?? '—'}</Td>
     case 'campagne': return <Td key={key} className="text-muted truncate" title={campaignName(lead) ?? undefined}>{campaignName(lead) ?? '—'}</Td>
     case 'adset': return <Td key={key} className="text-muted truncate" title={lead.adset ?? lead.utmMedium ?? undefined}>{lead.adset ?? lead.utmMedium ?? '—'}</Td>
-    case 'ad': return <Td key={key} className="text-muted truncate" title={lead.ad ?? lead.utmSource ?? undefined}>{lead.ad ?? lead.utmSource ?? '—'}</Td>
+    case 'ad': return <Td key={key} className="text-muted truncate" title={lead.ad ?? lead.utmContent ?? undefined}>{lead.ad ?? lead.utmContent ?? '—'}</Td>
     case 'creationLead': return <Td key={key} className="text-faint">{fullDateTime(lead.createdAt)}</Td>
     case 'datePassageRelance': return <Td key={key} className="text-faint">{lead.datePassageRelance ? fullDateTime(lead.datePassageRelance) : '—'}</Td>
     case 'setter': return <Td key={key}><SetterChips lead={lead} userMap={userMap} /></Td>
@@ -1235,7 +1233,6 @@ function renderAdminCell(
     case 'dernierAppel': return <Td key={key} className="text-faint">{lastCallDateTime(lead.latestCallAt ?? lead.lastContactAt)}</Td>
     case 'appelDate': return <Td key={key} className="text-faint">{lastCallDateTime(lead.latestCallAt ?? lead.lastContactAt)}</Td>
     case 'pctLeadAppele5min': return <Td key={key}>{yesNo(lead.firstCallUnderFiveMin)}</Td>
-    case 'campagnes': return <Td key={key} className="text-muted truncate" title={campaignSummary(lead)}>{campaignSummary(lead)}</Td>
     case 'jaugeAppels': return <Td key={key}><DailyCallGauge count={lead.callsToday ?? 0} /></Td>
     case 'prochainRappel': return <Td key={key} className="text-faint">{lastCallDateTime(lead.nextCallbackAt ?? null)}</Td>
     case 'relanceMax': return <Td key={key} className="text-faint">{formatDays(lead.joursRelance)}</Td>

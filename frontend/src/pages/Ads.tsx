@@ -47,7 +47,7 @@ const ALL_CHANNELS: AdChannel[] = [
   'meta', 'google', 'tiktok', 'linkedin', 'microsoft', 'organic', 'referral', 'direct', 'other',
 ]
 
-type Tab = 'rapport' | 'sources'
+type Tab = 'rapport' | 'creatives' | 'sources'
 
 export function Ads() {
   const role = useAuth((s) => s.user?.role)
@@ -59,11 +59,12 @@ export function Ads() {
       <Topbar eyebrow="ACQUISITION / PUBLICITÉ" title="Performance publicitaire — Meta" />
       <div className="px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 flex items-center gap-2 flex-shrink-0">
         <TabButton active={tab === 'rapport'} onClick={() => setTab('rapport')}>Rapport</TabButton>
+        <TabButton active={tab === 'creatives'} onClick={() => setTab('creatives')}>Performance créative</TabButton>
         {isAdmin && (
           <TabButton active={tab === 'sources'} onClick={() => setTab('sources')}>Sources à classer</TabButton>
         )}
       </div>
-      {tab === 'rapport' ? <AdsReportView isAdmin={isAdmin} /> : <AdsSourcesView />}
+      {tab === 'rapport' ? <AdsReportView isAdmin={isAdmin} /> : tab === 'creatives' ? <CreativesView /> : <AdsSourcesView />}
     </AppShell>
   )
 }
@@ -505,12 +506,12 @@ function DataRow({ row, depth, expandable = false, open = false, onClick, unmatc
   )
 }
 
-function SortableTh({ label, k, sortKey, sortDir, onSort }: {
+function SortableTh<K extends string>({ label, k, sortKey, sortDir, onSort }: {
   label: string
-  k: SortKey
-  sortKey: SortKey
+  k: K
+  sortKey: K
   sortDir: 'asc' | 'desc'
-  onSort: (k: SortKey) => void
+  onSort: (k: K) => void
 }) {
   const active = sortKey === k
   return (
@@ -523,28 +524,21 @@ function SortableTh({ label, k, sortKey, sortDir, onSort }: {
   )
 }
 
-// ===== KPI de période : le parcours complet du budget au prospect ============
-// Dépense → impressions (CPM) → clics (CTR/CPC) → arrivées au formulaire
-// (dernière étape du simulateur) → prospects créés. Le dernier KPI affiche les
-// prospects réellement arrivés dans Velora, pas les envois de formulaire du
-// simulateur (doublons/échecs : ~868 envois pour 601 prospects en juillet).
+// ===== KPI de période : les 3 chiffres qui comptent (réunion 2026-08-03) ====
+// Dépense · Nouveaux prospects · CPL. Impressions/clics restent lisibles dans
+// l'entonnoir d'acquisition, les arrivées au formulaire dans le tunnel
+// simulateur. Le KPI prospects affiche les prospects réellement arrivés dans
+// Velora, pas les envois de formulaire (doublons/échecs : ~868 envois pour
+// 601 prospects en juillet).
 
 function PeriodKpis({ totals, simFunnel }: {
   totals?: AdsTotals
   simFunnel: ConvexSimulatorFunnel | null
 }) {
   const spend = totals?.spend ?? 0
-  const impressions = totals?.impressions ?? 0
-  const clicks = totals?.clicks ?? 0
   const leads = totals?.leads ?? 0
-  // Arrivée au formulaire = sessions ayant atteint la dernière étape du simulateur.
-  const steps = simFunnel?.stepSessions ?? []
-  const formReached = steps.length > 0 ? steps[steps.length - 1] : 0
   const formSubmits = simFunnel?.formSubmits ?? 0
 
-  const cpm = impressions > 0 ? (spend / impressions) * 1000 : 0
-  const ctr = impressions > 0 ? ((clicks / impressions) * 100).toFixed(1) : null
-  const cpc = clicks > 0 ? spend / clicks : 0
   // La donnée simulateur couvre la période quand il y a au moins autant
   // d'envois que de nouveaux prospects. Écart envois − nouveaux = contacts
   // déjà dans Velora qui ont refait une simulation (GHL déduplique par
@@ -553,34 +547,13 @@ function PeriodKpis({ totals, simFunnel }: {
   const alreadyKnown = simCovers ? formSubmits - leads : 0
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 lg:gap-6">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:gap-6">
       <MagicKpi
         label="DÉPENSE"
         value={fmtEur(spend)}
-        sub={leads > 0 ? `CPL ${fmtEur(totals?.cpl)} · ${fmtInt(leads)} prospects` : 'sur la période'}
+        sub="sur la période"
         accent="gold"
         icon="tag"
-      />
-      <MagicKpi
-        label="IMPRESSIONS"
-        value={fmtInt(impressions)}
-        sub={impressions > 0 ? `CPM ${cpm.toFixed(2)} €` : 'affichages de la pub'}
-        accent="info"
-        icon="eye"
-      />
-      <MagicKpi
-        label="CLICS"
-        value={fmtInt(clicks)}
-        sub={ctr ? `CTR ${ctr}% · CPC ${cpc.toFixed(2)} €` : 'clics sur la pub'}
-        accent="green"
-        icon="target"
-      />
-      <MagicKpi
-        label="ARRIVÉS AU FORMULAIRE"
-        value={fmtInt(formReached)}
-        sub={`${fmtInt(simFunnel?.sessions)} arrivées simulateur`}
-        accent="info"
-        icon="filter"
       />
       <MagicKpi
         label="NOUVEAUX PROSPECTS"
@@ -597,7 +570,119 @@ function PeriodKpis({ totals, simFunnel }: {
           : `Prospects réellement créés dans Velora sur la période. Un envoi de formulaire d'un contact déjà connu ne crée pas de doublon : sa fiche existante est mise à jour et marquée « re-simulation ».`}
         {...(simCovers ? { progress: Math.min(100, Math.round((leads / formSubmits) * 100)) } : {})}
       />
+      <MagicKpi
+        label="CPL"
+        value={leads > 0 ? fmtEurCents(spend / leads) : '—'}
+        sub="dépense / nouveaux prospects"
+        accent="info"
+        icon="target"
+        tooltip="Coût par lead : la dépense publicitaire de la période divisée par le nombre de nouveaux prospects arrivés dans Velora."
+      />
     </div>
+  )
+}
+
+// ===== Performance créative =================================================
+// Rentabilité PAR créative (réunion 2026-08-03) : une créative peut générer
+// beaucoup de leads mais peu de RDV — leads, RDV planifiés et ventes comptent
+// donc autant que le CPL. Rattachement leads ↔ créatives : adId GHL ou, à
+// défaut, le nom (utm_content posé dans les publicités Meta).
+
+type CreativeSortKey = 'spend' | 'leads' | 'cpl' | 'rdvs' | 'devisSignes' | 'ca'
+
+function CreativesView() {
+  const [period, setPeriod] = useState<PeriodState>({ ...DEFAULT_PERIOD, mode: 'this_month' })
+  const range = buildPeriodRange(period)
+  const { data, loading, error } = useAdsReport({ from: range.from, to: range.to, level: 'ad', channel: 'meta' })
+  const [sortKey, setSortKey] = useState<CreativeSortKey>('rdvs')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+
+  const rows = useMemo(() => {
+    const arr = (data?.rows ?? []).filter((r) => (r.spend ?? 0) > 0 || r.leads > 0)
+    arr.sort((a, b) => {
+      const va = a[sortKey] ?? 0
+      const vb = b[sortKey] ?? 0
+      if (vb !== va) return sortDir === 'desc' ? vb - va : va - vb
+      return (b.leads ?? 0) - (a.leads ?? 0)
+    })
+    return arr
+  }, [data, sortKey, sortDir])
+
+  const onSort = (key: CreativeSortKey) => {
+    if (key === sortKey) setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+    else { setSortKey(key); setSortDir('desc') }
+  }
+
+  return (
+    <>
+      <div className="px-4 sm:px-6 md:px-8 pt-3 flex items-center justify-between gap-2 sm:gap-4 flex-shrink-0 flex-wrap">
+        <div className="text-xs text-faint font-semibold">
+          Cohorte : {range.label}.
+          {loading && <InlineLoading />}
+          {error ? ` Erreur: ${error}` : ''}
+        </div>
+        <DateRangePicker value={period} onChange={setPeriod} align="right" />
+      </div>
+
+      <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 overflow-y-auto space-y-4 sm:space-y-6 flex-grow">
+        <div className="glass-card p-6">
+          <SectionHead
+            icon="trophy"
+            eyebrow="RENTABILITÉ PAR CRÉATIVE"
+            title="Quelle publicité rapporte vraiment ?"
+            hint="prospects, RDV et ventes rattachés à chaque créative"
+          />
+          {loading && !data ? (
+            <div className="py-10 text-center text-faint"><Spinner size={28} /> Chargement…</div>
+          ) : rows.length === 0 ? (
+            <div className="rounded-3xl border border-line-soft bg-white/60 p-8 text-center text-muted">
+              Aucune créative sur cette période. Les prospects se rattachent aux créatives via
+              les paramètres UTM (utm_content) des publicités Meta — configurés sur les
+              prochaines campagnes, les données apparaîtront avec les nouveaux prospects.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[900px]">
+                <thead className="bg-or-tint">
+                  <tr className="text-left eyebrow">
+                    <th className="px-3 py-2.5">CRÉATIVE</th>
+                    <SortableTh label="DÉPENSE" k="spend" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                    <SortableTh label="PROSPECTS" k="leads" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                    <SortableTh label="CPL" k="cpl" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                    <SortableTh label="RDV" k="rdvs" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                    <th className="px-3 py-2.5">TX RDV</th>
+                    <SortableTh label="VENTES" k="devisSignes" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                    <SortableTh label="CA" k="ca" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => <CreativeRow key={`${r.adId ?? r.ad ?? i}`} row={r} />)}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </main>
+    </>
+  )
+}
+
+function CreativeRow({ row }: { row: AdsReportRow }) {
+  const context = [row.campaign, row.adset].filter((s) => s?.trim()).join(' · ')
+  return (
+    <tr className="border-b border-line-soft last:border-0">
+      <td className="px-3 py-2.5">
+        <div className="font-bold">{row.ad?.trim() || '— (sans nom)'}</div>
+        {context && <div className="text-[11px] text-faint truncate max-w-[280px]" title={context}>{context}</div>}
+      </td>
+      <td className="px-3 py-2.5 font-semibold">{fmtEur(row.spend)}</td>
+      <td className="px-3 py-2.5">{fmtInt(row.leads)}</td>
+      <td className="px-3 py-2.5">{row.leads > 0 ? fmtEurCents(row.cpl) : '—'}</td>
+      <td className="px-3 py-2.5 font-semibold">{fmtInt(row.rdvs)}</td>
+      <td className="px-3 py-2.5 text-muted">{row.leads > 0 ? pctFine(row.rdvs, row.leads) : '—'}</td>
+      <td className="px-3 py-2.5">{fmtInt(row.devisSignes)}</td>
+      <td className="px-3 py-2.5 font-semibold text-or-dark">{fmtEur(row.ca)}</td>
+    </tr>
   )
 }
 
@@ -797,6 +882,13 @@ function SeriesTooltip({ active, payload, label, euros }: {
   euros: Set<string>
 }) {
   if (!active || !payload?.length) return null
+  // CPL du point survolé quand dépense et prospects sont tous deux tracés
+  // (graphe « Dépense & prospects ») — demandé en réunion 2026-08-03.
+  const spendEntry = payload.find((e) => e.name === 'Dépense')
+  const leadsEntry = payload.find((e) => e.name === 'Prospects')
+  const cpl = spendEntry && leadsEntry && leadsEntry.value > 0
+    ? spendEntry.value / leadsEntry.value
+    : null
   return (
     <div style={{
       background: 'var(--color-card, #fff)',
@@ -816,6 +908,13 @@ function SeriesTooltip({ active, payload, label, euros }: {
           </span>
         </div>
       ))}
+      {cpl != null && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, paddingTop: 4, borderTop: '1px solid #ECF2ED' }}>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: '#A85D2E', flexShrink: 0 }} />
+          <span style={{ color: CHART_TICK }}>CPL</span>
+          <span style={{ fontWeight: 700, marginLeft: 'auto' }}>{fmtEurCents(cpl)}</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -989,8 +1088,12 @@ function SimulatorFunnel({ funnel, clicks, leads }: {
   const stages: Array<{ label: string; value: number; sub?: string }> = []
   if ((clicks ?? 0) > 0) stages.push({ label: 'Clics pub', value: Math.round(clicks!), sub: 'Meta' })
   stages.push({ label: 'Arrivées simulateur', value: funnel.sessions, sub: 'sessions' })
+  // La dernière étape du simulateur = le formulaire de coordonnées : on la
+  // nomme explicitement (réunion 2026-08-03) au lieu d'un « Étape N » opaque.
   funnel.stepSessions.forEach((n, i) => {
-    if (n > 0) stages.push({ label: `Étape ${i + 1} atteinte`, value: n })
+    if (n === 0) return
+    const isLast = i === funnel.stepSessions.length - 1
+    stages.push({ label: isLast ? 'Arrivée au formulaire' : `Étape ${i + 1} atteinte`, value: n })
   })
   stages.push({ label: 'Formulaire envoyé', value: funnel.formSubmits })
   // « Nouveaux » : un contact déjà connu de GHL qui refait une simulation ne
@@ -1131,6 +1234,11 @@ function fmtInt(n: number | null | undefined): string {
 
 function fmtEur(n: number | null | undefined): string {
   return `${Math.round(Number(n ?? 0)).toLocaleString('fr-FR')} €`
+}
+
+// Montants unitaires (CPL) : les centimes comptent — 2,62 € ≠ 3 €.
+function fmtEurCents(n: number | null | undefined): string {
+  return `${Number(n ?? 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
 }
 
 function fmtPct(n: number | null | undefined): string {
