@@ -265,8 +265,16 @@ export function useConvexRdvList(filters?: {
     return results.map(mapConvexRdv)
   }, [results, leadId, byLead])
 
+  // Stale-while-revalidate : un changement d'args (nouvelle période) fait
+  // repartir usePaginatedQuery de zéro (LoadingFirstPage, results vides). On
+  // continue d'afficher la dernière liste connue pendant le rechargement au
+  // lieu de vider les graphes ; `loading` reste vrai pour qui veut un spinner.
+  const listLoading = !leadId && args !== 'skip' && status === 'LoadingFirstPage'
+  const [heldList, setHeldList] = useState<RdvResponse[] | null>(null)
+  if (!leadId && args !== 'skip' && !listLoading && heldList !== data) setHeldList(data)
+
   return {
-    data: filters === null ? null : data,
+    data: filters === null ? null : (listLoading && heldList ? heldList : data),
     loading: filters !== null && (leadId ? byLead === undefined : status === 'LoadingFirstPage'),
     error: null,
     refetch: noop,
@@ -325,7 +333,11 @@ function usePersistentSticky<T>(key: string | null, value: T | undefined): T | u
   let current = held
   if (key !== held.k) {
     // Période/utilisateur changé → réhydrate depuis le cache de la nouvelle clé.
-    current = { k: key, v: lsRead<T>(key) }
+    // Plage jamais visitée (rien en localStorage) : on conserve les chiffres de
+    // la plage précédente le temps du rechargement (~1 s) au lieu de tout
+    // remettre à zéro. Pas de fuite entre comptes : un changement d'utilisateur
+    // passe par /login → la page (et ce fallback mémoire) est démontée.
+    current = { k: key, v: lsRead<T>(key) ?? held.v }
     setHeld(current)
   } else if (value !== undefined && !Object.is(value, held.v)) {
     current = { k: key, v: value }
