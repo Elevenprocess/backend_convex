@@ -185,6 +185,41 @@ function filterActiveLeads(
     .map(toLeadRow);
 }
 
+/**
+ * Chargement partagé des données de la vue agrégée (branches admin/setter de
+ * summary) : leads / rdv / users / appels chargés UNE fois + index dérivés purs
+ * (0 N+1, 0 rescan). Exporté pour hermes.kpis (reporting automatisé) qui produit
+ * la même vue admin sans dupliquer cette logique.
+ */
+export async function loadSummaryData(ctx: QueryCtx, range: RangeMs) {
+  const callDocs = await ctx.db
+    .query("callLogs")
+    .withIndex("by_calledAt", (q) => q.gte("calledAt", range.fromMs).lte("calledAt", range.toMs))
+    .collect();
+  const calls = callDocs.map(toCallRow);
+  const calledLeadIds = new Set<string>(calls.map((c) => c.leadId as string).filter(Boolean));
+  const [leadDocs, rdvDocs, userDocs] = await Promise.all([
+    ctx.db.query("leads").collect(),
+    ctx.db.query("rdv").collect(),
+    ctx.db.query("users").collect(),
+  ]);
+  const sourceByLead = buildSourceByLead(leadDocs);
+  const leadRows = filterActiveLeads(leadDocs, range, calledLeadIds);
+  const detached = await loadDetachedDebriefRdvRows(ctx, range, undefined, sourceByLead);
+  const firstRdvByLead = loadFirstRdvByLead(rdvDocs, sourceByLead);
+  const rdvRows = rdvDocs
+    .filter((r) => r.deletedAt === undefined)
+    .filter((r) => isInRange(r.scheduledAt ?? null, range) || isInRange(bizCreatedAt(r), range))
+    .map(toRdvRow);
+  const rdvAll = [...rdvRows, ...detached];
+  const userRows: UserRow[] = userDocs
+    .filter((u) => u.active !== false)
+    .map((u) => ({ id: u._id, name: u.name ?? "", role: roleOf(u) }));
+  const latestCallByLead = buildLatestCallByLead(calls);
+  const qualifierByLead = buildQualifierByLead(calls);
+  return { calls, leadRows, rdvAll, userRows, latestCallByLead, qualifierByLead, firstRdvByLead };
+}
+
 export const summary = query({
   args: {
     now: v.number(),
@@ -233,33 +268,8 @@ export const summary = query({
       };
     }
 
-    const callDocs = await ctx.db
-      .query("callLogs")
-      .withIndex("by_calledAt", (q) => q.gte("calledAt", range.fromMs).lte("calledAt", range.toMs))
-      .collect();
-    const calls = callDocs.map(toCallRow);
-    const calledLeadIds = new Set<string>(calls.map((c) => c.leadId as string).filter(Boolean));
-    // leads / rdv / users chargés UNE fois ; helpers purs derrière (0 N+1, 0 rescan).
-    const [leadDocs, rdvDocs, userDocs] = await Promise.all([
-      ctx.db.query("leads").collect(),
-      ctx.db.query("rdv").collect(),
-      ctx.db.query("users").collect(),
-    ]);
-    const sourceByLead = buildSourceByLead(leadDocs);
-    const leadRows = filterActiveLeads(leadDocs, range, calledLeadIds);
-    const detached = await loadDetachedDebriefRdvRows(ctx, range, undefined, sourceByLead);
-    const firstRdvByLead = loadFirstRdvByLead(rdvDocs, sourceByLead);
-    const rdvRows = rdvDocs
-      .filter((r) => r.deletedAt === undefined)
-      .filter((r) => isInRange(r.scheduledAt ?? null, range) || isInRange(bizCreatedAt(r), range))
-      .map(toRdvRow);
-    const rdvAll = [...rdvRows, ...detached];
-    const userRows: UserRow[] = userDocs
-      .filter((u) => u.active !== false)
-      .map((u) => ({ id: u._id, name: u.name ?? "", role: roleOf(u) }));
-
-    const latestCallByLead = buildLatestCallByLead(calls);
-    const qualifierByLead = buildQualifierByLead(calls);
+    const { calls, leadRows, rdvAll, userRows, latestCallByLead, qualifierByLead, firstRdvByLead } =
+      await loadSummaryData(ctx, range);
 
     if (role === "setter") {
       const setterLeadIds = new Set(

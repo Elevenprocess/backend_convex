@@ -154,3 +154,29 @@ test("listByLead ne renvoie que les RDV du lead, sans les supprimés", async () 
   expect(rows.map((r: any) => r._id)).toEqual([rdvId]);
   expect(rows.map((r: any) => r._id)).not.toContain(deletedId);
 });
+
+test("listSignatures ne renvoie que les RDV signés (signatureAt), sans les supprimés", async () => {
+  const t = makeT();
+  const comId = await insertUser(t, { role: "commercial" });
+  const setterId = await insertUser(t, { role: "setter", email: "sig@ecoi.fr" });
+  const leadId = await makeLead(t, setterId);
+  const signedId = await t.run(async (ctx: any) =>
+    ctx.db.insert("rdv", {
+      leadId, commercialId: comId, locationType: "domicile", status: "honore",
+      result: "signe", signatureAt: Date.parse("2026-01-10"),
+    }),
+  );
+  // Non signé : exclu.
+  await t.run(async (ctx: any) =>
+    ctx.db.insert("rdv", { leadId, commercialId: comId, locationType: "domicile", status: "planifie" }),
+  );
+  // Signé mais supprimé : exclu.
+  await t.run(async (ctx: any) =>
+    ctx.db.insert("rdv", {
+      leadId, commercialId: comId, locationType: "domicile", status: "honore",
+      result: "signe", signatureAt: Date.parse("2026-01-12"), deletedAt: Date.now(),
+    }),
+  );
+  const rows = await asUser(t, comId).query(api.rdv.listSignatures, {});
+  expect(rows.map((r: any) => r._id)).toEqual([signedId]);
+});

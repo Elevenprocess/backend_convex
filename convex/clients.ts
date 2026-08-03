@@ -262,23 +262,33 @@ async function userRefOf(
   return { id: userId, name: u?.name ?? null };
 }
 
-/** Décor commun des trois lectures de dossier (list/getByProject/getByLead). */
+/** Décor commun des trois lectures de dossier (list/getByProject/getByLead).
+ * Sous-lectures lancées en parallèle : list décore ~120 dossiers d'un coup et
+ * ~10 await séquentiels par dossier dominaient la latence de la page Suivi. */
 async function decorateClient(ctx: QueryCtx, c: Doc<"clients">) {
+  const [techniciens, missingDocs, steps, lead, panneau, onduleur, batterie, adminReferent, poseTeamLead] =
+    await Promise.all([
+      techniciensOf(ctx, c._id),
+      missingDocsOf(ctx, c._id),
+      stepsMapOf(ctx, c._id),
+      leadDecorOf(ctx, c.leadId),
+      productRefOf(ctx, c.panneauProductId, c.panneauQty),
+      productRefOf(ctx, c.onduleurProductId, c.onduleurQty),
+      productRefOf(ctx, c.batterieProductId, c.batterieQty),
+      userRefOf(ctx, c.adminReferentId),
+      userRefOf(ctx, c.poseTeamLeadId),
+    ]);
   return {
     ...c,
-    techniciens: await techniciensOf(ctx, c._id),
-    missingDocs: await missingDocsOf(ctx, c._id),
-    steps: await stepsMapOf(ctx, c._id),
-    lead: await leadDecorOf(ctx, c.leadId),
+    techniciens,
+    missingDocs,
+    steps,
+    lead,
     // Équipement et référents résolus (noms) — le front n'a plus à joindre les
     // tables products/users à partir d'IDs bruts.
-    equipment: {
-      panneau: await productRefOf(ctx, c.panneauProductId, c.panneauQty),
-      onduleur: await productRefOf(ctx, c.onduleurProductId, c.onduleurQty),
-      batterie: await productRefOf(ctx, c.batterieProductId, c.batterieQty),
-    },
-    adminReferent: await userRefOf(ctx, c.adminReferentId),
-    poseTeamLead: await userRefOf(ctx, c.poseTeamLeadId),
+    equipment: { panneau, onduleur, batterie },
+    adminReferent,
+    poseTeamLead,
   };
 }
 

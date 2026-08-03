@@ -16,23 +16,55 @@ import { can, canEditSubstep, visibleClientIds } from "./model/delivrabilitePerm
 import { recomputePhase, recomputeClientStatus } from "./model/ensureDossier";
 import { catalogByKey } from "./model/substepCatalog";
 import { isSubstepUnlocked, computeSlaDeadline, missingDocuments } from "./model/substepGating";
-import { activeDocsOfSubstep, toDocumentSummary } from "./documents";
+import { toDocumentSummary } from "./documents";
 import { insertAudit } from "./model/audit";
 import { shouldNotifyVtDateChange } from "./model/notifMessages";
 import { notifyAcompte, notifyVtDateChange } from "./model/notify";
 import { acompteStateForClient, blockingTranche, formatEuro, todayReunion } from "./model/acompteGuard";
 
-/** Décore une substep : unlocked (sœurs), documents actifs et badge pièce manquante. */
-async function decorate(ctx: QueryCtx, row: Doc<"workflowSubsteps">) {
-  const siblings = await ctx.db
-    .query("workflowSubsteps")
-    .withIndex("by_client", (q) => q.eq("clientId", row.clientId))
+/**
+ * Sœurs + documents actifs d'un dossier, chargés en DEUX requêtes (une par
+ * table). Avant, decorate re-chargeait toutes les sœurs et les documents PAR
+ * sous-étape : lister le workflow d'un dossier (~30 sous-étapes) coûtait
+ * ~30×30 lectures de sœurs + 30 requêtes documents.
+ */
+type ClientDecor = {
+  siblings: Doc<"workflowSubsteps">[];
+  docsBySubstep: Map<Id<"workflowSubsteps">, Doc<"documents">[]>;
+};
+
+async function clientDecorOf(
+  ctx: QueryCtx,
+  clientId: Id<"clients">,
+  knownSiblings?: Doc<"workflowSubsteps">[],
+): Promise<ClientDecor> {
+  const siblings =
+    knownSiblings ??
+    (await ctx.db
+      .query("workflowSubsteps")
+      .withIndex("by_client", (q) => q.eq("clientId", clientId))
+      .collect());
+  const docs = await ctx.db
+    .query("documents")
+    .withIndex("by_client", (q) => q.eq("clientId", clientId))
     .collect();
+  const docsBySubstep = new Map<Id<"workflowSubsteps">, Doc<"documents">[]>();
+  for (const d of docs) {
+    if (d.deletedAt !== undefined || !d.workflowSubstepId) continue;
+    const list = docsBySubstep.get(d.workflowSubstepId) ?? [];
+    list.push(d);
+    docsBySubstep.set(d.workflowSubstepId, list);
+  }
+  return { siblings, docsBySubstep };
+}
+
+/** Décore une substep : unlocked (sœurs), documents actifs et badge pièce manquante. */
+async function decorate(ctx: QueryCtx, row: Doc<"workflowSubsteps">, decor: ClientDecor) {
   const unlocked = isSubstepUnlocked(
     row.key,
-    siblings.map((s) => ({ key: s.key, status: s.status })),
+    decor.siblings.map((s) => ({ key: s.key, status: s.status })),
   );
-  const docs = await activeDocsOfSubstep(ctx, row._id);
+  const docs = decor.docsBySubstep.get(row._id) ?? [];
   const missingDocument = missingDocuments(row.key, docs.map((d) => d.type));
   // URL storage signée par pièce : l'app Convex ne peut pas servir les fichiers
   // via l'ancien endpoint NestJS (401 → aperçu cassé). Cf. documents:listBySubstep.
@@ -88,7 +120,17 @@ export const list = query({
       .filter((s) => args.responsableId === undefined || s.responsableId === args.responsableId)
       .filter((s) => args.phase === undefined || catalogByKey(s.key)?.phase === args.phase)
       .sort((a, b) => a.clientId.localeCompare(b.clientId) || a.position - b.position);
-    return await Promise.all(filtered.map((r) => decorate(ctx, r)));
+    // Décor par dossier (sœurs + documents) chargé UNE fois par client concerné.
+    // Chemin clientId : `rows` est déjà le set complet des sœurs de ce dossier.
+    const clientIds = [...new Set(filtered.map((s) => s.clientId))];
+    const decors = new Map(
+      await Promise.all(
+        clientIds.map(async (id) =>
+          [id, await clientDecorOf(ctx, id, args.clientId !== undefined ? rows : undefined)] as const,
+        ),
+      ),
+    );
+    return await Promise.all(filtered.map((r) => decorate(ctx, r, decors.get(r.clientId)!)));
   },
 });
 
@@ -100,7 +142,7 @@ export const get = query({
     if (!row) return null;
     const visible = await visibleClientIds(ctx, user);
     if (visible !== null && !visible.has(row.clientId)) return null;
-    return await decorate(ctx, row);
+    return await decorate(ctx, row, await clientDecorOf(ctx, row.clientId));
   },
 });
 

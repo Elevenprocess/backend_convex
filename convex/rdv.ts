@@ -268,6 +268,24 @@ export const listByLead = query({
   },
 });
 
+// RDV de signature uniquement (index by_signature) : la page Suivi n'a besoin
+// que d'eux pour dater/chiffrer les dossiers signés. Avant, elle déroulait
+// TOUTE la table rdv en pages de 200 (des milliers de lignes + résumé lead par
+// ligne) pour n'en garder qu'une centaine.
+export const listSignatures = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireUser(ctx);
+    const rows = await ctx.db
+      .query("rdv")
+      .withIndex("by_signature", (ix) => ix.gt("signatureAt", 0))
+      .collect();
+    return rows
+      .filter((r) => r.deletedAt === undefined)
+      .sort((a, b) => (b.signatureAt ?? 0) - (a.signatureAt ?? 0));
+  },
+});
+
 export const list = query({
   args: {
     commercialId: v.optional(v.id("users")),

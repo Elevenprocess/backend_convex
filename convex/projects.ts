@@ -164,6 +164,60 @@ export const ficheByLead = query({
   },
 });
 
+/**
+ * Détail d'UN projet (projet + débriefs + devis + pièces) en une query. La
+ * page projet enchaînait 2 allers-retours (get+debriefs puis devis+pièces) —
+ * chaque étage coûte un aller-retour réseau complet loin du datacenter.
+ * Shapes identiques à ficheByLead.
+ */
+export const fiche = query({
+  args: { projectId: v.id("projects") },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const project = await ctx.db.get(args.projectId);
+    if (!project || project.deletedAt !== undefined) return null;
+    const canReadAttachments = ATTACHMENT_READ_ROLES.includes(roleOf(user));
+
+    const [debriefs, devisRows, attachmentRows] = await Promise.all([
+      ctx.db
+        .query("debriefs")
+        .withIndex("by_project", (q) => q.eq("projectId", project._id))
+        .collect(),
+      ctx.db
+        .query("devis")
+        .withIndex("by_lead", (q) => q.eq("leadId", project.leadId))
+        .collect(),
+      canReadAttachments
+        ? ctx.db
+            .query("projectAttachments")
+            .withIndex("by_project", (q) => q.eq("projectId", project._id))
+            .collect()
+        : Promise.resolve([]),
+    ]);
+
+    const attachments = await Promise.all(
+      attachmentRows
+        .filter((a) => a.deletedAt === undefined)
+        .map(async (a) => {
+          const url = a.storageId ? ((await ctx.storage.getUrl(a.storageId)) ?? undefined) : undefined;
+          return attachmentToSummary(a, url);
+        }),
+    );
+
+    return {
+      project,
+      debriefs: debriefs
+        .filter((d) => d.deletedAt === undefined)
+        .sort((a, b) => b._creationTime - a._creationTime),
+      devis: devisRows
+        .filter((d) => d.deletedAt === undefined && d.projectId === project._id)
+        .sort((a, b) => b._creationTime - a._creationTime)
+        .map((d) => devisToResponse(d)),
+      attachments,
+    };
+  },
+});
+
 export const softDelete = mutation({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
