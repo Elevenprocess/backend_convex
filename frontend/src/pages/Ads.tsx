@@ -17,13 +17,11 @@ import { Spinner } from '../components/Spinner'
 import { Icon, type IconName } from '../components/Icon'
 import { useAuth } from '../lib/auth'
 import { useAdsReport } from '../lib/hooks'
-import { useConvexAdBudget, useConvexAdDeposits, useConvexSimulatorFunnel } from '../lib/convexHooks'
+import { useConvexSimulatorFunnel } from '../lib/convexHooks'
 import type { ConvexSimulatorFunnel } from '../lib/convexApi'
 import {
-  addAdDeposit,
   fetchSourceMap,
   fetchUnmappedSources,
-  removeAdDeposit,
   resyncAdSpend,
   upsertSourceMap,
 } from '../lib/api'
@@ -201,8 +199,6 @@ function AdsReportView({ isAdmin }: { isAdmin: boolean }) {
             {resyncMsg}
           </div>
         )}
-
-        <AdBudgetSection channel={channel} isAdmin={isAdmin} />
 
         <PeriodKpis totals={totals} simFunnel={simFunnel} />
 
@@ -601,207 +597,6 @@ function PeriodKpis({ totals, simFunnel }: {
           : `Prospects réellement créés dans Velora sur la période. Un envoi de formulaire d'un contact déjà connu ne crée pas de doublon : sa fiche existante est mise à jour et marquée « re-simulation ».`}
         {...(simCovers ? { progress: Math.min(100, Math.round((leads / formSubmits) * 100)) } : {})}
       />
-    </div>
-  )
-}
-
-// ===== Budget en cours (KPI principaux depuis le dernier dépôt de solde) =====
-// L'API Meta n'expose pas la facturation du compte : l'admin saisit chaque
-// dépôt à la main, et la carte suit dépense / prospects / impressions / clics
-// depuis le dernier dépôt (query réactive adDeposits:budget).
-
-function fmtDay(day: string): string {
-  return `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}`
-}
-
-function AdBudgetSection({ channel, isAdmin }: { channel: AdChannel; isAdmin: boolean }) {
-  const { data: budget, loading } = useConvexAdBudget(channel)
-  const [manageOpen, setManageOpen] = useState(false)
-
-  if (loading && !budget) return null
-  if (!budget?.deposit && !isAdmin) return null
-
-  const deposit = budget?.deposit ?? null
-  const consumedPct = deposit && deposit.amount > 0
-    ? Math.min(100, Math.round(((budget?.spend ?? 0) / deposit.amount) * 100))
-    : 0
-  const ctr = (budget?.impressions ?? 0) > 0
-    ? ((budget!.clicks / budget!.impressions) * 100).toFixed(1)
-    : null
-
-  return (
-    <div className="glass-card p-6">
-      <div className="flex items-start justify-between gap-3 mb-5 flex-wrap">
-        <SectionHead
-          icon="download"
-          eyebrow="KPI PRINCIPAUX"
-          title="Budget en cours — depuis le dernier dépôt de solde"
-          {...(deposit ? { hint: `dépôt du ${fmtDay(deposit.date)}${deposit.note ? ` · ${deposit.note}` : ''}` } : {})}
-        />
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={() => setManageOpen((o) => !o)}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-or/30 bg-or-tint px-3 py-1.5 text-sm font-bold text-or-dark"
-          >
-            <Icon name={manageOpen ? 'x' : 'plus'} size={14} />
-            {manageOpen ? 'Fermer' : 'Nouveau dépôt'}
-          </button>
-        )}
-      </div>
-
-      {manageOpen && isAdmin && <AdDepositManager channel={channel} onDone={() => setManageOpen(false)} />}
-
-      {deposit ? (
-        <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
-          <MagicKpi
-            label="DERNIER DÉPÔT"
-            value={fmtEur(deposit.amount)}
-            sub={`${fmtEur(budget!.spend)} consommés · reste ${fmtEur(budget!.remaining)}`}
-            accent="gold"
-            icon="download"
-            progress={consumedPct}
-          />
-          <MagicKpi
-            label="LEADS GÉNÉRÉS"
-            value={fmtInt(budget!.leads)}
-            sub={`sur ce budget · CPL ${fmtEur(budget!.cpl)}`}
-            accent="green"
-            icon="users"
-          />
-          <MagicKpi
-            label="IMPRESSIONS"
-            value={fmtInt(budget!.impressions)}
-            sub="depuis le dépôt"
-            accent="info"
-            icon="eye"
-          />
-          <MagicKpi
-            label="CLICS"
-            value={fmtInt(budget!.clicks)}
-            sub={ctr ? `CTR ${ctr}%` : 'depuis le dépôt'}
-            accent="success"
-            icon="target"
-          />
-        </div>
-      ) : (
-        <div className="rounded-2xl border border-line-soft bg-white/60 px-4 py-3 text-sm font-semibold text-muted">
-          Aucun dépôt de solde enregistré — clique « Nouveau dépôt » pour saisir le dernier
-          rechargement du compte publicitaire et activer les KPI principaux.
-        </div>
-      )}
-    </div>
-  )
-}
-
-// Formulaire de saisie + historique des dépôts (admin). Les queries budget/list
-// étant réactives, tout se met à jour sans refetch manuel.
-function AdDepositManager({ channel, onDone }: { channel: AdChannel; onDone: () => void }) {
-  const { data: deposits, loading } = useConvexAdDeposits(channel, true)
-  const [date, setDate] = useState(() => new Date().toLocaleDateString('en-CA'))
-  const [amount, setAmount] = useState('')
-  const [note, setNote] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-
-  async function save() {
-    const parsed = Number(amount.replace(',', '.'))
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-      setErr('Montant invalide.')
-      return
-    }
-    setSaving(true)
-    setErr(null)
-    try {
-      await addAdDeposit({ date, amount: parsed, channel, ...(note.trim() ? { note: note.trim() } : {}) })
-      setAmount('')
-      setNote('')
-      onDone()
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Échec de l’enregistrement.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function remove(id: string) {
-    try {
-      await removeAdDeposit(id)
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Échec de la suppression.')
-    }
-  }
-
-  return (
-    <div className="mb-5 rounded-2xl border border-line-soft bg-white/60 p-4 space-y-3">
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="text-xs font-bold text-muted">
-          Date du dépôt
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="mt-1 block rounded-xl border border-line-soft bg-white/80 px-3 py-1.5 text-sm font-semibold"
-          />
-        </label>
-        <label className="text-xs font-bold text-muted">
-          Montant (€)
-          <input
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="500"
-            className="mt-1 block w-28 rounded-xl border border-line-soft bg-white/80 px-3 py-1.5 text-sm font-semibold"
-          />
-        </label>
-        <label className="text-xs font-bold text-muted flex-1 min-w-[160px]">
-          Note (optionnel)
-          <input
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Recharge CB, campagne 499 €…"
-            className="mt-1 block w-full rounded-xl border border-line-soft bg-white/80 px-3 py-1.5 text-sm"
-          />
-        </label>
-        <button
-          type="button"
-          onClick={() => void save()}
-          disabled={saving}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-or/30 bg-or-tint px-3 py-1.5 text-sm font-bold text-or-dark disabled:opacity-60"
-        >
-          {saving ? <Spinner size={14} stroke={3} color="currentColor" /> : <Icon name="check" size={14} />}
-          Enregistrer
-        </button>
-      </div>
-      {err && <div className="text-xs font-semibold text-rouille">{err}</div>}
-
-      {loading && !deposits ? (
-        <div className="text-xs text-faint"><Spinner size={14} /> Chargement de l’historique…</div>
-      ) : (deposits?.length ?? 0) > 0 ? (
-        <div className="space-y-1">
-          <div className="eyebrow">Historique des dépôts</div>
-          {deposits!.map((d, i) => (
-            <div key={d.id} className="flex items-center gap-3 text-sm border-b border-line-soft last:border-0 py-1.5">
-              <span className="font-semibold tabular-nums">{fmtDay(d.date)}</span>
-              <span className="font-bold text-or-dark tabular-nums">{fmtEur(d.amount)}</span>
-              {i === 0 && (
-                <span className="inline-flex items-center rounded-full bg-or-tint px-2 py-0.5 text-[10px] font-extrabold text-or-dark border border-or/30">
-                  EN COURS
-                </span>
-              )}
-              <span className="text-xs text-faint truncate flex-1">{d.note ?? ''}</span>
-              <button
-                type="button"
-                onClick={() => void remove(d.id)}
-                title="Supprimer ce dépôt"
-                className="text-faint hover:text-rouille"
-              >
-                <Icon name="trash" size={14} />
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : null}
     </div>
   )
 }
