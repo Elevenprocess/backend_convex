@@ -597,15 +597,30 @@ function CreativesView() {
   const [sortKey, setSortKey] = useState<CreativeSortKey>('rdvs')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
-  const rows = useMemo(() => {
-    const arr = (data?.rows ?? []).filter((r) => (r.spend ?? 0) > 0 || r.leads > 0)
-    arr.sort((a, b) => {
+  // Les prospects sans créative identifiable (pas d'adId ni d'utm_content —
+  // typiquement les pubs d'avant les paramètres UTM) ne sont PAS une créative :
+  // on les sort du tableau et on les résume dans un encart dédié.
+  const { rows, orphan } = useMemo(() => {
+    const all = (data?.rows ?? []).filter((r) => (r.spend ?? 0) > 0 || r.leads > 0)
+    const named = all.filter((r) => r.ad?.trim())
+    named.sort((a, b) => {
       const va = a[sortKey] ?? 0
       const vb = b[sortKey] ?? 0
       if (vb !== va) return sortDir === 'desc' ? vb - va : va - vb
       return (b.leads ?? 0) - (a.leads ?? 0)
     })
-    return arr
+    const orphan = all
+      .filter((r) => !r.ad?.trim())
+      .reduce(
+        (acc, r) => ({
+          leads: acc.leads + r.leads,
+          rdvs: acc.rdvs + r.rdvs,
+          devisSignes: acc.devisSignes + r.devisSignes,
+          ca: acc.ca + r.ca,
+        }),
+        { leads: 0, rdvs: 0, devisSignes: 0, ca: 0 },
+      )
+    return { rows: named, orphan }
   }, [data, sortKey, sortDir])
 
   const onSort = (key: CreativeSortKey) => {
@@ -634,7 +649,7 @@ function CreativesView() {
           />
           {loading && !data ? (
             <div className="py-10 text-center text-faint"><Spinner size={28} /> Chargement…</div>
-          ) : rows.length === 0 ? (
+          ) : rows.length === 0 && orphan.leads === 0 ? (
             <div className="rounded-3xl border border-line-soft bg-white/60 p-8 text-center text-muted">
               Aucune créative sur cette période. Les prospects se rattachent aux créatives via
               les paramètres UTM (utm_content) des publicités Meta — configurés sur les
@@ -657,11 +672,25 @@ function CreativesView() {
                 </thead>
                 <tbody>
                   {rows.map((r, i) => <CreativeRow key={`${r.adId ?? r.ad ?? i}`} row={r} />)}
+                  {rows.length === 0 && (
+                    <tr><td colSpan={8} className="px-3 py-6 text-center text-muted">
+                      Aucun prospect rattaché à une créative sur cette période.
+                    </td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
           )}
         </div>
+
+        {orphan.leads > 0 && (
+          <div className="rounded-2xl border border-line-soft bg-white/60 px-4 py-3 text-sm font-semibold text-muted">
+            <span className="font-extrabold text-text">{fmtInt(orphan.leads)} prospect{orphan.leads > 1 ? 's' : ''} sans créative identifiée</span>
+            {' '}({fmtInt(orphan.rdvs)} RDV · {fmtInt(orphan.devisSignes)} vente{orphan.devisSignes > 1 ? 's' : ''} · {fmtEur(orphan.ca)} de CA) —
+            arrivés sans utm_content ni identifiant d'annonce. Les paramètres UTM ajoutés aux
+            publicités Meta le 03/08 rattacheront les prochains prospects à leur créative.
+          </div>
+        )}
       </main>
     </>
   )
@@ -677,7 +706,7 @@ function CreativeRow({ row }: { row: AdsReportRow }) {
       </td>
       <td className="px-3 py-2.5 font-semibold">{fmtEur(row.spend)}</td>
       <td className="px-3 py-2.5">{fmtInt(row.leads)}</td>
-      <td className="px-3 py-2.5">{row.leads > 0 ? fmtEurCents(row.cpl) : '—'}</td>
+      <td className="px-3 py-2.5">{row.spend > 0 && row.leads > 0 ? fmtEurCents(row.cpl) : '—'}</td>
       <td className="px-3 py-2.5 font-semibold">{fmtInt(row.rdvs)}</td>
       <td className="px-3 py-2.5 text-muted">{row.leads > 0 ? pctFine(row.rdvs, row.leads) : '—'}</td>
       <td className="px-3 py-2.5">{fmtInt(row.devisSignes)}</td>
