@@ -296,6 +296,7 @@ export const createAppointment = action({
 
     // 3. Appointment GHL confirmé sur le calendrier secteur.
     const name = [identity.firstName, identity.lastName].filter(Boolean).join(" ").trim();
+    const reachInfo = [identity.phone, identity.email].filter(Boolean).join(" · ");
     const appointmentRaw = (await ghlRequest("/calendars/events/appointments", {
       method: "POST",
       body: {
@@ -304,7 +305,7 @@ export const createAppointment = action({
         contactId,
         startTime: new Date(args.scheduledAt).toISOString(),
         appointmentStatus: "confirmed",
-        title: `RDV ECOI ${args.sector}${name ? ` — ${name}` : ""}`,
+        title: `RDV ECOI ${args.sector}${name ? ` — ${name}` : ""}${reachInfo ? ` — ${reachInfo}` : ""}`,
         notes: appointmentNotes,
       },
     })) as Record<string, unknown>;
