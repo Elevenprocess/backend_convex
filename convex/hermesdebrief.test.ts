@@ -13,6 +13,8 @@ afterEach(() => {
   delete process.env.FRONTEND_URL;
   delete process.env.HERMES_WEBHOOK_URL;
   delete process.env.HERMES_WEBHOOK_SECRET;
+  delete process.env.GHL_API_KEY;
+  delete process.env.GHL_LOCATION_ID;
   vi.unstubAllGlobals();
 });
 
@@ -182,7 +184,7 @@ test("markSent refuse une clé invalide", async () => {
 
 // ─── Cron de rattrapage : sélection pure ─────────────────────────────
 
-test("pickOverdueForRelay : fenêtre, téléphone requis, plus anciens d'abord, 2 max", async () => {
+test("pickOverdueForRelay : fenêtre, plus anciens d'abord, 2 max, téléphone absent relayé", async () => {
   const { pickOverdueForRelay } = await import("./hermesDebrief");
   const row = (id: string, scheduledAt: number | null, phone: string | null) => ({
     rdvId: id, scheduledAt, status: "planifie",
@@ -193,13 +195,76 @@ test("pickOverdueForRelay : fenêtre, téléphone requis, plus anciens d'abord, 
   const picked = pickOverdueForRelay(
     [
       row("recent", NOW - 1 * H, "+262692000001"),      // RDV fini depuis < 2h15 → flux événementiel encore attendu
-      row("sansTel", NOW - 5 * H, null),                 // commercial sans téléphone (ex. indisponible) → exclu
-      row("vieux", NOW - 6 * H, "+262692000002"),        // en retard → relayé
-      row("moyen", NOW - 4 * H, "+262692000003"),        // en retard → relayé
-      row("tresVieux", NOW - 8 * H, "+262692000004"),    // en retard mais au-delà des 2 premiers → coupé
+      row("sansTel", NOW - 7 * H, null),                 // téléphone Velora vide → relayé (fallback GHL côté agent)
+      row("vieux", NOW - 6 * H, "+262692000002"),        // en retard mais au-delà des 2 premiers → coupé
+      row("moyen", NOW - 4 * H, "+262692000003"),        // idem
+      row("tresVieux", NOW - 8 * H, "+262692000004"),    // en retard → relayé
       row("sansDate", null, "+262692000005"),            // pas de date → exclu
     ] as any,
     NOW,
   );
-  expect(picked.map((r: any) => r.rdvId)).toEqual(["tresVieux", "vieux"]);
+  expect(picked.map((r: any) => r.rdvId)).toEqual(["tresVieux", "sansTel"]);
+});
+
+// ─── Réattribution GHL vue au moment de l'envoi ──────────────────────
+
+test("notifyAgent réaligne le commercial réattribué côté GHL et lui envoie le débrief", async () => {
+  arm();
+  process.env.HERMES_WEBHOOK_URL = "http://vps:9000/webhooks/veloradebrief";
+  process.env.HERMES_WEBHOOK_SECRET = "secret-webhook";
+  process.env.GHL_API_KEY = "pit-test";
+  process.env.GHL_LOCATION_ID = "loc-test";
+  const t = makeT();
+  const { rdvId, leadId, comId } = await seedRdv(t, { externalId: "evtGhl1" });
+  await t.run((ctx: any) => ctx.db.patch(comId, { ghlUserId: "ghl-ancien" }));
+  const nouveauId = await t.run((ctx: any) =>
+    ctx.db.insert("users", {
+      email: "n@e.fr",
+      name: "Com Nouveau",
+      role: "commercial",
+      active: true,
+      phone: "+262692000099",
+      ghlUserId: "ghl-nouveau",
+    }),
+  );
+  const fetchSpy = vi.fn(async (url: unknown) => {
+    if (String(url).includes("/calendars/events/appointments/evtGhl1")) {
+      return {
+        ok: true, status: 200, statusText: "OK",
+        text: async () => JSON.stringify({ appointment: { assignedUserId: "ghl-nouveau" } }),
+      };
+    }
+    return { ok: true, status: 200 };
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+  await t.action(internal.hermesDebrief.notifyAgent, { rdvId, link: "https://x/#/debrief/tok" });
+  const webhookCall = fetchSpy.mock.calls.find(([u]: any[]) => String(u).includes("veloradebrief"));
+  expect(webhookCall).toBeDefined();
+  const payload = JSON.parse((webhookCall![1] as any).body);
+  expect(payload.commercial).toMatchObject({ name: "Com Nouveau", phone: "+262692000099" });
+  const { rdv, lead } = await t.run(async (ctx: any) => ({
+    rdv: await ctx.db.get(rdvId),
+    lead: await ctx.db.get(leadId),
+  }));
+  expect(rdv.commercialId).toBe(nouveauId);
+  expect(lead.assignedToId).toBe(nouveauId);
+});
+
+test("notifyAgent garde le commercial connu si GHL est injoignable", async () => {
+  arm();
+  process.env.HERMES_WEBHOOK_URL = "http://vps:9000/webhooks/veloradebrief";
+  process.env.HERMES_WEBHOOK_SECRET = "secret-webhook";
+  process.env.GHL_API_KEY = "pit-test";
+  process.env.GHL_LOCATION_ID = "loc-test";
+  const t = makeT();
+  const { rdvId } = await seedRdv(t, { externalId: "evtGhl2" });
+  const fetchSpy = vi.fn(async (url: unknown) => {
+    if (String(url).includes("/calendars/events/appointments/")) throw new Error("ECONNRESET");
+    return { ok: true, status: 200 };
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+  await t.action(internal.hermesDebrief.notifyAgent, { rdvId, link: "https://x/#/debrief/tok" });
+  const webhookCall = fetchSpy.mock.calls.find(([u]: any[]) => String(u).includes("veloradebrief"));
+  expect(webhookCall).toBeDefined();
+  expect(JSON.parse((webhookCall![1] as any).body).commercial).toMatchObject({ name: "Com Un" });
 });

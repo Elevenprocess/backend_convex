@@ -9,10 +9,12 @@
  */
 
 import { v } from "convex/values";
-import { action, internalAction, internalQuery, mutation } from "./_generated/server";
+import { action, internalAction, internalQuery, mutation, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { requireHermesKey } from "./model/hermesAuth";
 import { signDebriefToken } from "./model/debriefLinkToken";
+import { ghlRequest, isGhlConfigured } from "./ghlClient";
 
 const DEFAULT_LOOKBACK_DAYS = 7;
 const DEFAULT_LIMIT = 50;
@@ -147,6 +149,68 @@ export const rowForRdv = internalQuery({
   },
 });
 
+// Id GHL du rendez-vous (bi-famille d'ids, cf. persistGhlEvents) et ghlUserId
+// du commercial actuellement stocké — de quoi détecter une réattribution GHL.
+export const rdvGhlInfo = internalQuery({
+  args: { rdvId: v.id("rdv") },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ ghlEventId: string | null; commercialGhlUserId: string | null } | null> => {
+    const r = await ctx.db.get(args.rdvId);
+    if (!r || r.deletedAt !== undefined) return null;
+    const commercial = r.commercialId !== undefined ? await ctx.db.get(r.commercialId) : null;
+    return {
+      ghlEventId: r.ghlEventId ?? r.externalId ?? null,
+      commercialGhlUserId: commercial?.ghlUserId ?? null,
+    };
+  },
+});
+
+// Compte Velora actif relié à un utilisateur GHL. Scan complet : users est
+// petite et ghlUserId n'a pas d'index (même approche que mappedCommercials).
+export const userByGhlUserId = internalQuery({
+  args: { ghlUserId: v.string() },
+  handler: async (ctx, args): Promise<{ userId: Id<"users"> } | null> => {
+    const users = await ctx.db.query("users").collect();
+    const match = users.find(
+      (u) => u.ghlUserId === args.ghlUserId && u.deletedAt === undefined && u.active !== false,
+    );
+    return match ? { userId: match._id } : null;
+  },
+});
+
+/**
+ * Réattributions faites côté Eleven Process (GHL) : relit l'assignedUserId du
+ * rendez-vous au moment de l'envoi et réaligne rdv.commercialId (+ owner du
+ * lead) si un autre commercial a été attribué depuis la dernière sync — le
+ * débrief part alors vers le nouveau commercial. Best-effort : GHL injoignable
+ * ou nouveau commercial non mappé → on garde le commercial connu.
+ */
+async function refreshCommercialFromGhl(ctx: ActionCtx, rdvId: Id<"rdv">): Promise<void> {
+  if (!isGhlConfigured()) return;
+  try {
+    const info = await ctx.runQuery(internal.hermesDebrief.rdvGhlInfo, { rdvId });
+    if (!info?.ghlEventId) return;
+    const raw = (await ghlRequest(
+      `/calendars/events/appointments/${encodeURIComponent(info.ghlEventId)}`,
+    )) as { appointment?: { assignedUserId?: string } } | null;
+    const assigned = raw?.appointment?.assignedUserId;
+    if (!assigned || assigned === info.commercialGhlUserId) return;
+    const mapped = await ctx.runQuery(internal.hermesDebrief.userByGhlUserId, { ghlUserId: assigned });
+    if (!mapped) return;
+    await ctx.runMutation(internal.ghlAppointments.applyReassignment, {
+      rdvId,
+      commercialId: mapped.userId,
+    });
+    console.log(`Débrief ${rdvId} : commercial réaligné sur l'attribution GHL (${assigned}).`);
+  } catch (err) {
+    console.warn(
+      `Réalignement commercial GHL avant débrief ${rdvId} ignoré : ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
 // Signature HMAC-SHA256 hex (style GitHub X-Hub-Signature-256) attendue par
 // le gateway webhook Hermes. crypto.subtle : runtime Convex sans crypto Node.
 async function hmacSha256Hex(payload: string, secret: string): Promise<string> {
@@ -171,6 +235,7 @@ export const notifyAgent = internalAction({
     const url = process.env.HERMES_WEBHOOK_URL;
     const secret = process.env.HERMES_WEBHOOK_SECRET;
     if (!url || !secret) return null;
+    await refreshCommercialFromGhl(ctx, args.rdvId);
     const row: DueRow | null = await ctx.runQuery(internal.hermesDebrief.rowForRdv, { rdvId: args.rdvId });
     if (!row) return null;
     const body = JSON.stringify({ event: "debrief.send", ...row, link: args.link });
@@ -204,15 +269,14 @@ const CATCHUP_MAX_PER_RUN = 2;
 const CATCHUP_STAGGER_MS = 3 * 60_000;
 
 /**
- * Sélection pure des débriefs à relayer par le cron de rattrapage. Exclut les
- * commerciaux sans téléphone Velora (ex. commercial indisponible — le flux
- * événementiel garde, lui, son fallback profil GHL) et ne garde que les RDV
+ * Sélection pure des débriefs à relayer par le cron de rattrapage : les RDV
  * finis depuis assez longtemps pour que le flux événementiel ait eu sa chance.
+ * Un téléphone Velora vide n'exclut plus : l'agent Hermes retrouve le numéro
+ * via le profil GHL, et sans lui ces débriefs restaient bloqués sans fin.
  */
 export function pickOverdueForRelay(rows: DueRow[], now: number): DueRow[] {
   return rows
     .filter((r) => r.scheduledAt !== null && r.scheduledAt + OVERDUE_AFTER_MS <= now)
-    .filter((r) => r.commercial.phone !== null)
     .sort((a, b) => (a.scheduledAt ?? 0) - (b.scheduledAt ?? 0))
     .slice(0, CATCHUP_MAX_PER_RUN);
 }
