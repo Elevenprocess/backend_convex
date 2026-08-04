@@ -66,6 +66,10 @@ export function mapGhlLeadPayload(p: Record<string, unknown>): MappedGhlLead {
     ...obj(p.attributionSource),
     ...obj(contact.attributionSource),
   };
+  // Les « Données personnalisées » d'une action Webhook GHL arrivent sous
+  // customData, pas à la racine — c'est par là que le workflow [01.2] relaie
+  // les UTM du simulateur (inboundWebhookRequest → customData).
+  const custom = obj(p.customData);
 
   // Source brute pour le mapping admin « Sources à classer » : à défaut de
   // source contact, le NOM DU WORKFLOW créateur (ex. « [01.2] New Lead |
@@ -78,9 +82,9 @@ export function mapGhlLeadPayload(p: Record<string, unknown>): MappedGhlLead {
   return {
     externalId,
     signals: {
-      fbclid: pick(p.fbclid, attr.fbclid),
-      gclid: pick(p.gclid, attr.gclid),
-      utmSource: pick(p.utm_source, p.utmSource, attr.utmSource, attr.utm_source),
+      fbclid: pick(p.fbclid, custom.fbclid, attr.fbclid),
+      gclid: pick(p.gclid, custom.gclid, attr.gclid),
+      utmSource: pick(p.utm_source, p.utmSource, custom.utm_source, custom.utmSource, attr.utmSource, attr.utm_source),
       medium: pick(p.medium, attr.medium),
       sessionSource: pick(p.session_source, p.sessionSource, attr.sessionSource, attr.session_source),
       canalAcquisition,
@@ -92,17 +96,17 @@ export function mapGhlLeadPayload(p: Record<string, unknown>): MappedGhlLead {
       addressLine: pick(p.address1, p.address),
       city: pick(p.city),
       postalCode: pick(p.postal_code, p.postalCode),
-      utmSource: pick(p.utm_source, p.utmSource, attr.utmSource, attr.utm_source),
-      utmMedium: pick(p.utm_medium, p.utmMedium, attr.utmMedium, attr.utm_medium),
-      utmCampaign: pick(p.utm_campaign, p.utmCampaign, attr.utmCampaign, attr.utm_campaign),
+      utmSource: pick(p.utm_source, p.utmSource, custom.utm_source, custom.utmSource, attr.utmSource, attr.utm_source),
+      utmMedium: pick(p.utm_medium, p.utmMedium, custom.utm_medium, custom.utmMedium, attr.utmMedium, attr.utm_medium),
+      utmCampaign: pick(p.utm_campaign, p.utmCampaign, custom.utm_campaign, custom.utmCampaign, attr.utmCampaign, attr.utm_campaign),
       // Nomenclature Meta convenue (2026-08-03) : utm_content = nom de la
       // créative — c'est la clé du rapport « Performance créative ».
-      utmContent: pick(p.utm_content, p.utmContent, attr.utmContent, attr.utm_content),
-      campaign: pick(p.campaign, attr.campaign),
-      adset: pick(p.adset),
-      ad: pick(p.ad),
+      utmContent: pick(p.utm_content, p.utmContent, custom.utm_content, custom.utmContent, attr.utmContent, attr.utm_content),
+      campaign: pick(p.campaign, custom.campaign, attr.campaign),
+      adset: pick(p.adset, custom.adset),
+      ad: pick(p.ad, custom.ad),
       canalAcquisition,
-      campaignId: pick(p.campaign_id, p.campaignId, attr.campaignId, attr.campaign_id),
+      campaignId: pick(p.campaign_id, p.campaignId, custom.campaign_id, custom.campaignId, attr.campaignId, attr.campaign_id),
       adsetId: pick(p.adset_id, p.adsetId, attr.adsetId, attr.adset_id),
       adId: pick(p.ad_id, p.adId, attr.adId, attr.ad_id),
       attributionMedium: pick(p.medium, attr.medium),

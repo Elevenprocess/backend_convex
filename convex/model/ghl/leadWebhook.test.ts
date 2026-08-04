@@ -115,6 +115,36 @@ describe("mapGhlLeadPayload", () => {
     expect(mapGhlLeadPayload({ utm_content: "Créa A" }).data.utmContent).toBe("Créa A");
   });
 
+  it("UTM sous customData captés (Données personnalisées du webhook [01.2], 2026-08-04)", () => {
+    // Payload réel : l'action Webhook GHL range ses paires jeton-valeur sous
+    // customData, la racine ne portant que les champs standard du contact.
+    const m = mapGhlLeadPayload({
+      contact_id: "WC7ikVxqoLcyrWh7pzJb",
+      attributionSource: {},
+      contact: { attributionSource: { sessionSource: "CRM Workflows", medium: "Manual" } },
+      customData: {
+        utm_source: "fb_ads",
+        utm_medium: "Broad 2554 | Réunion | Advantage+",
+        utm_campaign: "Offre 499€ | 3 kWc | 974",
+        utm_content: "Vidéo témoignage | V2",
+        campaign_id: "cmp_42",
+        fbclid: "IwAR123",
+      },
+    });
+    expect(m.data).toMatchObject({
+      utmSource: "fb_ads",
+      utmMedium: "Broad 2554 | Réunion | Advantage+",
+      utmCampaign: "Offre 499€ | 3 kWc | 974",
+      utmContent: "Vidéo témoignage | V2",
+      campaignId: "cmp_42",
+    });
+    expect(m.signals.fbclid).toBe("IwAR123");
+    // La racine reste prioritaire sur customData.
+    expect(
+      mapGhlLeadPayload({ utm_source: "racine", customData: { utm_source: "custom" } }).data.utmSource,
+    ).toBe("racine");
+  });
+
   it("canalAcquisition : repli sur le nom du workflow quand source absente", () => {
     expect(
       mapGhlLeadPayload({ workflow: { name: "[01.2] New Lead | Simulateur" } }).data.canalAcquisition,
