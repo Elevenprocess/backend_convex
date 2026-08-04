@@ -72,21 +72,16 @@ const ADMIN_COLUMNS: ColumnChoice[] = [
   { key: 'premierAppel', label: 'Premier appel (date/heure)' },
   { key: 'jourRelance', label: 'Jour de relance (from Appels)' },
   { key: 'nbAppelTotal', label: "Nb d'appel total" },
-  { key: 'appel5min', label: '1er appel < 5 min ?' },
-  { key: 'urlFormulaireAppel', label: 'URL formulaire appel' },
   { key: 'logAppel', label: 'Log appel' },
   { key: 'nbAppelsAujourdhui', label: "Nb appels aujourd'hui" },
   { key: 'recordId', label: 'Record ID' },
   { key: 'modification', label: 'Dernière modification' },
   { key: 'dernierAppel', label: 'Dernier appel (date/heure)' },
   { key: 'appelDate', label: "Date/heure de l'appel (from Appels)" },
-  { key: 'pctLeadAppele5min', label: '% lead appelé < 5min' },
   { key: 'jaugeAppels', label: 'Jauge appels (4/jour)' },
   { key: 'prochainRappel', label: 'Date/heure prochain rappel (à partir de Appels)' },
   { key: 'relanceMax', label: 'Jour relance max' },
   { key: 'jauge', label: 'Jauge 11 jours' },
-  { key: 'projets', label: 'Projets' },
-  { key: 'localisationMap', label: 'Localisation Map' },
   { key: 'contactId', label: 'Contact ID (GHL)' },
   { key: 'adresseComplete', label: 'Adresse complète' },
   { key: 'creation', label: 'Date de création' },
@@ -101,6 +96,9 @@ const ADMIN_DEFAULT_COLUMNS: ColumnKey[] = [
   'telephone',
   'statut',
   'leadGenere',
+  'source',
+  'adset',
+  'ad',
   'setter',
   'dernierAppel',
   'jaugeAppels',
@@ -513,7 +511,7 @@ function LeadsAdmin() {
   const [commercialFilter, setCommercialFilter] = useState('all')
   const [leadFilters, setLeadFilters] = useState<LeadListFilters>(DEFAULT_LEAD_FILTERS)
   const [openComment, setOpenComment] = useState<{ leadName: string; comment: string } | null>(null)
-  const [visibleColumns, setVisibleColumns] = useColumnVisibility('ecoi.leads.admin.columns.v6', ADMIN_COLUMNS, ADMIN_DEFAULT_COLUMNS)
+  const [visibleColumns, setVisibleColumns] = useColumnVisibility('ecoi.leads.admin.columns.v7', ADMIN_COLUMNS, ADMIN_DEFAULT_COLUMNS)
   const selectedId = useLeadSidebar((s) => s.selectedLeadId)
   const selectLead = useLeadSidebar((s) => s.selectLead)
   const clearLead = useLeadSidebar((s) => s.clearLead)
@@ -1022,11 +1020,6 @@ function formatDays(days: number | null | undefined): string {
   return `${Math.max(0, days)}j`
 }
 
-function yesNo(value: boolean | null | undefined): React.ReactNode {
-  if (value === null || value === undefined) return <span className="text-faint">—</span>
-  return <span className={`status-badge ${value ? 'bg-success-tint text-success' : 'bg-rouille-tint text-rouille'}`}>{value ? 'Oui' : 'Non'}</span>
-}
-
 function kpiSummary(l: Pick<LeadResponse, 'callCount' | 'callsToday' | 'revenuFiscal'>): string {
   const parts = [`${l.callCount ?? 0} appels`, `${l.callsToday ?? 0}/4 aujourd'hui`]
   if (l.revenuFiscal !== null && l.revenuFiscal !== undefined) parts.push(`RFR ${l.revenuFiscal.toLocaleString('fr-FR')}`)
@@ -1164,21 +1157,16 @@ function renderAdminHeader(key: ColumnKey, sort?: { callbackDir: CallbackSort; o
     case 'premierAppel': return <Th key={key} className="w-[180px]">PREMIER APPEL</Th>
     case 'jourRelance': return <Th key={key} className="w-[170px]">JOUR DE RELANCE</Th>
     case 'nbAppelTotal': return <Th key={key} className="w-[140px]">NB D'APPEL TOTAL</Th>
-    case 'appel5min': return <Th key={key} className="w-[150px]">1ER APPEL &lt; 5 MIN ?</Th>
-    case 'urlFormulaireAppel': return <Th key={key} className="w-[190px]">URL FORMULAIRE APPEL</Th>
     case 'logAppel': return <Th key={key} className="w-[120px]">LOG APPEL</Th>
     case 'nbAppelsAujourdhui': return <Th key={key} className="w-[150px]">NB APPELS AUJOURD'HUI</Th>
     case 'recordId': return <Th key={key} className="w-[180px]">RECORD ID</Th>
     case 'modification': return <Th key={key} className="w-[180px]">DERNIÈRE MODIFICATION</Th>
     case 'dernierAppel': return <Th key={key} className="w-[180px]">DERNIER APPEL</Th>
     case 'appelDate': return <Th key={key} className="w-[190px]">DATE/HEURE DE L'APPEL</Th>
-    case 'pctLeadAppele5min': return <Th key={key} className="w-[160px]">% LEAD APPELÉ &lt; 5MIN</Th>
     case 'jaugeAppels': return <Th key={key} className="w-[160px]">JAUGE APPELS (4/JOUR)</Th>
     case 'prochainRappel': return <SortableTh key={key} className="w-[220px]" dir={sort?.callbackDir ?? null} onToggle={sort?.onToggleCallback}>DATE/HEURE PROCHAIN RAPPEL</SortableTh>
     case 'relanceMax': return <Th key={key} className="w-[160px]">JOUR RELANCE MAX</Th>
     case 'jauge': return <Th key={key} className="w-[170px]">JAUGE 11 JOURS</Th>
-    case 'projets': return <Th key={key} className="w-[160px]">PROJETS</Th>
-    case 'localisationMap': return <Th key={key} className="w-[220px]">LOCALISATION MAP</Th>
     case 'contactId': return <Th key={key} className="w-[180px]">CONTACT ID (GHL)</Th>
     case 'adresseComplete': return <Th key={key} className="w-[260px]">ADRESSE COMPLÈTE</Th>
     case 'creation': return <Th key={key} className="w-[160px]">DATE DE CRÉATION</Th>
@@ -1224,21 +1212,16 @@ function renderAdminCell(
     case 'premierAppel': return <Td key={key} className="text-faint">{lastCallDateTime(lead.firstCallAt ?? null)}</Td>
     case 'jourRelance': return <Td key={key} className="text-faint">{formatDays(lead.joursRelance)}</Td>
     case 'nbAppelTotal': return <Td key={key} className="text-faint">{lead.callCount ?? 0}</Td>
-    case 'appel5min': return <Td key={key}>{yesNo(lead.firstCallUnderFiveMin)}</Td>
-    case 'urlFormulaireAppel': return <Td key={key} className="text-faint">—</Td>
     case 'logAppel': return <Td key={key}><LeadCommentButton comment={lead.latestCallComment} leadName={fullName(lead)} onOpen={setOpenComment} /></Td>
     case 'nbAppelsAujourdhui': return <Td key={key} className="text-faint">{lead.callsToday ?? 0}</Td>
     case 'recordId': return <Td key={key} className="text-muted truncate" title={lead.externalId ?? lead.id}>{lead.externalId ?? lead.id}</Td>
     case 'modification': return <Td key={key} className="text-faint">{fullDateTime(lead.updatedAt)}</Td>
     case 'dernierAppel': return <Td key={key} className="text-faint">{lastCallDateTime(lead.latestCallAt ?? lead.lastContactAt)}</Td>
     case 'appelDate': return <Td key={key} className="text-faint">{lastCallDateTime(lead.latestCallAt ?? lead.lastContactAt)}</Td>
-    case 'pctLeadAppele5min': return <Td key={key}>{yesNo(lead.firstCallUnderFiveMin)}</Td>
     case 'jaugeAppels': return <Td key={key}><DailyCallGauge count={lead.callsToday ?? 0} /></Td>
     case 'prochainRappel': return <Td key={key} className="text-faint">{lastCallDateTime(lead.nextCallbackAt ?? null)}</Td>
     case 'relanceMax': return <Td key={key} className="text-faint">{formatDays(lead.joursRelance)}</Td>
     case 'jauge': return <Td key={key}><ElevenDayGauge jours={lead.joursRelance} /></Td>
-    case 'projets': return <Td key={key} className="text-muted truncate" title={lead.typeLogement ?? undefined}>{lead.typeLogement ?? '—'}</Td>
-    case 'localisationMap': return <Td key={key} className="text-muted truncate" title={lead.localisationMap ?? undefined}>{lead.localisationMap ?? '—'}</Td>
     case 'contactId': return <Td key={key} className="text-muted truncate" title={lead.externalId ?? undefined}>{lead.externalId ?? '—'}</Td>
     case 'adresseComplete': return <Td key={key} className="text-muted truncate" title={addressFull(lead)}>{addressFull(lead)}</Td>
     case 'creation': return <Td key={key} className="text-faint">{shortDate(lead.createdAt)}</Td>
