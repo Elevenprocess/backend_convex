@@ -2,9 +2,15 @@
  * Client HTTP GoHighLevel partagé (Tranche 8b, réutilisé 8c/8d).
  * GET = 2 tentatives (retry sur erreur réseau et réponse 5xx — GHL renvoie
  * parfois « Command timed out » en 5xx transitoire), timeout 15 s ;
- * mutation = 1 tentative, timeout 8 s. Module simple — pas de fonctions
- * Convex ici, uniquement importé par des actions.
+ * mutation = 1 tentative, timeout 8 s — sauf 429 (rate limit) : GHL rejette
+ * la requête AVANT de la traiter, donc rejouer un POST est sans risque de
+ * doublon → jusqu'à 3 tentatives espacées pour toutes les méthodes.
+ * Les erreurs remontées aux setters sont en français clair (ConvexError,
+ * donc visibles même en prod) ; le détail technique part dans les logs.
+ * Module simple — pas de fonctions Convex ici, uniquement importé par des actions.
  */
+
+import { ConvexError } from "convex/values";
 
 const RETRYABLE_FETCH_CODES = new Set([
   "ECONNRESET", "ETIMEDOUT", "EAI_AGAIN", "ENOTFOUND",
@@ -14,7 +20,29 @@ const RETRYABLE_FETCH_CODES = new Set([
 
 type ErrorWithCause = Error & { code?: string; cause?: { code?: string; name?: string; message?: string } };
 
-export class GhlApiError extends Error {}
+export class GhlApiError extends ConvexError<string> {}
+
+/** Message lisible pour les setters selon le statut HTTP GHL. */
+export function friendlyGhlHttpMessage(status: number, detail?: string): string {
+  if (status === 429) {
+    return "Trop de demandes en même temps vers le CRM : patiente quelques secondes puis réessaie.";
+  }
+  if (status === 401 || status === 403) {
+    return "Accès au CRM refusé (jeton expiré ou permissions). Préviens un administrateur.";
+  }
+  if (status >= 500) {
+    return "Le CRM (GHL) est momentanément indisponible. Réessaie dans un instant.";
+  }
+  // 4xx métier (créneau plus dispo, donnée invalide…) : le détail GHL est utile.
+  return `Le CRM a refusé la demande${detail ? ` : ${detail}` : ""}. Vérifie les infos saisies puis réessaie.`;
+}
+
+const FRIENDLY_NETWORK_MESSAGE =
+  "Connexion au CRM impossible (réseau lent ou coupé). Vérifie ta connexion internet puis réessaie — si ça persiste, actualise la page.";
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export function safeJson(text: string): unknown {
   try { return JSON.parse(text); } catch { return text; }
@@ -83,10 +111,12 @@ export async function ghlRequest(
 
   const method = opts.method ?? "GET";
   const isMutation = method !== "GET";
+  // 429 : GHL rejette avant traitement → rejouable sans doublon, même en POST.
+  const maxRateLimitAttempts = 3;
   const maxAttempts = isMutation ? 1 : 2;
   const timeoutMs = isMutation ? 8_000 : 15_000;
   let lastError: unknown;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  for (let attempt = 1; attempt <= Math.max(maxAttempts, maxRateLimitAttempts); attempt++) {
     try {
       const res = await fetch(url.toString(), {
         method,
@@ -102,7 +132,14 @@ export async function ghlRequest(
       const text = await res.text();
       const data = text ? safeJson(text) : null;
       if (!res.ok) {
-        const apiError = new GhlApiError(`Erreur GHL: ${extractMessage(data) || `${res.status} ${res.statusText}`}`);
+        const detail = extractMessage(data) || `${res.status} ${res.statusText}`;
+        console.error(`GHL ${method} ${path} → ${res.status} (tentative ${attempt}) : ${detail}`);
+        if (res.status === 429 && attempt < maxRateLimitAttempts) {
+          lastError = new GhlApiError(friendlyGhlHttpMessage(429));
+          await sleep(1_500 * attempt);
+          continue;
+        }
+        const apiError = new GhlApiError(friendlyGhlHttpMessage(res.status, detail));
         if (attempt < maxAttempts && isRetryableHttpStatus(res.status)) {
           lastError = apiError;
           continue;
@@ -113,9 +150,10 @@ export async function ghlRequest(
     } catch (error) {
       if (error instanceof GhlApiError) throw error;
       lastError = error;
+      console.error(`GHL ${method} ${path} injoignable (tentative ${attempt}) : ${describeFetchError(error)}`);
       if (attempt < maxAttempts && isRetryableFetchError(error)) continue;
-      throw new Error(`Erreur GHL fetch (${method} ${path}): ${describeFetchError(error)}`);
+      throw new GhlApiError(FRIENDLY_NETWORK_MESSAGE);
     }
   }
-  throw lastError instanceof Error ? lastError : new Error("Erreur GHL inconnue");
+  throw lastError instanceof Error ? lastError : new GhlApiError(FRIENDLY_NETWORK_MESSAGE);
 }

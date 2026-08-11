@@ -16,7 +16,7 @@ import {
   type UserResponse,
 } from '../lib/types'
 import { useCall, type CallState } from '../lib/call'
-import { useCallLogs, useRdvList, useStartCall, createCallLog, createRdv, updateLead, updateGhlAppointment, useGhlCalendarConfig, useGhlFreeSlots, createGhlAppointment, syncLeadGhlCalendarEvents, type GhlCalendarEvent } from '../lib/hooks'
+import { useCallLogs, useRdvList, useStartCall, createCallLog, createRdv, updateLead, updateGhlAppointment, useGhlCalendarConfig, useGhlFreeSlots, createGhlAppointment, syncLeadGhlCalendarEvents, humanizeError, type GhlCalendarEvent } from '../lib/hooks'
 import { useAuth } from '../lib/auth'
 import { leadDetailPath } from '../lib/leadPaths'
 import { sectorFromCity } from '../lib/sector'
@@ -338,7 +338,7 @@ function InfosTab({ lead, userMap, onSaved }: { lead: LeadResponse; userMap?: Ma
       onSaved?.()
       setEditing(false)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur inconnue')
+      setError(humanizeError(e, 'Erreur inconnue'))
     } finally {
       setSaving(false)
     }
@@ -718,7 +718,7 @@ function EditRdvForm({ rdv, lead, onCancel, onSaved }: { rdv: RdvResponse; lead:
       await updateGhlAppointment(rdv.id, payload)
       onSaved()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Modification impossible')
+      setError(humanizeError(e, 'Modification impossible'))
     } finally {
       setSaving(false)
     }
@@ -1155,7 +1155,7 @@ function NotesTab({
       }
       onSaved?.()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Action impossible')
+      setError(humanizeError(e, 'Action impossible'))
     } finally {
       setSaving(false)
     }
@@ -1220,7 +1220,7 @@ function NotesTab({
       setStep('done')
       onSaved?.()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Validation impossible')
+      setError(humanizeError(e, 'Validation impossible'))
     } finally {
       setSaving(false)
     }

@@ -69,6 +69,34 @@ type Async<T> = {
   refetch: () => void
 }
 
+// ─── Erreurs lisibles pour les setters ───────────────────────────────────────
+// Les actions Convex remontent des messages habillés (« [CONVEX A(...)]
+// [Request ID: …] Server Error Uncaught Error: … at handler (…) ») que les
+// setters ne peuvent pas interpréter. On extrait le message utile (le backend
+// envoie maintenant des ConvexError en français clair via `data`) et on traduit
+// les cas techniques restants en consignes actionnables.
+export function humanizeError(e: unknown, fallback = 'Une erreur est survenue. Actualise la page puis réessaie.'): string {
+  const data = (e as { data?: unknown } | null)?.data
+  let msg = typeof data === 'string' && data.trim()
+    ? data.trim()
+    : e instanceof Error ? e.message : String(e ?? '')
+  msg = msg
+    .replace(/\[CONVEX [^\]]*\]\s*/g, '')
+    .replace(/\[Request ID: [^\]]*\]\s*/g, '')
+    .replace(/Server Error\s*/gi, '')
+    .replace(/Uncaught (?:Convex)?Error:\s*/gi, '')
+  // Coupe la stack trace éventuelle (« … at ghlRequest (../convex/… ») .
+  msg = (msg.split('\n')[0] ?? '').split(/\s+at\s+(?:async\s+)?[\w$.[\]<>]*\s*\(/)[0].trim()
+  if (!msg) return fallback
+  if (/too many requests/i.test(msg)) {
+    return 'Trop de demandes en même temps : patiente quelques secondes puis réessaie.'
+  }
+  if (/failed to fetch|networkerror|network error|fetch failed|load failed|erreur ghl fetch|econnreset|timed?\s?out/i.test(msg)) {
+    return 'Problème de connexion : vérifie ta connexion internet puis réessaie. Si ça persiste, actualise la page.'
+  }
+  return msg
+}
+
 // `backgroundLoading` = phase 2 (full hydration) still running, phase 1 data is already on screen.
 // `loadMore`/`canLoadMore` = chargement fenêtré piloté par le scroll (mode Convex) :
 //   la liste ne charge la fenêtre suivante que quand on approche du bas. Absents/no-op

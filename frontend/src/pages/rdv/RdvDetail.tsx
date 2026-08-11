@@ -4,7 +4,7 @@ import { AppShell } from '../../components/shell/AppShell'
 import { Topbar } from '../../components/shell/Topbar'
 import { Icon } from '../../components/Icon'
 import { LoadingScreen } from '../../components/Spinner'
-import { useRdv, useLead, useUsers, useCallLogs, reassignGhlAppointment } from '../../lib/hooks'
+import { useRdv, useLead, useUsers, useCallLogs, reassignGhlAppointment, humanizeError } from '../../lib/hooks'
 import { useRole } from '../../lib/role'
 import { RdvReceptionFlagModal } from '../../components/rdv/RdvReceptionFlagModal'
 import {
@@ -90,7 +90,7 @@ export function RdvDetail() {
       await reassignGhlAppointment(rdv.id, selectedCommercial)
       setEditingCommercial(false)
     } catch (err) {
-      setReassignError(err instanceof Error ? err.message : String(err))
+      setReassignError(humanizeError(err, 'Réassignation impossible'))
     } finally {
       setReassignBusy(false)
     }

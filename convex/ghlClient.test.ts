@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractMessage, isRetryableFetchError, isRetryableHttpStatus, safeJson } from "./ghlClient";
+import { extractMessage, friendlyGhlHttpMessage, isRetryableFetchError, isRetryableHttpStatus, safeJson } from "./ghlClient";
 
 describe("ghlClient purs", () => {
   it("safeJson : JSON valide parsé, invalide → texte brut", () => {
@@ -19,6 +19,13 @@ describe("ghlClient purs", () => {
     expect(isRetryableHttpStatus(429)).toBe(false);
     expect(isRetryableHttpStatus(404)).toBe(false);
     expect(isRetryableHttpStatus(200)).toBe(false);
+  });
+  it("friendlyGhlHttpMessage : messages setters en français clair par statut", () => {
+    expect(friendlyGhlHttpMessage(429)).toContain("patiente quelques secondes");
+    expect(friendlyGhlHttpMessage(401)).toContain("administrateur");
+    expect(friendlyGhlHttpMessage(403)).toContain("administrateur");
+    expect(friendlyGhlHttpMessage(500)).toContain("momentanément indisponible");
+    expect(friendlyGhlHttpMessage(422, "slot no longer available")).toContain("slot no longer available");
   });
   it("isRetryableFetchError : codes réseau, TimeoutError, cause imbriquée", () => {
     expect(isRetryableFetchError(Object.assign(new Error("x"), { code: "ECONNRESET" }))).toBe(true);
