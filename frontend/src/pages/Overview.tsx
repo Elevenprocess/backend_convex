@@ -1070,7 +1070,7 @@ function OverviewAdmin() {
             prospects={stats.funnelProspects}
             title="Prospects avec RDV"
             subtitle="Liste complète des prospects qualifiés · commercial assigné + setter qualifiant"
-            limit={20}
+            limit={Infinity}
             className="overview-admin-prospects"
           />
           </section>
@@ -1568,7 +1568,7 @@ function CommercialQualifiedProspects({ prospects, title = 'Prospects qualifiés
       <div className="commercial-qualified-list-body">
         {prospects.length === 0 ? (
           <div className="text-xs text-faint">Aucun prospect qualifié sur cette période.</div>
-        ) : prospects.slice(0, limit).map((prospect) => (
+        ) : (Number.isFinite(limit) ? prospects.slice(0, limit) : prospects).map((prospect) => (
           <div key={prospect.id} className="commercial-qualified-row">
             <div className="overview-role-avatar">{userInitials(prospect.name)}</div>
             <div>
