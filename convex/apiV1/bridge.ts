@@ -84,13 +84,16 @@ export const SERVICE_NAME = "Agent API";
 export const actorValidator = v.object({
   source: v.string(),
   serviceUserId: v.id("users"),
-  actingAsUserId: v.optional(v.id("users")),
+  // Chaîne brute du header X-Acting-As : normalisée ici pour renvoyer un
+  // message clair plutôt qu'une erreur de validateur.
+  actingAsUserId: v.optional(v.string()),
 });
-export type ActorArgs = { source: string; serviceUserId: Id<"users">; actingAsUserId?: Id<"users"> };
+export type ActorArgs = { source: string; serviceUserId: Id<"users">; actingAsUserId?: string };
 
 async function resolveActor(ctx: QueryCtx | MutationCtx, a: ActorArgs): Promise<ServiceActor> {
   if (a.actingAsUserId) {
-    const u = await ctx.db.get(a.actingAsUserId);
+    const id = ctx.db.normalizeId("users", a.actingAsUserId);
+    const u = id ? await ctx.db.get(id) : null;
     if (!u || u.deletedAt !== undefined) throw new Error("X-Acting-As : utilisateur introuvable");
     if (u.active === false) throw new Error("X-Acting-As : compte désactivé");
     if (u.isService) throw new Error("X-Acting-As : compte de service non autorisé");

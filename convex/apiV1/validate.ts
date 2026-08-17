@@ -80,3 +80,75 @@ export function validateArgs(exportedArgsJson: string, args: unknown): void {
   const validator = JSON.parse(exportedArgsJson) as JsonValidator;
   validateValue(validator, args ?? {});
 }
+
+// ─── Coercion des query params (chaînes) vers les types attendus ─────────────
+
+function acceptsType(v: JsonValidator, t: string): boolean {
+  if (v.type === t) return true;
+  if (v.type === "union") return v.value.some((x) => acceptsType(x, t));
+  return false;
+}
+
+/**
+ * Convertit une valeur brute de query string selon le validateur du champ :
+ * "12" → 12 si un nombre est accepté, "true"/"false" → booléen, "null" → null,
+ * "a,b" → tableau. Laisse la chaîne telle quelle sinon (littéraux, ids…).
+ */
+export function coerceValue(v: JsonValidator, raw: string): unknown {
+  if (v.type === "array") return raw === "" ? [] : raw.split(",").map((x) => coerceValue(v.value, x.trim()));
+  if (acceptsType(v, "null") && raw === "null") return null;
+  if (acceptsType(v, "boolean") && (raw === "true" || raw === "false")) return raw === "true";
+  if (acceptsType(v, "number") && /^-?\d+(\.\d+)?$/.test(raw)) return Number(raw);
+  if (v.type === "object" || v.type === "any") {
+    try { return JSON.parse(raw); } catch { return raw; }
+  }
+  return raw;
+}
+
+/** Champs de premier niveau d'un validateur objet (vide pour `any`). */
+export function topLevelFields(exportedArgsJson: string): Record<string, { fieldType: JsonValidator; optional?: boolean }> {
+  const v = JSON.parse(exportedArgsJson) as JsonValidator;
+  return v.type === "object" ? v.value : {};
+}
+
+/** Coerce un objet {champ: chaîne} (query params) selon le validateur des args. */
+export function coerceQuery(exportedArgsJson: string, raw: Record<string, string>): Record<string, unknown> {
+  const fields = topLevelFields(exportedArgsJson);
+  const out: Record<string, unknown> = {};
+  for (const [k, s] of Object.entries(raw)) out[k] = fields[k] ? coerceValue(fields[k].fieldType, s) : s;
+  return out;
+}
+
+// ─── JSON Schema (OpenAPI) ───────────────────────────────────────────────────
+
+export function toJsonSchema(v: JsonValidator): Record<string, unknown> {
+  switch (v.type) {
+    case "any": return {};
+    case "null": return { type: "null" };
+    case "number": return { type: "number" };
+    case "bigint": return { type: "integer" };
+    case "boolean": return { type: "boolean" };
+    case "string": return { type: "string" };
+    case "bytes": return { type: "string", format: "binary" };
+    case "literal": return { const: v.value };
+    case "id": return { type: "string", description: `Identifiant ${v.tableName}` };
+    case "array": return { type: "array", items: toJsonSchema(v.value) };
+    case "record": return { type: "object", additionalProperties: toJsonSchema(v.values.fieldType) };
+    case "union": {
+      const lits = v.value.filter((x) => x.type === "literal") as Array<{ type: "literal"; value: unknown }>;
+      if (lits.length === v.value.length) return { enum: lits.map((l) => l.value) };
+      return { anyOf: v.value.map(toJsonSchema) };
+    }
+    case "object": {
+      const properties: Record<string, unknown> = {};
+      const required: string[] = [];
+      for (const [k, { fieldType, optional }] of Object.entries(v.value)) {
+        properties[k] = toJsonSchema(fieldType);
+        if (!optional) required.push(k);
+      }
+      return { type: "object", properties, ...(required.length ? { required } : {}), additionalProperties: false };
+    }
+  }
+}
+
+export type { JsonValidator };

@@ -19,6 +19,7 @@ import type * as apiV1__generated_shim from "../apiV1/_generated_shim.js";
 import type * as apiV1_bridge from "../apiV1/bridge.js";
 import type * as apiV1_router from "../apiV1/router.js";
 import type * as apiV1_routes from "../apiV1/routes.js";
+import type * as apiV1_validate from "../apiV1/validate.js";
 import type * as auth from "../auth.js";
 import type * as callLogs from "../callLogs.js";
 import type * as clients from "../clients.js";
@@ -124,6 +125,7 @@ declare const fullApi: ApiFromModules<{
   "apiV1/bridge": typeof apiV1_bridge;
   "apiV1/router": typeof apiV1_router;
   "apiV1/routes": typeof apiV1_routes;
+  "apiV1/validate": typeof apiV1_validate;
   auth: typeof auth;
   callLogs: typeof callLogs;
   clients: typeof clients;

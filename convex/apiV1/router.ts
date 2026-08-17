@@ -12,7 +12,8 @@ import type { ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { hashToken, TOKEN_PREFIX } from "../model/apiTokenCrypto";
 import { API_DOMAINS, expandScopes, hasScope, type ApiAccess, type ApiDomain } from "../model/apiScopes";
-import { kindOf, type ActorArgs } from "./bridge";
+import { kindOf, REGISTRY, type ActorArgs } from "./bridge";
+import { toJsonSchema, topLevelFields } from "./validate";
 
 export type RouteScope = `${ApiDomain}:${ApiAccess}`;
 export type ApiMethod = "GET" | "POST" | "PATCH" | "DELETE";
@@ -37,6 +38,8 @@ export type RouteDef = {
   /** Scope requis ; `null` = accessible à toute clé valide (ex. /me). */
   scope: RouteScope | null;
   summary: string;
+  /** Fonction métier pontée (`module.fn`) : sert à documenter les paramètres. */
+  fn?: string;
   /** Documentation OpenAPI facultative des paramètres de query. */
   queryParams?: Record<string, string>;
   handler: (ctx: ActionCtx, req: ApiRequest) => Promise<unknown>;
@@ -160,7 +163,7 @@ export function createApiHandler(routes: readonly RouteDef[]) {
       const actor: ActorArgs = {
         source: `Clé API : ${token.name}`,
         serviceUserId,
-        ...(actingAs ? { actingAsUserId: actingAs as ActorArgs["actingAsUserId"] } : {}),
+        ...(actingAs ? { actingAsUserId: actingAs } : {}),
       };
 
       const result = await route.handler(ctx, { token, actor, params, query: url.searchParams, body, now, raw: req });
@@ -216,9 +219,37 @@ export function buildOpenApi(routes: readonly RouteDef[], baseUrl: string) {
     const pathParams = [...r.path.matchAll(/:(\w+)/g)].map((m) => ({
       name: m[1], in: "path", required: true, schema: { type: "string" },
     }));
-    const queryParams = Object.entries(r.queryParams ?? {}).map(([name, description]) => ({
+    const queryParams: Array<Record<string, unknown>> = Object.entries(r.queryParams ?? {}).map(([name, description]) => ({
       name, in: "query", required: false, description, schema: { type: "string" },
     }));
+    let bodySchema: Record<string, unknown> | undefined;
+    if (r.fn && REGISTRY[r.fn]?.exportArgs) {
+      const fields = topLevelFields(REGISTRY[r.fn].exportArgs!());
+      const pathNames = new Set(pathParams.map((p) => p.name));
+      const bodyProps: Record<string, unknown> = {};
+      const bodyRequired: string[] = [];
+      for (const [name, { fieldType, optional }] of Object.entries(fields)) {
+        if (pathNames.has(name)) continue;
+        if (name === "paginationOpts") {
+          if (r.method === "GET") queryParams.push(
+            { name: "limit", in: "query", required: false, description: "Taille de page (1-200, défaut 50)", schema: { type: "integer" } },
+            { name: "cursor", in: "query", required: false, description: "Curseur `nextCursor` de la page précédente", schema: { type: "string" } },
+          );
+          continue;
+        }
+        const injected = name === "now" || name === "today" || name === "todayStart";
+        if (r.method === "GET") {
+          queryParams.push({
+            name, in: "query", required: !optional && !injected, schema: toJsonSchema(fieldType),
+            ...(injected ? { description: "Injecté automatiquement (heure serveur / date Réunion) si absent" } : {}),
+          });
+        } else {
+          bodyProps[name] = toJsonSchema(fieldType);
+          if (!optional && !injected) bodyRequired.push(name);
+        }
+      }
+      if (r.method !== "GET") bodySchema = { type: "object", properties: bodyProps, ...(bodyRequired.length ? { required: bodyRequired } : {}) };
+    }
     const op: Record<string, unknown> = {
       operationId: `${r.method.toLowerCase()}_${r.path.replace(/[/:]+/g, "_").replace(/^_|_$/g, "") || "root"}`,
       summary: r.summary,
@@ -234,8 +265,9 @@ export function buildOpenApi(routes: readonly RouteDef[], baseUrl: string) {
       },
     };
     if (r.method !== "GET") {
-      op.requestBody = { required: false, content: { "application/json": { schema: { type: "object" } } } };
+      op.requestBody = { required: false, content: { "application/json": { schema: bodySchema ?? { type: "object" } } } };
     }
+    if (r.fn) op["x-convex-function"] = r.fn;
     (paths[oaPath] ??= {})[r.method.toLowerCase()] = op;
   }
   return {
