@@ -838,6 +838,7 @@ export type ActivityListArgs = {
   actorId?: string
   domain?: ActivityDomain
   entityType?: string
+  actorRoles?: string[]
   leadId?: string
   clientId?: string
   search?: string
