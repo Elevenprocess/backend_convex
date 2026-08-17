@@ -9,7 +9,6 @@ import { leadDetailPath } from '../lib/leadPaths'
 import { useDisplayUser } from '../lib/role'
 import { useCallLogs, useClients, useLeads, useLeadStats, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary, useCommercialObjectives, useDebriefAnalytics, useSetterLeaderboard, prefetchAnalyticsFunnel, prefetchAnalyticsSummary, type DebriefAnalyticsResponse } from '../lib/hooks'
 import { STATUS_LABEL, DEBRIEF_ACCEPTANCE_FACTOR_LABEL, DEBRIEF_NON_SALE_REASON_LABEL, fullName, initials, type AnalyticsAdminSummary, type AnalyticsFunnelResponse, type CallLogResponse, type CommercialObjectiveResponse, type DebriefAcceptanceFactor, type DebriefNonSaleReason, type LeadResponse, type LeadStatus, type RdvResponse, type RdvLeadSummary, type UserResponse } from '../lib/types'
-import { CommercialLeaderboard, type LeaderboardRow } from '../components/overview/CommercialLeaderboard'
 import { ObjectivesEditorModal } from '../components/overview/ObjectivesEditorModal'
 import { TerrainMonthlyChart } from '../components/overview/TerrainMonthlyChart'
 import { computeTechnicienStats, computeTerrainPipeline, selectUnassignedVt, type TechnicienStat } from '../lib/technicienStats'
@@ -639,13 +638,15 @@ function OverviewCommercialSolo() {
 }
 
 // ----- F3 ter : responsable commercial (commercial_lead) — pilotage équipe -----
-// Vue manager : KPIs équipe avec atteinte d'objectif, classement des commerciaux,
-// édition des objectifs mensuels (persistés en base) et débriefs à remplir.
+// Vue manager alignée sur l'admin : KPI du jour (RDV, débriefs remplis / non
+// remplis, CA de vente), liste complète des prospects avec RDV (commercial +
+// setter), RDV du jour et prochains RDV ; édition des objectifs mensuels.
+// Période par défaut : aujourd'hui.
 function OverviewCommercialLead() {
   const navigate = useNavigate()
   const display = useDisplayUser()
   const [tab, setTab] = useState('overview')
-  const [period, setPeriod] = useState<FunnelPeriodState>({ ...DEFAULT_FUNNEL_PERIOD, mode: 'this_month' })
+  const [period, setPeriod] = useState<FunnelPeriodState>(DEFAULT_FUNNEL_PERIOD)
   const range = buildFunnelPeriodRange(period)
   const [objOpen, setObjOpen] = useState(false)
 
@@ -679,33 +680,6 @@ function OverviewCommercialLead() {
     return { ca, signed, honored, closing }
   }, [commercials])
 
-  // Objectif équipe = somme des objectifs des commerciaux (closing = moyenne).
-  const targets = useMemo(() => {
-    let ca = 0, ventes = 0, rdv = 0, closingSum = 0, closingCount = 0
-    for (const o of objectives ?? []) {
-      ca += o.caTarget ?? 0
-      ventes += o.ventesTarget ?? 0
-      rdv += o.rdvTarget ?? 0
-      if (o.closingTarget != null) { closingSum += o.closingTarget; closingCount++ }
-    }
-    return { ca, ventes, rdv, closing: closingCount ? Math.round(closingSum / closingCount) : 0 }
-  }, [objectives])
-
-  // Photo de profil par commercial : l'annuaire (useUsers) porte l'image, pas le
-  // classement (AnalyticsCommercialPerf). On la rattache par id pour afficher la
-  // vraie photo plutôt que les initiales dans le board.
-  const avatarByCommercial = useMemo(() => {
-    const m = new Map<string, string | null>()
-    for (const u of users ?? []) m.set(u.id, u.image)
-    return m
-  }, [users])
-
-  const leaderboardRows: LeaderboardRow[] = commercials.map((perf) => ({
-    perf,
-    objective: objByCommercial.get(perf.id) ?? null,
-    avatarUrl: avatarByCommercial.get(perf.id) ?? null,
-  }))
-
   const { upcoming } = useMemo(() => {
     const list = rdvs ?? []
     const leadById = new Map((allLeads ?? []).map((l) => [l.id, l]))
@@ -725,9 +699,25 @@ function OverviewCommercialLead() {
       .filter((p) => (p.scheduledAt ?? '').slice(0, 10) === todayIso)
   }, [rdvs, allLeads, users])
 
-  const caPct = targets.ca > 0 ? Math.round((team.ca / targets.ca) * 100) : undefined
-  const ventesPct = targets.ventes > 0 ? Math.round((team.signed / targets.ventes) * 100) : undefined
-  const rdvPct = targets.rdv > 0 ? Math.round((team.honored / targets.rdv) * 100) : undefined
+  // Liste complète des prospects avec RDV (même carte que l'admin).
+  const funnelProspects = useMemo(
+    () => adminFunnelProspects(rdvs ?? [], allLeads ?? [], users ?? []),
+    [rdvs, allLeads, users],
+  )
+
+  // KPI de la période (défaut : aujourd'hui) : RDV planifiés/honorés, débriefs
+  // remplis vs non remplis (RDV honorés sans débrief), CA de vente (summary).
+  const periodKpis = useMemo(() => {
+    const inRange = (rdvs ?? []).filter((r) => {
+      const at = r.scheduledAt ?? ''
+      return at >= range.from && at <= range.to && r.status !== 'annule'
+    })
+    const rdvCount = inRange.length
+    const filled = inRange.filter((r) => Boolean(r.debriefFilledAt)).length
+    const notFilled = inRange.filter((r) => !r.debriefFilledAt && (r.status === 'honore' || r.result != null)).length
+    return { rdvCount, filled, notFilled }
+  }, [rdvs, range.from, range.to])
+  const rdvLabel = period.mode === 'today' ? "RDV aujourd'hui" : 'RDV sur la période'
 
   // Liste des commerciaux pour l'éditeur d'objectifs : tout l'annuaire closing
   // (pour fixer un objectif même à un commercial sans activité ce mois), avec
@@ -761,7 +751,7 @@ function OverviewCommercialLead() {
             <span className="shot-eyebrow">VELORA · pilotage commercial</span>
             <h1>Pilotage de l'équipe</h1>
             <p className="text-sm text-muted mt-2">
-              Performance de l'équipe commerciale, classement et atteinte des objectifs du mois.
+              RDV, débriefs et ventes de l'équipe commerciale · {range.label}.
             </p>
           </div>
           <div className="overview-commercial-toolbar">
@@ -773,19 +763,24 @@ function OverviewCommercialLead() {
         </div>
 
         <section className="overview-commercial-hero-stats">
-          <MagicKpi size="sm" accent="gold" icon="trophy" label="CA équipe" value={fmtKEur(team.ca)}
-            sub={caPct != null ? `${caPct}% · obj. ${fmtKEur(targets.ca)}` : `${fmtCompact(team.signed)} ventes`}
-            progress={caPct != null ? Math.min(100, caPct) : undefined} />
-          <MagicKpi size="sm" accent="success" icon="target" label="Taux de vente moyen" value={`${team.closing}%`}
-            sub={targets.closing > 0 ? `objectif ${targets.closing}%` : 'moyenne équipe'} progress={team.closing} />
-          <MagicKpi size="sm" accent="green" icon="tag" label="Ventes" value={fmtCompact(team.signed)}
-            sub={ventesPct != null ? `${ventesPct}% · obj. ${fmtCompact(targets.ventes)}` : 'devis signés'} />
-          <MagicKpi size="sm" accent="info" icon="calendar" label="RDV honorés" value={fmtCompact(team.honored)}
-            sub={rdvPct != null ? `${rdvPct}% · obj. ${fmtCompact(targets.rdv)}` : 'sur la période'} />
+          <MagicKpi size="sm" accent="info" icon="calendar" label={rdvLabel} value={fmtCompact(periodKpis.rdvCount)}
+            sub={`${fmtCompact(team.honored)} honorés`} />
+          <MagicKpi size="sm" accent="success" icon="check" label="Débriefs remplis" value={fmtCompact(periodKpis.filled)}
+            sub="RDV avec compte-rendu" />
+          <MagicKpi size="sm" accent="gold" icon="clock" label="Débriefs non remplis" value={fmtCompact(periodKpis.notFilled)}
+            sub="RDV honorés sans débrief" />
+          <MagicKpi size="sm" accent="green" icon="trophy" label="CA de vente" value={fmtKEur(team.ca)}
+            sub={`${fmtCompact(team.signed)} vente${team.signed > 1 ? 's' : ''}`} />
         </section>
 
         <section className="overview-lead-grid">
-          <CommercialLeaderboard rows={leaderboardRows} onEditObjectives={() => setObjOpen(true)} />
+          <CommercialQualifiedProspects
+            prospects={funnelProspects}
+            title="Prospects avec RDV"
+            subtitle="Liste complète des prospects qualifiés · commercial assigné + setter qualifiant"
+            limit={Infinity}
+            className="overview-admin-prospects"
+          />
 
           <div className="overview-lead-side">
             <CommercialQualifiedProspects
