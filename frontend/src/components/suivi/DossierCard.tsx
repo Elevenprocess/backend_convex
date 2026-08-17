@@ -1,6 +1,6 @@
 import type { Dossier } from '../../lib/suivi'
 import { formatCurrency, formatRelativeDate, stepLabel } from '../../lib/suivi'
-import { STATUS_LABEL, fullName, initials } from '../../lib/types'
+import { fullName } from '../../lib/types'
 import type { ClientResponse } from '../../lib/types'
 import { clientCardSummary, workflowPhaseProgress } from '../../lib/suivi-board'
 
@@ -12,68 +12,45 @@ type Props = {
   onClick: () => void
 }
 
+/**
+ * Carte dossier (liste Délivrabilité) — volontairement minimaliste : nom,
+ * localisation/contact, jauge fine, phase courante + état. Le détail (email,
+ * statut, actions) vit dans la fiche.
+ */
 export function DossierCard({ dossier, client, projectCount, onClick }: Props) {
   const summary = clientCardSummary(client)
-  const workflowProgress = workflowPhaseProgress(client)
-  const statusColor = summary?.blocked
-    ? 'var(--color-rouille)'
-    : summary?.delivered
-      ? 'var(--color-or)'
-      : 'var(--color-cuivre)'
+  const progress = workflowPhaseProgress(client)
+  const tone = summary?.blocked ? 'blocked' : summary?.delivered ? 'done' : summary?.installed ? 'installed' : 'running'
 
-  const projectName = summary?.phaseLabel ?? 'Projet signé'
   const count = projectCount ?? 0
   const amountLabel = dossier.amount > 0 ? formatCurrency(dossier.amount) : null
   const signedAt = client?.signedAt ?? dossier.rdv?.signatureAt ?? null
+  const phase = summary?.phaseLabel ?? stepLabel(dossier.activeStep)
+  const meta = [dossier.lead.city, dossier.lead.phone, count > 1 ? `${count} projets` : null].filter(Boolean).join(' · ')
 
   return (
-    <button type="button" className="suivi-card glass-card" onClick={onClick}>
-      <header className="suivi-card-head">
-        <span className="suivi-avatar" aria-hidden>{initials(dossier.lead)}</span>
-        <div className="suivi-card-id">
-          <strong>{fullName(dossier.lead) || 'Client sans nom'}</strong>
-          <span>{[dossier.lead.city, amountLabel].filter(Boolean).join(' · ') || '—'}</span>
-        </div>
-        <span className="suivi-status-pill">{STATUS_LABEL[dossier.lead.status]}</span>
-      </header>
+    <button type="button" className={`dcard dcard--${tone}`} onClick={onClick}>
+      <div className="dcard-head">
+        <strong className="dcard-name">{fullName(dossier.lead) || 'Client sans nom'}</strong>
+        {progress && <span className="dcard-pct" aria-label={`Progression ${progress.pct}%`}>{progress.pct}%</span>}
+      </div>
+      {meta && <span className="dcard-meta">{meta}</span>}
 
-      <div className="suivi-card-meta-grid">
-        <span><b>Tél.</b>{dossier.lead.phone || '—'}</span>
-        <span><b>Email</b>{dossier.lead.email || '—'}</span>
+      <div className="dcard-track" aria-hidden>
+        <div className="dcard-fill" style={{ width: `${progress?.pct ?? 0}%` }} />
       </div>
 
-      {/* Projet : nom + nombre de projets, jauge d'avancement juste en dessous */}
-      <div className="suivi-card-project">
-        <div className="suivi-card-project-row">
-          <span className="suivi-card-project-name">{projectName}</span>
-          {count > 0 && (
-            <span className="suivi-card-project-count">{count} projet{count > 1 ? 's' : ''}</span>
-          )}
-        </div>
-        {workflowProgress && (
-        <div className="suivi-card-progress" aria-label={`Progression ${workflowProgress.pct}%`}>
-          <div className="suivi-card-progress-track">
-            <div className="suivi-card-progress-fill" style={{ width: `${workflowProgress.pct}%` }} />
-          </div>
-          <span>{workflowProgress.pct}%</span>
-        </div>
-        )}
+      <div className="dcard-foot">
+        <span className="dcard-dot" aria-hidden />
+        <span className="dcard-phase">{phase}</span>
+        {signedAt && <span className="dcard-time">· {formatRelativeDate(signedAt)}</span>}
+        <span className="dcard-end">
+          {summary?.blocked && <span className="dcard-tag dcard-tag--blocked">bloqué</span>}
+          {summary?.installed && !summary.delivered && <span className="dcard-tag dcard-tag--installed">Installé</span>}
+          {summary?.delivered && <span className="dcard-tag dcard-tag--done">livré</span>}
+          {amountLabel && <span className="dcard-amount">{amountLabel}</span>}
+        </span>
       </div>
-
-      {summary && (summary.blocked || summary.installed || summary.delivered) && (
-        <div className="suivi-card-tags">
-          {summary.blocked && <span className="suivi-tag suivi-tag-blocked">bloqué</span>}
-          {summary.installed && !summary.delivered && <span className="suivi-tag suivi-tag-installed">Installé</span>}
-          {summary.delivered && <span className="suivi-tag suivi-tag-done">livré</span>}
-        </div>
-      )}
-
-      <footer className="suivi-card-foot">
-        <span className="suivi-card-dot" style={{ background: statusColor }} aria-hidden />
-        <span className="suivi-card-step">{summary?.phaseLabel ?? stepLabel(dossier.activeStep)}</span>
-        {signedAt && <span className="suivi-card-time">· {formatRelativeDate(signedAt)}</span>}
-        <span className="suivi-card-action">Ouvrir la fiche</span>
-      </footer>
     </button>
   )
 }

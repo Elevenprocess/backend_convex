@@ -176,7 +176,7 @@ export function Suivi() {
   // Le hook mesure via ResizeObserver + mesure synchrone au montage.
   const { virtualizer: rowVirtualizer, columns } = useCardGridVirtualizer(scrollRef, filtered.length, {
     columns: (w) => Math.max(1, Math.floor(w / 320)),
-    estimateRowHeight: 220,
+    estimateRowHeight: 120,
     gap: 16,
     scrollMargin: scrollMarginValue,
   })
