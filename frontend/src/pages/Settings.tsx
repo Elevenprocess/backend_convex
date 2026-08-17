@@ -6,6 +6,7 @@ import { Topbar } from '../components/shell/Topbar'
 import { Icon } from '../components/Icon'
 import type { IconName } from '../components/Icon'
 import { UserEditModal } from '../components/UserEditModal'
+import { ApiTokensSection } from '../components/settings/ApiTokensSection'
 import { LoadingBlock, Spinner } from '../components/Spinner'
 import { useAuth, impersonationAllowed } from '../lib/auth'
 import { copyText, inviteUser, regenerateInvitation, revokeInvitation, syncGhlCommercialUsers, updateUser, useGhlCalendarConfig, useGhlUsers, useInvitations, useUsers } from '../lib/hooks'
@@ -410,6 +411,12 @@ function SettingsAdmin({ restricted = false }: { restricted?: boolean }) {
             </div>
           </section>
         </div>
+
+        {!restricted && (
+          <div className="settings-reveal" style={{ animationDelay: '300ms' }}>
+            <ApiTokensSection />
+          </div>
+        )}
       </main>
 
       {inviteOpen && (

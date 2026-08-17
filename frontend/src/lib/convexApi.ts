@@ -856,3 +856,26 @@ export const activityLogForLead = makeFunctionReference<
   { leadId: string; limit?: number },
   ConvexActivityDoc[]
 >('activityLog:forLead')
+
+// ─── Clés API agents (Paramètres → Clés API) ────────────────────────────────
+export type ConvexApiToken = {
+  id: string
+  name: string
+  prefix: string
+  scopes: string[]
+  effectiveScopes: string[]
+  createdAt: number
+  createdBy: string
+  expiresAt: number | null
+  revokedAt: number | null
+  lastUsedAt: number | null
+  callCount: number
+}
+export const apiTokensList = makeFunctionReference<'query', Record<string, never>, ConvexApiToken[]>('apiTokens:list')
+export const apiTokensCreate = makeFunctionReference<
+  'mutation',
+  { name: string; scopes: string[]; expiresAt?: number },
+  { id: string; secret: string; prefix: string; scopes: string[] }
+>('apiTokens:create')
+export const apiTokensUpdateScopes = makeFunctionReference<'mutation', { id: string; scopes: string[] }, { id: string; scopes: string[] }>('apiTokens:updateScopes')
+export const apiTokensRevoke = makeFunctionReference<'mutation', { id: string }, null>('apiTokens:revoke')
