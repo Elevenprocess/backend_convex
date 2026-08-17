@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
+import { HelpFab } from './HelpFab'
 import { Blobs, BLOB_PRESETS } from './Blobs'
 import { useAuth } from '../../lib/auth'
 import { useLeadSidebar } from '../../lib/leadSidebar'
@@ -33,6 +34,7 @@ export function AppShell({ children, blobsKey, flat = false }: AppShellProps) {
           {children}
         </div>
       </div>
+      <HelpFab />
     </div>
   )
 }

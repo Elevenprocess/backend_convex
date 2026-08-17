@@ -6665,3 +6665,34 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 .jr-row--setting.cursor-pointer:hover { background: color-mix(in srgb, var(--color-or-tint) 55%, transparent); }
 .jr-row--closing.cursor-pointer:hover { background: color-mix(in srgb, var(--color-cuivre-tint) 55%, transparent); }
 .jr-row--delivrabilite.cursor-pointer:hover { background: color-mix(in srgb, var(--color-success-tint) 55%, transparent); }
+
+/* ─── Bouton flottant d'aide / API (bas droite) ─────────────────────────── */
+.help-fab { position: fixed; right: 20px; bottom: 20px; z-index: 60; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.help-fab-button {
+  width: 46px; height: 46px; border-radius: 9999px; display: flex; align-items: center; justify-content: center;
+  background: var(--color-noir, #1b1a17); color: #fff; border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 24px rgba(15, 30, 22, 0.28); cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+.help-fab-button:hover { transform: translateY(-1px); box-shadow: 0 12px 28px rgba(15, 30, 22, 0.34); }
+.help-fab-button.is-open { background: var(--color-or-dark, #b8862b); }
+.help-fab-menu {
+  min-width: 260px; padding: 10px; border-radius: 16px; background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--color-line, rgba(0, 0, 0, 0.08)); box-shadow: 0 16px 40px rgba(15, 30, 22, 0.18);
+  backdrop-filter: blur(14px); animation: help-fab-in 140ms ease-out;
+}
+.help-fab-title { margin: 2px 8px 6px; font-size: 10px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-faint, #8a857b); }
+.help-fab-item {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; color: var(--color-text, #1b1a17); text-decoration: none;
+}
+.help-fab-item:hover { background: rgba(184, 134, 43, 0.1); }
+.help-fab-item span { display: flex; flex-direction: column; line-height: 1.2; }
+.help-fab-item b { font-size: 13px; font-weight: 700; }
+.help-fab-item small { font-size: 11px; color: var(--color-muted, #6b665c); }
+@keyframes help-fab-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: none; } }
+@media (max-width: 640px) { .help-fab { right: 12px; bottom: 12px; } .help-fab-button { width: 42px; height: 42px; } }
+[data-theme="dark"] .help-fab-menu { background: rgba(24, 28, 26, 0.96); border-color: rgba(255, 255, 255, 0.1); }
+[data-theme="dark"] .help-fab-item { color: #f1f4f2; }
+[data-theme="dark"] .help-fab-item:hover { background: rgba(143, 208, 164, 0.12); }
+[data-theme="dark"] .help-fab-button { background: #f1f4f2; color: #141715; border-color: rgba(0, 0, 0, 0.1); }
+[data-theme="dark"] .help-fab-button.is-open { background: var(--color-or-dark); }
