@@ -19,7 +19,7 @@ import {
 import type { Role } from '../lib/types'
 import {
   DOMAIN_META, DOMAIN_ORDER, ENTITY_META, ENTITY_ORDER,
-  dayKey, dayTitle, detailRows, entityTarget, initialsOf, timeFmt, toCsv,
+  dayKey, dayTitle, detailRows, entityTarget, initialsOf, timeFmt,
 } from '../lib/journal'
 
 const PAGE_SIZE = 60
@@ -38,6 +38,7 @@ export function Journal() {
   const [entityType, setEntityType] = useState<string>(params.get('type') ?? '')
   const [searchInput, setSearchInput] = useState<string>(params.get('q') ?? '')
   const [search, setSearch] = useState<string>(params.get('q') ?? '')
+  const [memberQuery, setMemberQuery] = useState('')
   const leadId = params.get('lead') ?? undefined
   const clientId = params.get('client') ?? undefined
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -102,6 +103,13 @@ export function Journal() {
       .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', 'fr'))
   }, [users, scope])
 
+  const visibleActors = useMemo(() => {
+    const q = memberQuery.trim().toLowerCase()
+    if (!q) return actorOptions
+    return actorOptions.filter((u) => `${u.name ?? ''} ${u.email ?? ''} ${ROLE_LABELS[u.role as Role] ?? ''}`.toLowerCase().includes(q))
+  }, [actorOptions, memberQuery])
+  const selectedActor = actorOptions.find((u) => u.id === actorId)
+
   const groups = useMemo(() => {
     const map = new Map<string, ConvexActivityDoc[]>()
     for (const r of results) {
@@ -127,16 +135,6 @@ export function Journal() {
     setParams(next, { replace: true })
   }
 
-  const exportCsv = () => {
-    const blob = new Blob([toCsv(results)], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `velora-historique-${dayKey(Date.now())}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
   const hasFilters = Boolean(domain || actorId || entityType || search || leadId || clientId)
   const scopeHint = scope?.kind === 'own'
     ? 'Vous voyez uniquement vos propres actions.'
@@ -148,101 +146,109 @@ export function Journal() {
     <AppShell blobsKey="admin" flat>
       <Topbar eyebrow="ESPACE" title="Historique des actions" />
       <main className="journal-page flex-grow overflow-y-auto px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 pb-10">
-        {/* Barre d'outils */}
-        <div className="flex flex-wrap items-center gap-2 mb-3">
-          {visibleDomains.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${domain === '' ? 'bg-or text-white' : 'bg-cream-darker text-muted hover:bg-line'}`}
-                onClick={() => setDomain('')}
+        <div className="jr-layout">
+          {/* ── Barre latérale : recherche + équipe ── */}
+          <aside className="jr-side" aria-label="Filtres">
+            <label className="jr-search">
+              <Icon name="search" size={14} />
+              <input
+                type="search"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Rechercher…"
+                aria-label="Rechercher dans l'historique"
+              />
+            </label>
+
+            {actorOptions.length > 0 && (
+              <section className="jr-side-section">
+                <div className="jr-side-head">
+                  <h2>Équipe</h2>
+                  {actorId && <button type="button" onClick={() => setActorId('')}>Tous</button>}
+                </div>
+                {actorOptions.length > 8 && (
+                  <input
+                    type="search"
+                    className="jr-side-filter"
+                    value={memberQuery}
+                    onChange={(e) => setMemberQuery(e.target.value)}
+                    placeholder="Filtrer les membres"
+                    aria-label="Filtrer les membres"
+                  />
+                )}
+                <ul className="jr-members" role="listbox" aria-label="Filtrer par personne">
+                  <li>
+                    <button type="button" role="option" aria-selected={actorId === ''} className={actorId === '' ? 'active' : ''} onClick={() => setActorId('')}>
+                      <span className="jr-member-avatar"><Icon name="users" size={12} /></span>
+                      <span className="jr-member-name">Toute l'équipe</span>
+                    </button>
+                  </li>
+                  {visibleActors.map((u) => (
+                    <li key={u.id}>
+                      <button type="button" role="option" aria-selected={actorId === u.id} className={actorId === u.id ? 'active' : ''} onClick={() => setActorId(actorId === u.id ? '' : u.id)}>
+                        <span className="jr-member-avatar">{initialsOf(u.name || u.email || '?')}</span>
+                        <span className="jr-member-name">{u.name || u.email}</span>
+                        <span className="jr-member-role">{ROLE_LABELS[u.role as Role] ?? u.role}</span>
+                      </button>
+                    </li>
+                  ))}
+                  {visibleActors.length === 0 && <li className="jr-members-empty">Aucun membre.</li>}
+                </ul>
+              </section>
+            )}
+
+            {scopeHint && <p className="jr-scope">{scopeHint}</p>}
+          </aside>
+
+          {/* ── Contenu ── */}
+          <div className="jr-main">
+            <div className="jr-toolbar">
+              {visibleDomains.length > 0 ? (
+                <div className="jr-chips" role="tablist" aria-label="Filtrer par domaine">
+                  <button type="button" className={domain === '' ? 'active' : ''} onClick={() => setDomain('')}>Tous</button>
+                  {visibleDomains.map((d) => (
+                    <button key={d} type="button" className={domain === d ? 'active' : ''} onClick={() => setDomain(domain === d ? '' : d)}>
+                      {DOMAIN_META[d].label}
+                    </button>
+                  ))}
+                </div>
+              ) : <span />}
+              <select
+                value={entityType}
+                onChange={(e) => setEntityType(e.target.value)}
+                className="jr-select"
+                aria-label="Filtrer par type"
               >
-                Tous
-              </button>
-              {visibleDomains.map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${domain === d ? 'bg-or text-white' : 'bg-cream-darker text-muted hover:bg-line'}`}
-                  onClick={() => setDomain(domain === d ? '' : d)}
-                >
-                  {DOMAIN_META[d].label}
-                </button>
-              ))}
+                <option value="">Tous les types</option>
+                {ENTITY_ORDER.map((k) => (
+                  <option key={k} value={k}>{ENTITY_META[k].plural}</option>
+                ))}
+              </select>
+              <div className="jr-toolbar-right">
+                <DateRangePicker value={period} onChange={setPeriod} align="right" />
+              </div>
             </div>
-          )}
-          <div className="ml-auto flex items-center gap-2 flex-wrap">
-            <DateRangePicker value={period} onChange={setPeriod} align="right" />
-          </div>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2 mb-4">
-          <label className="relative flex-1 min-w-[220px] max-w-md">
-            <Icon name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
-            <input
-              type="search"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Rechercher (nom du prospect, action, mot-clé…)"
-              className="w-full rounded-xl border border-line-soft bg-white/70 pl-8 pr-3 py-1.5 text-sm"
-              aria-label="Rechercher dans l'historique"
-            />
-          </label>
-          {actorOptions.length > 0 && (
-            <select
-              value={actorId}
-              onChange={(e) => setActorId(e.target.value)}
-              className="rounded-xl border border-line-soft bg-white/70 px-3 py-1.5 text-sm font-semibold"
-              aria-label="Filtrer par personne"
-            >
-              <option value="">Toute l'équipe</option>
-              {actorOptions.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name || u.email} · {ROLE_LABELS[u.role as Role] ?? u.role}
-                </option>
-              ))}
-            </select>
-          )}
-          <select
-            value={entityType}
-            onChange={(e) => setEntityType(e.target.value)}
-            className="rounded-xl border border-line-soft bg-white/70 px-3 py-1.5 text-sm font-semibold"
-            aria-label="Filtrer par type"
-          >
-            <option value="">Tous les types</option>
-            {ENTITY_ORDER.map((k) => (
-              <option key={k} value={k}>{ENTITY_META[k].plural}</option>
-            ))}
-          </select>
-          {hasFilters && (
-            <button type="button" className="text-xs font-bold text-muted hover:text-rouille px-2" onClick={resetFilters}>
-              Réinitialiser
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={exportCsv}
-            disabled={results.length === 0}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-or/30 bg-or-tint px-3 py-1.5 text-xs font-bold text-or-dark disabled:opacity-50"
-            title="Exporter les lignes chargées en CSV"
-          >
-            <Icon name="download" size={14} />
-            Export CSV
-          </button>
-        </div>
-
-        <div className="text-xs text-faint mb-4 flex flex-wrap gap-x-3 gap-y-1">
-          <span>
-            {loadingFirst ? 'Chargement…' : `${results.length}${canLoadMore ? '+' : ''} action${results.length > 1 ? 's' : ''} · ${range.label}`}
-          </span>
-          {(leadId || clientId) && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-or-tint text-or-dark px-2 py-0.5 font-bold">
-              {leadId ? 'Prospect filtré' : 'Dossier filtré'}
-              <button type="button" onClick={resetFilters} aria-label="Retirer le filtre" className="ml-1">✕</button>
-            </span>
-          )}
-          {scopeHint && <span>{scopeHint}</span>}
-        </div>
+            <div className="jr-meta">
+              <span>
+                {loadingFirst ? 'Chargement…' : `${results.length}${canLoadMore ? '+' : ''} action${results.length > 1 ? 's' : ''} · ${range.label}`}
+              </span>
+              {selectedActor && (
+                <span className="jr-pill">
+                  {selectedActor.name || selectedActor.email}
+                  <button type="button" onClick={() => setActorId('')} aria-label="Retirer le filtre personne">✕</button>
+                </span>
+              )}
+              {(leadId || clientId) && (
+                <span className="jr-pill">
+                  {leadId ? 'Prospect filtré' : 'Dossier filtré'}
+                  <button type="button" onClick={resetFilters} aria-label="Retirer le filtre">✕</button>
+                </span>
+              )}
+              {hasFilters && (
+                <button type="button" className="jr-reset" onClick={resetFilters}>Réinitialiser</button>
+              )}
+            </div>
 
         {loadingFirst ? (
           <LoadingBlock label="Chargement de l'historique…" />
@@ -259,10 +265,10 @@ export function Journal() {
           <div className="space-y-6">
             {groups.map(([key, rows]) => (
               <section key={key}>
-                <h2 className="sticky top-0 z-10 -mx-1 px-1 py-1.5 mb-2 text-[11px] font-black uppercase tracking-wider text-faint bg-cream/85 backdrop-blur-sm">
+                <h2 className="jr-day">
                   {dayTitle(rows[0].at)} <span className="font-semibold normal-case tracking-normal">· {rows.length} action{rows.length > 1 ? 's' : ''}</span>
                 </h2>
-                <ol className="glass-card divide-y divide-line-soft overflow-hidden">
+                <ol className="jr-list">
                   {rows.map((r) => (
                     <ActivityRow
                       key={r._id}
@@ -291,6 +297,8 @@ export function Journal() {
             )}
           </div>
         )}
+          </div>
+        </div>
       </main>
     </AppShell>
   )
