@@ -202,7 +202,7 @@ export function Journal() {
                   {visibleActors.map((u) => (
                     <li key={u.id}>
                       <button type="button" role="option" aria-selected={actorId === u.id} className={actorId === u.id ? 'active' : ''} onClick={() => setActorId(actorId === u.id ? '' : u.id)}>
-                        <span className="jr-member-avatar">{initialsOf(u.name || u.email || '?')}</span>
+                        <span className={`jr-member-avatar jr-member-avatar--${roleFamily(u.role as Role)}`}>{initialsOf(u.name || u.email || '?')}</span>
                         <span className="jr-member-name">{u.name || u.email}</span>
                         <span className="jr-member-role">{ROLE_LABELS[u.role as Role] ?? u.role}</span>
                       </button>
@@ -340,7 +340,7 @@ function ActivityRow({ row, role, expanded, onToggle, onOpen }: {
 
   return (
     <li
-      className={`px-3 sm:px-4 py-2.5 transition-colors ${clickable ? 'cursor-pointer hover:bg-or-tint/40 focus-visible:bg-or-tint/40 outline-none' : ''}`}
+      className={`jr-row jr-row--${row.domain} px-3 sm:px-4 py-2.5 transition-colors ${clickable ? 'cursor-pointer outline-none' : ''}`}
       onClick={clickable ? onOpen : undefined}
       onKeyDown={handleKey}
       role={clickable ? 'button' : undefined}

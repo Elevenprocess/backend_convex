@@ -6650,3 +6650,18 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 }
 .jr-domain-avatar { font-size: 8px; letter-spacing: .04em; }
 .jr-members button.active .jr-domain-avatar { background: var(--color-or); color: #fff; }
+/* Historique : couleur par famille (setter / commercial / délivrabilité) */
+.jr-member-avatar--setter { background: var(--color-or-tint); color: var(--color-or-dark); }
+.jr-member-avatar--commercial { background: var(--color-cuivre-tint); color: var(--color-cuivre); }
+.jr-member-avatar--delivrabilite { background: var(--color-success-tint); color: var(--color-success); }
+.jr-row { position: relative; border-left: 3px solid transparent; }
+.jr-row--setting { border-left-color: var(--color-or); }
+.jr-row--closing { border-left-color: var(--color-cuivre); }
+.jr-row--delivrabilite { border-left-color: var(--color-success); }
+.jr-row--finances { border-left-color: var(--color-rouille); }
+.jr-row--admin { border-left-color: var(--color-info); }
+.jr-row--system { border-left-color: var(--color-line); }
+.jr-row.cursor-pointer:hover, .jr-row.cursor-pointer:focus-visible { background: var(--color-line-soft); }
+.jr-row--setting.cursor-pointer:hover { background: color-mix(in srgb, var(--color-or-tint) 55%, transparent); }
+.jr-row--closing.cursor-pointer:hover { background: color-mix(in srgb, var(--color-cuivre-tint) 55%, transparent); }
+.jr-row--delivrabilite.cursor-pointer:hover { background: color-mix(in srgb, var(--color-success-tint) 55%, transparent); }
