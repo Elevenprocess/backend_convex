@@ -16,7 +16,7 @@
 import type { MutationCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { ActivityDomain, Role } from "./enums";
-import { getCurrentUser, getRealUser, roleOf } from "./access";
+import { getCurrentUser, getRealUser, getServiceActor, roleOf } from "./access";
 
 // ─── Libellés FR ─────────────────────────────────────────────────────────────
 
@@ -227,10 +227,13 @@ export async function logActivity(ctx: MutationCtx, input: ActivityInput): Promi
     } catch {
       via = null;
     }
+    // Acteur de service (API agents) : on garde l'identité empruntée/service
+    // et on suffixe la source (clé) pour que la ligne reste lisible.
+    const service = getServiceActor(ctx);
     await ctx.db.insert("activityLog", {
       at: input.at ?? Date.now(),
       actorId: real._id,
-      actorName: userLabel(real),
+      actorName: service ? `${userLabel(real)} (via ${service.source})` : userLabel(real),
       actorRole: roleOf(real),
       domain: domainForRole(roleOf(real)),
       ...(via ? { viaUserId: via._id } : {}),

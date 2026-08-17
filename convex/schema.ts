@@ -45,6 +45,9 @@ export default defineSchema({
     lastActionType: v.optional(v.string()),
     createdById: v.optional(v.id("users")),
     deletedAt: v.optional(v.number()),
+    // Compte de service de l'API agents (convex/apiV1/bridge.ts) : masqué de
+    // la gestion d'équipe, présent dans l'annuaire pour résoudre son nom.
+    isService: v.optional(v.boolean()),
     // Mode « Explorer un profil » (Settings) : id du user dont on emprunte la
     // vue. Appliqué au centre par getCurrentUser (model/access.ts) — toutes les
     // requêtes voient le profil exploré sans changement. Posé/levé par

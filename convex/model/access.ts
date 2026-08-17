@@ -9,10 +9,31 @@ export function roleOf(user: Doc<"users">): Role {
   return (user.role ?? "setter") as Role;
 }
 
+/**
+ * Acteur de service (API agents /api/v1) : posé sur le ctx d'invocation par
+ * convex/apiV1/bridge.ts, jamais par une session. `user` = compte de service
+ * admin (ou l'utilisateur emprunté via X-Acting-As), `source` = libellé de la
+ * clé pour le journal d'activité (« Clé API : Hermes »). Le ctx étant créé par
+ * invocation, aucun état ne fuit entre requêtes.
+ */
+export type ServiceActor = { user: Doc<"users">; source: string };
+const SERVICE_ACTOR = Symbol.for("velora.serviceActor");
+
+export function getServiceActor(ctx: unknown): ServiceActor | null {
+  return ((ctx as Record<symbol, unknown>)[SERVICE_ACTOR] as ServiceActor | undefined) ?? null;
+}
+
+export function withServiceActor<C extends object>(ctx: C, actor: ServiceActor): C {
+  return Object.assign(Object.create(Object.getPrototypeOf(ctx)), ctx, { [SERVICE_ACTOR]: actor }) as C;
+}
+
 // User RÉELLEMENT connecté (session auth), sans overlay « Explorer un profil ».
 // À utiliser uniquement par la gestion de l'impersonation elle-même
-// (users.setViewAs/clearViewAs/sessionContext).
+// (users.setViewAs/clearViewAs/sessionContext). Un acteur de service (API
+// agents) est traité comme le user réel.
 export async function getRealUser(ctx: Ctx): Promise<Doc<"users"> | null> {
+  const service = getServiceActor(ctx);
+  if (service) return service.user;
   const userId = await getAuthUserId(ctx);
   if (userId === null) return null;
   return await ctx.db.get(userId);

@@ -77,7 +77,7 @@ export const list = query({
       : await ctx.db.query("users").collect();
     if (args.team !== undefined) rows = rows.filter((u) => u.team === args.team);
     if (args.active !== undefined) rows = rows.filter((u) => (u.active ?? true) === args.active);
-    return rows.filter((u) => u.deletedAt === undefined);
+    return rows.filter((u) => u.deletedAt === undefined && !u.isService);
   },
 });
 

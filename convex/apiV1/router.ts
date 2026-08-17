@@ -12,6 +12,7 @@ import type { ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { hashToken, TOKEN_PREFIX } from "../model/apiTokenCrypto";
 import { API_DOMAINS, expandScopes, hasScope, type ApiAccess, type ApiDomain } from "../model/apiScopes";
+import { kindOf, type ActorArgs } from "./bridge";
 
 export type RouteScope = `${ApiDomain}:${ApiAccess}`;
 export type ApiMethod = "GET" | "POST" | "PATCH" | "DELETE";
@@ -20,6 +21,8 @@ export type ApiToken = { id: string; name: string; scopes: string[] };
 
 export type ApiRequest = {
   token: ApiToken;
+  /** Acteur transmis au pont (compte de service, ou X-Acting-As). */
+  actor: ActorArgs;
   params: Record<string, string>;
   query: URLSearchParams;
   body: unknown; // JSON parsé (undefined si pas de body)
@@ -152,7 +155,15 @@ export function createApiHandler(routes: readonly RouteDef[]) {
         }
       }
 
-      const result = await route.handler(ctx, { token, params, query: url.searchParams, body, now, raw: req });
+      const serviceUserId = await ctx.runMutation(internal.apiV1.bridge.ensureServiceUser, {});
+      const actingAs = req.headers.get("x-acting-as")?.trim();
+      const actor: ActorArgs = {
+        source: `Clé API : ${token.name}`,
+        serviceUserId,
+        ...(actingAs ? { actingAsUserId: actingAs as ActorArgs["actingAsUserId"] } : {}),
+      };
+
+      const result = await route.handler(ctx, { token, actor, params, query: url.searchParams, body, now, raw: req });
       return jsonResponse(result ?? { ok: true });
     } catch (err) {
       if (err instanceof ApiError) return errorResponse(err);
@@ -169,6 +180,15 @@ export function createApiHandler(routes: readonly RouteDef[]) {
 function cleanConvexMessage(msg: string): string {
   const m = /Uncaught Error:\s*([\s\S]*?)(?:\n\s+at |$)/.exec(msg);
   return (m ? m[1] : msg).trim();
+}
+
+// ─── Invocation des fonctions métier via le pont ─────────────────────────────
+
+/** Appelle `module.fn` (query ou mutation publique) au nom de l'acteur de la requête. */
+export async function invoke(ctx: ActionCtx, req: ApiRequest, fn: string, args: unknown = {}): Promise<unknown> {
+  return kindOf(fn) === "query"
+    ? await ctx.runQuery(internal.apiV1.bridge.invokeQuery, { fn, args, actor: req.actor })
+    : await ctx.runMutation(internal.apiV1.bridge.invokeMutation, { fn, args, actor: req.actor });
 }
 
 // ─── Introspection ───────────────────────────────────────────────────────────
