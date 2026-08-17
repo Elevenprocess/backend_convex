@@ -11,6 +11,8 @@ import { mapGhlStageToStatus } from "./model/ghl/stageMapper";
 import { checkWebhookSecret, clientIp, importsDisabled } from "./model/ghl/webhookAuth";
 import { signDebriefToken, verifyDebriefToken } from "./model/debriefLinkToken";
 import { normalizePublicDebriefBody } from "./model/debriefLinkBody";
+import { createApiHandler } from "./apiV1/router";
+import { ROUTES } from "./apiV1/routes";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);
@@ -426,5 +428,14 @@ http.route({
     return corsJson({ ok: true });
   }),
 });
+
+/**
+ * API agents (Hermes, n8n…) : /api/v1/* — Bearer `vlr_…`, scopes par domaine.
+ * Voir convex/apiV1/router.ts (mécanique) et convex/apiV1/routes.ts (registre).
+ */
+const apiV1 = httpAction(createApiHandler(ROUTES));
+for (const method of ["GET", "POST", "PATCH", "DELETE"] as const) {
+  http.route({ pathPrefix: "/api/v1/", method, handler: apiV1 });
+}
 
 export default http;

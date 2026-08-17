@@ -786,4 +786,31 @@ export default defineSchema({
     externalId: v.optional(v.string()),
     data: v.any(),
   }).index("by_table", ["table"]),
+
+  /**
+   * Clés API agents (Paramètres → Clés API). Le secret `vlr_…` n'est renvoyé
+   * qu'à la création ; seul son hash SHA-256 est stocké. `scopes` =
+   * `<domaine>:<read|write>` (cf. model/apiScopes.ts). Une clé est un compte
+   * de service admin limité par ses scopes ; elle est acceptée par
+   * /api/v1/* (Bearer) et par requireServiceKey() (surface Hermes historique).
+   */
+  apiTokens: defineTable({
+    name: v.string(),
+    prefix: v.string(), // 12 premiers caractères, pour l'affichage
+    tokenHash: v.string(),
+    // Absent sur les clés créées avant les scopes (héritage) → aucun accès
+    // /api/v1 tant qu'un admin ne les a pas définis.
+    scopes: v.optional(v.array(v.string())),
+    createdById: v.id("users"),
+    createdAt: v.number(),
+    expiresAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+    lastUsedAt: v.optional(v.number()),
+    callCount: v.optional(v.number()),
+    // Rate limit : fenêtre glissante d'une minute.
+    windowStart: v.optional(v.number()),
+    windowCount: v.optional(v.number()),
+  })
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_createdAt", ["createdAt"]),
 });
