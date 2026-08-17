@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { usePaginatedQuery, useQuery } from 'convex/react'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Icon } from '../components/Icon'
@@ -8,28 +7,24 @@ import { LoadingBlock, Spinner } from '../components/Spinner'
 import { EmptyState } from '../components/EmptyState'
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
 import { useAuth } from '../lib/auth'
-import { useConvexUsers } from '../lib/convexHooks'
+import { useConvexActivityLog, useConvexActivityScope, useConvexUsers } from '../lib/convexHooks'
 import { useLeadSidebar } from '../lib/leadSidebar'
 import { ROLE_LABELS } from '../lib/role'
 import { DEFAULT_PERIOD, buildPeriodRange, type PeriodState } from '../lib/period'
-import {
-  activityLogList, activityLogMyScope,
-  type ActivityDomain, type ActivityListArgs, type ConvexActivityDoc,
-} from '../lib/convexApi'
+import type { ActivityDomain, ActivityListArgs, ConvexActivityDoc } from '../lib/convexApi'
 import type { Role } from '../lib/types'
 import {
   DOMAIN_META, DOMAIN_ORDER, ENTITY_META, ENTITY_ORDER,
   dayKey, dayTitle, detailRows, entityTarget, initialsOf, timeFmt,
 } from '../lib/journal'
 
-const PAGE_SIZE = 60
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export function Journal() {
   const role = useAuth((s) => s.user?.role) as Role | undefined
   const [params, setParams] = useSearchParams()
-  const scope = useQuery(activityLogMyScope, {})
+  const scope = useConvexActivityScope()
   const { data: users } = useConvexUsers()
 
   const [period, setPeriod] = useState<PeriodState>({ ...DEFAULT_PERIOD, mode: 'this_week' })
@@ -84,10 +79,7 @@ export function Journal() {
     ...(search ? { search } : {}),
   }), [range.from, range.to, domain, actorId, entityType, leadId, clientId, search])
 
-  const { results, status, loadMore } = usePaginatedQuery(activityLogList, args, { initialNumItems: PAGE_SIZE })
-  const loadingFirst = status === 'LoadingFirstPage'
-  const canLoadMore = status === 'CanLoadMore'
-  const loadingMore = status === 'LoadingMore'
+  const { rows: results, loading: loadingFirst, fromCache, canLoadMore, loadingMore, loadMore } = useConvexActivityLog(args)
 
   const visibleDomains = useMemo<ActivityDomain[]>(() => {
     if (!scope) return []
@@ -248,6 +240,11 @@ export function Journal() {
               <span>
                 {loadingFirst ? 'Chargement…' : `${results.length}${canLoadMore ? '+' : ''} action${results.length > 1 ? 's' : ''} · ${range.label}`}
               </span>
+              {fromCache && (
+                <span className="inline-flex items-center gap-1">
+                  <Spinner size={10} stroke={3} color="currentColor" /> mise à jour…
+                </span>
+              )}
               {selectedActor && (
                 <span className="jr-pill">
                   {selectedActor.name || selectedActor.email}
@@ -303,7 +300,7 @@ export function Journal() {
                   type="button"
                   className="btn-ghost inline-flex items-center gap-2"
                   disabled={loadingMore}
-                  onClick={() => loadMore(PAGE_SIZE)}
+                  onClick={loadMore}
                 >
                   {loadingMore ? <Spinner size={14} stroke={3} color="currentColor" /> : <Icon name="download" size={14} />}
                   Charger plus

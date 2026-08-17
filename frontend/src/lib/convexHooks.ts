@@ -5,7 +5,7 @@ import { getFunctionName } from 'convex/server'
 import { convexClient } from './convex'
 import { adsReport, adBudget, adDepositsList, type ConvexAdBudget, type ConvexAdDeposit, simulatorFunnel, type ConvexSimulatorFunnel, analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, callLogsListByLead, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsListEnriched, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, substepsList, usersGet, usersList, usersDirectory, leadsGetEnriched, analyticsSetterLeaderboard } from './convexApi'
 import type { ConvexUserDoc, SetterLeaderboardEntry, ConvexActivityDoc } from './convexApi'
-import { activityLogForLead } from './convexApi'
+import { activityLogForLead, activityLogList, activityLogMyScope, type ActivityListArgs, type ActivityDomain } from './convexApi'
 import { mapConvexAcompte, mapConvexCallLog, mapConvexClient, mapConvexCommercialObjective, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexSubstep, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
 import { fetchCache } from './fetchCacheStore'
@@ -815,4 +815,64 @@ export function useConvexLeadActivity(leadId: string | undefined, limit = 200): 
   const rows = useQuery(activityLogForLead, leadId ? { leadId, limit } : 'skip')
   const data = useMemo(() => (leadId ? (rows ?? null) : []), [leadId, rows])
   return { data, loading: Boolean(leadId) && rows === undefined, error: null, refetch: noop }
+}
+
+// ─── Journal d'activité (page Historique) ────────────────────────────────────
+// Même recette que les listes : la dernière page vue (mêmes filtres) est servie
+// depuis le cache mémoire/disque pendant que l'abonnement Convex démarre —
+// plus d'écran « Chargement… » à chaque entrée sur la page.
+const JOURNAL_CACHE_MAX_ROWS = 300
+export const JOURNAL_PAGE_SIZE = 60
+
+function journalCacheKey(userId: string | undefined, args: ActivityListArgs): string {
+  return `journal:${userId ?? 'anon'}:${JSON.stringify(args)}`
+}
+
+export type ActivityScope = { kind: 'all' | 'domains' | 'own'; domains: ActivityDomain[]; userId: string }
+
+export function useConvexActivityScope(): ActivityScope | null {
+  const userId = useAuth((s) => s.user?.id)
+  const key = `journal-scope:${userId ?? 'anon'}`
+  const live = useQuery(activityLogMyScope, userId ? {} : 'skip')
+  const cached = useMemo(() => (fetchCache.get(key)?.data as ActivityScope | undefined) ?? null, [key])
+  useEffect(() => {
+    if (!live) return
+    const entry = { data: live, timestamp: Date.now() }
+    fetchCache.set(key, entry)
+    persistEntry(key, entry)
+  }, [key, live])
+  return live ?? cached
+}
+
+export function useConvexActivityLog(args: ActivityListArgs): {
+  rows: ConvexActivityDoc[]
+  loading: boolean
+  fromCache: boolean
+  canLoadMore: boolean
+  loadingMore: boolean
+  loadMore: () => void
+} {
+  const userId = useAuth((s) => s.user?.id)
+  const { results, status, loadMore } = usePaginatedQuery(activityLogList, args, { initialNumItems: JOURNAL_PAGE_SIZE })
+  const cacheKey = journalCacheKey(userId, args)
+  const cached = useMemo(
+    () => (fetchCache.get(cacheKey)?.data as ConvexActivityDoc[] | undefined) ?? null,
+    [cacheKey],
+  )
+  const liveReady = status !== 'LoadingFirstPage'
+  useEffect(() => {
+    if (!liveReady) return
+    const entry = { data: results.slice(0, JOURNAL_CACHE_MAX_ROWS), timestamp: Date.now() }
+    fetchCache.set(cacheKey, entry)
+    persistEntry(cacheKey, entry)
+  }, [cacheKey, results, liveReady])
+  const showLive = liveReady || !cached
+  return {
+    rows: showLive ? results : cached ?? [],
+    loading: !liveReady && !cached,
+    fromCache: !liveReady && Boolean(cached),
+    canLoadMore: status === 'CanLoadMore',
+    loadingMore: status === 'LoadingMore',
+    loadMore: () => loadMore(JOURNAL_PAGE_SIZE),
+  }
 }

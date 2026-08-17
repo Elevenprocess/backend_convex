@@ -22,6 +22,10 @@ import { WORKFLOW_ROLES, WORKFLOW_VIEW_ROLES } from "./clients";
 import { can, canEditStep, visibleClientIds } from "./model/delivrabilitePermissions";
 import { recomputeClientStatus } from "./model/ensureDossier";
 import { insertAudit } from "./model/audit";
+import {
+  logActivity, leadLabelById, userLabelById, WORKFLOW_PHASE_LABEL, WORKFLOW_STATUS_LABEL,
+  label, diffFields, fieldsSentence,
+} from "./model/activity";
 
 export const list = query({
   args: {
@@ -135,6 +139,37 @@ async function applyStepUpdate(
       before: { status: before.status },
       after: { status: args.status },
     });
+  }
+
+  {
+    const diff = diffFields(before as unknown as Record<string, unknown>, patch);
+    if (diff.changed.length > 0) {
+      const { subject } = await leadLabelById(ctx, client?.leadId);
+      const phaseLabel = label(WORKFLOW_PHASE_LABEL, before.phase);
+      let action = "workflow_step.updated";
+      let what: string;
+      if (args.status !== undefined && args.status !== before.status) {
+        action = args.status === "probleme"
+          ? "workflow_step.problem"
+          : before.status === "probleme"
+            ? "workflow_step.problem_resolved"
+            : "workflow_step.status_changed";
+        what = `a passé l'étape « ${phaseLabel} » du dossier ${subject} de « ${label(WORKFLOW_STATUS_LABEL, before.status)} » à « ${label(WORKFLOW_STATUS_LABEL, args.status)} »`;
+        if (args.status === "probleme" && args.problemReason) what += ` (motif : ${args.problemReason})`;
+      } else if (diff.changed.includes("responsableId")) {
+        action = "workflow_step.assigned";
+        const who = args.responsableId ? await userLabelById(ctx, args.responsableId) : "personne";
+        what = `a assigné l'étape « ${phaseLabel} » du dossier ${subject} à ${who}`;
+      } else {
+        what = `a modifié l'étape « ${phaseLabel} » du dossier ${subject} (${fieldsSentence(diff.changed)})`;
+      }
+      await logActivity(ctx, {
+        action, entityType: "workflow_step", entityId: stepId,
+        clientId: before.clientId, leadId: client?.leadId, subject,
+        summary: what,
+        details: { phase: before.phase, before: diff.before, after: diff.after },
+      });
+    }
   }
 
   await recomputeClientStatus(ctx, before.clientId);
