@@ -35,6 +35,7 @@ export function shouldAutoReload(): boolean {
 export function RouteError() {
   const error = useRouteError()
   const stale = isStaleChunkError(error)
+  const detail = error instanceof Error ? error.message : typeof error === 'string' ? error : ''
   const autoReloading = stale && shouldAutoReload()
 
   useEffect(() => {
@@ -62,6 +63,12 @@ export function RouteError() {
       >
         Recharger la page
       </button>
+      {!stale && detail && (
+        <details className="mt-3 max-w-lg text-left">
+          <summary className="cursor-pointer text-xs text-faint">Détail technique</summary>
+          <pre className="mt-1 whitespace-pre-wrap break-words rounded-lg bg-line-soft p-2 text-[11px] text-muted">{detail}</pre>
+        </details>
+      )}
     </div>
   )
 }
