@@ -18,7 +18,7 @@ export const API_DOMAINS = [
   { key: 'notifications', label: 'Notifications', desc: 'lecture / marquage' },
   { key: 'objectives', label: 'Objectifs', desc: 'objectifs commerciaux' },
   { key: 'referrers', label: 'Apporteurs', desc: "apporteurs d'affaires" },
-  { key: 'calendar', label: 'Agenda GHL', desc: 'créneaux, événements, RDV GHL' },
+  { key: 'calendar', label: 'Agenda GHL', desc: 'créneaux, événements, RDV GHL — routes à venir' },
   { key: 'activity', label: 'Historique', desc: "journal d'activité" },
 ] as const
 

@@ -16,6 +16,13 @@ gérée par les admins depuis Paramètres.
 - **Compat** : `hermes.ts` + `HERMES_API_KEY` conservés (agent débriefs n8n).
 
 ## Architecture
+> Mise à jour (implémentation) : plutôt que des `internal*` par domaine, un **pont « acteur de service »**
+> (`convex/apiV1/bridge.ts`) invoque les fonctions métier existantes (`fn._handler`, même couture que
+> convex-test) sur un ctx portant un `ServiceActor` reconnu par `getRealUser()` : mêmes règles, mêmes
+> effets, même journal (« Nom (via Clé API : X) »). Compte de service admin « Agent API » (`users.isService`),
+> `X-Acting-As` pour agir au nom d'un utilisateur. Args validés contre les validateurs Convex exportés.
+> Les actions (agenda GHL, invitations, sync ads) ne passent pas par le pont → domaine `calendar` sans route pour l'instant.
+
 ```
 Agent ──HTTPS──▶ convex/http.ts ──▶ convex/api/router.ts
                      1. lookup clé (SHA-256) dans `apiKeys`
