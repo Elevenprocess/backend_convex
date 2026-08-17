@@ -645,8 +645,11 @@ function OverviewCommercialSolo() {
 function OverviewCommercialLead() {
   const navigate = useNavigate()
   const display = useDisplayUser()
+  const me = useAuth((s) => s.user)
   const [tab, setTab] = useState('overview')
   const [period, setPeriod] = useState<FunnelPeriodState>(DEFAULT_FUNNEL_PERIOD)
+  // Périmètre : mes RDV (commercial = moi) ou toute l'équipe closing.
+  const [scope, setScope] = useState<'me' | 'team'>('team')
   const range = buildFunnelPeriodRange(period)
   const [objOpen, setObjOpen] = useState(false)
 
@@ -658,10 +661,17 @@ function OverviewCommercialLead() {
   const { data: summary } = useAnalyticsSummary({ from: range.from, to: range.to })
   const { data: objectives, refetch: refetchObjectives } = useCommercialObjectives(monthKey)
   const { data: users } = useUsers()
-  const { data: rdvs = [] } = useRdvList({ limit: 200 })
+  const { data: allRdvs = [] } = useRdvList({ limit: 200 })
   const { data: allLeads = [] } = useLeads({ limit: 500 })
 
-  const commercials = useMemo(() => summary?.admin?.commercials ?? [], [summary])
+  const rdvs = useMemo(
+    () => (scope === 'me' && me ? (allRdvs ?? []).filter((r) => r.commercialId === me.id) : (allRdvs ?? [])),
+    [allRdvs, scope, me],
+  )
+  const commercials = useMemo(() => {
+    const all = summary?.admin?.commercials ?? []
+    return scope === 'me' && me ? all.filter((c) => c.id === me.id) : all
+  }, [summary, scope, me])
 
   const objByCommercial = useMemo(() => {
     const m = new Map<string, CommercialObjectiveResponse>()
@@ -679,25 +689,6 @@ function OverviewCommercialLead() {
       : 0
     return { ca, signed, honored, closing }
   }, [commercials])
-
-  const { upcoming } = useMemo(() => {
-    const list = rdvs ?? []
-    const leadById = new Map((allLeads ?? []).map((l) => [l.id, l]))
-    const todayIso = new Date().toISOString().slice(0, 10)
-    const upcoming = list
-      .filter((r) => r.status === 'planifie' && (r.scheduledAt ?? '') >= todayIso)
-      .sort((a, b) => (a.scheduledAt ?? '').localeCompare(b.scheduledAt ?? ''))
-      .map((r) => ({ rdv: r, lead: r.lead ?? leadById.get(r.leadId) }))
-    return { upcoming }
-  }, [rdvs, allLeads])
-
-  // RDV du jour de toute l'équipe avec l'état du débrief (mêmes badges que la
-  // carte admin : à venir / en cours / envoyé + ouvert ou non / non envoyé).
-  const todayProspects = useMemo(() => {
-    const todayIso = new Date().toISOString().slice(0, 10)
-    return adminFunnelProspects(rdvs ?? [], allLeads ?? [], users ?? [])
-      .filter((p) => (p.scheduledAt ?? '').slice(0, 10) === todayIso)
-  }, [rdvs, allLeads, users])
 
   // Liste des prospects avec RDV (même carte que l'admin), limitée à la plage
   // de dates sélectionnée : par défaut aujourd'hui → ni RDV futurs, ni passés.
@@ -757,6 +748,10 @@ function OverviewCommercialLead() {
             </p>
           </div>
           <div className="overview-commercial-toolbar">
+            <div className="overview-scope-toggle" role="tablist" aria-label="Périmètre des RDV">
+              <button type="button" role="tab" aria-selected={scope === 'me'} className={`overview-scope-btn ${scope === 'me' ? 'is-active' : ''}`} onClick={() => setScope('me')}>Mes RDV</button>
+              <button type="button" role="tab" aria-selected={scope === 'team'} className={`overview-scope-btn ${scope === 'team' ? 'is-active' : ''}`} onClick={() => setScope('team')}>Toute l'équipe</button>
+            </div>
             <button type="button" className="lead-objbtn-top" onClick={() => setObjOpen(true)}>
               Objectifs · {monthLabel}
             </button>
@@ -775,34 +770,14 @@ function OverviewCommercialLead() {
             sub={`${fmtCompact(team.signed)} vente${team.signed > 1 ? 's' : ''}`} />
         </section>
 
-        <section className="overview-lead-grid">
+        <section className="overview-lead-full">
           <CommercialQualifiedProspects
             prospects={funnelProspects}
-            title="Prospects avec RDV"
-            subtitle={`Prospects qualifiés · ${range.label} · commercial assigné + setter qualifiant`}
+            title={scope === 'me' ? 'Mes prospects avec RDV' : 'Prospects avec RDV'}
+            subtitle={`${scope === 'me' ? 'Mes RDV' : "Toute l'équipe"} · ${range.label} · commercial assigné + setter qualifiant`}
             limit={Infinity}
             className="overview-admin-prospects"
           />
-
-          <div className="overview-lead-side">
-            <CommercialQualifiedProspects
-              prospects={todayProspects}
-              title="RDV du jour"
-              subtitle="Suivi des débriefs de l'équipe · temps réel"
-              limit={12}
-            />
-
-            <div className="overview-air-card">
-              <CardHead title="Prochains RDV équipe" icon="phone" />
-              <div className="overview-role-list">
-                {upcoming.length === 0 ? (
-                  <div className="text-xs text-faint">Aucun RDV à venir.</div>
-                ) : upcoming.slice(0, 5).map(({ rdv, lead }) => (
-                  <CommercialUpcomingRdvRow key={rdv.id} rdv={rdv} lead={lead} />
-                ))}
-              </div>
-            </div>
-          </div>
         </section>
       </main>
 
@@ -820,33 +795,6 @@ function OverviewCommercialLead() {
   )
 }
 
-// Ligne RDV à venir enrichie (nom prospect + ville · tél + lieu + date), cliquable vers le détail.
-// Calquée sur le markup de CommercialDebriefsToFill pour rester cohérent visuellement.
-function CommercialUpcomingRdvRow({ rdv, lead }: { rdv: RdvResponse; lead?: RdvLeadSummary | null }) {
-  const navigate = useNavigate()
-  const name = lead ? fullName(lead) : 'Prospect'
-  const place = rdv.locationType === 'visio' ? 'Visio' : rdv.locationType === 'agence' ? 'Agence' : 'Domicile'
-  return (
-    <button
-      type="button"
-      className="commercial-qualified-row"
-      style={{ background: 'none', border: 'none', font: 'inherit', textAlign: 'left', width: '100%', cursor: 'pointer' }}
-      onClick={() => navigate(`/rdv/${rdv.id}`)}
-    >
-      <div className="overview-role-avatar">{userInitials(name)}</div>
-      <div>
-        <strong>{name}</strong>
-        <small>{lead?.city ?? 'Ville non renseignée'} · {lead?.phone ?? 'sans téléphone'}</small>
-      </div>
-      <div className="commercial-qualified-meta">
-        <span>{place}</span>
-        <small>{shortDateTime(rdv.scheduledAt)}</small>
-      </div>
-    </button>
-  )
-}
-
-// ----- F4 Admin -----
 function OverviewAdmin() {
   const navigate = useNavigate()
   const me = useAuth((s) => s.user)

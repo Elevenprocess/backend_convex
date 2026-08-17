@@ -6696,3 +6696,10 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
 [data-theme="dark"] .help-fab-item:hover { background: rgba(143, 208, 164, 0.12); }
 [data-theme="dark"] .help-fab-button { background: #f1f4f2; color: #141715; border-color: rgba(0, 0, 0, 0.1); }
 [data-theme="dark"] .help-fab-button.is-open { background: var(--color-or-dark); }
+
+/* Responsable commercial : périmètre Mes RDV / Toute l'équipe + liste pleine largeur */
+.overview-scope-toggle { display: inline-flex; padding: 3px; border-radius: 999px; border: 1px solid var(--color-line); background: #fff; }
+.overview-scope-btn { padding: 6px 13px; border-radius: 999px; border: 0; background: transparent; color: var(--color-muted); font-family: inherit; font-size: 12px; font-weight: 800; cursor: pointer; transition: background .15s ease, color .15s ease; }
+.overview-scope-btn.is-active { background: var(--color-or-dark); color: #fff; }
+[data-theme="dark"] .overview-scope-toggle { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); }
+.overview-lead-full { margin-top: 18px; min-width: 0; }
