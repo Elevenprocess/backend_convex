@@ -5,9 +5,9 @@ import { useAuth } from '../../lib/auth'
 const API_ORIGIN = ((import.meta.env.VITE_CONVEX_URL as string | undefined) ?? 'https://spotted-horse-257.eu-west-1.convex.cloud').replace('.convex.cloud', '.convex.site')
 
 /**
- * Bouton flottant d'aide (bas droite, toutes les pages de l'app) : ouvre un
- * petit menu vers la documentation de l'API, le guide agents IA et, pour les
- * admins, la gestion des clés.
+ * Bouton flottant d'aide (bas droite, toutes les pages de l'app), réservé aux
+ * ADMINS : menu vers la documentation de l'API, le guide agents IA et la
+ * gestion des clés. Les autres rôles ne le voient pas.
  */
 export function HelpFab() {
   const [open, setOpen] = useState(false)
@@ -23,6 +23,8 @@ export function HelpFab() {
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
   }, [open])
 
+  if (role !== 'admin') return null
+
   return (
     <div ref={ref} className="help-fab" data-testid="help-fab">
       {open && (
@@ -36,12 +38,10 @@ export function HelpFab() {
             <Icon name="sparkles" size={15} />
             <span><b>Guide pour agents IA</b><small>Markdown à donner à Hermes / n8n</small></span>
           </a>
-          {role === 'admin' && (
-            <a href="#/settings" role="menuitem" className="help-fab-item" onClick={() => setOpen(false)}>
-              <Icon name="key" size={15} />
-              <span><b>Gérer les clés API</b><small>Paramètres → API</small></span>
-            </a>
-          )}
+          <a href="#/settings" role="menuitem" className="help-fab-item" onClick={() => setOpen(false)}>
+            <Icon name="key" size={15} />
+            <span><b>Gérer les clés API</b><small>Paramètres → API</small></span>
+          </a>
         </div>
       )}
       <button
