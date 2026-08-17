@@ -699,10 +699,12 @@ function OverviewCommercialLead() {
       .filter((p) => (p.scheduledAt ?? '').slice(0, 10) === todayIso)
   }, [rdvs, allLeads, users])
 
-  // Liste complète des prospects avec RDV (même carte que l'admin).
+  // Liste des prospects avec RDV (même carte que l'admin), limitée à la plage
+  // de dates sélectionnée : par défaut aujourd'hui → ni RDV futurs, ni passés.
   const funnelProspects = useMemo(
-    () => adminFunnelProspects(rdvs ?? [], allLeads ?? [], users ?? []),
-    [rdvs, allLeads, users],
+    () => adminFunnelProspects(rdvs ?? [], allLeads ?? [], users ?? [])
+      .filter((p) => (p.scheduledAt ?? '') >= range.from && (p.scheduledAt ?? '') <= range.to),
+    [rdvs, allLeads, users, range.from, range.to],
   )
 
   // KPI de la période (défaut : aujourd'hui) : RDV planifiés/honorés, débriefs
@@ -777,7 +779,7 @@ function OverviewCommercialLead() {
           <CommercialQualifiedProspects
             prospects={funnelProspects}
             title="Prospects avec RDV"
-            subtitle="Liste complète des prospects qualifiés · commercial assigné + setter qualifiant"
+            subtitle={`Prospects qualifiés · ${range.label} · commercial assigné + setter qualifiant`}
             limit={Infinity}
             className="overview-admin-prospects"
           />
