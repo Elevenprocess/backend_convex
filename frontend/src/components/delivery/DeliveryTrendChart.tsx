@@ -71,7 +71,7 @@ export function DeliveryTrendChart({ clients, now, monthsBack = 12, title = 'Dos
             <XAxis dataKey="label" tick={{ fontSize: 11, fill: COLOR_TICK }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
             <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--color-line-soft)' }} />
             <Bar dataKey="signed" name="Dossiers signés" fill={COLOR_BAR} radius={[4, 4, 4, 4]} maxBarSize={28} animationDuration={500}>
-              <LabelList dataKey="signed" position="top" formatter={(v: number) => (v > 0 ? v : '')} style={{ fontSize: 11, fontWeight: 600, fill: COLOR_LABEL }} />
+              <LabelList dataKey="signed" position="top" formatter={(v: unknown) => (typeof v === 'number' && v > 0 ? String(v) : '')} style={{ fontSize: 11, fontWeight: 600, fill: COLOR_LABEL }} />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
