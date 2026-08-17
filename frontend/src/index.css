@@ -6648,3 +6648,9 @@ textarea.wf-modal-input { resize: vertical; min-height: 64px; }
   .jr-toolbar { grid-template-columns: 1fr; }
   .jr-toolbar-right { justify-content: flex-start; }
 }
+.jr-domains { display: flex; flex-direction: column; gap: 2px; }
+.jr-domains button { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 0; border-radius: 9px; background: transparent; font: inherit; font-size: 13px; font-weight: 500; color: var(--color-muted); text-align: left; cursor: pointer; transition: background-color .14s ease, color .14s ease; }
+.jr-domains button:hover { color: var(--color-text); background: var(--color-line-soft); }
+.jr-domains button.active { background: var(--color-or-tint); color: var(--color-or-dark); font-weight: 600; }
+.jr-domain-dot { width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0; opacity: .85; }
+@media (max-width: 900px) { .jr-domains { flex-direction: row; flex-wrap: wrap; } }

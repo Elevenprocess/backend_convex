@@ -149,6 +149,18 @@ export function Journal() {
         <div className="jr-layout">
           {/* ── Barre latérale : recherche + équipe ── */}
           <aside className="jr-side" aria-label="Filtres">
+            {visibleDomains.length > 0 && (
+              <nav className="jr-domains" aria-label="Filtrer par domaine">
+                <button type="button" className={domain === '' ? 'active' : ''} onClick={() => setDomain('')}>
+                  <span className="jr-domain-dot" style={{ background: 'var(--color-text)' }} />Tous
+                </button>
+                {visibleDomains.map((d) => (
+                  <button key={d} type="button" className={domain === d ? 'active' : ''} onClick={() => setDomain(domain === d ? '' : d)}>
+                    <span className={`jr-domain-dot ${DOMAIN_META[d].dot}`} />{DOMAIN_META[d].label}
+                  </button>
+                ))}
+              </nav>
+            )}
             <label className="jr-search">
               <Icon name="search" size={14} />
               <input
@@ -203,16 +215,7 @@ export function Journal() {
           {/* ── Contenu ── */}
           <div className="jr-main">
             <div className="jr-toolbar">
-              {visibleDomains.length > 0 ? (
-                <div className="jr-chips" role="tablist" aria-label="Filtrer par domaine">
-                  <button type="button" className={domain === '' ? 'active' : ''} onClick={() => setDomain('')}>Tous</button>
-                  {visibleDomains.map((d) => (
-                    <button key={d} type="button" className={domain === d ? 'active' : ''} onClick={() => setDomain(domain === d ? '' : d)}>
-                      {DOMAIN_META[d].label}
-                    </button>
-                  ))}
-                </div>
-              ) : <span />}
+              <span />
               <select
                 value={entityType}
                 onChange={(e) => setEntityType(e.target.value)}
