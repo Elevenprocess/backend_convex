@@ -76,20 +76,22 @@ test("règles de création : nom, scopes, expiration, admin only", async () => {
 
 test("révocation, expiration, mise à jour des scopes", async () => {
   const { t, admin } = await adminT();
+  // Expiration relative à l'horloge réelle (la création refuse une date passée).
+  const EXP = Date.now() + 3_600_000;
   const { id, secret } = await admin.mutation(api.apiTokens.create, {
-    name: "k", scopes: ["leads:read"], expiresAt: NOW + 60_000,
+    name: "k", scopes: ["leads:read"], expiresAt: EXP,
   });
   const h = hashToken(secret);
 
   await admin.mutation(api.apiTokens.updateScopes, { id, scopes: ["*:read"] });
-  let auth = await t.mutation(internal.apiTokens.authenticate, { tokenHash: h, now: NOW });
+  let auth = await t.mutation(internal.apiTokens.authenticate, { tokenHash: h, now: EXP - 1000 });
   expect(auth.ok && auth.token.scopes).toEqual(["*:read"]);
 
-  auth = await t.mutation(internal.apiTokens.authenticate, { tokenHash: h, now: NOW + 60_000 });
+  auth = await t.mutation(internal.apiTokens.authenticate, { tokenHash: h, now: EXP });
   expect(auth).toEqual({ ok: false, code: "expired" });
 
   await admin.mutation(api.apiTokens.revoke, { id });
-  auth = await t.mutation(internal.apiTokens.authenticate, { tokenHash: h, now: NOW });
+  auth = await t.mutation(internal.apiTokens.authenticate, { tokenHash: h, now: EXP - 1000 });
   expect(auth).toEqual({ ok: false, code: "revoked" });
   await expect(admin.mutation(api.apiTokens.updateScopes, { id, scopes: ["leads:read"] })).rejects.toThrow(/révoquée/);
 
