@@ -17,7 +17,7 @@ import { action, internalAction, internalMutation, internalQuery, type ActionCtx
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { requireRole } from "./model/access";
-import { requireHermesKey } from "./model/hermesAuth";
+import { requireServiceKey } from "./model/hermesAuth";
 import { reunionDayKey, reunionDayRange } from "./model/analyticsRange";
 
 interface MetaInsightRow {
@@ -271,7 +271,7 @@ async function runSync(
 export const ingestRows = action({
   args: { apiKey: v.string(), rows: v.array(upsertRowValidator) },
   handler: async (ctx, args) => {
-    requireHermesKey(args.apiKey);
+    await requireServiceKey(ctx, args.apiKey);
     for (let i = 0; i < args.rows.length; i += 100) {
       await ctx.runMutation(internal.adSpend.upsertRows, {
         rows: args.rows.slice(i, i + 100),

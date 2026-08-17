@@ -18,6 +18,9 @@ import { catalogByKey } from "./model/substepCatalog";
 import { isSubstepUnlocked, computeSlaDeadline, missingDocuments } from "./model/substepGating";
 import { toDocumentSummary } from "./documents";
 import { insertAudit } from "./model/audit";
+import {
+  logActivity, leadLabelById, userLabelById, WORKFLOW_STATUS_LABEL, label, diffFields, fieldsSentence,
+} from "./model/activity";
 import { shouldNotifyVtDateChange } from "./model/notifMessages";
 import { notifyAcompte, notifyVtDateChange } from "./model/notify";
 import { acompteStateForClient, blockingTranche, formatEuro, todayReunion } from "./model/acompteGuard";
@@ -252,6 +255,47 @@ async function applySubstepUpdate(
       before: { status: before.status },
       after: { status: updated.status },
     });
+  }
+
+  {
+    const diff = diffFields(before as unknown as Record<string, unknown>, patch);
+    if (diff.changed.length > 0) {
+      const { subject } = await leadLabelById(ctx, client?.leadId);
+      const stepLabel = def?.label ?? before.key;
+      let action = "workflow_substep.updated";
+      let what: string;
+      if (args.status !== undefined && args.status !== before.status) {
+        action = updated.status === "fait"
+          ? "workflow_substep.done"
+          : updated.status === "probleme"
+            ? "workflow_substep.problem"
+            : before.status === "probleme"
+              ? "workflow_substep.problem_resolved"
+              : updated.status === "annule"
+                ? "workflow_substep.cancelled"
+                : "workflow_substep.status_changed";
+        what = updated.status === "fait"
+          ? `a validé « ${stepLabel} » sur le dossier ${subject}`
+          : `a passé « ${stepLabel} » du dossier ${subject} de « ${label(WORKFLOW_STATUS_LABEL, before.status)} » à « ${label(WORKFLOW_STATUS_LABEL, updated.status)} »`;
+        if (updated.status === "probleme" && args.problemReason) what += ` (motif : ${args.problemReason})`;
+        if (updated.status === "fait" && updated.dateRealisee) what += ` — réalisé le ${updated.dateRealisee}`;
+      } else if (diff.changed.includes("responsableId")) {
+        action = "workflow_substep.assigned";
+        const who = args.responsableId ? await userLabelById(ctx, args.responsableId) : "personne";
+        what = `a assigné « ${stepLabel} » du dossier ${subject} à ${who}`;
+      } else if (diff.changed.includes("dateRealisee") || diff.changed.includes("heure")) {
+        action = "workflow_substep.dated";
+        what = `a daté « ${stepLabel} » du dossier ${subject}${updated.dateRealisee ? ` au ${updated.dateRealisee}${updated.heure ? ` ${updated.heure}` : ""}` : " (date effacée)"}`;
+      } else {
+        what = `a modifié « ${stepLabel} » du dossier ${subject} (${fieldsSentence(diff.changed)})`;
+      }
+      await logActivity(ctx, {
+        action, entityType: "workflow_substep", entityId: substepId,
+        clientId: before.clientId, leadId: client?.leadId, subject,
+        summary: what,
+        details: { key: before.key, phase, before: diff.before, after: diff.after },
+      });
+    }
   }
 
   await recomputePhase(ctx, before.stepId);

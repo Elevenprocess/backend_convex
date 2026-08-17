@@ -9,7 +9,7 @@
  * Le secret `vlr_…` n'est renvoyé qu'à la création ; seul son hash est stocké.
  */
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireRole } from "./model/access";
 import { insertAudit } from "./model/audit";
 import { hashToken, randomToken, tokenPrefix } from "./model/apiTokenCrypto";
@@ -59,7 +59,9 @@ export const scopes = query({
 export const create = mutation({
   args: {
     name: v.string(),
-    scopes: v.array(v.string()),
+    // Absent / vide = clé sans accès /api/v1 (utile pour la surface Hermes
+    // historique via requireServiceKey, qui ne regarde pas les scopes).
+    scopes: v.optional(v.array(v.string())),
     expiresAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -67,8 +69,7 @@ export const create = mutation({
     const name = args.name.trim();
     if (!name) throw new Error("Nom de la clé requis");
     if (name.length > MAX_NAME) throw new Error(`Nom trop long (max ${MAX_NAME})`);
-    const scopes = normalizeScopes(args.scopes);
-    if (scopes.length === 0) throw new Error("Choisissez au moins un scope");
+    const scopes = normalizeScopes(args.scopes ?? []);
     if (args.expiresAt !== undefined && args.expiresAt <= Date.now()) {
       throw new Error("La date d'expiration doit être dans le futur");
     }
@@ -174,5 +175,29 @@ export const authenticate = internalMutation({
       windowCount: windowCount + 1,
     });
     return { ok: true, token: { id: row._id, name: row.name, scopes: row.scopes ?? [] } };
+  },
+});
+
+// ─── Compat surface Hermes historique (model/hermesAuth.requireServiceKey) ──
+
+/** Vérification par hash depuis une action (pas de ctx.db) : id si valide. */
+export const checkHash = internalQuery({
+  args: { tokenHash: v.string() },
+  handler: async (ctx, { tokenHash }) => {
+    const row = await ctx.db.query("apiTokens").withIndex("by_tokenHash", (q) => q.eq("tokenHash", tokenHash)).unique();
+    if (!row || row.revokedAt) return null;
+    if (row.expiresAt !== undefined && row.expiresAt <= Date.now()) return null;
+    return row._id;
+  },
+});
+
+/** Trace d'usage best-effort (au plus une écriture par minute). */
+export const touch = internalMutation({
+  args: { id: v.id("apiTokens") },
+  handler: async (ctx, { id }) => {
+    const row = await ctx.db.get(id);
+    if (row && (!row.lastUsedAt || Date.now() - row.lastUsedAt > 60_000)) {
+      await ctx.db.patch(id, { lastUsedAt: Date.now(), callCount: (row.callCount ?? 0) + 1 });
+    }
   },
 });

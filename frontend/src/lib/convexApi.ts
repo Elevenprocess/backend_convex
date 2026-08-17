@@ -405,6 +405,7 @@ export type ConvexCallLogDoc = {
   calledAt: number; result: string; durationSec?: number; notes?: string; nextCallbackAt?: number
 }
 export const callLogsListBySetter = makeFunctionReference<'query', { setterId: string; limit?: number }, ConvexCallLogDoc[]>('callLogs:listBySetter')
+export const callLogsListByLead = makeFunctionReference<'query', { leadId: string }, ConvexCallLogDoc[]>('callLogs:listByLead')
 
 export type ConvexCommercialObjectiveDoc = {
   _id: string; _creationTime: number; commercialId: string; period: string

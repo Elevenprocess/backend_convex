@@ -15,7 +15,6 @@ import type * as adSpend from "../adSpend.js";
 import type * as ads from "../ads.js";
 import type * as analytics from "../analytics.js";
 import type * as apiTokens from "../apiTokens.js";
-import type * as apiV1__generated_shim from "../apiV1/_generated_shim.js";
 import type * as apiV1_bridge from "../apiV1/bridge.js";
 import type * as apiV1_router from "../apiV1/router.js";
 import type * as apiV1_routes from "../apiV1/routes.js";
@@ -121,7 +120,6 @@ declare const fullApi: ApiFromModules<{
   ads: typeof ads;
   analytics: typeof analytics;
   apiTokens: typeof apiTokens;
-  "apiV1/_generated_shim": typeof apiV1__generated_shim;
   "apiV1/bridge": typeof apiV1_bridge;
   "apiV1/router": typeof apiV1_router;
   "apiV1/routes": typeof apiV1_routes;
