@@ -21,6 +21,14 @@ import {
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
+// Famille de rôle → couleur (setters = vert, commerciaux = cuivre, délivrabilité = succès).
+function roleFamily(role: Role | undefined): 'setter' | 'commercial' | 'delivrabilite' | 'other' {
+  if (role === 'setter' || role === 'setter_lead') return 'setter'
+  if (role === 'commercial' || role === 'commercial_lead') return 'commercial'
+  if (role === 'delivrabilite' || role === 'responsable_technique' || role === 'back_office' || role === 'technicien') return 'delivrabilite'
+  return 'other'
+}
+
 export function Journal() {
   const role = useAuth((s) => s.user?.role) as Role | undefined
   const [params, setParams] = useSearchParams()
