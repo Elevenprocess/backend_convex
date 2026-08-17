@@ -44,6 +44,8 @@ const listArgs = {
   actorId: v.optional(v.id("users")),
   domain: v.optional(activityDomainValidator),
   entityType: v.optional(v.string()),
+  // Filtre « type » de l'UI : famille de rôle de l'auteur (setter/commercial/délivrabilité…).
+  actorRoles: v.optional(v.array(v.string())),
   leadId: v.optional(v.id("leads")),
   clientId: v.optional(v.id("clients")),
   search: v.optional(v.string()),
@@ -85,6 +87,7 @@ export const list = query({
       if (domain !== undefined && row.domain !== domain) return false;
       if (allowedDomains && !allowedDomains.includes(row.domain)) return false;
       if (args.entityType !== undefined && row.entityType !== args.entityType) return false;
+      if (args.actorRoles !== undefined && !args.actorRoles.includes(row.actorRole ?? "")) return false;
       if (args.leadId !== undefined && row.leadId !== args.leadId) return false;
       if (args.clientId !== undefined && row.clientId !== args.clientId) return false;
       return true;

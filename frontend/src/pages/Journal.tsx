@@ -14,12 +14,21 @@ import { DEFAULT_PERIOD, buildPeriodRange, type PeriodState } from '../lib/perio
 import type { ActivityDomain, ActivityListArgs, ConvexActivityDoc } from '../lib/convexApi'
 import type { Role } from '../lib/types'
 import {
-  DOMAIN_META, DOMAIN_ORDER, ENTITY_META, ENTITY_ORDER,
+  DOMAIN_META, DOMAIN_ORDER, ENTITY_META,
   dayKey, dayTitle, detailRows, entityTarget, initialsOf, timeFmt,
 } from '../lib/journal'
 
 
 // ─── Page ────────────────────────────────────────────────────────────────────
+
+// Filtre « Type » : famille de rôle de l'auteur de l'action.
+const ACTOR_TYPES = {
+  setter: { label: 'Setter', roles: ['setter', 'setter_lead'] },
+  commercial: { label: 'Commercial', roles: ['commercial', 'commercial_lead'] },
+  delivrabilite: { label: 'Délivrabilité', roles: ['delivrabilite', 'responsable_technique', 'back_office', 'technicien'] },
+} as const
+type ActorType = keyof typeof ACTOR_TYPES | ''
+const isActorType = (v: string | null): v is ActorType => v === '' || (v !== null && v in ACTOR_TYPES)
 
 // Famille de rôle → couleur (setters = vert, commerciaux = cuivre, délivrabilité = succès).
 function roleFamily(role: Role | undefined): 'setter' | 'commercial' | 'delivrabilite' | 'other' {
@@ -38,7 +47,7 @@ export function Journal() {
   const [period, setPeriod] = useState<PeriodState>({ ...DEFAULT_PERIOD, mode: 'this_week' })
   const [domain, setDomain] = useState<ActivityDomain | ''>((params.get('domain') as ActivityDomain) ?? '')
   const [actorId, setActorId] = useState<string>(params.get('actor') ?? '')
-  const [entityType, setEntityType] = useState<string>(params.get('type') ?? '')
+  const [actorType, setActorType] = useState<ActorType>(isActorType(params.get('type')) ? (params.get('type') as ActorType) : '')
   const [searchInput, setSearchInput] = useState<string>(params.get('q') ?? '')
   const [search, setSearch] = useState<string>(params.get('q') ?? '')
   const [memberQuery, setMemberQuery] = useState('')
@@ -69,11 +78,11 @@ export function Journal() {
     const setOrDelete = (k: string, v: string) => (v ? next.set(k, v) : next.delete(k))
     setOrDelete('domain', domain)
     setOrDelete('actor', actorId)
-    setOrDelete('type', entityType)
+    setOrDelete('type', actorType)
     setOrDelete('q', search)
     if (next.toString() !== params.toString()) setParams(next, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [domain, actorId, entityType, search])
+  }, [domain, actorId, actorType, search])
 
   const range = buildPeriodRange(period)
   const args = useMemo<ActivityListArgs>(() => ({
@@ -81,11 +90,11 @@ export function Journal() {
     to: new Date(range.to).getTime(),
     ...(domain ? { domain } : {}),
     ...(actorId ? { actorId } : {}),
-    ...(entityType ? { entityType } : {}),
+    ...(actorType ? { actorRoles: [...ACTOR_TYPES[actorType].roles] } : {}),
     ...(leadId ? { leadId } : {}),
     ...(clientId ? { clientId } : {}),
     ...(search ? { search } : {}),
-  }), [range.from, range.to, domain, actorId, entityType, leadId, clientId, search])
+  }), [range.from, range.to, domain, actorId, actorType, leadId, clientId, search])
 
   const { rows: results, loading: loadingFirst, fromCache, canLoadMore, loadingMore, loadMore } = useConvexActivityLog(args)
 
@@ -130,12 +139,12 @@ export function Journal() {
     })
 
   const resetFilters = () => {
-    setDomain(''); setActorId(''); setEntityType(''); setSearchInput(''); setSearch('')
+    setDomain(''); setActorId(''); setActorType(''); setSearchInput(''); setSearch('')
     const next = new URLSearchParams()
     setParams(next, { replace: true })
   }
 
-  const hasFilters = Boolean(domain || actorId || entityType || search || leadId || clientId)
+  const hasFilters = Boolean(domain || actorId || actorType || search || leadId || clientId)
   const scopeHint = scope?.kind === 'own'
     ? 'Vous voyez uniquement vos propres actions.'
     : scope?.kind === 'domains'
@@ -229,14 +238,14 @@ export function Journal() {
             <div className="jr-toolbar">
               <span />
               <select
-                value={entityType}
-                onChange={(e) => setEntityType(e.target.value)}
+                value={actorType}
+                onChange={(e) => setActorType(e.target.value as ActorType)}
                 className="jr-select"
-                aria-label="Filtrer par type"
+                aria-label="Filtrer par type d'auteur"
               >
                 <option value="">Tous les types</option>
-                {ENTITY_ORDER.map((k) => (
-                  <option key={k} value={k}>{ENTITY_META[k].plural}</option>
+                {(Object.keys(ACTOR_TYPES) as Exclude<ActorType, ''>[]).map((k) => (
+                  <option key={k} value={k}>{ACTOR_TYPES[k].label}</option>
                 ))}
               </select>
               <div className="jr-toolbar-right">
