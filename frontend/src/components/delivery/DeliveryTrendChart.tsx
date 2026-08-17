@@ -1,21 +1,11 @@
 import { useMemo } from 'react'
-import {
-  ComposedChart,
-  Bar,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts'
+import { BarChart, Bar, LabelList, XAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import type { ClientResponse } from '../../lib/types'
 import { deliveriesByMonth } from '../../lib/deliveryCharts'
 
-const COLOR_INSTALL = '#B59241'
-const COLOR_MES = '#1F7857'
-const COLOR_GRID = 'var(--color-line)'
+const COLOR_BAR = 'var(--color-or)'
 const COLOR_TICK = 'var(--color-muted)'
+const COLOR_LABEL = 'var(--color-text)'
 
 interface TooltipEntry { name: string; value: number; color: string }
 function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: TooltipEntry[]; label?: string }) {
@@ -44,18 +34,15 @@ type Props = {
 }
 
 /**
- * Tendance délivrabilité : dossiers signés par mois (barres) + cumul (ligne).
+ * Tendance délivrabilité : dossiers signés par mois (barres seules, valeur
+ * au-dessus de chaque barre, total de la période en tête — pas de second axe).
  * On trace la signature (seule date fiable de la source) et non les
  * installations/MES, dont la date n'existe pas côté NestJS (suivi par statut).
  */
 export function DeliveryTrendChart({ clients, now, monthsBack = 12, title = 'Dossiers signés par mois', subtitle, headStat }: Props) {
-  const data = useMemo(() => {
-    const rows = deliveriesByMonth(clients, monthsBack, now)
-    let cumul = 0
-    return rows.map((r) => ({ ...r, cumul: (cumul += r.signed) }))
-  }, [clients, monthsBack, now])
-  const total = data.length ? data[data.length - 1].cumul : 0
-  const hasData = data.some((d) => d.signed > 0)
+  const data = useMemo(() => deliveriesByMonth(clients, monthsBack, now), [clients, monthsBack, now])
+  const total = data.reduce((acc, r) => acc + r.signed, 0)
+  const hasData = total > 0
 
   return (
     <div className="dfx-chart-card">
@@ -72,33 +59,21 @@ export function DeliveryTrendChart({ clients, now, monthsBack = 12, title = 'Dos
               <strong>{headStat.value}</strong>
             </div>
           )}
-          <div className="dfx-legend">
-            <span className="dfx-legend-item"><i style={{ background: COLOR_INSTALL }} />Signés / mois</span>
-            <span className="dfx-legend-item"><i style={{ background: COLOR_MES }} />Cumul ({total})</span>
+          <div className="dfx-headstat">
+            <small>Total période</small>
+            <strong>{total}</strong>
           </div>
         </div>
       </div>
       {hasData ? (
         <ResponsiveContainer width="100%" height={196}>
-          <ComposedChart data={data} margin={{ top: 6, right: -18, left: -18, bottom: 0 }} barCategoryGap="30%">
-            <CartesianGrid strokeDasharray="3 3" stroke={COLOR_GRID} vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 11, fill: COLOR_TICK }} tickLine={false} axisLine={false} />
-            <YAxis yAxisId="left" allowDecimals={false} tick={{ fontSize: 11, fill: COLOR_TICK }} tickLine={false} axisLine={false} width={34} />
-            <YAxis yAxisId="right" orientation="right" allowDecimals={false} tick={{ fontSize: 11, fill: COLOR_TICK }} tickLine={false} axisLine={false} width={34} />
-            <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(31,120,87,0.05)' }} />
-            <Bar yAxisId="left" dataKey="signed" name="Dossiers signés" fill={COLOR_INSTALL} radius={[5, 5, 0, 0]} maxBarSize={34} animationDuration={700} />
-            <Line
-              yAxisId="right"
-              type="monotone"
-              dataKey="cumul"
-              name="Cumul signés"
-              stroke={COLOR_MES}
-              strokeWidth={3}
-              dot={{ r: 3, fill: COLOR_MES, strokeWidth: 0 }}
-              activeDot={{ r: 5 }}
-              animationDuration={900}
-            />
-          </ComposedChart>
+          <BarChart data={data} margin={{ top: 18, right: 4, left: 4, bottom: 0 }} barCategoryGap="38%">
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: COLOR_TICK }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+            <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--color-line-soft)' }} />
+            <Bar dataKey="signed" name="Dossiers signés" fill={COLOR_BAR} radius={[4, 4, 4, 4]} maxBarSize={28} animationDuration={500}>
+              <LabelList dataKey="signed" position="top" formatter={(v: number) => (v > 0 ? v : '')} style={{ fontSize: 11, fontWeight: 600, fill: COLOR_LABEL }} />
+            </Bar>
+          </BarChart>
         </ResponsiveContainer>
       ) : (
         <div className="dfx-chart-empty">Aucun dossier signé sur la période.</div>
