@@ -30,12 +30,12 @@ const CALENDAR_ROLES: Role[] = [
 // (responsable) garde, lui, l'accès complet.
 // Historique des actions : chacun voit selon son périmètre (serveur) — le
 // technicien a sa propre navigation, on ne l'y expose pas.
+// Historique masqué pour le responsable commercial (demande user 2026-08-17).
 const JOURNAL_ROLES: Role[] = [
   'admin',
   'setter',
   'setter_lead',
   'commercial',
-  'commercial_lead',
   'delivrabilite',
   'responsable_technique',
   'back_office',

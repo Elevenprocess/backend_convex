@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Icon } from '../components/Icon'
@@ -165,6 +165,8 @@ export function Journal() {
     : scope?.kind === 'domains'
       ? `Périmètre : ${scope.domains.map((d) => DOMAIN_META[d].label).join(', ')} + vos actions.`
       : null
+
+  if (role === 'commercial_lead') return <Navigate to="/overview" replace />
 
   return (
     <AppShell blobsKey="admin" flat>
