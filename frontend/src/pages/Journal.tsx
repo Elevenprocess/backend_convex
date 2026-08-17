@@ -38,6 +38,10 @@ function roleFamily(role: Role | undefined): 'setter' | 'commercial' | 'delivrab
   return 'other'
 }
 
+function normalizeText(v: string): string {
+  return v.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+}
+
 export function Journal() {
   const role = useAuth((s) => s.user?.role) as Role | undefined
   const [params, setParams] = useSearchParams()
@@ -66,9 +70,9 @@ export function Journal() {
     navigate(target.path)
   }
 
-  // Recherche débouncée (le search index tourne côté serveur).
+  // Recherche (locale, sur les lignes chargées) légèrement débouncée.
   useEffect(() => {
-    const h = setTimeout(() => setSearch(searchInput.trim()), 300)
+    const h = setTimeout(() => setSearch(searchInput.trim()), 120)
     return () => clearTimeout(h)
   }, [searchInput])
 
@@ -85,18 +89,29 @@ export function Journal() {
   }, [domain, actorId, actorType, search])
 
   const range = buildPeriodRange(period)
+  // Seule la PÉRIODE (et le ciblage prospect/dossier) va au serveur : les
+  // autres filtres sont appliqués localement sur les lignes chargées, donc
+  // chaque clic dans la sidebar est instantané.
   const args = useMemo<ActivityListArgs>(() => ({
     from: new Date(range.from).getTime(),
     to: new Date(range.to).getTime(),
-    ...(domain ? { domain } : {}),
-    ...(actorId ? { actorId } : {}),
-    ...(actorType ? { actorRoles: [...ACTOR_TYPES[actorType].roles] } : {}),
     ...(leadId ? { leadId } : {}),
     ...(clientId ? { clientId } : {}),
-    ...(search ? { search } : {}),
-  }), [range.from, range.to, domain, actorId, actorType, leadId, clientId, search])
+  }), [range.from, range.to, leadId, clientId])
 
-  const { rows: results, loading: loadingFirst, fromCache, canLoadMore, loadingMore, loadMore } = useConvexActivityLog(args)
+  const { rows: loaded, loading: loadingFirst, fromCache, canLoadMore, loadingMore, loadMore } = useConvexActivityLog(args)
+
+  const results = useMemo(() => {
+    const roles = actorType ? (ACTOR_TYPES[actorType].roles as readonly string[]) : null
+    const q = normalizeText(search)
+    return loaded.filter((r) => {
+      if (domain && r.domain !== domain) return false
+      if (actorId && r.actorId !== actorId) return false
+      if (roles && !roles.includes(r.actorRole ?? '')) return false
+      if (q && !normalizeText(`${r.actorName} ${r.subject ?? ''} ${r.summary}`).includes(q)) return false
+      return true
+    })
+  }, [loaded, domain, actorId, actorType, search])
 
   const visibleDomains = useMemo<ActivityDomain[]>(() => {
     if (!scope) return []
@@ -255,7 +270,7 @@ export function Journal() {
 
             <div className="jr-meta">
               <span>
-                {loadingFirst ? 'Chargement…' : `${results.length}${canLoadMore ? '+' : ''} action${results.length > 1 ? 's' : ''} · ${range.label}`}
+                {loadingFirst ? 'Chargement…' : `${results.length}${canLoadMore ? '+' : ''} action${results.length > 1 ? 's' : ''}${results.length !== loaded.length ? ` sur ${loaded.length}` : ''} · ${range.label}`}
               </span>
               {fromCache && (
                 <span className="inline-flex items-center gap-1">

@@ -821,8 +821,13 @@ export function useConvexLeadActivity(leadId: string | undefined, limit = 200): 
 // Même recette que les listes : la dernière page vue (mêmes filtres) est servie
 // depuis le cache mémoire/disque pendant que l'abonnement Convex démarre —
 // plus d'écran « Chargement… » à chaque entrée sur la page.
-const JOURNAL_CACHE_MAX_ROWS = 300
-export const JOURNAL_PAGE_SIZE = 60
+// La période est chargée UNE fois (drain automatique par pages de 200 jusqu'à
+// un plafond) ; les filtres domaine/personne/type/recherche s'appliquent côté
+// client → chaque sélection est instantanée (avant : nouvelle souscription
+// serveur à chaque clic, latence datacenter à chaque fois).
+const JOURNAL_CACHE_MAX_ROWS = 2000
+export const JOURNAL_PAGE_SIZE = 200
+export const JOURNAL_DRAIN_MAX = 2000
 
 function journalCacheKey(userId: string | undefined, args: ActivityListArgs): string {
   return `journal:${userId ?? 'anon'}:${JSON.stringify(args)}`
@@ -860,19 +865,26 @@ export function useConvexActivityLog(args: ActivityListArgs): {
     [cacheKey],
   )
   const liveReady = status !== 'LoadingFirstPage'
+  // Drain automatique de la période jusqu'au plafond (au-delà : « Charger plus »).
+  useEffect(() => {
+    if (status === 'CanLoadMore' && results.length < JOURNAL_DRAIN_MAX) loadMore(JOURNAL_PAGE_SIZE)
+  }, [status, results.length, loadMore])
   useEffect(() => {
     if (!liveReady) return
     const entry = { data: results.slice(0, JOURNAL_CACHE_MAX_ROWS), timestamp: Date.now() }
     fetchCache.set(cacheKey, entry)
     persistEntry(cacheKey, entry)
   }, [cacheKey, results, liveReady])
-  const showLive = liveReady || !cached
+  // Le cache reste affiché tant que le live n'a pas rattrapé sa taille (évite
+  // la liste qui rétrécit puis regrossit pendant le drain).
+  const draining = status === 'CanLoadMore' && results.length < JOURNAL_DRAIN_MAX
+  const showLive = liveReady && (!cached || !draining || results.length >= cached.length)
   return {
     rows: showLive ? results : cached ?? [],
     loading: !liveReady && !cached,
-    fromCache: !liveReady && Boolean(cached),
-    canLoadMore: status === 'CanLoadMore',
-    loadingMore: status === 'LoadingMore',
+    fromCache: !showLive,
+    canLoadMore: status === 'CanLoadMore' && results.length >= JOURNAL_DRAIN_MAX,
+    loadingMore: status === 'LoadingMore' || (liveReady && draining),
     loadMore: () => loadMore(JOURNAL_PAGE_SIZE),
   }
 }
