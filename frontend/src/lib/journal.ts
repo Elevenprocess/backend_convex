@@ -1,5 +1,5 @@
 import { ROLE_LABELS } from './role'
-import { leadDetailPath } from './leadPaths'
+import { leadListPath } from './leadPaths'
 import type { ActivityDomain, ConvexActivityDoc } from './convexApi'
 import type { Role } from './types'
 
@@ -85,32 +85,43 @@ export function initialsOf(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
-/** Chemin de navigation vers l'entité d'une ligne du journal (null = pas de lien). */
-export function entityPath(row: Pick<ConvexActivityDoc, 'entityType' | 'entityId' | 'leadId' | 'clientId'>, role: Role | null | undefined): string | null {
+export type EntityTarget = { path: string; leadId?: string }
+
+/**
+ * Cible de navigation d'une ligne du journal (null = pas de lien) :
+ *  - tout ce qui concerne un prospect → liste prospects/clients du rôle avec
+ *    le panneau latéral ouvert sur ce prospect (leadId renvoyé pour selectLead)
+ *  - actions de dossier délivrabilité (étapes, sous-étapes, pièces, dossier)
+ *    → page dossier /suivi/:lead (panneau dossier intégré)
+ *  - comptes / invitations / objectifs → Paramètres ; acomptes → Finances
+ */
+export function entityTarget(
+  row: Pick<ConvexActivityDoc, 'entityType' | 'entityId' | 'leadId' | 'clientId'>,
+  role: Role | null | undefined,
+): EntityTarget | null {
   switch (row.entityType) {
-    case 'lead':
-    case 'call':
-    case 'debrief':
-    case 'devis':
-      return row.leadId ? leadDetailPath(role, row.leadId) : null
-    case 'rdv':
-      return `/rdv/${row.entityId}`
-    case 'project':
-    case 'project_attachment':
-      return row.leadId ? leadDetailPath(role, row.leadId) : null
     case 'client':
     case 'workflow_step':
     case 'workflow_substep':
     case 'document':
-      return row.clientId ? `/suivi/${row.clientId}` : row.leadId ? leadDetailPath(role, row.leadId) : null
+      return row.leadId ? { path: `/suivi/${row.leadId}`, leadId: row.leadId } : null
     case 'acompte':
-      return '/finances'
+      return { path: '/finances' }
     case 'user':
     case 'invitation':
-      return '/settings'
+    case 'commercial_objective':
+      return { path: '/settings' }
     default:
-      return row.leadId ? leadDetailPath(role, row.leadId) : null
+      return row.leadId ? { path: leadListPath(role), leadId: row.leadId } : null
   }
+}
+
+/** Chemin seul (compat / affichage). */
+export function entityPath(
+  row: Pick<ConvexActivityDoc, 'entityType' | 'entityId' | 'leadId' | 'clientId'>,
+  role: Role | null | undefined,
+): string | null {
+  return entityTarget(row, role)?.path ?? null
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {

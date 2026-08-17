@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { detailRows, entityPath, initialsOf, toCsv } from '../lib/journal'
+import { detailRows, entityPath, entityTarget, initialsOf, toCsv } from '../lib/journal'
 import type { ConvexActivityDoc } from '../lib/convexApi'
 
 const base: ConvexActivityDoc = {
@@ -17,13 +17,17 @@ describe('Journal helpers', () => {
     expect(initialsOf('')).toBe('?')
   })
 
-  it('entityPath suit le rôle (prospect vs client) et les entités délivrabilité', () => {
-    expect(entityPath(base, 'setter')).toBe('/leads/l1')
-    expect(entityPath(base, 'commercial')).toBe('/client/l1')
-    expect(entityPath({ entityType: 'rdv', entityId: 'r1', leadId: 'l1' }, 'admin')).toBe('/rdv/r1')
-    expect(entityPath({ entityType: 'workflow_substep', entityId: 's1', clientId: 'c1', leadId: 'l1' }, 'back_office')).toBe('/suivi/c1')
-    expect(entityPath({ entityType: 'user', entityId: 'u1' }, 'admin')).toBe('/settings')
-    expect(entityPath({ entityType: 'referrer', entityId: 'x' }, 'admin')).toBeNull()
+  it('entityTarget : prospect → liste du rôle + panneau ; dossier → /suivi/:lead ; admin → réglages', () => {
+    expect(entityTarget(base, 'setter')).toEqual({ path: '/leads', leadId: 'l1' })
+    expect(entityTarget(base, 'commercial')).toEqual({ path: '/client', leadId: 'l1' })
+    expect(entityTarget(base, 'delivrabilite')).toEqual({ path: '/client', leadId: 'l1' })
+    expect(entityTarget({ entityType: 'rdv', entityId: 'r1', leadId: 'l1' }, 'admin')).toEqual({ path: '/leads', leadId: 'l1' })
+    expect(entityTarget({ entityType: 'workflow_substep', entityId: 's1', clientId: 'c1', leadId: 'l1' }, 'back_office')).toEqual({ path: '/suivi/l1', leadId: 'l1' })
+    expect(entityTarget({ entityType: 'document', entityId: 'd1', clientId: 'c1', leadId: 'l1' }, 'admin')).toEqual({ path: '/suivi/l1', leadId: 'l1' })
+    expect(entityTarget({ entityType: 'user', entityId: 'u1' }, 'admin')).toEqual({ path: '/settings' })
+    expect(entityTarget({ entityType: 'acompte', entityId: 'x#1', leadId: 'l1' }, 'finances')).toEqual({ path: '/finances' })
+    expect(entityTarget({ entityType: 'referrer', entityId: 'x' }, 'admin')).toBeNull()
+    expect(entityPath(base, 'setter')).toBe('/leads')
   })
 
   it('detailRows : diff avant/après + clés libres, timestamps formatés', () => {

@@ -5,6 +5,9 @@ import { Topbar } from '../../components/shell/Topbar'
 import { Icon, type IconName } from '../../components/Icon'
 import { LoadingScreen } from '../../components/Spinner'
 import { useLead, useRdvList, useCallLogs, useUsers, useStartCall } from '../../lib/hooks'
+import { useConvexLeadActivity } from '../../lib/convexHooks'
+import type { ConvexActivityDoc } from '../../lib/convexApi'
+import { ROLE_LABELS } from '../../lib/role'
 import {
   PROJECT_STATUS_LABEL,
   STATUS_BADGE,
@@ -55,6 +58,7 @@ export function LeadDetail() {
   const { data: lead, loading, error } = useLead(id)
   const { data: rdvs } = useRdvList(id ? { leadId: id, limit: 50 } : undefined)
   const { data: calls } = useCallLogs(id ? { leadId: id, limit: 50 } : undefined)
+  const { data: activity } = useConvexLeadActivity(id)
   const { data: users } = useUsers()
 
   const userMap = useMemo(() => {
@@ -207,7 +211,7 @@ export function LeadDetail() {
       ? { label: DELIVRABILITE_STATUS_LABEL[lead.delivrabiliteStatus], className: DELIVRABILITE_STATUS_BADGE[lead.delivrabiliteStatus] }
       : { label: STATUS_LABEL[lead.status], className: STATUS_BADGE[lead.status] }
 
-  const timeline = buildTimeline(rdvs ?? [], calls ?? [], userMap)
+  const timeline = buildTimeline(rdvs ?? [], calls ?? [], userMap, activity ?? [])
 
   // Accueil : signalement d'une annulation/report reçue sur le numéro central.
   // Cible le RDV ouvert (planifié/reporté) le plus récent de ce prospect.
@@ -527,12 +531,45 @@ export function LeadDetail() {
   )
 }
 
+const ACTIVITY_ICON: Record<string, { icon: IconName; bg: string; color: string }> = {
+  call: { icon: 'phone', bg: 'bg-cuivre-tint', color: 'text-cuivre' },
+  rdv: { icon: 'calendar', bg: 'bg-success-tint', color: 'text-success' },
+  debrief: { icon: 'message', bg: 'bg-or-tint', color: 'text-or-dark' },
+  lead: { icon: 'users', bg: 'bg-or-tint', color: 'text-or-dark' },
+  devis: { icon: 'tag', bg: 'bg-info-tint', color: 'text-info' },
+  project: { icon: 'grid', bg: 'bg-info-tint', color: 'text-info' },
+  project_attachment: { icon: 'inbox', bg: 'bg-info-tint', color: 'text-info' },
+  client: { icon: 'inbox', bg: 'bg-success-tint', color: 'text-success' },
+  workflow_step: { icon: 'check', bg: 'bg-success-tint', color: 'text-success' },
+  workflow_substep: { icon: 'check', bg: 'bg-success-tint', color: 'text-success' },
+  document: { icon: 'inbox', bg: 'bg-success-tint', color: 'text-success' },
+  acompte: { icon: 'tag', bg: 'bg-rouille-tint', color: 'text-rouille' },
+}
+
+// Historique de la fiche = journal d'activité (qui a fait quoi, phrase FR) +
+// événements RDV/appels d'AVANT la mise en place du journal (sinon perdus).
 function buildTimeline(
   rdvs: RdvResponse[],
   calls: CallLogResponse[],
   userMap: Map<string, UserResponse>,
+  activity: ConvexActivityDoc[] = [],
 ): TimelineItem[] {
   const items: (TimelineItem & { sortKey: number })[] = []
+
+  const journalSince = activity.length > 0 ? Math.min(...activity.map((a) => a.at)) : Number.POSITIVE_INFINITY
+  for (const a of activity) {
+    const meta = ACTIVITY_ICON[a.entityType] ?? { icon: 'clock' as IconName, bg: 'bg-cream-darker', color: 'text-muted' }
+    const roleLabel = a.actorRole ? ROLE_LABELS[a.actorRole as keyof typeof ROLE_LABELS] ?? a.actorRole : null
+    items.push({
+      icon: meta.icon,
+      iconBg: meta.bg,
+      iconColor: meta.color,
+      title: roleLabel && a.actorId ? `${a.actorName} · ${roleLabel}` : a.actorName,
+      date: formatDateTime(new Date(a.at).toISOString()),
+      desc: a.summary,
+      sortKey: a.at,
+    })
+  }
 
   for (const r of rdvs) {
     const com = r.commercialId ? (userMap.get(r.commercialId)?.name ?? 'commercial') : 'commercial non assigné'
@@ -549,6 +586,8 @@ function buildTimeline(
   }
 
   for (const c of calls) {
+    // Depuis le journal, chaque appel y figure déjà (avec son auteur).
+    if (new Date(c.calledAt).getTime() >= journalSince) continue
     items.push({
       icon: 'phone',
       iconBg: 'bg-cuivre-tint',

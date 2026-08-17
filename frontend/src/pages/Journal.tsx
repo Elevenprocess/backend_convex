@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
@@ -9,6 +9,7 @@ import { EmptyState } from '../components/EmptyState'
 import { DateRangePicker } from '../components/analytics/DateRangePicker'
 import { useAuth } from '../lib/auth'
 import { useConvexUsers } from '../lib/convexHooks'
+import { useLeadSidebar } from '../lib/leadSidebar'
 import { ROLE_LABELS } from '../lib/role'
 import { DEFAULT_PERIOD, buildPeriodRange, type PeriodState } from '../lib/period'
 import {
@@ -18,7 +19,7 @@ import {
 import type { Role } from '../lib/types'
 import {
   DOMAIN_META, DOMAIN_ORDER, ENTITY_META, ENTITY_ORDER,
-  dayKey, dayTitle, detailRows, entityPath, initialsOf, timeFmt, toCsv,
+  dayKey, dayTitle, detailRows, entityTarget, initialsOf, timeFmt, toCsv,
 } from '../lib/journal'
 
 const PAGE_SIZE = 60
@@ -40,6 +41,17 @@ export function Journal() {
   const leadId = params.get('lead') ?? undefined
   const clientId = params.get('client') ?? undefined
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const navigate = useNavigate()
+  const selectLead = useLeadSidebar((s) => s.selectLead)
+
+  // Clic sur une ligne : ouvre la page concernée avec le panneau du prospect
+  // déjà sélectionné (liste prospects/clients + sidebar, ou page dossier).
+  const openRow = (row: ConvexActivityDoc) => {
+    const target = entityTarget(row, role)
+    if (!target) return
+    if (target.leadId) selectLead(target.leadId)
+    navigate(target.path)
+  }
 
   // Recherche débouncée (le search index tourne côté serveur).
   useEffect(() => {
@@ -258,6 +270,7 @@ export function Journal() {
                       role={role}
                       expanded={expanded.has(r._id)}
                       onToggle={() => toggle(r._id)}
+                      onOpen={() => openRow(r)}
                     />
                   ))}
                 </ol>
@@ -285,21 +298,35 @@ export function Journal() {
 
 // ─── Ligne ───────────────────────────────────────────────────────────────────
 
-function ActivityRow({ row, role, expanded, onToggle }: {
+function ActivityRow({ row, role, expanded, onToggle, onOpen }: {
   row: ConvexActivityDoc
   role: Role | undefined
   expanded: boolean
   onToggle: () => void
+  onOpen: () => void
 }) {
   const meta = DOMAIN_META[row.domain] ?? DOMAIN_META.system
-  const path = entityPath(row, role)
+  const target = entityTarget(row, role)
   const details = detailRows(row.details)
   const hasDetails = details.length > 0
   const isSystem = row.domain === 'system' && !row.actorId
   const roleLabel = row.actorRole ? (ROLE_LABELS[row.actorRole as Role] ?? row.actorRole) : null
+  const clickable = Boolean(target)
+
+  const handleKey = (e: React.KeyboardEvent) => {
+    if (!clickable) return
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() }
+  }
 
   return (
-    <li className="px-3 sm:px-4 py-2.5">
+    <li
+      className={`px-3 sm:px-4 py-2.5 transition-colors ${clickable ? 'cursor-pointer hover:bg-or-tint/40 focus-visible:bg-or-tint/40 outline-none' : ''}`}
+      onClick={clickable ? onOpen : undefined}
+      onKeyDown={handleKey}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      title={clickable ? (target?.leadId ? `Ouvrir ${row.subject ?? 'le prospect'}` : 'Ouvrir') : undefined}
+    >
       <div className="flex items-start gap-3">
         <span className="w-12 shrink-0 pt-1 text-xs font-bold tabular-nums text-faint">{timeFmt.format(new Date(row.at))}</span>
         <span
@@ -319,22 +346,27 @@ function ActivityRow({ row, role, expanded, onToggle }: {
             <span className="rounded-full bg-cream-darker px-2 py-0.5 font-bold text-muted">
               {ENTITY_META[row.entityType]?.label ?? row.entityType}
             </span>
-            {path && (
-              <Link to={path} className="inline-flex items-center gap-1 rounded-full border border-line-soft px-2 py-0.5 font-bold text-or-dark hover:bg-or-tint">
+            {row.subject && target?.leadId && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-line-soft px-2 py-0.5 font-bold text-or-dark">
                 <Icon name="eye" size={11} />
-                Ouvrir{row.subject ? ` · ${row.subject}` : ''}
-              </Link>
+                {row.subject}
+              </span>
             )}
             {row.viaUserId && <span className="text-faint">(en mode « Explorer un profil »)</span>}
             {hasDetails && (
-              <button type="button" onClick={onToggle} className="ml-auto inline-flex items-center gap-1 text-faint hover:text-text font-bold">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onToggle() }}
+                onKeyDown={(e) => e.stopPropagation()}
+                className="ml-auto inline-flex items-center gap-1 text-faint hover:text-text font-bold"
+              >
                 {expanded ? 'Masquer' : 'Détails'}
                 <Icon name={expanded ? 'chevron-down' : 'chevron-right'} size={12} />
               </button>
             )}
           </div>
           {expanded && hasDetails && (
-            <div className="mt-2 rounded-xl border border-line-soft bg-cream/60 px-3 py-2 text-xs">
+            <div className="mt-2 rounded-xl border border-line-soft bg-cream/60 px-3 py-2 text-xs" onClick={(e) => e.stopPropagation()}>
               <table className="w-full">
                 <tbody>
                   {details.map((d, i) => (
@@ -356,6 +388,7 @@ function ActivityRow({ row, role, expanded, onToggle }: {
             </div>
           )}
         </div>
+        {clickable && <Icon name="chevron-right" size={16} className="mt-1.5 shrink-0 text-faint" />}
       </div>
     </li>
   )

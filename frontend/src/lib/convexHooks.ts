@@ -3,8 +3,9 @@ import { create } from 'zustand'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 import { getFunctionName } from 'convex/server'
 import { convexClient } from './convex'
-import { adsReport, adBudget, adDepositsList, type ConvexAdBudget, type ConvexAdDeposit, simulatorFunnel, type ConvexSimulatorFunnel, analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsListEnriched, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, substepsList, usersGet, usersList, usersDirectory, leadsGetEnriched, analyticsSetterLeaderboard } from './convexApi'
-import type { ConvexUserDoc, SetterLeaderboardEntry } from './convexApi'
+import { adsReport, adBudget, adDepositsList, type ConvexAdBudget, type ConvexAdDeposit, simulatorFunnel, type ConvexSimulatorFunnel, analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, callLogsListByLead, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsListEnriched, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, substepsList, usersGet, usersList, usersDirectory, leadsGetEnriched, analyticsSetterLeaderboard } from './convexApi'
+import type { ConvexUserDoc, SetterLeaderboardEntry, ConvexActivityDoc } from './convexApi'
+import { activityLogForLead } from './convexApi'
 import { mapConvexAcompte, mapConvexCallLog, mapConvexClient, mapConvexCommercialObjective, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexSubstep, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
 import { fetchCache } from './fetchCacheStore'
@@ -656,17 +657,24 @@ export function useConvexCommercialAnalytics(
 export function useConvexCallLogs(filters?: {
   leadId?: string; setterId?: string; limit?: number; offset?: number
 } | null): Async<CallLogResponse[]> {
-  // Overview : feed d'appels d'un setter. Sans setterId → vide (pas de list globale).
-  const setterId = filters === null ? undefined : filters?.setterId
+  // Overview : feed d'appels d'un setter (setterId). Fiche prospect : appels
+  // d'un lead (leadId — callLogs:listByLead, était ignoré avant → historique
+  // de la fiche toujours vide). Sans l'un ni l'autre → vide (pas de list globale).
   const filtersIsNull = filters === null
+  const setterId = filters === null ? undefined : filters?.setterId
+  const leadId = filters === null ? undefined : filters?.leadId
   const limit = filters === null ? undefined : filters?.limit
-  const rows = useQuery(callLogsListBySetter, setterId ? { setterId, limit } : 'skip')
+  const bySetter = useQuery(callLogsListBySetter, setterId ? { setterId, limit } : 'skip')
+  const byLead = useQuery(callLogsListByLead, !setterId && leadId ? { leadId } : 'skip')
+  const rows = setterId ? bySetter : leadId ? byLead : undefined
+  const enabled = Boolean(setterId || leadId)
   const data = useMemo(() => {
-    if (!setterId) return filtersIsNull ? null : []
+    if (!enabled) return filtersIsNull ? null : []
     if (rows === undefined) return null
-    return rows.map(mapConvexCallLog)
-  }, [setterId, rows, filtersIsNull])
-  return { data, loading: !!setterId && rows === undefined, error: null, refetch: noop }
+    const mapped = rows.map(mapConvexCallLog)
+    return limit !== undefined && !setterId ? mapped.slice(0, limit) : mapped
+  }, [enabled, rows, filtersIsNull, limit, setterId])
+  return { data, loading: enabled && rows === undefined, error: null, refetch: noop }
 }
 
 // commercialObjectives.listByPeriod exige admin/commercial_lead → skip sinon.
@@ -799,4 +807,12 @@ export function useConvexUsers(): Async<UserResponse[]> {
   }, [known, allowed, rows, dirRows])
   const loading = known && (allowed ? rows === undefined : dirRows === undefined)
   return { data, loading, error: null, refetch: noop }
+}
+
+// Journal d'activité d'un prospect (fiche : section Historique). Périmètre
+// appliqué côté serveur (activityLog:forLead).
+export function useConvexLeadActivity(leadId: string | undefined, limit = 200): Async<ConvexActivityDoc[]> {
+  const rows = useQuery(activityLogForLead, leadId ? { leadId, limit } : 'skip')
+  const data = useMemo(() => (leadId ? (rows ?? null) : []), [leadId, rows])
+  return { data, loading: Boolean(leadId) && rows === undefined, error: null, refetch: noop }
 }
