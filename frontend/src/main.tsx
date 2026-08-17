@@ -40,6 +40,7 @@ const ProfilCommercial = lazy(() => import('./pages/profils/ProfilCommercial').t
 const Settings = lazy(() => import('./pages/Settings').then((m) => ({ default: m.Settings })))
 const MyProfile = lazy(() => import('./pages/MyProfile').then((m) => ({ default: m.MyProfile })))
 const AcceptInvitation = lazy(() => import('./pages/AcceptInvitation').then((m) => ({ default: m.AcceptInvitation })))
+const ApiDocs = lazy(() => import('./pages/ApiDocs').then((m) => ({ default: m.ApiDocs })))
 const DebriefMagicPage = lazy(() => import('./pages/DebriefMagicPage').then((m) => ({ default: m.DebriefMagicPage })))
 const Notifications = lazy(() => import('./pages/Notifications').then((m) => ({ default: m.Notifications })))
 const Journal = lazy(() => import('./pages/Journal').then((m) => ({ default: m.Journal })))
@@ -96,6 +97,7 @@ const router = createHashRouter([
       { path: '/login', element: <Login /> },
       { path: '/accept-invitation', element: <AcceptInvitation /> },
       { path: '/debrief/:token', element: <DebriefMagicPage /> },
+      { path: '/api-docs', element: <ApiDocs /> },
       {
         element: <RequireAuth />,
         children: [

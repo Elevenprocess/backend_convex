@@ -17,7 +17,7 @@
 import { REGISTRY } from "./bridge";
 import { coerceQuery, topLevelFields } from "./validate";
 import {
-  API_PREFIX, allowedRoutes, badRequest, buildOpenApi, describeToken, invoke,
+  API_PREFIX, allowedRoutes, badRequest, buildGuide, buildOpenApi, describeToken, invoke,
   type ApiMethod, type RouteDef, type RouteScope,
 } from "./router";
 
@@ -82,9 +82,14 @@ const META: RouteDef[] = [
     handler: async (_ctx, req) => ({ ...describeToken(req.token), routes: allowedRoutes(ROUTES, req.token) }),
   },
   {
-    method: "GET", path: "/openapi.json", scope: null,
-    summary: "Spécification OpenAPI 3.1 de l'API",
+    method: "GET", path: "/openapi.json", scope: null, public: true,
+    summary: "Spécification OpenAPI 3.1 de l'API (publique)",
     handler: async (_ctx, req) => buildOpenApi(ROUTES, new URL(req.raw.url).origin),
+  },
+  {
+    method: "GET", path: "/guide.md", scope: null, public: true,
+    summary: "Guide Markdown pour agents IA : règles, vocabulaire métier, routes (public)",
+    handler: async (_ctx, req) => buildGuide(ROUTES, new URL(req.raw.url).origin),
   },
 ];
 

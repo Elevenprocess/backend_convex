@@ -57,6 +57,8 @@ export function ApiTokensSection() {
       <p className="text-xs text-muted mb-3">
         Donnez à un agent (Hermes, n8n, script) un accès à Velora limité aux domaines que vous cochez.
         Base : <code className="font-mono">{apiBaseUrl()}</code> · header <code className="font-mono">Authorization: Bearer vlr_…</code>.
+        {' '}<a href="#/api-docs" target="_blank" rel="noreferrer" className="font-semibold text-or-dark hover:underline">Documentation de l'API ↗</a>
+        {' · '}<a href={`${apiBaseUrl()}/guide.md`} target="_blank" rel="noreferrer" className="font-semibold text-or-dark hover:underline">guide.md pour agents IA ↗</a>
       </p>
       <div className="flex items-center justify-between gap-2 mb-3">
         <span className="text-xs text-faint">{active.length} clé{active.length > 1 ? 's' : ''} active{active.length > 1 ? 's' : ''}</span>

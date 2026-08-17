@@ -37,6 +37,8 @@ export type RouteDef = {
   path: string;
   /** Scope requis ; `null` = accessible à toute clé valide (ex. /me). */
   scope: RouteScope | null;
+  /** Route publique (sans clé) : documentation uniquement, jamais de données. */
+  public?: boolean;
   summary: string;
   /** Fonction métier pontée (`module.fn`) : sert à documenter les paramètres. */
   fn?: string;
@@ -137,9 +139,12 @@ export function createApiHandler(routes: readonly RouteDef[]) {
     const now = Date.now();
     try {
       const url = new URL(req.url);
-      const token = await authenticate(ctx, req, now);
-
       const match = matchRoute(routes, req.method, url.pathname);
+      const publicRoute = "route" in match && match.route.public === true;
+      const token: ApiToken = publicRoute
+        ? { id: "public", name: "public", scopes: [] }
+        : await authenticate(ctx, req, now);
+
       if (!("route" in match)) {
         if (match.pathExists) throw new ApiError(405, "method_not_allowed", `Méthode ${req.method} non autorisée sur ${url.pathname}`);
         throw notFound(`Route inconnue : ${req.method} ${url.pathname}`);
@@ -158,6 +163,15 @@ export function createApiHandler(routes: readonly RouteDef[]) {
         }
       }
 
+      if (publicRoute) {
+        const out = await route.handler(ctx, {
+          token, actor: { source: "public", serviceUserId: "" as ActorArgs["serviceUserId"] },
+          params, query: url.searchParams, body, now, raw: req,
+        });
+        return typeof out === "string"
+          ? new Response(out, { status: 200, headers: { "content-type": "text/markdown; charset=utf-8", "access-control-allow-origin": "*" } })
+          : jsonResponse(out ?? {}, 200, { "access-control-allow-origin": "*" });
+      }
       const serviceUserId = await ctx.runMutation(internal.apiV1.bridge.ensureServiceUser, {});
       const actingAs = req.headers.get("x-acting-as")?.trim();
       const actor: ActorArgs = {
@@ -288,4 +302,72 @@ export function buildOpenApi(routes: readonly RouteDef[], baseUrl: string) {
     ],
     paths,
   };
+}
+
+// ─── Guide Markdown pour agents (GET /guide.md) ──────────────────────────────
+
+function fieldType(v: ReturnType<typeof topLevelFields>[string]["fieldType"]): string {
+  const sch = toJsonSchema(v) as Record<string, unknown>;
+  if (Array.isArray(sch.enum)) return (sch.enum as unknown[]).map((x) => JSON.stringify(x)).join(" | ");
+  if (sch.type === "array") return `tableau`;
+  if (typeof sch.type === "string") return sch.type === "number" ? "nombre" : sch.type === "boolean" ? "booléen" : sch.type === "string" ? "chaîne" : String(sch.type);
+  if (Array.isArray(sch.anyOf)) return "valeur (voir openapi.json)";
+  return "objet";
+}
+
+export function buildGuide(routes: readonly RouteDef[], baseUrl: string): string {
+  const base = `${baseUrl}${API_PREFIX}`;
+  const lines: string[] = [];
+  lines.push("# Velora — API agents : guide d'utilisation", "");
+  lines.push(`Base : \`${base}\` — Auth : header \`Authorization: Bearer vlr_…\` (clé créée par un admin dans Paramètres → API).`, "");
+  lines.push("## Règles", "",
+    "- `GET /me` : nom de la clé, scopes, **routes autorisées** (lis-le en premier). `GET /openapi.json` : schémas complets.",
+    "- Scopes `<domaine>:read|write` ; `403 missing_scope` renvoie `required` = le scope à demander à un admin.",
+    "- `X-Acting-As: <userId>` (optionnel) : agir au nom d'un utilisateur Velora (ses droits s'appliquent, l'action lui est attribuée). Sinon la clé agit comme un admin « Agent API ».",
+    "- Listes paginées : `?limit=` (1-200, défaut 50) `&cursor=` → `{ items, nextCursor }` ; boucler tant que `nextCursor` n'est pas null.",
+    "- Dates : millisecondes epoch (`scheduledAt`, `from`, `to`, `nextCallbackAt`) sauf `YYYY-MM-DD` (`period`, rapports pubs `from`/`to`). `now`/`today` sont injectés automatiquement.",
+    "- Écritures : body JSON avec exactement les champs listés (champ inconnu = 422). Ne jamais inventer un identifiant : lis-le d'abord (ex. `GET /leads?search=`).",
+    "- Erreurs : `{ error: { code, message } }` en français ; 422 = règle métier ou paramètre invalide (corrige et réessaie), 429 = attendre `Retry-After` secondes.",
+    "- Avant un `DELETE` ou un changement de statut, confirme avec l'humain si la demande est ambiguë.", "");
+  lines.push("## Vocabulaire métier → routes", "",
+    "- prospect / lead / contact → `/leads` · appel téléphonique → `/leads/{leadId}/calls` · rendez-vous → `/rdv`",
+    "- débrief (compte-rendu de RDV, vente ou non) → `/debriefs` · devis → `/devis` · projet / dossier de vente → `/projects`",
+    "- délivrabilité (VT, DP, raccordement, installation, Consuel, mise en service) → `/clients` + `/workflow/steps` + `/workflow/substeps`",
+    "- acomptes / échéancier / financement → `/payments`, `/debriefs/{debriefId}/…` · pubs Meta/Google → `/ads` · KPI, funnel, classements → `/analytics`",
+    "- équipe (setters, commerciaux, techniciens…) → `/users` · objectifs mensuels → `/objectives` · apporteurs d'affaires → `/referrers` · historique des actions → `/activity`", "");
+  lines.push("## Routes par domaine", "");
+  const byDomain = new Map<string, RouteDef[]>();
+  for (const r of routes) {
+    const d = r.scope ? r.scope.split(":")[0] : "meta";
+    (byDomain.get(d) ?? byDomain.set(d, []).get(d)!).push(r);
+  }
+  const label = (d: string) => API_DOMAINS.find((x) => x.key === d)?.label ?? (d === "meta" ? "Introspection" : d);
+  for (const [d, rs] of byDomain) {
+    lines.push(`### ${label(d)} (${d})`, "");
+    for (const r of rs) {
+      lines.push(`- **${r.method} ${API_PREFIX}${r.path}** — ${r.summary}${r.scope ? ` · scope \`${r.scope}\`` : " · public"}`);
+      if (r.fn && REGISTRY[r.fn]?.exportArgs) {
+        const fields = topLevelFields(REGISTRY[r.fn].exportArgs!());
+        const pathNames = new Set([...r.path.matchAll(/:(\w+)/g)].map((m) => m[1]));
+        const parts: string[] = [];
+        for (const [name, { fieldType: ft, optional }] of Object.entries(fields)) {
+          if (pathNames.has(name)) continue;
+          if (name === "paginationOpts") { parts.push("limit?, cursor?"); continue; }
+          if (name === "now" || name === "today" || name === "todayStart") continue;
+          parts.push(`${name}${optional ? "?" : ""}: ${fieldType(ft)}`);
+        }
+        if (parts.length) lines.push(`  - ${r.method === "GET" ? "query" : "body"} : ${parts.join(" ; ")}`);
+      }
+    }
+    lines.push("");
+  }
+  lines.push("## Exemples", "",
+    "```bash",
+    `curl -H "Authorization: Bearer $VELORA_API_KEY" "${base}/leads?status=qualifie&limit=20"`,
+    `curl -X POST -H "Authorization: Bearer $VELORA_API_KEY" -H "X-Acting-As: <userId>" -H "content-type: application/json" \\`,
+    `  -d '{"result":"rappel_planifie","notes":"Rappeler jeudi","nextCallbackAt":1724000000000}' "${base}/leads/<leadId>/calls"`,
+    `curl -X PATCH -H "Authorization: Bearer $VELORA_API_KEY" -H "content-type: application/json" -d '{"scheduledAt":1724050000000}' "${base}/rdv/<rdvId>"`,
+    `curl -H "Authorization: Bearer $VELORA_API_KEY" "${base}/analytics/summary?days=30"`,
+    "```", "");
+  return lines.join("\n");
 }

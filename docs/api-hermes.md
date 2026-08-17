@@ -1,5 +1,8 @@
 # API Velora pour agents (Hermes, n8n, scripts)
 
+**Page d'aide publique : `https://velora.electroconceptoi.com/#/api-docs`** (routes en direct depuis openapi.json).
+**Guide agents IA (Markdown, public) : `https://spotted-horse-257.eu-west-1.convex.site/api/v1/guide.md`** — c'est l'URL à donner à un agent avec sa clé.
+
 Base : `https://spotted-horse-257.eu-west-1.convex.site/api/v1`
 Auth : header `Authorization: Bearer vlr_…` (clé créée dans **Paramètres → Clés API / Agents**, admin).
 

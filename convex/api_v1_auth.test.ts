@@ -121,3 +121,19 @@ test("403 missing_scope avec le scope requis en clair, 429 avec Retry-After (rou
   expect(matchRoute([fake], "GET", "/api/v1/leads")).toEqual({ pathExists: false });
   expect(matchRoute([fake], "GET", "/other/leads/x")).toEqual({ pathExists: false });
 });
+
+test("openapi.json et guide.md sont publics (sans clé) ; /me reste protégé", async () => {
+  const { call } = await setup(["leads:read"]);
+  const spec = await call("/openapi.json", {}, null);
+  expect(spec.status).toBe(200);
+  expect((await spec.json()).openapi).toBe("3.1.0");
+  const guide = await call("/guide.md", {}, null);
+  expect(guide.status).toBe(200);
+  expect(guide.headers.get("content-type")).toContain("text/markdown");
+  const md = await guide.text();
+  expect(md).toContain("# Velora — API agents");
+  expect(md).toContain("**GET /api/v1/leads**");
+  expect(md).toContain("body : ");
+  expect(md).toContain("scope `leads:write`");
+  expect((await call("/me", {}, null)).status).toBe(401);
+});
