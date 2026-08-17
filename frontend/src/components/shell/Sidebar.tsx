@@ -41,11 +41,11 @@ const JOURNAL_ROLES: Role[] = [
   'back_office',
   'finances',
 ]
+// Statistiques : masquées pour le responsable commercial (demande user 2026-08-17).
 const NON_SALES_REP_ROLES: Role[] = [
   'admin',
   'setter',
   'setter_lead',
-  'commercial_lead',
   'delivrabilite',
   'responsable_technique',
   'back_office',
@@ -68,7 +68,7 @@ const SECTIONS: Section[] = [
     label: 'Statistiques',
     items: [
       { to: '/analytics', icon: 'chart', label: 'Statistiques', roles: NON_SALES_REP_ROLES },
-      { to: '/ads', icon: 'target', label: 'Publicité', roles: ['admin', 'commercial_lead'] },
+      { to: '/ads', icon: 'target', label: 'Publicité', roles: ['admin'] },
     ],
   },
   {

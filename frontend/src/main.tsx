@@ -61,11 +61,11 @@ function NoTechnicien({ children }: { children: ReactElement }) {
   return children
 }
 
-// Page Publicité (/ads) : réservée à l'admin et au commercial_lead (suivi ROAS).
+// Page Publicité (/ads) : réservée à l'admin (commercial_lead retiré le 2026-08-17).
 // Tout autre rôle est renvoyé vers son accueil. Garde positive (allowlist).
 function RequireAdsAccess({ children }: { children: ReactElement }) {
   const role = useAuth((s) => s.user?.role)
-  if (role === 'admin' || role === 'commercial_lead') return children
+  if (role === 'admin') return children
   return <Navigate to="/overview" replace />
 }
 

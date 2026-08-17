@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Spinner } from '../components/Spinner'
@@ -79,7 +79,9 @@ const EMPTY_ADMIN_STATS: AnalyticsAdminSummary = {
 export function Analytics() {
   const me = useAuth((s) => s.user)
 
-  if (me?.role === 'admin' || me?.role === 'commercial_lead') return <AnalyticsAdmin />
+  if (me?.role === 'admin') return <AnalyticsAdmin />
+  // Responsable commercial : plus d'accès aux statistiques (2026-08-17).
+  if (me?.role === 'commercial_lead') return <Navigate to="/overview" replace />
   if (me?.role === 'commercial') return <AnalyticsCommercial name={me.name} />
   if (me?.role === 'delivrabilite' || me?.role === 'responsable_technique' || me?.role === 'back_office' || me?.role === 'technicien') return <AnalyticsSuivi />
   return <AnalyticsSetter name={me?.name ?? 'Setter'} />
