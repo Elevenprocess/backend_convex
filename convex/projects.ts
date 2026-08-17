@@ -2,6 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { projectStatusValidator } from "./model/enums";
 import { requireRole, requireUser, assertCommercialRole, roleOf } from "./model/access";
+import { logActivity, leadLabel, leadLabelById, diffFields, fieldsSentence } from "./model/activity";
 import { toResponse as devisToResponse } from "./devis";
 import { READ_ROLES as ATTACHMENT_READ_ROLES, toSummary as attachmentToSummary } from "./projectAttachments";
 
@@ -29,7 +30,7 @@ export const create = mutation({
     if (args.commercialId) await assertCommercialRole(ctx, args.commercialId);
 
     const name = (args.name ?? `Projet ${leadFullName(lead)}`).trim() || "Dossier sans nom";
-    return await ctx.db.insert("projects", {
+    const projectId = await ctx.db.insert("projects", {
       leadId: args.leadId,
       commercialId: args.commercialId ?? user._id,
       name,
@@ -40,6 +41,13 @@ export const create = mutation({
       notes: args.notes,
       externalId: args.externalId,
     });
+    await logActivity(ctx, {
+      action: "project.created", entityType: "project", entityId: projectId, leadId: args.leadId,
+      subject: leadLabel(lead),
+      summary: `a créé le projet « ${name} » pour ${leadLabel(lead)}`,
+      details: { name, commercialId: args.commercialId ?? user._id },
+    });
+    return projectId;
   },
 });
 
@@ -89,6 +97,21 @@ export const update = mutation({
     if (args.status !== undefined) patch.status = args.status;
     if (args.notes !== undefined) patch.notes = args.notes;
     await ctx.db.patch(args.projectId, patch);
+    {
+      const diff = diffFields(existing as unknown as Record<string, unknown>, patch);
+      if (diff.changed.length > 0) {
+        const { subject } = await leadLabelById(ctx, existing.leadId);
+        const statusChanged = diff.changed.includes("status");
+        await logActivity(ctx, {
+          action: statusChanged ? "project.status_changed" : "project.updated",
+          entityType: "project", entityId: args.projectId, leadId: existing.leadId, subject,
+          summary: statusChanged
+            ? `a passé le projet « ${existing.name} » de ${subject} de « ${existing.status} » à « ${args.status} »`
+            : `a modifié le projet « ${existing.name} » de ${subject} (${fieldsSentence(diff.changed)})`,
+          details: { before: diff.before, after: diff.after },
+        });
+      }
+    }
     return null;
   },
 });
@@ -225,6 +248,13 @@ export const softDelete = mutation({
     const existing = await ctx.db.get(args.projectId);
     if (!existing || existing.deletedAt !== undefined) throw new Error("Projet introuvable");
     await ctx.db.patch(args.projectId, { deletedAt: Date.now() });
+    {
+      const { subject } = await leadLabelById(ctx, existing.leadId);
+      await logActivity(ctx, {
+        action: "project.deleted", entityType: "project", entityId: args.projectId, leadId: existing.leadId, subject,
+        summary: `a supprimé le projet « ${existing.name} » de ${subject}`,
+      });
+    }
     return null;
   },
 });

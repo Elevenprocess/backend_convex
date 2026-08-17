@@ -7,6 +7,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireUser, requireRole } from "./model/access";
+import { logActivity, userLabel, ROLE_LABEL, label } from "./model/activity";
 import { roleValidator, teamValidator, type Role } from "./model/enums";
 
 const MANAGER_ROLES: Role[] = ["admin", "commercial_lead"];
@@ -62,12 +63,18 @@ export const storeInvitation = internalMutation({
     for (const p of prior) {
       if (p.status === "pending") await ctx.db.patch(p._id, { status: "revoked" });
     }
-    return await ctx.db.insert("userInvitations", {
+    const invitationId = await ctx.db.insert("userInvitations", {
       email: args.email, name: args.name, role: args.role,
       ...(args.team !== undefined ? { team: args.team } : {}),
       ...(args.phone !== undefined ? { phone: args.phone } : {}),
       token: args.token, status: "pending", invitedById: args.invitedById, expiresAt: args.expiresAt,
     });
+    await logActivity(ctx, {
+      action: "invitation.sent", entityType: "invitation", entityId: invitationId, subject: args.name,
+      summary: `a invité ${args.name} (${args.email}) en tant que ${label(ROLE_LABEL, args.role)}`,
+      details: { email: args.email, role: args.role, team: args.team ?? null },
+    });
+    return invitationId;
   },
 });
 
@@ -135,6 +142,10 @@ export const revokeInvitation = mutation({
     const inv = await ctx.db.get(args.invitationId);
     if (!inv || inv.status !== "pending") return null;
     await ctx.db.patch(args.invitationId, { status: "revoked" });
+    await logActivity(ctx, {
+      action: "invitation.revoked", entityType: "invitation", entityId: args.invitationId, subject: inv.name,
+      summary: `a révoqué l'invitation de ${inv.name} (${inv.email})`,
+    });
     return null;
   },
 });
@@ -167,6 +178,12 @@ export const acceptInvitation = mutation({
       emailVerified: true,
     });
     await ctx.db.patch(inv._id, { status: "accepted", acceptedUserId: user._id, acceptedAt: now });
+    await logActivity(ctx, {
+      action: "invitation.accepted", entityType: "user", entityId: user._id, subject: inv.name,
+      summary: `a rejoint Velora en tant que ${label(ROLE_LABEL, inv.role)} (invitation acceptée)`,
+      details: { role: inv.role, team: inv.team ?? null },
+      at: now,
+    });
     return { userId: user._id };
   },
 });
@@ -194,6 +211,11 @@ export const renewUser = mutation({
       ...(args.email !== undefined ? { email: args.email.trim().toLowerCase() } : {}),
       ...(args.name !== undefined ? { name: args.name.trim() } : {}),
       ...(args.phone !== undefined ? { phone: args.phone } : {}),
+    });
+    await logActivity(ctx, {
+      action: "user.renewed", entityType: "user", entityId: args.userId, subject: userLabel(target),
+      summary: `a renouvelé le compte ${args.name?.trim() || userLabel(target)}${args.role ? ` (${label(ROLE_LABEL, args.role)})` : ""}`,
+      details: { role: args.role ?? null, team: args.team ?? null, email: args.email ?? null },
     });
     return null;
   },

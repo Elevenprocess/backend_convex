@@ -9,6 +9,7 @@
  */
 
 import type * as acompteReminders from "../acompteReminders.js";
+import type * as activityLog from "../activityLog.js";
 import type * as adDeposits from "../adDeposits.js";
 import type * as adSpend from "../adSpend.js";
 import type * as ads from "../ads.js";
@@ -41,6 +42,7 @@ import type * as model_access from "../model/access.js";
 import type * as model_acompteEcheancier from "../model/acompteEcheancier.js";
 import type * as model_acompteGuard from "../model/acompteGuard.js";
 import type * as model_acquisitionChannel from "../model/acquisitionChannel.js";
+import type * as model_activity from "../model/activity.js";
 import type * as model_adsReport from "../model/adsReport.js";
 import type * as model_analyticsBuilders from "../model/analyticsBuilders.js";
 import type * as model_analyticsRange from "../model/analyticsRange.js";
@@ -105,6 +107,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   acompteReminders: typeof acompteReminders;
+  activityLog: typeof activityLog;
   adDeposits: typeof adDeposits;
   adSpend: typeof adSpend;
   ads: typeof ads;
@@ -137,6 +140,7 @@ declare const fullApi: ApiFromModules<{
   "model/acompteEcheancier": typeof model_acompteEcheancier;
   "model/acompteGuard": typeof model_acompteGuard;
   "model/acquisitionChannel": typeof model_acquisitionChannel;
+  "model/activity": typeof model_activity;
   "model/adsReport": typeof model_adsReport;
   "model/analyticsBuilders": typeof model_analyticsBuilders;
   "model/analyticsRange": typeof model_analyticsRange;

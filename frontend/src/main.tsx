@@ -42,6 +42,7 @@ const MyProfile = lazy(() => import('./pages/MyProfile').then((m) => ({ default:
 const AcceptInvitation = lazy(() => import('./pages/AcceptInvitation').then((m) => ({ default: m.AcceptInvitation })))
 const DebriefMagicPage = lazy(() => import('./pages/DebriefMagicPage').then((m) => ({ default: m.DebriefMagicPage })))
 const Notifications = lazy(() => import('./pages/Notifications').then((m) => ({ default: m.Notifications })))
+const Journal = lazy(() => import('./pages/Journal').then((m) => ({ default: m.Journal })))
 const CallFullScreen = lazy(() => import('./pages/call/CallFullScreen').then((m) => ({ default: m.CallFullScreen })))
 const CallSplit = lazy(() => import('./pages/call/CallSplit').then((m) => ({ default: m.CallSplit })))
 const TechnicienPlanning = lazy(() => import('./pages/technicien/TechnicienPlanning').then((m) => ({ default: m.TechnicienPlanning })))
@@ -125,6 +126,7 @@ const router = createHashRouter([
           { path: '/settings', element: <Settings /> },
           { path: '/profile', element: <MyProfile /> },
           { path: '/notifications', element: <NoTechnicien><Notifications /></NoTechnicien> },
+          { path: '/journal', element: <NoTechnicien><Journal /></NoTechnicien> },
           { path: '/call/:id', element: <CallFullScreen /> },
           { path: '/call/split', element: <CallSplit /> },
           { path: '*', element: <RoleHome /> },

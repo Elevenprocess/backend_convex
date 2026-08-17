@@ -2,6 +2,7 @@ import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { roleValidator, teamValidator } from "./model/enums";
 import { getCurrentUser, requireUser, requireRole, getRealUser, resolveViewAs, impersonationAllowed, roleOf } from "./model/access";
+import { logActivity, userLabel, ROLE_LABEL, label, diffFields, fieldsSentence } from "./model/activity";
 
 export const me = query({
   args: {},
@@ -121,7 +122,7 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const admin = await requireRole(ctx, ["admin"]);
-    return await ctx.db.insert("users", {
+    const userId = await ctx.db.insert("users", {
       email: args.email,
       name: args.name,
       role: args.role ?? "setter",
@@ -130,6 +131,12 @@ export const create = mutation({
       active: true,
       createdById: admin._id,
     });
+    await logActivity(ctx, {
+      action: "user.created", entityType: "user", entityId: userId, subject: args.name,
+      summary: `a créé le compte ${args.name} (${label(ROLE_LABEL, args.role ?? "setter")})`,
+      details: { email: args.email, role: args.role ?? "setter", team: args.team ?? null },
+    });
+    return userId;
   },
 });
 
@@ -155,6 +162,22 @@ export const adminUpdate = mutation({
     if (args.team !== undefined) patch.team = args.team;
     if (args.active !== undefined) patch.active = args.active;
     if (Object.keys(patch).length > 0) await ctx.db.patch(args.userId, patch);
+    {
+      const diff = diffFields(target as unknown as Record<string, unknown>, patch);
+      if (diff.changed.length > 0) {
+        const bits: string[] = [];
+        if (diff.changed.includes("role")) bits.push(`rôle « ${label(ROLE_LABEL, target.role)} » → « ${label(ROLE_LABEL, args.role)} »`);
+        if (diff.changed.includes("active")) bits.push(args.active ? "compte réactivé" : "compte désactivé");
+        const rest = diff.changed.filter((k) => k !== "role" && k !== "active");
+        if (rest.length) bits.push(fieldsSentence(rest));
+        await logActivity(ctx, {
+          action: diff.changed.includes("role") ? "user.role_changed" : diff.changed.includes("active") ? (args.active ? "user.activated" : "user.deactivated") : "user.updated",
+          entityType: "user", entityId: args.userId, subject: userLabel(target),
+          summary: `a modifié le compte ${userLabel(target)} (${bits.join(" ; ")})`,
+          details: { before: diff.before, after: diff.after },
+        });
+      }
+    }
     return null;
   },
 });
@@ -170,6 +193,10 @@ export const remove = mutation({
     const target = await ctx.db.get(args.userId);
     if (!target || target.deletedAt !== undefined) throw new Error("Utilisateur introuvable");
     await ctx.db.patch(args.userId, { deletedAt: Date.now(), active: false });
+    await logActivity(ctx, {
+      action: "user.deleted", entityType: "user", entityId: args.userId, subject: userLabel(target),
+      summary: `a supprimé le compte ${userLabel(target)} (${label(ROLE_LABEL, target.role)})`,
+    });
     return null;
   },
 });
@@ -178,7 +205,15 @@ export const updateRole = mutation({
   args: { userId: v.id("users"), role: roleValidator },
   handler: async (ctx, args) => {
     await requireRole(ctx, ["admin"]);
+    const target = await ctx.db.get(args.userId);
     await ctx.db.patch(args.userId, { role: args.role });
+    if (target && target.role !== args.role) {
+      await logActivity(ctx, {
+        action: "user.role_changed", entityType: "user", entityId: args.userId, subject: userLabel(target),
+        summary: `a changé le rôle de ${userLabel(target)} : « ${label(ROLE_LABEL, target.role ?? "setter")} » → « ${label(ROLE_LABEL, args.role)} »`,
+        details: { before: { role: target.role ?? "setter" }, after: { role: args.role } },
+      });
+    }
     return null;
   },
 });
@@ -187,7 +222,15 @@ export const toggleActive = mutation({
   args: { userId: v.id("users"), active: v.boolean() },
   handler: async (ctx, args) => {
     await requireRole(ctx, ["admin"]);
+    const target = await ctx.db.get(args.userId);
     await ctx.db.patch(args.userId, { active: args.active });
+    if (target && (target.active ?? true) !== args.active) {
+      await logActivity(ctx, {
+        action: args.active ? "user.activated" : "user.deactivated", entityType: "user", entityId: args.userId,
+        subject: userLabel(target),
+        summary: args.active ? `a réactivé le compte ${userLabel(target)}` : `a désactivé le compte ${userLabel(target)}`,
+      });
+    }
     return null;
   },
 });

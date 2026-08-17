@@ -8,6 +8,10 @@ import { requireRole, assertCommercialRole, requireUser } from "./model/access";
 import { insertStageHistory } from "./model/stageHistory";
 import { deriveLeadStatus } from "./model/deriveLeadStatus";
 import { notifyRdvReceptionFlag } from "./model/notify";
+import {
+  logActivity, leadLabelById, userLabelById, RDV_STATUS_LABEL, RDV_RESULT_LABEL, label,
+  fmtDateTime, fmtEur, diffFields, fieldsSentence,
+} from "./model/activity";
 
 export const OPEN_RDV_STATUSES = ["planifie", "reporte"] as const;
 export const COMMERCIAL = ["admin", "commercial", "commercial_lead"] as const;
@@ -74,6 +78,21 @@ export const create = mutation({
       await ctx.db.patch(args.leadId, { assignedToId: args.commercialId });
     }
 
+    {
+      const { subject } = await leadLabelById(ctx, args.leadId);
+      const commercialName = args.commercialId ? await userLabelById(ctx, args.commercialId) : null;
+      const bits = [args.scheduledAt ? `le ${fmtDateTime(args.scheduledAt)}` : "sans date"];
+      if (commercialName) bits.push(`commercial : ${commercialName}`);
+      await logActivity(ctx, {
+        action: "rdv.created", entityType: "rdv", entityId: rdvId, leadId: args.leadId,
+        subject,
+        summary: `a planifié un RDV avec ${subject} (${bits.join(", ")})`,
+        details: {
+          scheduledAt: args.scheduledAt ?? null, commercialId: args.commercialId ?? null,
+          locationType: args.locationType ?? "domicile", notes: args.notes ?? null,
+        },
+      });
+    }
     return rdvId;
   },
 });
@@ -142,6 +161,28 @@ export const flagByReception = mutation({
           });
         }
       }
+    }
+
+    {
+      const { subject } = await leadLabelById(ctx, existing.leadId);
+      const what =
+        args.kind === "annule"
+          ? "a signalé l'annulation du RDV"
+          : replan
+            ? `a signalé le report du RDV au ${fmtDateTime(args.newScheduledAt)}`
+            : "a signalé le report (sans nouvelle date) du RDV";
+      await logActivity(ctx, {
+        action: args.kind === "annule" ? "rdv.reception_cancelled" : "rdv.reception_postponed",
+        entityType: "rdv", entityId: args.rdvId, leadId: existing.leadId,
+        subject,
+        summary: `${what} de ${subject}${args.reason ? ` — motif : ${args.reason}` : ""}`,
+        details: {
+          kind: args.kind, reason: args.reason ?? null, newScheduledAt: args.newScheduledAt ?? null,
+          before: { status: existing.status, scheduledAt: existing.scheduledAt ?? null },
+          after: { status: patch.status, scheduledAt: (patch.scheduledAt as number | undefined) ?? existing.scheduledAt ?? null },
+        },
+        at: now,
+      });
     }
 
     // Alerte le commercial concerné (best-effort, ne bloque pas le signalement).
@@ -219,6 +260,40 @@ export const update = mutation({
     }
 
     await ctx.db.patch(args.rdvId, patch);
+
+    {
+      const diff = diffFields(existing as unknown as Record<string, unknown>, patch);
+      if (diff.changed.length > 0) {
+        const { subject } = await leadLabelById(ctx, existing.leadId);
+        let action = "rdv.updated";
+        let what: string;
+        if (replan) {
+          action = "rdv.rescheduled";
+          what = `a reporté le RDV de ${subject} au ${fmtDateTime(args.scheduledAt)}`;
+        } else if (args.status !== undefined && args.status !== existing.status) {
+          action = "rdv.status_changed";
+          what = `a passé le RDV de ${subject} à « ${label(RDV_STATUS_LABEL, args.status)} »`;
+          if (args.result) what += ` (résultat : ${label(RDV_RESULT_LABEL, args.result)})`;
+        } else if (args.result !== undefined && args.result !== (existing.result ?? null)) {
+          action = "rdv.debriefed";
+          what = args.result
+            ? `a débriefé le RDV de ${subject} : ${label(RDV_RESULT_LABEL, args.result)}`
+            : `a effacé le résultat du RDV de ${subject}`;
+          if (args.montantTotal !== undefined) what += ` — ${fmtEur(args.montantTotal)}`;
+        } else if (args.scheduledAt !== undefined && args.scheduledAt !== existing.scheduledAt) {
+          action = "rdv.rescheduled";
+          what = `a déplacé le RDV de ${subject} au ${fmtDateTime(args.scheduledAt)}`;
+        } else {
+          what = `a modifié le RDV de ${subject} (${fieldsSentence(diff.changed)})`;
+        }
+        await logActivity(ctx, {
+          action, entityType: "rdv", entityId: args.rdvId, leadId: existing.leadId,
+          subject, summary: what,
+          details: { before: diff.before, after: diff.after },
+          at: now,
+        });
+      }
+    }
 
     // Dérive le statut du lead (sauf en re-planification)
     if (!replan && existing.leadId) {

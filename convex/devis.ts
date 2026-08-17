@@ -3,6 +3,7 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { customerPatch, dropUndefined, DevisExtraction } from "./model/devisExtraction";
 import { requireRole, requireUser } from "./model/access";
+import { logActivity, leadLabelById, fmtEur } from "./model/activity";
 import { extractFromPdf } from "./model/ocr";
 import { syncStatusToLeadAndProject } from "./model/devisStatusSync";
 import { ensureDossier } from "./model/ensureDossier";
@@ -122,6 +123,14 @@ export const create = mutation({
       extracted: {},
     });
     await ctx.scheduler.runAfter(0, internal.devis.runOcr, { devisId });
+    {
+      const { subject } = await leadLabelById(ctx, args.leadId);
+      await logActivity(ctx, {
+        action: "devis.uploaded", entityType: "devis", entityId: devisId, leadId: args.leadId, subject,
+        summary: `a déposé le devis « ${args.filename} » pour ${subject}`,
+        details: { filename: args.filename, sizeBytes: args.sizeBytes, rdvId: args.rdvId ?? null, projectId: args.projectId ?? null },
+      });
+    }
     return devisId;
   },
 });
@@ -238,6 +247,19 @@ export const update = mutation({
       if (updated) await syncStatusToLeadAndProject(ctx, updated);
     }
     const final = await ctx.db.get(args.devisId);
+    if (Object.keys(patch).length > 0) {
+      const { subject } = await leadLabelById(ctx, row.leadId);
+      const statusChanged = args.status !== undefined && args.status !== row.status;
+      const changed = Object.keys(patch).filter((k) => k !== "extracted");
+      await logActivity(ctx, {
+        action: statusChanged ? "devis.status_changed" : "devis.updated",
+        entityType: "devis", entityId: args.devisId, leadId: row.leadId, subject,
+        summary: statusChanged
+          ? `a passé le devis de ${subject} de « ${row.status} » à « ${args.status} »`
+          : `a modifié le devis de ${subject}${final?.montantNet !== undefined ? ` (${fmtEur(final.montantNet)} net)` : ""} — ${changed.join(", ")}`,
+        details: { changed, before: { status: row.status, montantNet: row.montantNet ?? null }, after: { status: final?.status, montantNet: final?.montantNet ?? null } },
+      });
+    }
     return toResponse(final!);
   },
 });
@@ -284,6 +306,15 @@ export const markAsSigned = mutation({
 
     const updated = await ctx.db.get(args.devisId);
     if (updated) await syncStatusToLeadAndProject(ctx, updated);
+    {
+      const { subject } = await leadLabelById(ctx, row.leadId);
+      await logActivity(ctx, {
+        action: "devis.signed", entityType: "devis", entityId: args.devisId, leadId: row.leadId, subject,
+        summary: `a marqué le devis de ${subject} comme signé (${fmtEur(row.montantNet ?? row.montantTtc)})`,
+        details: { montantNet: row.montantNet ?? null, montantTtc: row.montantTtc ?? null, financingType: row.financingType ?? null, devisNumber: row.devisNumber ?? null },
+        at: now,
+      });
+    }
     return toResponse(updated!);
   },
 });
@@ -297,6 +328,14 @@ export const remove = mutation({
     if (row.status === "signe") throw new Error("Devis signé : suppression interdite.");
     if (row.storageId) await ctx.storage.delete(row.storageId);
     await ctx.db.delete(args.devisId);
+    {
+      const { subject } = await leadLabelById(ctx, row.leadId);
+      await logActivity(ctx, {
+        action: "devis.deleted", entityType: "devis", entityId: args.devisId, leadId: row.leadId, subject,
+        summary: `a supprimé le devis « ${row.filename} » de ${subject}`,
+        details: { filename: row.filename, status: row.status },
+      });
+    }
     return { id: args.devisId, deleted: true as const };
   },
 });

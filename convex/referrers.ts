@@ -1,6 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { requireRole, requireUser } from "./model/access";
+import { logActivity } from "./model/activity";
 
 export const list = query({
   args: { activeOnly: v.optional(v.boolean()) },
@@ -25,12 +26,17 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     await requireRole(ctx, ["admin", "setter_lead", "commercial_lead", "setter", "commercial"]);
-    return await ctx.db.insert("referrers", {
+    const referrerId = await ctx.db.insert("referrers", {
       nom: args.nom,
       phone: args.phone,
       email: args.email,
       notes: args.notes,
       active: true,
     });
+    await logActivity(ctx, {
+      action: "referrer.created", entityType: "referrer", entityId: referrerId, subject: args.nom,
+      summary: `a ajouté le parrain « ${args.nom} »`,
+    });
+    return referrerId;
   },
 });

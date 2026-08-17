@@ -13,6 +13,7 @@ import { webhookProviderValidator, leadStatusValidator } from "./model/enums";
 import { mapGhlLeadPayload } from "./model/ghl/leadWebhook";
 import { mapGhlStageToStatus } from "./model/ghl/stageMapper";
 import { ensureDossier } from "./model/ensureDossier";
+import { logSystemActivity, leadLabel, LEAD_STATUS_LABEL, label } from "./model/activity";
 import { deriveAcquisitionChannel, isSiteWebUtm } from "./model/acquisitionChannel";
 import { syncProjectFromLeadStatus } from "./model/ghl/projectSync";
 
@@ -235,6 +236,34 @@ export const applyGhlStageChange = internalMutation({
       }
     }
 
+    // 5) Journal d'activité (jamais en backfill silencieux : ce n'est pas une action).
+    if (!input.silent && (created || statusChanged || mapped.sideEffect === "archived")) {
+      const leadDoc = await ctx.db.get(leadId);
+      const subject = leadLabel(leadDoc);
+      const nextStatus = leadDoc?.status ?? mapped.status ?? "nouveau";
+      let summary: string;
+      let action: string;
+      if (created) {
+        action = "lead.created";
+        summary = `Prospect ${subject} créé depuis GHL (étape « ${normalizedStage} »)`;
+      } else if (mapped.sideEffect === "archived") {
+        action = "lead.archived";
+        summary = `Prospect ${subject} archivé depuis GHL (étape « ${normalizedStage} »)`;
+      } else {
+        action = "lead.status_changed";
+        summary = `Prospect ${subject} passé de « ${label(LEAD_STATUS_LABEL, previousStatus)} » à « ${label(LEAD_STATUS_LABEL, nextStatus)} » (étape GHL « ${normalizedStage} »)`;
+      }
+      await logSystemActivity(ctx, {
+        source: "GHL", onBehalfOf: assignedToId ?? null,
+        action, entityType: "lead", entityId: leadId, leadId, subject, summary,
+        details: {
+          ghlStageName: normalizedStage, before: { status: previousStatus ?? null }, after: { status: nextStatus },
+          monetaryValue: input.monetaryValue ?? null, lostReason: input.lostReason ?? null,
+        },
+        at: input.occurredAt,
+      });
+    }
+
     return {
       leadId, created, statusChanged, historyAppended,
       ...(mapped.sideEffect !== undefined ? { sideEffect: mapped.sideEffect } : {}),
@@ -291,6 +320,12 @@ export const createLeadFromWebhook = internalMutation({
           patch.status = "a_rappeler";
         }
         await ctx.db.patch(existing._id, patch);
+        await logSystemActivity(ctx, {
+          source: "GHL", action: "lead.resubmitted", entityType: "lead", entityId: existing._id,
+          leadId: existing._id, subject: leadLabel(existing),
+          summary: `Prospect ${leadLabel(existing)} a refait une simulation (re-soumission)${patch.status ? " — repassé « À rappeler »" : ""}`,
+          details: { before: { status: existing.status }, after: { status: patch.status ?? existing.status } },
+        });
         return { leadId: existing._id, duplicate: true };
       }
     }
@@ -307,6 +342,15 @@ export const createLeadFromWebhook = internalMutation({
       ...stripUndefined(args.data),
       acquisitionChannel: channel,
     });
+    {
+      const created = await ctx.db.get(leadId);
+      await logSystemActivity(ctx, {
+        source: "GHL", action: "lead.created", entityType: "lead", entityId: leadId, leadId,
+        subject: leadLabel(created),
+        summary: `Nouveau prospect ${leadLabel(created)} reçu de GHL (canal ${channel}${args.data.canalAcquisition ? `, ${args.data.canalAcquisition}` : ""})`,
+        details: { channel, canalAcquisition: args.data.canalAcquisition ?? null, utmSource: args.data.utmSource ?? null, campaign: args.data.campaign ?? null },
+      });
+    }
     return { leadId, duplicate: false };
   },
 });

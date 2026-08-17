@@ -10,6 +10,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { requireRole } from "./model/access";
+import { logActivity, leadLabelById } from "./model/activity";
 import { WORKFLOW_ROLES, WORKFLOW_VIEW_ROLES } from "./clients";
 import { canEditSubstep, normalizeRole, visibleClientIds } from "./model/delivrabilitePermissions";
 import { catalogByKey } from "./model/substepCatalog";
@@ -113,6 +114,18 @@ export const attachToSubstep = mutation({
       await ctx.db.patch(substep._id, { dateRealisee: today });
     }
 
+    {
+      const client = await ctx.db.get(substep.clientId);
+      const { subject } = await leadLabelById(ctx, client?.leadId);
+      const names = args.files.map((f) => f.filename);
+      await logActivity(ctx, {
+        action: "document.uploaded", entityType: "document", entityId: substep._id,
+        clientId: substep.clientId, leadId: client?.leadId, subject,
+        summary: `a déposé ${names.length > 1 ? `${names.length} pièces` : "une pièce"} sur « ${def?.label ?? substep.key} » du dossier ${subject} (${names.join(", ")})`,
+        details: { substepKey: substep.key, type, files: names },
+      });
+    }
+
     return created;
   },
 });
@@ -170,6 +183,16 @@ export const remove = mutation({
     }
     await ctx.db.patch(args.documentId, { deletedAt: Date.now() });
     if (doc.storageId) await ctx.storage.delete(doc.storageId);
+    {
+      const client = await ctx.db.get(doc.clientId);
+      const { subject } = await leadLabelById(ctx, client?.leadId);
+      await logActivity(ctx, {
+        action: "document.deleted", entityType: "document", entityId: args.documentId,
+        clientId: doc.clientId, leadId: client?.leadId, subject,
+        summary: `a supprimé la pièce « ${doc.filename} » du dossier ${subject}`,
+        details: { type: doc.type, filename: doc.filename, substepId: doc.workflowSubstepId ?? null },
+      });
+    }
     return { ok: true as const };
   },
 });

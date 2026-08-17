@@ -28,6 +28,19 @@ const CALENDAR_ROLES: Role[] = [
 // Le commercial (vendeur individuel) n'a pas besoin d'Analytics ni de Rappels :
 // sa vue est minimale (débrief + suivi de son client). Le commercial_lead
 // (responsable) garde, lui, l'accès complet.
+// Historique des actions : chacun voit selon son périmètre (serveur) — le
+// technicien a sa propre navigation, on ne l'y expose pas.
+const JOURNAL_ROLES: Role[] = [
+  'admin',
+  'setter',
+  'setter_lead',
+  'commercial',
+  'commercial_lead',
+  'delivrabilite',
+  'responsable_technique',
+  'back_office',
+  'finances',
+]
 const NON_SALES_REP_ROLES: Role[] = [
   'admin',
   'setter',
@@ -47,6 +60,7 @@ const SECTIONS: Section[] = [
     items: [
       { to: '/overview', icon: 'home', label: "Vue d'ensemble" },
       { to: '/notifications', icon: 'bell', label: 'Rappels', roles: NON_SALES_REP_ROLES },
+      { to: '/journal', icon: 'clock', label: 'Historique', roles: JOURNAL_ROLES },
     ],
   },
   {

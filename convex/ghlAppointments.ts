@@ -23,6 +23,7 @@ import { ghlRequest, isGhlConfigured, requireGhlLocationId } from "./ghlClient";
 import { calendarIdForSector, parseSectorCalendars } from "./model/ghl/sectorConfig";
 import { buildGhlProspectRemark } from "./model/ghl/prospectRemark";
 import { requireRole, requireUser } from "./model/access";
+import { logActivity, leadLabel, leadLabelById, userLabelById, fmtDateTime } from "./model/activity";
 import { rdvLocationValidator } from "./model/enums";
 import { OPEN_RDV_STATUSES } from "./rdv";
 
@@ -215,6 +216,15 @@ export const finalizeAppointment = internalMutation({
     await ctx.db.patch(args.leadId, patch as never);
 
     const rdv = await ctx.db.get(rdvId);
+    await logActivity(ctx, {
+      fallbackSource: "GHL",
+      action: open ? "rdv.rescheduled" : "rdv.created", entityType: "rdv", entityId: rdvId, leadId: args.leadId,
+      subject: leadLabel(lead),
+      summary: open
+        ? `a re-planifié le RDV de ${leadLabel(lead)} au ${fmtDateTime(args.scheduledAt)} (calendrier GHL)`
+        : `a pris un RDV pour ${leadLabel(lead)} le ${fmtDateTime(args.scheduledAt)} (calendrier GHL)`,
+      details: { scheduledAt: args.scheduledAt, appointmentId: args.appointmentId, locationType: args.locationType ?? "domicile", notes: args.notes ?? null, statusBefore: lead.status, statusAfter: "qualifie" },
+    });
     return { rdvId, rdv };
   },
 });
@@ -377,6 +387,18 @@ export const applyAppointmentUpdate = internalMutation({
     }
     if (args.revenuFiscal != null) leadPatch.revenuFiscal = args.revenuFiscal;
     if (Object.keys(leadPatch).length > 0) await ctx.db.patch(rdv.leadId, leadPatch as never);
+    if (Object.keys(patch).length > 0 || Object.keys(leadPatch).length > 0) {
+      const { subject } = await leadLabelById(ctx, rdv.leadId);
+      const moved = args.scheduledAt !== undefined && args.scheduledAt !== rdv.scheduledAt;
+      await logActivity(ctx, {
+        fallbackSource: "GHL",
+        action: moved ? "rdv.rescheduled" : "rdv.updated", entityType: "rdv", entityId: args.rdvId, leadId: rdv.leadId, subject,
+        summary: moved
+          ? `a déplacé le RDV de ${subject} au ${fmtDateTime(args.scheduledAt)} (calendrier GHL)`
+          : `a modifié le RDV de ${subject} (${[...Object.keys(patch), ...Object.keys(leadPatch)].join(", ")}) via GHL`,
+        details: { before: { scheduledAt: rdv.scheduledAt ?? null }, after: { scheduledAt: args.scheduledAt ?? rdv.scheduledAt ?? null }, leadPatch },
+      });
+    }
     return null;
   },
 });
@@ -477,6 +499,15 @@ export const applyReassignment = internalMutation({
     const lead = await ctx.db.get(rdv.leadId);
     if (lead && lead.deletedAt === undefined) {
       await ctx.db.patch(rdv.leadId, { assignedToId: args.commercialId });
+    }
+    {
+      const commercialName = await userLabelById(ctx, args.commercialId);
+      await logActivity(ctx, {
+        fallbackSource: "GHL",
+        action: "rdv.reassigned", entityType: "rdv", entityId: args.rdvId, leadId: rdv.leadId, subject: leadLabel(lead),
+        summary: `a réattribué le RDV de ${leadLabel(lead)} au commercial ${commercialName}`,
+        details: { before: { commercialId: rdv.commercialId ?? null }, after: { commercialId: args.commercialId } },
+      });
     }
     return null;
   },

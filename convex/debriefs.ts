@@ -18,6 +18,23 @@ import {
   commercialSaleActiveFromLeadStatus,
 } from "./model/syncFromCommercial";
 import { notifyDebriefCreated } from "./model/notify";
+import {
+  logActivity, logSystemActivity, leadLabelById, DEBRIEF_OUTCOME_LABEL, label, fmtEur, fmtDateTime,
+} from "./model/activity";
+
+// Phrase FR d'un débrief : « vente (12 000 €, comptant) », « non-vente (trop cher) »…
+function debriefSentence(a: {
+  outcome: string; nonSaleReason?: string | null; montantTotal?: number | null; financingType?: string | null;
+}): string {
+  const bits: string[] = [];
+  if (a.outcome === "vente") {
+    if (a.montantTotal !== undefined && a.montantTotal !== null) bits.push(fmtEur(a.montantTotal));
+    if (a.financingType) bits.push(String(a.financingType));
+  } else if (a.outcome === "non_vente" && a.nonSaleReason) {
+    bits.push(String(a.nonSaleReason));
+  }
+  return `${label(DEBRIEF_OUTCOME_LABEL, a.outcome)}${bits.length ? ` (${bits.join(", ")})` : ""}`;
+}
 
 const COMMERCIAL = ["admin", "commercial", "commercial_lead"] as const;
 
@@ -213,6 +230,19 @@ export const createForLead = mutation({
       leadId: args.leadId, commercialId, outcome: args.outcome,
       montantTotal: args.montantTotal, rdvId: args.rdvId,
     });
+    {
+      const { subject } = await leadLabelById(ctx, args.leadId);
+      await logActivity(ctx, {
+        action: args.outcome === "vente" ? "debrief.sale" : "debrief.created",
+        entityType: "debrief", entityId: debriefId, leadId: args.leadId, subject,
+        summary: `a saisi le débrief de ${subject} : ${debriefSentence(args)}`,
+        details: {
+          outcome: args.outcome, nonSaleReason: args.nonSaleReason ?? null,
+          montantTotal: args.montantTotal ?? null, financingType: args.financingType ?? null,
+          rdvId: args.rdvId ?? null, projectId: projectId ?? null, notes: args.notes ?? null,
+        },
+      });
+    }
     return debriefId;
   },
 });
@@ -266,6 +296,19 @@ export const create = mutation({
       leadId: project.leadId, commercialId, outcome: args.outcome,
       montantTotal: args.montantTotal, rdvId: args.rdvId,
     });
+    {
+      const { subject } = await leadLabelById(ctx, project.leadId);
+      await logActivity(ctx, {
+        action: args.outcome === "vente" ? "debrief.sale" : "debrief.created",
+        entityType: "debrief", entityId: debriefId, leadId: project.leadId, subject,
+        summary: `a saisi le débrief de ${subject} : ${debriefSentence(args)}`,
+        details: {
+          outcome: args.outcome, nonSaleReason: args.nonSaleReason ?? null,
+          montantTotal: args.montantTotal ?? null, financingType: args.financingType ?? null,
+          rdvId: args.rdvId ?? null, projectId: args.projectId, notes: args.notes ?? null,
+        },
+      });
+    }
     return debriefId;
   },
 });
@@ -467,6 +510,22 @@ export const submitViaLink = internalMutation({
       }
     }
 
+    {
+      const { subject } = await leadLabelById(ctx, leadId);
+      await logSystemActivity(ctx, {
+        source: "Lien débrief WhatsApp", onBehalfOf: commercialId,
+        action: args.outcome === "vente" ? "debrief.sale" : "debrief.created",
+        entityType: "debrief", entityId: args.rdvId, leadId, subject,
+        summary: `a saisi le débrief de ${subject} via le lien WhatsApp : ${debriefSentence(args)}`,
+        details: {
+          outcome: args.outcome, nonSaleReason: args.nonSaleReason ?? null,
+          montantTotal: args.montantTotal ?? null, financingType: args.financingType ?? null,
+          rdvId: args.rdvId, notes: args.notes ?? null,
+        },
+        at: now,
+      });
+    }
+
     await ctx.scheduler.runAfter(0, internal.ghlDebriefLink.pushRdvDebriefScheduled, { rdvId: args.rdvId });
     return { ok: true };
   },
@@ -485,6 +544,16 @@ export const rescheduleViaLink = internalMutation({
       debriefFilledAt: undefined,
       debriefDueAt: undefined,
     });
+    {
+      const { subject } = await leadLabelById(ctx, rdvRow.leadId);
+      await logSystemActivity(ctx, {
+        source: "Lien débrief WhatsApp", onBehalfOf: rdvRow.commercialId ?? null,
+        action: "rdv.rescheduled", entityType: "rdv", entityId: args.rdvId,
+        leadId: rdvRow.leadId, subject,
+        summary: `a reporté le RDV de ${subject} au ${fmtDateTime(args.scheduledAt)} via le lien WhatsApp`,
+        details: { before: { scheduledAt: rdvRow.scheduledAt ?? null }, after: { scheduledAt: args.scheduledAt } },
+      });
+    }
     return { ok: true };
   },
 });
@@ -596,6 +665,21 @@ export const update = mutation({
         kits: updated.kits ?? null,
       });
     }
+    if (Object.keys(patch).length > 0) {
+      const { subject } = await leadLabelById(ctx, existing.leadId);
+      const updated = (await ctx.db.get(args.debriefId))!;
+      const outcomeChanged = args.outcome !== undefined && args.outcome !== existing.outcome;
+      const before: Record<string, unknown> = {};
+      for (const k of Object.keys(patch)) before[k] = (existing as Record<string, unknown>)[k] ?? null;
+      await logActivity(ctx, {
+        action: outcomeChanged ? "debrief.outcome_changed" : "debrief.updated",
+        entityType: "debrief", entityId: args.debriefId, leadId: existing.leadId ?? undefined, subject,
+        summary: outcomeChanged
+          ? `a modifié le débrief de ${subject} : ${label(DEBRIEF_OUTCOME_LABEL, existing.outcome)} → ${debriefSentence(updated)}`
+          : `a modifié le débrief de ${subject} (${Object.keys(patch).join(", ")})`,
+        details: { before, after: patch },
+      });
+    }
     return null;
   },
 });
@@ -607,6 +691,15 @@ export const softDelete = mutation({
     const existing = await ctx.db.get(args.debriefId);
     if (!existing || existing.deletedAt !== undefined) throw new Error("Débrief introuvable");
     await ctx.db.patch(args.debriefId, { deletedAt: Date.now() });
+    {
+      const { subject } = await leadLabelById(ctx, existing.leadId);
+      await logActivity(ctx, {
+        action: "debrief.deleted", entityType: "debrief", entityId: args.debriefId,
+        leadId: existing.leadId ?? undefined, subject,
+        summary: `a supprimé le débrief de ${subject} (${label(DEBRIEF_OUTCOME_LABEL, existing.outcome)})`,
+        details: { outcome: existing.outcome, montantTotal: existing.montantTotal ?? null },
+      });
+    }
     return null;
   },
 });

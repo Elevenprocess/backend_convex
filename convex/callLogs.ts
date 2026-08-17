@@ -6,6 +6,7 @@ import { callResultValidator } from "./model/enums";
 import type { CallResult, LeadStatus } from "./model/enums";
 import { requireUser, requireLeadWriteRole, roleOf } from "./model/access";
 import { insertStageHistory } from "./model/stageHistory";
+import { logActivity, leadLabel, CALL_RESULT_LABEL, LEAD_STATUS_LABEL, label, fmtDateTime } from "./model/activity";
 import { OPEN_RDV_STATUSES } from "./rdv";
 
 // Portage de CallLogsService : le résultat d'appel dérive le statut du lead
@@ -135,6 +136,25 @@ export const logCall = mutation({
         assignedToId: lead.assignedToId,
         changedAt: calledAt,
         source: "manual",
+      });
+    }
+    {
+      const bits = [`résultat : ${label(CALL_RESULT_LABEL, args.result)}`];
+      if (args.durationSec) bits.push(`${Math.round(args.durationSec / 60)} min`);
+      if (args.nextCallbackAt) bits.push(`rappel le ${fmtDateTime(args.nextCallbackAt)}`);
+      if (derivedStatus && derivedStatus !== lead.status) {
+        bits.push(`statut → « ${label(LEAD_STATUS_LABEL, derivedStatus)} »`);
+      }
+      await logActivity(ctx, {
+        action: "call.logged", entityType: "call", entityId: id, leadId: args.leadId,
+        subject: leadLabel(lead),
+        summary: `a enregistré un appel avec ${leadLabel(lead)} (${bits.join(", ")})`,
+        details: {
+          result: args.result, durationSec: args.durationSec ?? null,
+          nextCallbackAt: args.nextCallbackAt ?? null, notes: args.notes ?? null,
+          statusBefore: lead.status, statusAfter: derivedStatus ?? lead.status,
+        },
+        at: calledAt,
       });
     }
     return id;

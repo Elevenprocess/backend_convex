@@ -7,6 +7,14 @@ export const ROLES = [
 export type Role = (typeof ROLES)[number];
 export const roleValidator = v.union(...ROLES.map((r) => v.literal(r))) as Validator<Role>;
 
+// Côtés métier du journal d'activité (activityLog.domain).
+export const ACTIVITY_DOMAINS = [
+  "setting", "closing", "delivrabilite", "finances", "admin", "system",
+] as const;
+export type ActivityDomain = (typeof ACTIVITY_DOMAINS)[number];
+export const activityDomainValidator =
+  v.union(...ACTIVITY_DOMAINS.map((d) => v.literal(d))) as Validator<ActivityDomain>;
+
 export const TEAMS = ["setting", "closing", "admin", "delivrabilite"] as const;
 export type Team = (typeof TEAMS)[number];
 export const teamValidator = v.union(...TEAMS.map((t) => v.literal(t))) as Validator<Team>;

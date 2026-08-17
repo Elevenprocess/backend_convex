@@ -13,6 +13,7 @@ import { action, internalAction, internalQuery, mutation, type ActionCtx } from 
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireHermesKey } from "./model/hermesAuth";
+import { logSystemActivity, leadLabelById } from "./model/activity";
 import { signDebriefToken } from "./model/debriefLinkToken";
 import { ghlRequest, isGhlConfigured } from "./ghlClient";
 
@@ -330,6 +331,15 @@ export const markSent = mutation({
     if (!r || r.deletedAt !== undefined) throw new Error("RDV introuvable");
     if (r.debriefNotifiedAt !== undefined) return null;
     await ctx.db.patch(args.rdvId, { debriefNotifiedAt: Date.now() });
+    {
+      const { subject } = await leadLabelById(ctx, r.leadId);
+      await logSystemActivity(ctx, {
+        source: "Débrief WhatsApp", action: "rdv.debrief_link_sent", entityType: "rdv", entityId: args.rdvId,
+        leadId: r.leadId, subject,
+        summary: `Lien de débrief WhatsApp envoyé au commercial pour le RDV de ${subject}`,
+        details: { commercialId: r.commercialId ?? null },
+      });
+    }
     return null;
   },
 });

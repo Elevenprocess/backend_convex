@@ -9,6 +9,9 @@ import { normalizeSource } from "./model/acquisitionChannel";
 import { insertStageHistory } from "./model/stageHistory";
 import { enrichLead } from "./model/enrichLead";
 import { CLIENT_VISIBLE_STATUSES, isClientVisibleLead } from "./model/clientScope";
+import {
+  logActivity, leadLabel, userLabelById, LEAD_STATUS_LABEL, label, diffFields, fieldsSentence,
+} from "./model/activity";
 
 export const get = query({
   args: { leadId: v.id("leads") },
@@ -27,6 +30,11 @@ export const softDelete = mutation({
     const existing = await ctx.db.get(args.leadId);
     if (!existing || existing.deletedAt !== undefined) throw new Error("Lead introuvable");
     await ctx.db.patch(args.leadId, { deletedAt: Date.now() });
+    await logActivity(ctx, {
+      action: "lead.deleted", entityType: "lead", entityId: args.leadId, leadId: args.leadId,
+      subject: leadLabel(existing),
+      summary: `a supprimé le prospect ${leadLabel(existing)}`,
+    });
     return null;
   },
 });
@@ -183,13 +191,21 @@ export const create = mutation({
     const user = await requireRole(ctx, [
       "admin", "setter", "setter_lead", "commercial", "commercial_lead",
     ]);
-    return await ctx.db.insert("leads", {
+    const leadId = await ctx.db.insert("leads", {
       ...args,
       source: "manual",
       status: args.status ?? "nouveau",
       createdAt: Date.now(),
       setterId: user._id,
     });
+    const created = await ctx.db.get(leadId);
+    await logActivity(ctx, {
+      action: "lead.created", entityType: "lead", entityId: leadId, leadId,
+      subject: leadLabel(created),
+      summary: `a créé le prospect ${leadLabel(created)} (saisie manuelle, statut ${label(LEAD_STATUS_LABEL, args.status ?? "nouveau")})`,
+      details: { status: args.status ?? "nouveau", canalAcquisition: args.canalAcquisition ?? null },
+    });
+    return leadId;
   },
 });
 
@@ -197,7 +213,15 @@ export const assignSetter = mutation({
   args: { leadId: v.id("leads"), setterId: v.id("users") },
   handler: async (ctx, args) => {
     await requireRole(ctx, ["admin", "setter_lead"]);
+    const lead = await ctx.db.get(args.leadId);
     await ctx.db.patch(args.leadId, { setterId: args.setterId });
+    const setterName = await userLabelById(ctx, args.setterId);
+    await logActivity(ctx, {
+      action: "lead.setter_assigned", entityType: "lead", entityId: args.leadId, leadId: args.leadId,
+      subject: leadLabel(lead),
+      summary: `a attribué le prospect ${leadLabel(lead)} au setter ${setterName}`,
+      details: { before: { setterId: lead?.setterId ?? null }, after: { setterId: args.setterId } },
+    });
     return null;
   },
 });
@@ -206,7 +230,15 @@ export const assignCommercial = mutation({
   args: { leadId: v.id("leads"), userId: v.id("users") },
   handler: async (ctx, args) => {
     await requireRole(ctx, ["admin", "commercial_lead", "setter_lead"]);
+    const lead = await ctx.db.get(args.leadId);
     await ctx.db.patch(args.leadId, { assignedToId: args.userId });
+    const commercialName = await userLabelById(ctx, args.userId);
+    await logActivity(ctx, {
+      action: "lead.commercial_assigned", entityType: "lead", entityId: args.leadId, leadId: args.leadId,
+      subject: leadLabel(lead),
+      summary: `a attribué le prospect ${leadLabel(lead)} au commercial ${commercialName}`,
+      details: { before: { assignedToId: lead?.assignedToId ?? null }, after: { assignedToId: args.userId } },
+    });
     return null;
   },
 });
@@ -226,6 +258,12 @@ export const updateStatus = mutation({
       assignedToId: lead.assignedToId,
       changedAt: Date.now(),
       source: "manual",
+    });
+    await logActivity(ctx, {
+      action: "lead.status_changed", entityType: "lead", entityId: args.leadId, leadId: args.leadId,
+      subject: leadLabel(lead),
+      summary: `a passé le prospect ${leadLabel(lead)} de « ${label(LEAD_STATUS_LABEL, lead.status)} » à « ${label(LEAD_STATUS_LABEL, args.status)} »`,
+      details: { before: { status: lead.status }, after: { status: args.status } },
     });
     return null;
   },
@@ -247,6 +285,15 @@ export const qualify = mutation({
       assignedToId: lead.assignedToId,
       changedAt: Date.now(),
       source: "manual",
+    });
+    await logActivity(ctx, {
+      action: args.qualified ? "lead.qualified" : "lead.disqualified",
+      entityType: "lead", entityId: args.leadId, leadId: args.leadId,
+      subject: leadLabel(lead),
+      summary: args.qualified
+        ? `a qualifié le prospect ${leadLabel(lead)}`
+        : `a marqué le prospect ${leadLabel(lead)} comme pas qualifié`,
+      details: { before: { status: lead.status }, after: { status } },
     });
     return null;
   },
@@ -290,6 +337,22 @@ export const update = mutation({
         assignedToId: args.assignedToId ?? lead.assignedToId,
         changedAt: Date.now(),
         source: "manual",
+      });
+    }
+    const diff = diffFields(lead as unknown as Record<string, unknown>, patch);
+    if (diff.changed.length > 0) {
+      const parts: string[] = [];
+      if (statusChanged) {
+        parts.push(`statut « ${label(LEAD_STATUS_LABEL, lead.status)} » → « ${label(LEAD_STATUS_LABEL, args.status)} »`);
+      }
+      const others = diff.changed.filter((k) => k !== "status");
+      if (others.length > 0) parts.push(fieldsSentence(others));
+      await logActivity(ctx, {
+        action: statusChanged ? "lead.status_changed" : "lead.updated",
+        entityType: "lead", entityId: leadId, leadId,
+        subject: leadLabel(lead),
+        summary: `a modifié le prospect ${leadLabel(lead)} (${parts.join(" ; ")})`,
+        details: { before: diff.before, after: diff.after },
       });
     }
     return await ctx.db.get(leadId);

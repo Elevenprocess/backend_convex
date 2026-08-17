@@ -17,6 +17,7 @@ import {
   documentTypeValidator,
   // Webhooks entrants (Tranche 8a)
   webhookProviderValidator, webhookEventStatusValidator,
+  activityDomainValidator,
 } from "./model/enums";
 
 export default defineSchema({
@@ -695,6 +696,47 @@ export default defineSchema({
   })
     .index("by_entity", ["entityType", "entityId"])
     .index("by_user", ["userId"]),
+
+  /**
+   * Journal d'activité (espace « Historique ») : une ligne horodatée par action
+   * métier faite dans le SaaS — setting, closing, délivrabilité, finances,
+   * admin — plus les événements système (webhooks GHL, liens débrief, cron).
+   * Écrit UNIQUEMENT via model/activity.ts (logActivity/logSystemActivity).
+   * `summary` = phrase française lisible telle quelle ; `details` = contexte
+   * brut (avant/après, args) pour le dépliage. Distinct de `auditLog`
+   * (audit technique des statuts workflow, conservé).
+   */
+  activityLog: defineTable({
+    at: v.number(), // ms
+    // Acteur : user connecté (undefined = système). Snapshots pour que la
+    // ligne reste lisible même si le compte est renommé/supprimé.
+    actorId: v.optional(v.id("users")),
+    actorName: v.string(),
+    actorRole: v.optional(v.string()),
+    // Côté métier : setting | closing | delivrabilite | finances | admin | system
+    domain: activityDomainValidator,
+    // Admin en mode « Explorer un profil » : le profil emprunté.
+    viaUserId: v.optional(v.id("users")),
+    action: v.string(), // ex. "lead.status_changed"
+    entityType: v.string(), // lead | rdv | debrief | client | workflow_step | …
+    entityId: v.string(),
+    // Rattachements pour filtrer/naviguer.
+    leadId: v.optional(v.id("leads")),
+    clientId: v.optional(v.id("clients")),
+    subject: v.optional(v.string()), // libellé de l'entité (nom du prospect…)
+    summary: v.string(),
+    details: v.optional(v.any()),
+  })
+    .index("by_at", ["at"])
+    .index("by_actor_at", ["actorId", "at"])
+    .index("by_domain_at", ["domain", "at"])
+    .index("by_lead_at", ["leadId", "at"])
+    .index("by_client_at", ["clientId", "at"])
+    .index("by_entity_at", ["entityType", "entityId", "at"])
+    .searchIndex("search_summary", {
+      searchField: "summary",
+      filterFields: ["domain", "actorId", "entityType"],
+    }),
 
   /**
    * Catalogue de produits (panneaux, onduleurs, batteries).

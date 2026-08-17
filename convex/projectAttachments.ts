@@ -8,6 +8,7 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { requireRole } from "./model/access";
+import { logActivity, leadLabelById } from "./model/activity";
 import type { Role } from "./model/enums";
 
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024; // 25 Mo / fichier
@@ -75,6 +76,14 @@ export const create = mutation({
     });
     const row = (await ctx.db.get(id))!;
     const url = (await ctx.storage.getUrl(args.storageId)) ?? undefined;
+    {
+      const { subject } = await leadLabelById(ctx, project.leadId);
+      await logActivity(ctx, {
+        action: "attachment.uploaded", entityType: "project_attachment", entityId: id, leadId: project.leadId, subject,
+        summary: `a ajouté ${args.kind === "photo" ? "une photo" : "un document"} « ${label ?? args.filename} » au projet de ${subject}`,
+        details: { kind: args.kind, filename: args.filename, label: label ?? null, projectId: args.projectId },
+      });
+    }
     return toSummary(row, url);
   },
 });
@@ -118,6 +127,16 @@ export const remove = mutation({
     if (!row || row.deletedAt !== undefined) throw new Error("Pièce jointe introuvable");
     await ctx.db.patch(args.attachmentId, { deletedAt: Date.now() });
     if (row.storageId) await ctx.storage.delete(row.storageId);
+    {
+      const project = await ctx.db.get(row.projectId);
+      const { subject } = await leadLabelById(ctx, project?.leadId);
+      await logActivity(ctx, {
+        action: "attachment.deleted", entityType: "project_attachment", entityId: args.attachmentId,
+        leadId: project?.leadId, subject,
+        summary: `a supprimé ${row.kind === "photo" ? "la photo" : "le document"} « ${row.label ?? row.filename} » du projet de ${subject}`,
+        details: { kind: row.kind, filename: row.filename },
+      });
+    }
     return { ok: true };
   },
 });

@@ -810,3 +810,49 @@ export const leadsSourceMapUpsert = makeFunctionReference<
   { rawSource: string; channel: string; label: string; reapply?: boolean },
   { reapplied: number }
 >('leads:sourceMapUpsert')
+
+// ─── Journal d'activité (page Historique) ────────────────────────────────────
+export type ActivityDomain = 'setting' | 'closing' | 'delivrabilite' | 'finances' | 'admin' | 'system'
+export type ConvexActivityDoc = {
+  _id: string
+  _creationTime: number
+  at: number
+  actorId?: string
+  actorName: string
+  actorRole?: string
+  domain: ActivityDomain
+  viaUserId?: string
+  action: string
+  entityType: string
+  entityId: string
+  leadId?: string
+  clientId?: string
+  subject?: string
+  summary: string
+  details?: unknown
+}
+export type ActivityListArgs = {
+  from?: number
+  to?: number
+  actorId?: string
+  domain?: ActivityDomain
+  entityType?: string
+  leadId?: string
+  clientId?: string
+  search?: string
+}
+export const activityLogList = makeFunctionReference<
+  'query',
+  ActivityListArgs & { paginationOpts: { numItems: number; cursor: string | null } },
+  PaginationResult<ConvexActivityDoc>
+>('activityLog:list')
+export const activityLogMyScope = makeFunctionReference<
+  'query',
+  Record<string, never>,
+  { kind: 'all' | 'domains' | 'own'; domains: ActivityDomain[]; userId: string }
+>('activityLog:myScope')
+export const activityLogForLead = makeFunctionReference<
+  'query',
+  { leadId: string; limit?: number },
+  ConvexActivityDoc[]
+>('activityLog:forLead')

@@ -8,6 +8,7 @@
 import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireRole } from "./model/access";
+import { logActivity, leadLabelById, fmtEur } from "./model/activity";
 import {
   financingTypeValidator,
   paymentSubMethodValidator,
@@ -129,6 +130,17 @@ export const updateFinancing = mutation({
     }
 
     await ctx.db.patch(args.debriefId, patch as any);
+    {
+      const { subject } = await leadLabelById(ctx, debrief.leadId);
+      const before: Record<string, unknown> = {};
+      for (const k of Object.keys(patch)) before[k] = (debrief as Record<string, unknown>)[k] ?? null;
+      await logActivity(ctx, {
+        action: "financing.updated", entityType: "debrief", entityId: args.debriefId,
+        leadId: debrief.leadId ?? undefined, subject,
+        summary: `a modifié le financement de ${subject} (${Object.keys(patch).join(", ")})${args.montantTotal !== undefined ? ` — ${fmtEur(args.montantTotal)}` : ""}`,
+        details: { before, after: patch },
+      });
+    }
     return null;
   },
 });
@@ -229,6 +241,15 @@ export const setEcheancier = mutation({
     // ── 5. Passer le débrief en customEcheancier=true ──────────────────────
     await ctx.db.patch(args.debriefId, { customEcheancier: true });
 
+    {
+      const { subject } = await leadLabelById(ctx, debrief.leadId);
+      await logActivity(ctx, {
+        action: "echeancier.set", entityType: "debrief", entityId: args.debriefId,
+        leadId: debrief.leadId ?? undefined, subject,
+        summary: `a défini un échéancier personnalisé (${args.tranches.length} tranche${args.tranches.length > 1 ? "s" : ""}) pour ${subject}`,
+        details: { tranches: args.tranches },
+      });
+    }
     return null;
   },
 });
@@ -311,6 +332,14 @@ export const resetEcheancier = mutation({
     }
 
     await ctx.db.patch(args.debriefId, { customEcheancier: false });
+    {
+      const { subject } = await leadLabelById(ctx, debrief.leadId);
+      await logActivity(ctx, {
+        action: "echeancier.reset", entityType: "debrief", entityId: args.debriefId,
+        leadId: debrief.leadId ?? undefined, subject,
+        summary: `a rétabli l'échéancier standard pour ${subject}`,
+      });
+    }
     return null;
   },
 });
@@ -400,6 +429,24 @@ export const recordEcheance = mutation({
       });
     }
 
+    {
+      const { subject } = await leadLabelById(ctx, debrief.leadId);
+      const tpl = templates.find((t) => t.ordre === args.ordre);
+      const trancheLabel = (tpl as { label?: string } | undefined)?.label ?? `tranche ${args.ordre}`;
+      const what = args.statut === "encaisse"
+        ? `a encaissé « ${trancheLabel} » (${fmtEur(args.montantReel)}${args.dateEncaissement ? `, le ${args.dateEncaissement}` : ""}) pour ${subject}`
+        : `a passé « ${trancheLabel} » de ${subject} au statut « ${args.statut} »`;
+      await logActivity(ctx, {
+        action: args.statut === "encaisse" ? "acompte.collected" : "acompte.status_changed",
+        entityType: "acompte", entityId: `${args.debriefId}#${args.ordre}`,
+        leadId: debrief.leadId ?? undefined, subject,
+        summary: what,
+        details: {
+          ordre: args.ordre, before: existing ? { statut: existing.statut, montantReel: existing.montantReel ?? null } : null,
+          after: { statut: args.statut, montantReel: args.montantReel ?? null, dateEncaissement: args.dateEncaissement ?? null, notes: args.notes ?? null },
+        },
+      });
+    }
     return null;
   },
 });

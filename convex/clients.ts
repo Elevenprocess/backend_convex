@@ -23,6 +23,7 @@ import { can, visibleClientIds } from "./model/delivrabilitePermissions";
 import { newlyAddedTechs, pickVtDate, pickVtHeure, inPeriod } from "./model/vtCalendar";
 import { vtAssignedMessage } from "./model/notifMessages";
 import { createNotification } from "./model/notify";
+import { logActivity, leadLabelById, userLabelById } from "./model/activity";
 
 // ─── Rôles (portés de roles.decorator.ts + clients.controller.ts) ────────────
 
@@ -475,6 +476,19 @@ export const assignTechniciens = mutation({
       }
     }
 
+    {
+      const { subject } = await leadLabelById(ctx, existing.leadId);
+      const names = await Promise.all(nextIds.map((id) => userLabelById(ctx, id)));
+      await logActivity(ctx, {
+        action: "client.technicien_assigned", entityType: "client", entityId: args.clientId,
+        clientId: args.clientId, leadId: existing.leadId, subject,
+        summary: names.length > 0
+          ? `a attribué le dossier ${subject} au${names.length > 1 ? "x techniciens" : " technicien"} ${names.join(", ")}`
+          : `a retiré le(s) technicien(s) du dossier ${subject}`,
+        details: { before: previousIds, after: nextIds },
+      });
+    }
+
     const updated = (await ctx.db.get(args.clientId))!;
     return { ...updated, techniciens: await techniciensOf(ctx, args.clientId) };
   },
@@ -512,11 +526,18 @@ export const bootstrap = mutation({
       throw new Error(`Lead ${leadId} introuvable`);
     }
 
-    return await ensureDossier(ctx, {
+    const clientId = await ensureDossier(ctx, {
       leadId: leadId!,
       projectId: args.projectId,
       actorId: actor._id,
     });
+    await logActivity(ctx, {
+      action: "client.bootstrapped", entityType: "client", entityId: clientId,
+      clientId, leadId: leadId!, subject: [lead.firstName, lead.lastName].filter(Boolean).join(" ") || "Prospect",
+      summary: `a initialisé le dossier délivrabilité de ${[lead.firstName, lead.lastName].filter(Boolean).join(" ") || "ce prospect"}`,
+      details: { projectId: args.projectId ?? null },
+    });
+    return clientId;
   },
 });
 
@@ -578,7 +599,7 @@ export const createManualDossier = mutation({
       name: `Projet ${args.firstName} ${args.lastName}`,
       status: "signe",
     });
-    return await ensureDossier(ctx, {
+    const clientId = await ensureDossier(ctx, {
       leadId,
       projectId,
       montantTotal: args.montantTotal,
@@ -586,5 +607,12 @@ export const createManualDossier = mutation({
       signedAt: args.signedAt,
       actorId: actor._id,
     });
+    await logActivity(ctx, {
+      action: "client.manual_created", entityType: "client", entityId: clientId,
+      clientId, leadId, subject: `${args.firstName} ${args.lastName}`,
+      summary: `a créé manuellement le dossier ${args.firstName} ${args.lastName}${args.montantTotal !== undefined ? ` (${Math.round(args.montantTotal)} €)` : ""}`,
+      details: { montantTotal: args.montantTotal ?? null, typeFinancement: args.typeFinancement ?? null, signedAt: args.signedAt ?? null },
+    });
+    return clientId;
   },
 });
