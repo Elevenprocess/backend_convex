@@ -5186,53 +5186,42 @@ button.fiche-devis-main.is-clickable:hover .fiche-devis-num { color: var(--color
 [data-theme="dark"] .settings-invite-row { background: rgba(255, 255, 255, 0.025); }
 [data-theme="dark"] .settings-invite-row:hover { border-color: rgba(255, 255, 255, 0.2); }
 
-/* ── Integration / preference rows ──────────────────────────── */
-.settings-line {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border: 1px solid var(--color-line);
-  border-radius: 10px;
-  background: #F1F6F0;
-  padding: 12px 13px;
-  transition: border-color 0.14s ease;
+/* ── Onglets Paramètres (Équipe / API / Thème) ─────────────── */
+.settings-tabs {
+  display: flex; gap: 4px; margin: 4px 0 14px; padding: 4px;
+  border: 1px solid var(--color-line); border-radius: 12px; background: var(--color-card); width: fit-content; max-width: 100%;
 }
-.settings-line:hover { border-color: rgba(42, 37, 32, 0.16); }
-[data-theme="dark"] .settings-line { background: rgba(255, 255, 255, 0.025); }
-[data-theme="dark"] .settings-line:hover { border-color: rgba(255, 255, 255, 0.2); }
-.settings-line-dot { width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; }
-.settings-pref-btn {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border: 1px solid var(--color-line);
-  border-radius: 10px;
-  background: #F1F6F0;
-  padding: 12px 13px;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-  color: var(--color-text);
-  transition: border-color 0.14s ease;
+.settings-tabs button {
+  display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; cursor: pointer;
+  border-radius: 9px; padding: 7px 12px; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--color-muted);
+  transition: background-color .14s ease, color .14s ease;
 }
-.settings-pref-btn:hover { border-color: rgba(42, 37, 32, 0.16); }
-[data-theme="dark"] .settings-pref-btn { background: rgba(255, 255, 255, 0.025); }
-[data-theme="dark"] .settings-pref-btn:hover { border-color: rgba(255, 255, 255, 0.2); }
+.settings-tabs button:hover { color: var(--color-text); background: var(--color-line-soft); }
+.settings-tabs button.active { background: var(--color-or); color: #fff; }
+[data-theme="dark"] .settings-tabs button.active { color: #0B130E; }
 
-.settings-mock-tag {
-  display: inline-flex;
-  align-items: center;
-  font-size: 9px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-  color: var(--color-cuivre);
-  background: var(--color-cuivre-tint);
-  padding: 3px 8px;
-  border-radius: 999px;
+.settings-input {
+  border: 1px solid var(--color-line); border-radius: 9px; padding: 9px 12px; font: inherit; font-size: 13px;
+  background: var(--color-card); color: var(--color-text); outline: none; transition: border-color .14s ease;
 }
+.settings-input:focus { border-color: var(--color-or); }
+.settings-token {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; padding: 4px 8px; border-radius: 6px;
+  background: var(--color-line-soft); color: var(--color-text); word-break: break-all;
+}
+
+.settings-theme-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.settings-theme-opt {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 14px; text-align: left; cursor: pointer;
+  border: 1px solid var(--color-line); border-radius: 12px; background: var(--color-card); color: var(--color-text); font: inherit;
+  transition: border-color .14s ease, background-color .14s ease;
+}
+.settings-theme-opt:hover { border-color: var(--color-or-light); }
+.settings-theme-opt.active { border-color: var(--color-or); background: var(--color-or-tint); }
+.settings-theme-opt:focus-visible { outline: 2px solid var(--color-or); outline-offset: 2px; }
+.settings-theme-icon { display: inline-flex; color: var(--color-or-dark); margin-bottom: 4px; }
+.settings-theme-opt strong { font-size: 13.5px; font-weight: 600; }
+.settings-theme-opt small { font-size: 11.5px; color: var(--color-muted); }
 
 /* ── Modal (dark-aware, replaces glass in flat shell) ───────── */
 .settings-modal {

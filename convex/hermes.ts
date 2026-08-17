@@ -14,7 +14,7 @@ import { rdvStatusValidator } from "./model/enums";
 import { buildRange } from "./model/analyticsRange";
 import { buildAdminStats } from "./model/analyticsBuilders";
 import { loadSummaryData } from "./analytics";
-import { requireHermesKey } from "./model/hermesAuth";
+import { requireServiceKey } from "./model/hermesAuth";
 
 /**
  * KPI agrégés — même vue que analytics.summary côté admin (mêmes builders,
@@ -30,7 +30,7 @@ export const kpis = query({
     to: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    requireHermesKey(args.apiKey);
+    await requireServiceKey(ctx, args.apiKey);
     const range = buildRange(args.from, args.to, args.days ?? 365, args.now);
     const { calls, leadRows, rdvAll, userRows, latestCallByLead, firstRdvByLead } =
       await loadSummaryData(ctx, range);
@@ -61,7 +61,7 @@ export const rdvList = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    requireHermesKey(args.apiKey);
+    await requireServiceKey(ctx, args.apiKey);
     const max = Math.min(Math.max(args.limit ?? 100, 1), 500);
     let q = ctx.db
       .query("rdv")

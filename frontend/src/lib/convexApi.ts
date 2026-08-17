@@ -405,6 +405,7 @@ export type ConvexCallLogDoc = {
   calledAt: number; result: string; durationSec?: number; notes?: string; nextCallbackAt?: number
 }
 export const callLogsListBySetter = makeFunctionReference<'query', { setterId: string; limit?: number }, ConvexCallLogDoc[]>('callLogs:listBySetter')
+export const callLogsListByLead = makeFunctionReference<'query', { leadId: string }, ConvexCallLogDoc[]>('callLogs:listByLead')
 
 export type ConvexCommercialObjectiveDoc = {
   _id: string; _creationTime: number; commercialId: string; period: string
@@ -856,3 +857,12 @@ export const activityLogForLead = makeFunctionReference<
   { leadId: string; limit?: number },
   ConvexActivityDoc[]
 >('activityLog:forLead')
+
+// Tokens API (Paramètres → API) : clés de service admin pour intégrations.
+export type ConvexApiToken = {
+  id: string; name: string; prefix: string; createdAt: number; createdBy: string
+  lastUsedAt: number | null; revokedAt: number | null
+}
+export const apiTokensList = makeFunctionReference<'query', Record<string, never>, ConvexApiToken[]>('apiTokens:list')
+export const apiTokensCreate = makeFunctionReference<'mutation', { name: string }, { id: string; secret: string }>('apiTokens:create')
+export const apiTokensRevoke = makeFunctionReference<'mutation', { id: string }, null>('apiTokens:revoke')

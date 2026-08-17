@@ -786,4 +786,19 @@ export default defineSchema({
     externalId: v.optional(v.string()),
     data: v.any(),
   }).index("by_table", ["table"]),
+
+  // Tokens API (Paramètres → API) : clés de service créées par un admin pour
+  // les intégrations externes (n8n, agents, scripts). On ne stocke que le
+  // hash SHA-256 ; le secret n'est montré qu'une fois à la création.
+  apiTokens: defineTable({
+    name: v.string(),
+    prefix: v.string(), // 8 premiers caractères du secret, pour l'identifier dans la liste
+    tokenHash: v.string(),
+    createdById: v.id("users"),
+    createdAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_createdAt", ["createdAt"]),
 });

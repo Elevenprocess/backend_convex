@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { FormEvent, MouseEvent } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Icon } from '../components/Icon'
@@ -10,7 +10,8 @@ import { LoadingBlock, Spinner } from '../components/Spinner'
 import { useAuth, impersonationAllowed } from '../lib/auth'
 import { copyText, inviteUser, regenerateInvitation, revokeInvitation, syncGhlCommercialUsers, updateUser, useGhlCalendarConfig, useGhlUsers, useInvitations, useUsers } from '../lib/hooks'
 import { notifyClipboardCopied } from '../lib/clipboardToast'
-import { useTheme } from '../lib/theme'
+import { useTheme, type ThemeMode } from '../lib/theme'
+import { ApiTokensSection } from '../components/settings/ApiTokensSection'
 import { useOnlineUsers } from '../lib/realtime'
 import type { InvitationResponse, Role, Team, UserResponse } from '../lib/types'
 
@@ -177,7 +178,19 @@ function SectorChip({ label, active, onClick }: { label: string; active: boolean
   )
 }
 
+type SettingsTab = 'equipe' | 'api' | 'theme'
+const TABS: { id: SettingsTab; label: string; icon: IconName; adminOnly?: boolean }[] = [
+  { id: 'equipe', label: 'Équipe', icon: 'users' },
+  { id: 'api', label: 'API', icon: 'key', adminOnly: true },
+  { id: 'theme', label: 'Thème', icon: 'sun' },
+]
+
 function SettingsAdmin({ restricted = false }: { restricted?: boolean }) {
+  const [params, setParams] = useSearchParams()
+  const tabs = TABS.filter((t) => !t.adminOnly || !restricted)
+  const rawTab = params.get('tab') as SettingsTab | null
+  const tab: SettingsTab = tabs.some((t) => t.id === rawTab) ? (rawTab as SettingsTab) : 'equipe'
+  const setTab = (next: SettingsTab) => setParams((prev) => { if (next === 'equipe') prev.delete('tab'); else prev.set('tab', next); return prev }, { replace: true })
   const { data: users, loading, error, refetch: refetchUsers } = useUsers()
   const [inviteOpen, setInviteOpen] = useState(false)
   const [filter, setFilter] = useState<TeamFilter>('all')
@@ -224,10 +237,6 @@ function SettingsAdmin({ restricted = false }: { restricted?: boolean }) {
       setGhlSyncing(false)
     }
   }
-  const isDark = useTheme((s) => s.isDark)
-  const toggleTheme = useTheme((s) => s.toggleTheme)
-  const themeMode = useTheme((s) => s.theme)
-  const setTheme = useTheme((s) => s.setTheme)
   // commercial_lead : restreint la base aux setters et commerciaux uniquement.
   const team = useMemo(
     () => (users ?? []).filter((u) => !restricted || ACQUISITION_ROLES.includes(u.role)),
@@ -276,22 +285,45 @@ function SettingsAdmin({ restricted = false }: { restricted?: boolean }) {
         <header className="settings-header settings-reveal">
           <div>
             <span className="shot-eyebrow">Paramètres</span>
-            <h1>Gestion de l'équipe</h1>
-            <p>{counts.total} utilisateur{counts.total > 1 ? 's' : ''} · {counts.active} actif{counts.active > 1 ? 's' : ''}</p>
+            <h1>{tab === 'equipe' ? "Gestion de l'équipe" : tab === 'api' ? 'Tokens API' : 'Apparence'}</h1>
+            <p>
+              {tab === 'equipe'
+                ? `${counts.total} utilisateur${counts.total > 1 ? 's' : ''} · ${counts.active} actif${counts.active > 1 ? 's' : ''}`
+                : tab === 'api'
+                  ? 'Clés de service pour vos automatisations et intégrations.'
+                  : 'Thème clair, sombre ou automatique.'}
+            </p>
           </div>
-          <div className="settings-header-actions">
-            {!restricted && (
-              <button onClick={handleSyncGhl} disabled={ghlSyncing} className="settings-invite" style={{ opacity: ghlSyncing ? 0.6 : 1 }} title="Relie automatiquement les commerciaux à leurs comptes GHL (par email)">
-                <Icon name="sparkles" size={15} />
-                {ghlSyncing ? 'Synchronisation…' : 'Synchroniser avec GHL'}
+          {tab === 'equipe' && (
+            <div className="settings-header-actions">
+              {!restricted && (
+                <button onClick={handleSyncGhl} disabled={ghlSyncing} className="settings-invite" style={{ opacity: ghlSyncing ? 0.6 : 1 }} title="Relie automatiquement les commerciaux à leurs comptes GHL (par email)">
+                  <Icon name="sparkles" size={15} />
+                  {ghlSyncing ? 'Synchronisation…' : 'Synchroniser avec GHL'}
+                </button>
+              )}
+              <button onClick={() => setInviteOpen(true)} className="settings-invite">
+                <Icon name="plus" size={15} />
+                Inviter un membre
               </button>
-            )}
-            <button onClick={() => setInviteOpen(true)} className="settings-invite">
-              <Icon name="plus" size={15} />
-              Inviter un membre
-            </button>
-          </div>
+            </div>
+          )}
         </header>
+
+        <nav className="settings-tabs settings-reveal" aria-label="Sections des paramètres">
+          {tabs.map((t) => (
+            <button key={t.id} type="button" className={tab === t.id ? 'active' : ''} onClick={() => setTab(t.id)} aria-current={tab === t.id ? 'page' : undefined}>
+              <Icon name={t.icon} size={14} /> {t.label}
+            </button>
+          ))}
+        </nav>
+
+        {tab === 'api' && <ApiTokensSection />}
+        {tab === 'theme' && <ThemeSection />}
+        {tab === 'equipe' && (<>
+        {ghlUsersError && !restricted && (
+          <div className="settings-reveal rounded-lg bg-rouille-tint px-3 py-2 text-xs text-rouille" style={{ margin: '0 0 8px' }}>Users GHL indisponibles : {ghlUsersError}</div>
+        )}
         {ghlSyncMsg && (
           <div className="settings-reveal" style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 700 }}>
             <span className="status-badge bg-success-tint text-success">GHL : {ghlSyncMsg}</span>
@@ -378,38 +410,7 @@ function SettingsAdmin({ restricted = false }: { restricted?: boolean }) {
           </section>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 settings-reveal" style={{ animationDelay: '240ms' }}>
-          <section className="overview-air-card" style={{ padding: 18 }}>
-            <div className="shot-card-head">
-              <h3>Intégrations</h3>
-              <span className="settings-mock-tag">Mock</span>
-            </div>
-            <div className="space-y-2.5">
-              {ghlUsersError && <div className="rounded-lg bg-rouille-tint px-3 py-2 text-xs text-rouille">Users GHL indisponibles : {ghlUsersError}</div>}
-              <IntegrationRow name="GoHighLevel" desc="Webhooks leads, agendas et mapping commerciaux" status="active" />
-              <IntegrationRow name="Airtable" desc="Migration one-shot" status="done" />
-              <IntegrationRow name="Twilio" desc="SMS de rappel" status="todo" />
-            </div>
-          </section>
-
-          <section className="overview-air-card" style={{ padding: 18 }}>
-            <div className="shot-card-head">
-              <h3>Préférences</h3>
-              <span className="settings-mock-tag">Mock</span>
-            </div>
-            <div className="space-y-2.5">
-              <PrefRow label="Notifications email" enabled />
-              <PrefRow label="Notifications in-app" enabled />
-              <PrefRow
-                label="Thème automatique (suivre le système)"
-                enabled={themeMode === 'system'}
-                onClick={() => setTheme(themeMode === 'system' ? (isDark ? 'dark' : 'light') : 'system')}
-              />
-              <PrefRow label="Mode sombre" enabled={isDark} onClick={toggleTheme} />
-              <PrefRow label="Débrief obligatoire post-RDV" enabled />
-            </div>
-          </section>
-        </div>
+        </>)}
       </main>
 
       {inviteOpen && (
@@ -789,30 +790,36 @@ function Th({ children, right = false }: { children: React.ReactNode; right?: bo
   return <th className={right ? 'is-right' : ''}>{children}</th>
 }
 
-function IntegrationRow({ name, desc, status }: { name: string; desc: string; status: 'active' | 'done' | 'todo' }) {
-  const dot = status === 'active' ? 'bg-success' : status === 'done' ? 'bg-info' : 'bg-faint'
-  const label = status === 'active' ? 'Actif' : status === 'done' ? 'Terminé' : 'À configurer'
+function ThemeSection() {
+  const themeMode = useTheme((s) => s.theme)
+  const setTheme = useTheme((s) => s.setTheme)
+  const options: { id: ThemeMode; label: string; desc: string; icon: IconName }[] = [
+    { id: 'light', label: 'Clair', desc: 'Toujours en mode clair.', icon: 'sun' },
+    { id: 'dark', label: 'Sombre', desc: 'Toujours en mode sombre.', icon: 'moon' },
+    { id: 'system', label: 'Automatique', desc: 'Suit le réglage de votre appareil.', icon: 'monitor' },
+  ]
   return (
-    <div className="settings-line">
-      <div className={`settings-line-dot ${dot}`} />
-      <div className="flex-grow min-w-0">
-        <div className="text-sm font-semibold truncate">{name}</div>
-        <div className="text-xs text-faint truncate">{desc}</div>
+    <section className="overview-air-card" style={{ padding: 18 }}>
+      <div className="shot-card-head">
+        <h3>Thème de l'interface</h3>
+        <span><Icon name="sun" size={16} /></span>
       </div>
-      <span className="text-xs text-muted flex-shrink-0">{label}</span>
-    </div>
+      <div className="settings-theme-grid" role="radiogroup" aria-label="Thème">
+        {options.map((o) => (
+          <button
+            key={o.id}
+            type="button"
+            role="radio"
+            aria-checked={themeMode === o.id}
+            className={`settings-theme-opt ${themeMode === o.id ? 'active' : ''}`}
+            onClick={() => setTheme(o.id)}
+          >
+            <span className="settings-theme-icon"><Icon name={o.icon} size={18} /></span>
+            <strong>{o.label}</strong>
+            <small>{o.desc}</small>
+          </button>
+        ))}
+      </div>
+    </section>
   )
-}
-
-function PrefRow({ label, enabled, onClick }: { label: string; enabled: boolean; onClick?: () => void }) {
-  const content = (
-    <>
-      <span className="text-sm">{label}</span>
-      <div className={`theme-switch ${enabled ? 'active' : ''}`}><span /></div>
-    </>
-  )
-  if (onClick) {
-    return <button type="button" onClick={onClick} className="settings-pref-btn">{content}</button>
-  }
-  return <div className="settings-line justify-between">{content}</div>
 }

@@ -14,6 +14,7 @@ import type * as adDeposits from "../adDeposits.js";
 import type * as adSpend from "../adSpend.js";
 import type * as ads from "../ads.js";
 import type * as analytics from "../analytics.js";
+import type * as apiTokens from "../apiTokens.js";
 import type * as auth from "../auth.js";
 import type * as callLogs from "../callLogs.js";
 import type * as clients from "../clients.js";
@@ -112,6 +113,7 @@ declare const fullApi: ApiFromModules<{
   adSpend: typeof adSpend;
   ads: typeof ads;
   analytics: typeof analytics;
+  apiTokens: typeof apiTokens;
   auth: typeof auth;
   callLogs: typeof callLogs;
   clients: typeof clients;

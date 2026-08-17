@@ -12,7 +12,7 @@ import { v } from "convex/values";
 import { action, internalAction, internalQuery, mutation, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { requireHermesKey } from "./model/hermesAuth";
+import { requireServiceKey } from "./model/hermesAuth";
 import { logSystemActivity, leadLabelById } from "./model/activity";
 import { signDebriefToken } from "./model/debriefLinkToken";
 import { ghlRequest, isGhlConfigured } from "./ghlClient";
@@ -95,7 +95,7 @@ export const due = action({
     now: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<Array<DueRow & { link: string }>> => {
-    requireHermesKey(args.apiKey);
+    await requireServiceKey(ctx, args.apiKey);
     const secret = debriefSecret();
     if (!secret) throw new Error("DEBRIEF_LINK_SECRET / BETTER_AUTH_SECRET manquant");
     const now = args.now ?? Date.now();
@@ -326,7 +326,7 @@ export const relayOverdue = internalAction({
 export const markSent = mutation({
   args: { apiKey: v.string(), rdvId: v.id("rdv") },
   handler: async (ctx, args) => {
-    requireHermesKey(args.apiKey);
+    await requireServiceKey(ctx, args.apiKey);
     const r = await ctx.db.get(args.rdvId);
     if (!r || r.deletedAt !== undefined) throw new Error("RDV introuvable");
     if (r.debriefNotifiedAt !== undefined) return null;
