@@ -1,109 +1,82 @@
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import type { MonthPoint } from '../../lib/financesCharts'
 
 interface Props {
   data: MonthPoint[]
+  subtitle?: string
 }
 
 function formatMonth(m: string): string {
-  // YYYY-MM → Mmm YYYY (ex: Jan 2026)
   const [year, month] = m.split('-')
-  const date = new Date(Number(year), Number(month) - 1, 1)
-  return date.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' })
+  return new Date(Number(year), Number(month) - 1, 1).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' })
 }
 
-function formatEuro(v: number): string {
-  return `${v.toLocaleString('fr-FR')} €`
+const euro = (v: number) => `${Math.round(v).toLocaleString('fr-FR')} €`
+const compact = (v: number) => (v >= 1000 ? `${(v / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} k€` : `${v} €`)
+
+interface TooltipEntry { name: string; value: number; color: string }
+function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: TooltipEntry[]; label?: string }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="dfx-tooltip">
+      <div className="dfx-tooltip-title">{label}</div>
+      {payload.map((e) => (
+        <div key={e.name} className="dfx-tooltip-row">
+          <span className="dfx-tooltip-dot" style={{ background: e.color }} />
+          <span className="dfx-tooltip-name">{e.name}</span>
+          <strong>{euro(e.value)}</strong>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 /**
- * Graphique recharts : cumul encaissé (area verte) vs reste à encaisser (area ambre).
- * Les deux séries visualisent l'évolution du gap entre encaissé et restant dû.
+ * Courbe d'encaissement : cumul encaissé (vert) vs reste à encaisser (cuivre).
+ * Sans grille ni axe Y lourd : deux aires douces, repères mensuels.
  */
-export function FinancesCharts({ data }: Props) {
-  if (data.length === 0) {
-    return (
-      <div className="glass-card p-6 text-center text-sm text-faint">
-        Aucune donnée d'encaissement à afficher pour la période sélectionnée.
-      </div>
-    )
-  }
-
-  const chartData = data.map((p) => ({
-    ...p,
-    monthLabel: formatMonth(p.month),
-  }))
+export function FinancesCharts({ data, subtitle }: Props) {
+  const chartData = data.map((p) => ({ ...p, monthLabel: formatMonth(p.month) }))
+  const last = data[data.length - 1]
 
   return (
-    <div className="glass-card p-4 mb-5">
-      <div className="eyebrow text-or-dark mb-3">Courbe d'encaissement réelle vs reste à encaisser</div>
-      <ResponsiveContainer width="100%" height={240}>
-        <AreaChart data={chartData} margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
-          <defs>
-            <linearGradient id="gradEncaisse" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#b69a5c" stopOpacity={0.25} />
-              <stop offset="95%" stopColor="#b69a5c" stopOpacity={0} />
-            </linearGradient>
-            <linearGradient id="gradReste" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#c0522a" stopOpacity={0.18} />
-              <stop offset="95%" stopColor="#c0522a" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e8e0d2" />
-          <XAxis
-            dataKey="monthLabel"
-            tick={{ fontSize: 11, fill: '#8a7e6e' }}
-            tickLine={false}
-            axisLine={false}
-          />
-          <YAxis
-            tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`}
-            tick={{ fontSize: 11, fill: '#8a7e6e' }}
-            tickLine={false}
-            axisLine={false}
-            width={48}
-          />
-          <Tooltip
-            formatter={(value) => [typeof value === 'number' ? formatEuro(value) : String(value ?? '')]}
-            labelStyle={{ fontWeight: 700, fontSize: 12 }}
-            contentStyle={{ borderRadius: 8, border: '1px solid #e8e0d2', fontSize: 12 }}
-          />
-          <Legend
-            iconType="circle"
-            iconSize={8}
-            wrapperStyle={{ fontSize: 12, paddingTop: 4 }}
-          />
-          <Area
-            type="monotone"
-            dataKey="cumulEncaisse"
-            name="Encaissement cumulé"
-            stroke="#b69a5c"
-            strokeWidth={2}
-            fill="url(#gradEncaisse)"
-            dot={false}
-            activeDot={{ r: 4 }}
-          />
-          <Area
-            type="monotone"
-            dataKey="resteTotal"
-            name="Reste à encaisser"
-            stroke="#c0522a"
-            strokeWidth={2}
-            fill="url(#gradReste)"
-            dot={false}
-            activeDot={{ r: 4 }}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
+    <div className="fin-card fin-chart">
+      <div className="fin-card-head">
+        <div>
+          <span className="fin-eyebrow">Encaissements</span>
+          <h3>Cumul encaissé vs reste à encaisser</h3>
+          {subtitle && <p>{subtitle}</p>}
+        </div>
+        {last && (
+          <div className="fin-legend">
+            <span><i style={{ background: 'var(--color-or)' }} />Encaissé <b>{compact(last.cumulEncaisse)}</b></span>
+            <span><i style={{ background: 'var(--color-cuivre)' }} />Reste <b>{compact(last.resteTotal)}</b></span>
+          </div>
+        )}
+      </div>
+      {data.length === 0 ? (
+        <div className="fin-chart-empty">Aucun encaissement sur la période.</div>
+      ) : (
+        <ResponsiveContainer width="100%" height={220}>
+          <AreaChart data={chartData} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id="finGradEnc" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--color-or)" stopOpacity={0.28} />
+                <stop offset="100%" stopColor="var(--color-or)" stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="finGradReste" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--color-cuivre)" stopOpacity={0.22} />
+                <stop offset="100%" stopColor="var(--color-cuivre)" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <XAxis dataKey="monthLabel" tick={{ fontSize: 11, fill: 'var(--color-muted)' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+            <YAxis tickFormatter={compact} tick={{ fontSize: 11, fill: 'var(--color-faint)' }} tickLine={false} axisLine={false} width={52} />
+            <Tooltip content={<ChartTooltip />} cursor={{ stroke: 'var(--color-line)' }} />
+            <Area type="monotone" dataKey="cumulEncaisse" name="Encaissement cumulé" stroke="var(--color-or)" strokeWidth={2} fill="url(#finGradEnc)" dot={false} activeDot={{ r: 4 }} animationDuration={500} />
+            <Area type="monotone" dataKey="resteTotal" name="Reste à encaisser" stroke="var(--color-cuivre)" strokeWidth={2} fill="url(#finGradReste)" dot={false} activeDot={{ r: 4 }} animationDuration={500} />
+          </AreaChart>
+        </ResponsiveContainer>
+      )}
     </div>
   )
 }
