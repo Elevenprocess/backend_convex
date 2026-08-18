@@ -1,7 +1,14 @@
 // Port de OcrService (devis NestJS). Appel OpenRouter (Vision) — exécuté côté
 // action Convex. Non testé offline (réseau).
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const OCR_MODEL = "google/gemini-2.0-flash-001";
+// gemini-2.0-flash-001 a été retiré d'OpenRouter (404 « No endpoints found »,
+// constaté le 18/08/2026) : on passe sur 2.5-flash, surchargeable par env
+// OCR_MODEL, avec repli automatique si le modèle disparaît à son tour.
+const OCR_MODELS = [
+  process.env.OCR_MODEL,
+  "google/gemini-2.5-flash",
+  "google/gemini-3.5-flash-lite",
+].filter((m): m is string => !!m);
 const OCR_ATTEMPTS = 3;
 
 const SYSTEM_PROMPT = `Tu es un OCR spécialisé sur les devis photovoltaïques français (logiciel Solteo). Tu dois extraire EXHAUSTIVEMENT toutes les données visibles du PDF. Tu réponds UNIQUEMENT avec un JSON valide. Aucun texte avant ou après le JSON, pas de markdown. Montants en euros sans symbole, point décimal. Dates au format YYYY-MM-DD.`;
@@ -25,13 +32,15 @@ export async function extractFromPdf(
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY manquante");
   let lastErr: unknown;
-  for (let attempt = 1; attempt <= OCR_ATTEMPTS; attempt++) {
+  let modelIdx = 0;
+  for (let attempt = 1; attempt <= OCR_ATTEMPTS + OCR_MODELS.length; attempt++) {
+    const model = OCR_MODELS[Math.min(modelIdx, OCR_MODELS.length - 1)];
     try {
       const res = await fetch(OPENROUTER_URL, {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: OCR_MODEL,
+          model,
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
             {
@@ -44,6 +53,12 @@ export async function extractFromPdf(
           ],
         }),
       });
+      if (res.status === 404 && modelIdx < OCR_MODELS.length - 1) {
+        // Modèle retiré → on bascule sur le suivant sans consommer d'essai.
+        modelIdx++;
+        lastErr = new Error(`OpenRouter 404 sur ${model}: ${await res.text()}`);
+        continue;
+      }
       if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${await res.text()}`);
       const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
       const content = json.choices?.[0]?.message?.content;

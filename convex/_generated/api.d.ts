@@ -39,6 +39,7 @@ import type * as hermes from "../hermes.js";
 import type * as hermesDebrief from "../hermesDebrief.js";
 import type * as http from "../http.js";
 import type * as invitations from "../invitations.js";
+import type * as leadEnrichFromDevis from "../leadEnrichFromDevis.js";
 import type * as leadPresence from "../leadPresence.js";
 import type * as leads from "../leads.js";
 import type * as migration from "../migration.js";
@@ -144,6 +145,7 @@ declare const fullApi: ApiFromModules<{
   hermesDebrief: typeof hermesDebrief;
   http: typeof http;
   invitations: typeof invitations;
+  leadEnrichFromDevis: typeof leadEnrichFromDevis;
   leadPresence: typeof leadPresence;
   leads: typeof leads;
   migration: typeof migration;
