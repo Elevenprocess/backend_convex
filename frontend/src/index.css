@@ -5567,7 +5567,7 @@ button.fin-kpi { cursor: pointer; }
 button.fin-kpi:hover { border-color: var(--color-or-light); }
 button.fin-kpi:focus-visible { outline: 2px solid var(--color-or); outline-offset: 2px; }
 .fin-kpi.is-active { border-color: var(--color-or); box-shadow: inset 0 0 0 1px var(--color-or); }
-.fin-kpi--hero { background: linear-gradient(135deg, var(--color-or-tint) 0%, var(--color-card) 70%); }
+.fin-kpi--hero { background: var(--color-card); }
 .fin-kpi--alert { border-color: color-mix(in srgb, var(--color-rouille) 40%, var(--color-line)); }
 .fin-kpi-top { display: flex; align-items: center; gap: 10px; }
 .fin-kpi-icon { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 10px; background: var(--color-line-soft); color: var(--color-muted); }

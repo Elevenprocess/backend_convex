@@ -59,21 +59,11 @@ export function FinancesCharts({ data, subtitle }: Props) {
       ) : (
         <ResponsiveContainer width="100%" height={220}>
           <AreaChart data={chartData} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="finGradEnc" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--color-or)" stopOpacity={0.28} />
-                <stop offset="100%" stopColor="var(--color-or)" stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="finGradReste" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--color-cuivre)" stopOpacity={0.22} />
-                <stop offset="100%" stopColor="var(--color-cuivre)" stopOpacity={0} />
-              </linearGradient>
-            </defs>
             <XAxis dataKey="monthLabel" tick={{ fontSize: 11, fill: 'var(--color-muted)' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
             <YAxis tickFormatter={compact} tick={{ fontSize: 11, fill: 'var(--color-faint)' }} tickLine={false} axisLine={false} width={58} />
             <Tooltip content={<ChartTooltip />} cursor={{ stroke: 'var(--color-line)' }} />
-            <Area type="monotone" dataKey="cumulEncaisse" name="Encaissement cumulé" stroke="var(--color-or)" strokeWidth={2} fill="url(#finGradEnc)" dot={false} activeDot={{ r: 4 }} animationDuration={500} />
-            <Area type="monotone" dataKey="resteTotal" name="Reste à encaisser" stroke="var(--color-cuivre)" strokeWidth={2} fill="url(#finGradReste)" dot={false} activeDot={{ r: 4 }} animationDuration={500} />
+            <Area type="monotone" dataKey="cumulEncaisse" name="Encaissement cumulé" stroke="var(--color-or)" strokeWidth={2} fill="var(--color-or)" fillOpacity={0.12} dot={false} activeDot={{ r: 4 }} animationDuration={500} />
+            <Area type="monotone" dataKey="resteTotal" name="Reste à encaisser" stroke="var(--color-cuivre)" strokeWidth={2} fill="var(--color-cuivre)" fillOpacity={0.10} dot={false} activeDot={{ r: 4 }} animationDuration={500} />
           </AreaChart>
         </ResponsiveContainer>
       )}
