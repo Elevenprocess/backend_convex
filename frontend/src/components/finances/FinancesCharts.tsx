@@ -12,7 +12,7 @@ function formatMonth(m: string): string {
 }
 
 const euro = (v: number) => `${Math.round(v).toLocaleString('fr-FR')} €`
-const compact = (v: number) => (v >= 1000 ? `${(v / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} k€` : `${v} €`)
+const compact = (v: number) => (v >= 1000 ? `${(v / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 0 })}k€` : `${v}€`)
 
 interface TooltipEntry { name: string; value: number; color: string }
 function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: TooltipEntry[]; label?: string }) {
@@ -70,7 +70,7 @@ export function FinancesCharts({ data, subtitle }: Props) {
               </linearGradient>
             </defs>
             <XAxis dataKey="monthLabel" tick={{ fontSize: 11, fill: 'var(--color-muted)' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-            <YAxis tickFormatter={compact} tick={{ fontSize: 11, fill: 'var(--color-faint)' }} tickLine={false} axisLine={false} width={52} />
+            <YAxis tickFormatter={compact} tick={{ fontSize: 11, fill: 'var(--color-faint)' }} tickLine={false} axisLine={false} width={58} />
             <Tooltip content={<ChartTooltip />} cursor={{ stroke: 'var(--color-line)' }} />
             <Area type="monotone" dataKey="cumulEncaisse" name="Encaissement cumulé" stroke="var(--color-or)" strokeWidth={2} fill="url(#finGradEnc)" dot={false} activeDot={{ r: 4 }} animationDuration={500} />
             <Area type="monotone" dataKey="resteTotal" name="Reste à encaisser" stroke="var(--color-cuivre)" strokeWidth={2} fill="url(#finGradReste)" dot={false} activeDot={{ r: 4 }} animationDuration={500} />
