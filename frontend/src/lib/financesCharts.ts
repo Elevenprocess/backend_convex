@@ -7,6 +7,8 @@ export type MonthPoint = {
   cumulEncaisse: number
   /** Σ restant à encaisser après les encaissements cumulés du mois. */
   resteTotal: number
+  /** Encaissé sur le mois seul (barres du graphe). */
+  encaisse: number
 }
 
 function toNumber(v: string | number | null | undefined): number {
@@ -94,11 +96,13 @@ export function buildEncaissementSeries(
 
   let cumul = cumulBeforeWindow
   return months.map((month) => {
-    cumul += encaisseByMonth.get(month) ?? 0
+    const encaisse = encaisseByMonth.get(month) ?? 0
+    cumul += encaisse
     return {
       month,
       cumulEncaisse: cumul,
       resteTotal: Math.max(0, totalPlanned - cumul),
+      encaisse,
     }
   })
 }
