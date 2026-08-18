@@ -93,3 +93,39 @@ export const attachImported = internalMutation({
     return { ok: true as const, skipped: false as const, statusUpgraded };
   },
 });
+
+// Rattache une pièce existante à un autre dossier (réparation d'une pièce
+// posée sur le mauvais dossier). Même clé de sous-étape par défaut.
+export const reassign = internalMutation({
+  args: {
+    documentId: v.id("documents"),
+    clientId: v.id("clients"),
+    substepKey: v.optional(workflowSubstepKeyValidator),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const doc = await ctx.db.get(args.documentId);
+    if (!doc || doc.deletedAt !== undefined) return { ok: false as const, reason: "pièce introuvable" };
+    const client = await ctx.db.get(args.clientId);
+    if (!client || client.deletedAt !== undefined) return { ok: false as const, reason: "dossier introuvable" };
+    let key = args.substepKey;
+    if (!key && doc.workflowSubstepId) {
+      const cur = await ctx.db.get(doc.workflowSubstepId);
+      key = cur?.key;
+    }
+    if (!key) return { ok: false as const, reason: "sous-étape inconnue" };
+    const substep = await ctx.db
+      .query("workflowSubsteps")
+      .withIndex("by_client_key", (q) => q.eq("clientId", args.clientId).eq("key", key!))
+      .first();
+    if (!substep) return { ok: false as const, reason: `sous-étape ${key} absente sur la cible` };
+    if (args.dryRun !== true) {
+      await ctx.db.patch(doc._id, {
+        clientId: args.clientId,
+        workflowStepId: substep.stepId,
+        workflowSubstepId: substep._id,
+      });
+    }
+    return { ok: true as const, filename: doc.filename, from: doc.clientId, to: args.clientId, substep: key };
+  },
+});

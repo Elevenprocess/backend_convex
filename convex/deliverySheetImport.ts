@@ -33,6 +33,7 @@ import { WorkflowSubstepKey } from "./model/enums";
 const rowValidator = v.object({
   name: v.string(),
   installe: v.optional(v.string()),
+  adresse: v.optional(v.string()),
   ville: v.optional(v.string()),
   tel: v.optional(v.string()),
   dpStatut: v.optional(v.string()),
@@ -65,14 +66,46 @@ function nameTokens(raw: string): string[] {
     .replace(/\([^)]*\)/g, " ") // "(16 panneaux)", "(2)", "(devis?)"…
     .replace(/[^A-Z]+/g, " ")
     .trim();
-  return cleaned
-    .split(/\s+/)
-    .filter((t) => t.length >= 2 && !STOPWORDS.has(t));
+  // Jetons uniques : « MAILLOT MAILLOT » = 1 seul jeton (nom sans prénom).
+  return [...new Set(
+    cleaned.split(/\s+/).filter((t) => t.length >= 2 && !STOPWORDS.has(t)),
+  )];
 }
 
 function panneauxFromName(raw: string): number | null {
   const m = raw.match(/\((\d+)\s*(?:panneaux|pv)\)/i);
   return m ? Number(m[1]) : null;
+}
+
+// Téléphone → 9 derniers chiffres (0692 32 93 62 / +262692329362 / 692329362).
+function phoneKey(raw: string | undefined | null): string | null {
+  const digits = (raw ?? "").replace(/\D/g, "");
+  return digits.length >= 9 ? digits.slice(-9) : null;
+}
+
+// Jetons d'adresse (≥ 3 lettres, sans mots vides) pour départager les
+// homonymes multi-sites (« 13 AV DES MOUTARDIERS » ↔ « 13 Avenue des Moutardiers »).
+const ADDR_STOP = new Set(["RUE", "CHEMIN", "CHE", "IMPASSE", "IMP", "ALLEE", "AVENUE", "AV", "LOT", "LOTISSEMENT", "ROUTE", "RTE", "BIS", "TER", "DES", "DE", "DU", "LA", "LE", "LES", "SAINT", "SAINTE", "ST", "STE"]);
+function addrTokens(raw: string | undefined | null): string[] {
+  return (raw ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z]+/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length >= 3 && !ADDR_STOP.has(t));
+}
+
+// Un lead réduit à UN seul jeton (« MAILLOT MAILLOT ») ne doit pas absorber
+// une ligne à plusieurs jetons (« MAILLOT DANIEL ») : exiger ≥ 2 jetons du
+// côté lead dès que la ligne en a ≥ 2. (Leçon de l'import du 09/07 : le
+// dossier de MAILLOT MAILLOT — client GHL distinct — a reçu les jalons de
+// MAILLOT DANIEL et les devis de Daniel + Christophe.)
+function tokensCompatible(rowTokens: string[], leadTokens: string[]): boolean {
+  if (rowTokens.length >= 2 && leadTokens.length < 2) return false;
+  const rowSet = new Set(rowTokens);
+  const leadSet = new Set(leadTokens);
+  return leadTokens.every((t) => rowSet.has(t)) || rowTokens.every((t) => leadSet.has(t));
 }
 
 // ─── Interprétation des colonnes ──────────────────────────────────────────────
@@ -88,6 +121,7 @@ function fold(s: string | undefined | null): string {
 const isDepose = (s?: string) => fold(s).startsWith("depose");
 const isDpValidee = (s?: string) => {
   const t = fold(s);
+  if (t === "ok") return true; // la feuille note parfois « OK » pour une DP accordée
   if (!/valid/.test(t)) return false;
   return !/refus|refaire|corriger|en cours|revoir|voir avec|pas de permis|non accord|a faire/.test(t);
 };
@@ -108,6 +142,7 @@ export const apply = internalMutation({
     );
     const candidates: Array<{
       client: Doc<"clients">;
+      lead: Doc<"leads">;
       tokens: string[];
       display: string;
     }> = [];
@@ -117,8 +152,10 @@ export const apply = internalMutation({
       const display = [lead.firstName, lead.lastName].filter(Boolean).join(" ");
       const tokens = nameTokens(display);
       if (tokens.length === 0) continue;
-      candidates.push({ client, tokens, display });
+      candidates.push({ client, lead, tokens, display });
     }
+    // Ordre stable (création) pour l'appariement ordinal des homonymes.
+    candidates.sort((a, b) => a.client._creationTime - b.client._creationTime);
 
     // ── 2. Matching ligne → dossier ──────────────────────────────────────────
     const report = {
@@ -129,11 +166,14 @@ export const apply = internalMutation({
       notesSet: 0,
       clientsTouched: 0,
       unmatched: [] as string[],
+      matchedByPhone: [] as string[],
       ambiguous: [] as string[],
       duplicates: [] as string[],
       annule: [] as string[],
       conflicts: [] as string[], // substep en probleme/annule alors que la feuille dit fait
       missingSubsteps: [] as string[],
+      // Ligne → dossier retenu (sert au driver d'import des pièces Drive).
+      mapping: [] as Array<{ name: string; clientId: Id<"clients">; display: string }>,
     };
     const usedClients = new Set<string>();
 
@@ -151,12 +191,7 @@ export const apply = internalMutation({
 
       // Un candidat matche si tous ses jetons lead sont dans la ligne, ou
       // l'inverse (la feuille ajoute souvent prénoms/mentions en plus).
-      let matches = candidates.filter(({ tokens }) => {
-        const leadSet = new Set(tokens);
-        const leadInRow = tokens.every((t) => rowSet.has(t));
-        const rowInLead = rowTokens.every((t) => leadSet.has(t));
-        return leadInRow || rowInLead;
-      });
+      let matches = candidates.filter(({ tokens }) => tokensCompatible(rowTokens, tokens));
 
       // Départage multi-dossiers d'un même lead par "(N panneaux)".
       if (matches.length > 1) {
@@ -183,7 +218,53 @@ export const apply = internalMutation({
         );
         if (exact.length === 1) matches = exact;
       }
+      // Départage : téléphone de la ligne (9 derniers chiffres) — Payet
+      // Bernard 8D (0692…) vs 8C (0693…).
+      if (matches.length > 1) {
+        const pk = phoneKey(row.tel);
+        if (pk) {
+          const byPhone = matches.filter((m) => phoneKey(m.lead.phone) === pk);
+          if (byPhone.length === 1) matches = byPhone;
+        }
+      }
+      // Départage : recouvrement d'adresse (Valeriano tourterelles vs moutardiers).
+      if (matches.length > 1) {
+        const rowAddr = new Set(addrTokens(row.adresse));
+        if (rowAddr.size > 0) {
+          const scored = matches.map((m) => ({
+            m,
+            score: addrTokens(m.lead.addressLine).filter((t) => rowAddr.has(t)).length,
+          }));
+          const best = Math.max(...scored.map((x) => x.score));
+          const top = scored.filter((x) => x.score === best && best > 0);
+          if (top.length === 1) matches = [top[0].m];
+        }
+      }
+      // Dernier recours : homonymes stricts (même affichage, souvent même
+      // lead : deux installations ou dossier dupliqué) → appariement ordinal,
+      // premier dossier (par création) encore libre. Les lignes de la
+      // feuille sont dans le même ordre que les dossiers (« 1 (12pv) »,
+      // « 2 (5pv) »).
+      if (matches.length > 1) {
+        const displays = new Set(matches.map((m) => fold(m.display).replace(/\s+/g, " ")));
+        if (displays.size === 1) {
+          const free = matches.filter((m) => !usedClients.has(m.client._id));
+          if (free.length >= 1) matches = [free[0]];
+        }
+      }
 
+      // Repli : aucun homonyme mais un dossier dont le lead porte le même
+      // téléphone (nom tronqué côté GHL, conjoint(e) signataire…).
+      if (matches.length === 0) {
+        const pk = phoneKey(row.tel);
+        if (pk) {
+          const byPhone = candidates.filter((m) => phoneKey(m.lead.phone) === pk);
+          if (byPhone.length === 1) {
+            matches = byPhone;
+            report.matchedByPhone.push(`${row.name} → ${byPhone[0].display}`);
+          }
+        }
+      }
       if (matches.length === 0) {
         report.unmatched.push(row.name);
         continue;
@@ -202,6 +283,7 @@ export const apply = internalMutation({
       }
       usedClients.add(client._id);
       report.matched++;
+      report.mapping.push({ name: row.name, clientId: client._id, display });
 
       // ── 3. Plan de mise à jour de la ligne ─────────────────────────────────
       // complete=true → viser le statut "fait" ; complete=false → note seule.
@@ -344,6 +426,7 @@ export const ensureDossiers = internalMutation({
       dossiersCreated: [] as string[],
       leadsCreated: [] as string[],
       ambiguousLead: [] as string[],
+      matchedByPhone: [] as string[],
       noLead: [] as string[],
       sameLeadDuplicate: [] as string[],
       annule: [] as string[],
@@ -359,10 +442,7 @@ export const ensureDossiers = internalMutation({
       if (rowTokens.length === 0) continue;
       const rowSet = new Set(rowTokens);
 
-      let matches = leadTokens.filter(({ tokens }) => {
-        const leadSet = new Set(tokens);
-        return tokens.every((t) => rowSet.has(t)) || rowTokens.every((t) => leadSet.has(t));
-      });
+      let matches = leadTokens.filter(({ tokens }) => tokensCompatible(rowTokens, tokens));
 
       if (matches.length > 1) {
         // 1. La table leads contient beaucoup de doublons (même personne,
@@ -405,15 +485,38 @@ export const ensureDossiers = internalMutation({
         }
       }
 
+      // 5. Téléphone de la ligne (9 derniers chiffres) — « Henri GRONDIN »
+      //    ↔ Henri Grondin (Le Tampon) vs Henri Paul Grondin (Saint-Pierre).
+      if (matches.length > 1) {
+        const pk = phoneKey(row.tel);
+        if (pk) {
+          const byPhone = matches.filter((m) => phoneKey(m.lead.phone) === pk);
+          if (byPhone.length === 1) matches = byPhone;
+        }
+      }
       if (matches.length > 1) {
         report.ambiguousLead.push(`${row.name} → ${matches.map((m) => m.display).join(" / ")}`);
         continue;
+      }
+      // Repli : aucun homonyme mais UN lead actif au même téléphone (nom
+      // tronqué « Benja De Oliveira Taffet », conjoint(e) signataire…) →
+      // on rattache le dossier à ce lead plutôt que de créer un doublon.
+      if (matches.length === 0) {
+        const pk = phoneKey(row.tel);
+        if (pk) {
+          const byPhone = leadTokens.filter((m) => phoneKey(m.lead.phone) === pk);
+          if (byPhone.length === 1) {
+            matches = byPhone;
+            report.matchedByPhone.push(`${row.name} → ${byPhone[0].display}`);
+          }
+        }
       }
 
       let leadId: Id<"leads"> | null = null;
       if (matches.length === 1) {
         // Sécurité création : exiger ≥ 2 jetons communs pour matcher un lead.
-        if (matches[0].tokens.length < 2 && rowTokens.length >= 2) {
+        const viaPhone = report.matchedByPhone.some((x) => x.startsWith(`${row.name} → `));
+        if (!viaPhone && matches[0].tokens.length < 2 && rowTokens.length >= 2) {
           report.ambiguousLead.push(`${row.name} → match trop faible : ${matches[0].display}`);
           continue;
         }
@@ -435,6 +538,7 @@ export const ensureDossiers = internalMutation({
             lastName: cleanName,
             createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),
             ...(row.tel?.trim() ? { phone: row.tel.trim() } : {}),
+            ...(row.adresse?.trim() ? { addressLine: row.adresse.trim() } : {}),
             ...(row.ville?.trim() ? { city: row.ville.trim() } : {}),
           });
         }
@@ -559,5 +663,45 @@ export const alignDossierLeadStatuses = internalMutation({
       patched++;
     }
     return { dryRun: args.dryRun === true, patched };
+  },
+});
+
+// ─── resetSubsteps — remet des jalons à « a_faire » (réparation ciblée) ───────
+// Utilisé pour défaire une pollution d'import (jalons/dates/notes posés sur le
+// mauvais dossier). Efface statut, dateRealisee et notes des clés données,
+// puis recompute phase + dossier. À n'employer qu'avec un diagnostic précis.
+export const resetSubsteps = internalMutation({
+  args: {
+    clientId: v.id("clients"),
+    keys: v.array(v.string()),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const dryRun = args.dryRun === true;
+    const reset: string[] = [];
+    const touchedSteps = new Set<Id<"workflowSteps">>();
+    for (const key of args.keys) {
+      const substep = await ctx.db
+        .query("workflowSubsteps")
+        .withIndex("by_client_key", (q) =>
+          q.eq("clientId", args.clientId).eq("key", key as WorkflowSubstepKey),
+        )
+        .first();
+      if (!substep) continue;
+      reset.push(`${key}: ${substep.status}${substep.dateRealisee ? " " + substep.dateRealisee : ""}${substep.notes ? " [note]" : ""}`);
+      if (!dryRun) {
+        await ctx.db.patch(substep._id, {
+          status: "a_faire",
+          dateRealisee: undefined,
+          notes: undefined,
+        });
+        touchedSteps.add(substep.stepId);
+      }
+    }
+    if (!dryRun && touchedSteps.size > 0) {
+      for (const stepId of touchedSteps) await recomputePhase(ctx, stepId);
+      await recomputeClientStatus(ctx, args.clientId);
+    }
+    return { dryRun, reset };
   },
 });
