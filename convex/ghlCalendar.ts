@@ -189,18 +189,25 @@ export const persistGhlEvents = internalMutation({
           updated++;
           continue;
         }
-        if (existing.debriefFilledAt !== undefined) {
-          await ctx.db.patch(existing._id, { commercialId: event.commercialId, scheduledAt, status });
-        } else {
-          await ctx.db.patch(existing._id, {
-            commercialId: event.commercialId,
-            scheduledAt,
-            status,
-            notes: buildSyncedRdvNotes(event as GhlCalendarEvent),
-          });
+        // Ne patcher QUE les champs réellement modifiés : la sync repasse toutes
+        // les 15 min sur les mêmes événements et un patch à l'identique compte
+        // comme une écriture Convex → il ré-exécutait rdv:list / leads:listEnriched
+        // (via refreshLeadAgg) chez tous les clients abonnés, 96 fois par jour.
+        const patch: Record<string, unknown> = {};
+        if (existing.commercialId !== event.commercialId) patch.commercialId = event.commercialId;
+        if (existing.scheduledAt !== scheduledAt) patch.scheduledAt = scheduledAt;
+        if (existing.status !== status) patch.status = status;
+        if (existing.debriefFilledAt === undefined) {
+          const notes = buildSyncedRdvNotes(event as GhlCalendarEvent);
+          if (existing.notes !== notes) patch.notes = notes;
         }
-        await refreshLeadAgg(ctx, existing.leadId);
-        updated++;
+        if (Object.keys(patch).length > 0) {
+          await ctx.db.patch(existing._id, patch);
+          await refreshLeadAgg(ctx, existing.leadId);
+          updated++;
+        } else {
+          skipped++; // inchangé — aucune écriture, aucune invalidation
+        }
         continue;
       }
 
