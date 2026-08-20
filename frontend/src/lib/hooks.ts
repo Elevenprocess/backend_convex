@@ -1265,7 +1265,7 @@ export type GhlCommercialSyncReport = {
 
 // Mappe (par email) les commerciaux du SaaS à leurs utilisateurs GHL côté backend.
 export function syncGhlCommercialUsers(): Promise<GhlCommercialSyncReport> {
-  if (convexAuthEnabled) {
+  if (convexAuthEnabled && convexClient) {
     return convexClient.action(ghlCalendarSyncUsers, {}) as Promise<GhlCommercialSyncReport>
   }
   return api<GhlCommercialSyncReport>('/ghl-calendar/sync-users', { method: 'POST' })
