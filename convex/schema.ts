@@ -163,8 +163,8 @@ export default defineSchema({
 
   /**
    * Présence setter « je regarde ce lead » (remplace le socket NestJS) :
-   * une ligne par utilisateur, heartbeat côté client (~25 s) qui prolonge
-   * expiresAt (TTL 60 s) ; un onglet fermé expire tout seul. Petite table
+   * une ligne par utilisateur, heartbeat côté client (~40 s) qui prolonge
+   * expiresAt (TTL 90 s) ; un onglet fermé expire tout seul. Petite table
    * volatile — lue en entier par leadPresence:list (réactif).
    */
   leadPresence: defineTable({
@@ -176,6 +176,19 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_expiresAt", ["expiresAt"]),
+
+  /**
+   * Heartbeat « en ligne » (badge Actif de la page équipe) — séparé de la table
+   * users EXPRÈS : requireUser lit le doc user à CHAQUE query, donc un patch de
+   * users toutes les 60 s (ancien users.heartbeat) invalidait et ré-exécutait
+   * TOUTES les queries abonnées de l'utilisateur (dont le drain leads:listEnriched
+   * complet). Ici, seul users:onlineIds (petite table, lecture bon marché) est
+   * ré-exécuté par un heartbeat. Une ligne par utilisateur.
+   */
+  userPresence: defineTable({
+    userId: v.id("users"),
+    lastSeenAt: v.number(), // ms — dernier heartbeat (users:heartbeat, ~60 s)
+  }).index("by_user", ["userId"]),
 
   // Audit trail des webhooks entrants (parité webhook_events NestJS) : le raw
   // payload survit à l'échec du traitement → replay/debug possibles.

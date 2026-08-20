@@ -46,7 +46,7 @@ function useLeadLocksSocket(): ReadonlyMap<string, LeadLockInfo> {
   )
 }
 
-// Mode Convex : la présence vit dans la table leadPresence (heartbeat TTL 60 s)
+// Mode Convex : la présence vit dans la table leadPresence (heartbeat TTL 90 s)
 // et leadPresence:list est une query réactive — chaque touch/release des autres
 // onglets met la map à jour toute seule.
 function useLeadLocksConvex(): ReadonlyMap<string, LeadLockInfo> {
@@ -116,10 +116,10 @@ export const useOnlineUsers: typeof useOnlineUsersSocket = convexAuthEnabled
 let activeSocket: Socket | null = null
 
 // Heartbeat Convex : tant qu'un prospect est ouvert, on re-touch toutes les
-// 25 s (TTL serveur 60 s) — un onglet fermé/crashé expire donc tout seul.
+// 40 s (TTL serveur 90 s) — un onglet fermé/crashé expire donc tout seul.
 let presenceLeadId: string | null = null
 let presenceTimer: number | null = null
-const PRESENCE_HEARTBEAT_MS = 25_000
+const PRESENCE_HEARTBEAT_MS = 40_000
 
 // Émet le verrou côté setter : on s'auto-déclare comme "je regarde ce lead".
 export function emitLeadSelect(leadId: string, setterId: string, setterName: string) {

@@ -99,16 +99,16 @@ export const directory = query({
 // est actif si son heartbeat (users:heartbeat, ~60 s côté front) date de moins
 // de ONLINE_TTL_MS. `now` vient du client : une query Convex ne se réévalue pas
 // avec le temps qui passe, le front change l'arg à chaque tick pour rafraîchir.
+// Lit la table userPresence (PAS users) : les heartbeats n'invalident que cette
+// query, pas tout l'arbre de queries de chaque utilisateur (cf. schema.ts).
 const ONLINE_TTL_MS = 2 * 60_000;
 
 export const onlineIds = query({
   args: { now: v.number() },
   handler: async (ctx, args) => {
     await requireUser(ctx);
-    const rows = await ctx.db.query("users").collect();
-    return rows
-      .filter((u) => u.deletedAt === undefined && (u.lastSeenAt ?? 0) > args.now - ONLINE_TTL_MS)
-      .map((u) => u._id);
+    const rows = await ctx.db.query("userPresence").collect();
+    return rows.filter((r) => r.lastSeenAt > args.now - ONLINE_TTL_MS).map((r) => r.userId);
   },
 });
 
@@ -235,11 +235,22 @@ export const toggleActive = mutation({
   },
 });
 
+// Heartbeat « en ligne » : écrit dans userPresence, JAMAIS dans users — un patch
+// du doc user invaliderait toutes les queries abonnées de l'utilisateur
+// (requireUser le lit partout) et ré-exécuterait le drain leads toutes les 60 s.
 export const heartbeat = mutation({
   args: {},
   handler: async (ctx) => {
     const user = await requireUser(ctx);
-    await ctx.db.patch(user._id, { lastSeenAt: Date.now() });
+    const existing = await ctx.db
+      .query("userPresence")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, { lastSeenAt: Date.now() });
+    } else {
+      await ctx.db.insert("userPresence", { userId: user._id, lastSeenAt: Date.now() });
+    }
     return null;
   },
 });

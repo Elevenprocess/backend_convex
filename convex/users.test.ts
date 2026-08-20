@@ -66,12 +66,17 @@ test("toggleActive() refusé pour un non-admin", async () => {
   ).rejects.toThrow(/non autorisé/);
 });
 
-test("heartbeat() met à jour lastSeenAt", async () => {
+test("heartbeat() écrit dans userPresence SANS toucher le doc user (sinon il invaliderait toutes les queries)", async () => {
   const t = makeT();
   const id = await insertUser(t, { role: "setter" });
   await asUser(t, id).mutation(api.users.heartbeat, {});
+  await asUser(t, id).mutation(api.users.heartbeat, {}); // idempotent : une seule ligne
+  const rows = await t.run((ctx) =>
+    ctx.db.query("userPresence").withIndex("by_user", (q: any) => q.eq("userId", id)).collect());
+  expect(rows).toHaveLength(1);
+  expect(rows[0].lastSeenAt).toBeGreaterThan(0);
   const u = await t.run((ctx) => ctx.db.get(id));
-  expect(u?.lastSeenAt).toBeGreaterThan(0);
+  expect(u?.lastSeenAt).toBeUndefined();
 });
 
 test("get : renvoie le user par id, null si supprimé ou id invalide", async () => {
@@ -107,17 +112,15 @@ test("directory : refusé sans authentification", async () => {
   await expect(t.query(api.users.directory, {})).rejects.toThrow(/Non authentifié/);
 });
 
-test("onlineIds : seuls les comptes vus il y a moins de 2 min, hors supprimés", async () => {
+test("onlineIds : seuls les comptes au heartbeat (userPresence) de moins de 2 min", async () => {
   const t = makeT();
   const now = 10 * 60_000;
   const viewerId = await insertUser(t, { role: "setter", email: "v@ecoi.fr" });
   const onlineId = await insertUser(t, { role: "commercial", email: "on@ecoi.fr" });
   const staleId = await insertUser(t, { role: "commercial", email: "off@ecoi.fr" });
-  const deletedId = await insertUser(t, { role: "setter", email: "del@ecoi.fr" });
   await t.run(async (ctx: any) => {
-    await ctx.db.patch(onlineId, { lastSeenAt: now - 30_000 });
-    await ctx.db.patch(staleId, { lastSeenAt: now - 5 * 60_000 });
-    await ctx.db.patch(deletedId, { lastSeenAt: now - 10_000, deletedAt: 1 });
+    await ctx.db.insert("userPresence", { userId: onlineId, lastSeenAt: now - 30_000 });
+    await ctx.db.insert("userPresence", { userId: staleId, lastSeenAt: now - 5 * 60_000 });
   });
   const ids = await asUser(t, viewerId).query(api.users.onlineIds, { now });
   expect(ids).toEqual([onlineId]);

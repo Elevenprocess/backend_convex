@@ -1,8 +1,8 @@
 /**
  * Présence « un setter regarde ce lead » — remplace le gateway socket.io
  * NestJS (lead:select / lead:deselect). Modèle heartbeat :
- *  - le client `touch` à l'ouverture d'un prospect puis toutes les ~25 s ;
- *  - TTL 60 s : sans heartbeat (onglet fermé, crash), le verrou expire seul ;
+ *  - le client `touch` à l'ouverture d'un prospect puis toutes les ~40 s ;
+ *  - TTL 90 s : sans heartbeat (onglet fermé, crash), le verrou expire seul ;
  *  - `list` est une query RÉACTIVE : chaque heartbeat/release des autres
  *    onglets pousse la mise à jour à tous les clients abonnés.
  * Une seule ligne par utilisateur (on ne regarde qu'un prospect à la fois).
@@ -11,7 +11,9 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./model/access";
 
-const TTL_MS = 60_000;
+// 90 s / heartbeat 40 s : deux battements de marge, moitié moins de mutations
+// (et de ré-exécutions de `list` chez tous les abonnés) que l'ancien 60/25.
+const TTL_MS = 90_000;
 
 export const touch = mutation({
   args: { leadId: v.id("leads") },
