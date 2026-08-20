@@ -639,7 +639,14 @@ export const mapGhlCommercials = internalMutation({
 
       if (user) {
         if (user.ghlUserId === pair.ghlUserId) {
-          report.already.push(`${pair.name} → ${user.name ?? user.email}`);
+          // Backfill secteur : les comptes reliés avant l'ajout du champ n'ont
+          // jamais reçu leur ghlCalendarId (ils restaient « Sans secteur »).
+          if (pair.calendarId !== undefined && user.ghlCalendarId !== pair.calendarId) {
+            if (args.dryRun !== true) await ctx.db.patch(user._id, { ghlCalendarId: pair.calendarId });
+            report.linked.push(`${pair.name} → ${user.name ?? user.email} (secteur)`);
+          } else {
+            report.already.push(`${pair.name} → ${user.name ?? user.email}`);
+          }
           continue;
         }
         if (args.dryRun !== true) {
@@ -668,6 +675,35 @@ export const mapGhlCommercials = internalMutation({
   },
 });
 
+// Recense les membres des calendriers secteur GHL (ghlUserId → calendarIds).
+// Best-effort : un calendrier illisible (timeout GHL intermittent) est sauté
+// plutôt que de perdre toute la passe — idempotent, rattrapé au passage suivant.
+async function collectSectorMemberships(
+  sectors: Array<{ calendarId: string }>,
+): Promise<Map<string, string[]>> {
+  const memberCalendars = new Map<string, string[]>();
+  for (const { calendarId } of sectors) {
+    let raw: { calendar?: { teamMembers?: Array<{ userId?: string }> } } | null = null;
+    try {
+      raw = (await ghlRequest(`/calendars/${encodeURIComponent(calendarId)}`)) as {
+        calendar?: { teamMembers?: Array<{ userId?: string }> };
+      } | null;
+    } catch (error) {
+      console.warn(
+        `Sync staff GHL : calendrier ${calendarId} illisible (${error instanceof Error ? error.message : String(error)})`,
+      );
+      continue;
+    }
+    for (const member of raw?.calendar?.teamMembers ?? []) {
+      if (!member.userId) continue;
+      const list = memberCalendars.get(member.userId) ?? [];
+      list.push(calendarId);
+      memberCalendars.set(member.userId, list);
+    }
+  }
+  return memberCalendars;
+}
+
 // ─── Synchro quotidienne équipe GHL → comptes Velora ─────────────────────────
 // Reconstruit les paires (membre des calendriers secteur → user GHL) et les
 // passe à mapGhlCommercials (idempotent, additif — la purge des partants reste
@@ -682,28 +718,7 @@ export const syncStaffScheduled = internalAction({
       const sectors = sectorsFromEnv();
       if (sectors.length === 0) return null;
 
-      const memberCalendars = new Map<string, string[]>();
-      for (const { calendarId } of sectors) {
-        // Timeout GHL intermittent : on saute le calendrier plutôt que de
-        // perdre toute la passe (idempotent, rattrapé au prochain passage).
-        let raw: { calendar?: { teamMembers?: Array<{ userId?: string }> } } | null = null;
-        try {
-          raw = (await ghlRequest(`/calendars/${encodeURIComponent(calendarId)}`)) as {
-            calendar?: { teamMembers?: Array<{ userId?: string }> };
-          } | null;
-        } catch (error) {
-          console.warn(
-            `Sync staff GHL : calendrier ${calendarId} illisible (${error instanceof Error ? error.message : String(error)})`,
-          );
-          continue;
-        }
-        for (const member of raw?.calendar?.teamMembers ?? []) {
-          if (!member.userId) continue;
-          const list = memberCalendars.get(member.userId) ?? [];
-          list.push(calendarId);
-          memberCalendars.set(member.userId, list);
-        }
-      }
+      const memberCalendars = await collectSectorMemberships(sectors);
       if (memberCalendars.size === 0) return null;
 
       const users = normalizeGhlUsers(
@@ -733,5 +748,75 @@ export const syncStaffScheduled = internalAction({
       console.warn(`Sync staff GHL auto échouée : ${error instanceof Error ? error.message : String(error)}`);
     }
     return null;
+  },
+});
+
+// ─── Sync manuelle équipe (bouton « Synchroniser avec GHL ») ─────────────────
+
+type GhlCommercialSyncReport = {
+  ghlUserCount: number;
+  matched: Array<{ id: Id<"users">; name: string; email: string | null; ghlUserId: string }>;
+  unmatched: Array<{ id: Id<"users">; name: string; email: string | null }>;
+  alreadyMapped: Array<{ id: Id<"users">; name: string; ghlUserId: string }>;
+};
+
+// Écritures de syncUsers : relie par email chaque commercial Velora à son user
+// GHL, et pose ghlCalendarId quand le membre n'a qu'un seul calendrier secteur
+// (y compris en backfill sur les comptes déjà reliés). Les non résolus (email
+// SaaS ≠ email GHL) sont listés pour correction par l'admin.
+export const applyUserSync = internalMutation({
+  args: {
+    ghlUsers: v.array(v.object({ id: v.string(), name: v.string(), email: v.union(v.string(), v.null()) })),
+    soloCalendars: v.array(v.object({ ghlUserId: v.string(), calendarId: v.string() })),
+  },
+  handler: async (ctx, args): Promise<GhlCommercialSyncReport> => {
+    const byEmail = new Map<string, { id: string; name: string; email: string | null }>();
+    for (const u of args.ghlUsers) if (u.email) byEmail.set(u.email.trim().toLowerCase(), u);
+    const soloCalendarByGhlUserId = new Map(args.soloCalendars.map((s) => [s.ghlUserId, s.calendarId]));
+
+    const report: GhlCommercialSyncReport = {
+      ghlUserCount: args.ghlUsers.length,
+      matched: [], unmatched: [], alreadyMapped: [],
+    };
+    for (const user of await ctx.db.query("users").collect()) {
+      if (user.deletedAt !== undefined) continue;
+      if (user.role !== "commercial" && user.role !== "commercial_lead") continue;
+      const ghl = user.email ? byEmail.get(user.email.trim().toLowerCase()) : undefined;
+      if (!ghl) {
+        report.unmatched.push({ id: user._id, name: user.name ?? "", email: user.email ?? null });
+        continue;
+      }
+      const calendarId = soloCalendarByGhlUserId.get(ghl.id);
+      const patch: { ghlUserId?: string; ghlCalendarId?: string } = {};
+      if (user.ghlUserId !== ghl.id) patch.ghlUserId = ghl.id;
+      if (calendarId !== undefined && user.ghlCalendarId !== calendarId) patch.ghlCalendarId = calendarId;
+      if (Object.keys(patch).length > 0) await ctx.db.patch(user._id, patch);
+      if (user.ghlUserId === ghl.id) {
+        report.alreadyMapped.push({ id: user._id, name: user.name ?? "", ghlUserId: ghl.id });
+      } else {
+        report.matched.push({ id: user._id, name: user.name ?? "", email: user.email ?? null, ghlUserId: ghl.id });
+      }
+    }
+    return report;
+  },
+});
+
+// Port Convex du POST /ghl-calendar/sync-users NestJS. Même rapport que
+// l'ancien endpoint (matched/unmatched/alreadyMapped) pour la page Équipe.
+export const syncUsers = action({
+  args: {},
+  handler: async (ctx): Promise<GhlCommercialSyncReport> => {
+    await requireViewer(ctx, BUSINESS_VIEW);
+    const ghlUsers = normalizeGhlUsers(
+      await ghlRequest("/users/", { query: { locationId: requireGhlLocationId() } }),
+    );
+    const memberCalendars = await collectSectorMemberships(sectorsFromEnv());
+    const soloCalendars = [...memberCalendars.entries()]
+      .filter(([, calendarIds]) => calendarIds.length === 1)
+      .map(([ghlUserId, calendarIds]) => ({ ghlUserId, calendarId: calendarIds[0] }));
+    return await ctx.runMutation(internal.ghlCalendar.applyUserSync, {
+      ghlUsers: ghlUsers.map((u) => ({ id: u.id, name: u.name, email: u.email ?? null })),
+      soloCalendars,
+    });
   },
 });

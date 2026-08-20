@@ -20,6 +20,13 @@ describe("ghlClient purs", () => {
     expect(isRetryableHttpStatus(404)).toBe(false);
     expect(isRetryableHttpStatus(200)).toBe(false);
   });
+  it("faux 401 « Command timed out » (passerelle GHL) : retryable + message indisponibilité, pas jeton expiré", () => {
+    expect(isRetryableHttpStatus(401, "Command timed out")).toBe(true);
+    expect(isRetryableHttpStatus(403, "request timed out")).toBe(true);
+    expect(isRetryableHttpStatus(401, "Invalid JWT")).toBe(false);
+    expect(friendlyGhlHttpMessage(401, "Command timed out")).toContain("momentanément indisponible");
+    expect(friendlyGhlHttpMessage(401, "Invalid JWT")).toContain("administrateur");
+  });
   it("friendlyGhlHttpMessage : messages setters en français clair par statut", () => {
     expect(friendlyGhlHttpMessage(429)).toContain("patiente quelques secondes");
     expect(friendlyGhlHttpMessage(401)).toContain("administrateur");

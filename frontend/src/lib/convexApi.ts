@@ -664,6 +664,7 @@ export const analyticsCommercialStats = makeFunctionReference<
 export const ghlCalendarGetConfig = makeFunctionReference<'action', Record<string, never>, { configured: boolean; locationIdPresent: boolean; sectorCalendarCount: number; sectors: unknown[] }>('ghlCalendar:getConfig')
 export const ghlCalendarListUsers = makeFunctionReference<'action', Record<string, never>, unknown[]>('ghlCalendar:listUsers')
 export const ghlCalendarMySector = makeFunctionReference<'action', { userId?: string }, unknown>('ghlCalendar:mySector')
+export const ghlCalendarSyncUsers = makeFunctionReference<'action', Record<string, never>, unknown>('ghlCalendar:syncUsers')
 export const ghlCalendarFreeSlots = makeFunctionReference<'action', { from: number; to: number; sector?: string; calendarId?: string; timezone?: string }, { configured: boolean; slots: unknown[] }>('ghlCalendar:freeSlots')
 export const ghlCalendarEventsAction = makeFunctionReference<'action', { from: number; to: number; sector?: string; calendarId?: string }, { configured: boolean; events: unknown[] }>('ghlCalendar:events')
 export const ghlCalendarSyncEvents = makeFunctionReference<'action', { from: number; to: number; sector?: string; calendarId?: string }, unknown>('ghlCalendar:syncEvents')

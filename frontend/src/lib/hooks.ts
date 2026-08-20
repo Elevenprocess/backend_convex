@@ -36,7 +36,7 @@ import { fetchCache, type FetchCacheEntry } from './fetchCacheStore'
 import { persistEntry, loadAllEntries, migrateLegacyLocalStorage } from './cachePersist'
 import { convexAuthEnabled, convexClient } from './convex'
 import { callLogsLogCall, leadsCreate, leadsGet, leadsSoftDelete, leadsUpdate, rdvCreate, rdvFlagByReception, rdvGet, rdvUpdate,
-  ghlCalendarGetConfig, ghlCalendarListUsers, ghlCalendarMySector, ghlCalendarFreeSlots, ghlCalendarEventsAction,
+  ghlCalendarGetConfig, ghlCalendarListUsers, ghlCalendarMySector, ghlCalendarSyncUsers, ghlCalendarFreeSlots, ghlCalendarEventsAction,
   ghlCalendarSyncEvents, ghlCalendarSyncLeadEvents, ghlAppointmentsCreate, ghlAppointmentsUpdate, ghlAppointmentsReassign,
   usersAdminUpdate, usersRemove, usersGet } from './convexApi'
 import { mapConvexLead, mapConvexRdv, mapConvexUser } from './convexMappers'
@@ -1265,6 +1265,9 @@ export type GhlCommercialSyncReport = {
 
 // Mappe (par email) les commerciaux du SaaS à leurs utilisateurs GHL côté backend.
 export function syncGhlCommercialUsers(): Promise<GhlCommercialSyncReport> {
+  if (convexAuthEnabled) {
+    return convexClient.action(ghlCalendarSyncUsers, {}) as Promise<GhlCommercialSyncReport>
+  }
   return api<GhlCommercialSyncReport>('/ghl-calendar/sync-users', { method: 'POST' })
 }
 

@@ -22,12 +22,21 @@ type ErrorWithCause = Error & { code?: string; cause?: { code?: string; name?: s
 
 export class GhlApiError extends ConvexError<string> {}
 
+// La passerelle GHL renvoie parfois un 401/403 dont le détail est
+// « Command timed out » : c'est un timeout côté CRM, pas un jeton invalide.
+export function isGhlTimeoutDetail(detail?: string): boolean {
+  return /timed?\s?out/i.test(detail ?? "");
+}
+
 /** Message lisible pour les setters selon le statut HTTP GHL. */
 export function friendlyGhlHttpMessage(status: number, detail?: string): string {
   if (status === 429) {
     return "Trop de demandes en même temps vers le CRM : patiente quelques secondes puis réessaie.";
   }
   if (status === 401 || status === 403) {
+    if (isGhlTimeoutDetail(detail)) {
+      return "Le CRM (GHL) est momentanément indisponible. Réessaie dans un instant.";
+    }
     return "Accès au CRM refusé (jeton expiré ou permissions). Préviens un administrateur.";
   }
   if (status >= 500) {
@@ -48,8 +57,9 @@ export function safeJson(text: string): unknown {
   try { return JSON.parse(text); } catch { return text; }
 }
 
-export function isRetryableHttpStatus(status: number): boolean {
-  return status >= 500;
+export function isRetryableHttpStatus(status: number, detail?: string): boolean {
+  if (status >= 500) return true;
+  return (status === 401 || status === 403) && isGhlTimeoutDetail(detail);
 }
 
 export function isRetryableFetchError(error: unknown): boolean {
@@ -140,7 +150,7 @@ export async function ghlRequest(
           continue;
         }
         const apiError = new GhlApiError(friendlyGhlHttpMessage(res.status, detail));
-        if (attempt < maxAttempts && isRetryableHttpStatus(res.status)) {
+        if (attempt < maxAttempts && isRetryableHttpStatus(res.status, detail)) {
           lastError = apiError;
           continue;
         }
