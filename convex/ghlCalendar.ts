@@ -10,6 +10,7 @@ import type { ActionCtx, MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { requireUser, roleOf } from "./model/access";
+import { refreshLeadAgg } from "./model/leadAgg";
 import type { Role } from "./model/enums";
 import { ghlRequest, isGhlConfigured, requireGhlLocationId } from "./ghlClient";
 import {
@@ -184,6 +185,7 @@ export const persistGhlEvents = internalMutation({
             debriefFilledAt: undefined,
             ...(isSyncedNotes ? { notes: undefined } : {}),
           });
+          await refreshLeadAgg(ctx, existing.leadId);
           updated++;
           continue;
         }
@@ -197,6 +199,7 @@ export const persistGhlEvents = internalMutation({
             notes: buildSyncedRdvNotes(event as GhlCalendarEvent),
           });
         }
+        await refreshLeadAgg(ctx, existing.leadId);
         updated++;
         continue;
       }
@@ -217,6 +220,7 @@ export const persistGhlEvents = internalMutation({
       if (event.commercialId !== undefined) {
         await ctx.db.patch(leadId, { status: "qualifie", assignedToId: event.commercialId });
       }
+      await refreshLeadAgg(ctx, leadId);
       created++;
     }
 

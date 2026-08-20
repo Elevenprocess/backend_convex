@@ -25,6 +25,7 @@ import { buildGhlProspectRemark } from "./model/ghl/prospectRemark";
 import { requireRole, requireUser } from "./model/access";
 import { logActivity, leadLabel, leadLabelById, userLabelById, fmtDateTime } from "./model/activity";
 import { rdvLocationValidator } from "./model/enums";
+import { refreshLeadAgg } from "./model/leadAgg";
 import { OPEN_RDV_STATUSES } from "./rdv";
 
 const RDV_PLANIFIE_STAGE = "5. RDV Planifié 📅";
@@ -225,6 +226,7 @@ export const finalizeAppointment = internalMutation({
         : `a pris un RDV pour ${leadLabel(lead)} le ${fmtDateTime(args.scheduledAt)} (calendrier GHL)`,
       details: { scheduledAt: args.scheduledAt, appointmentId: args.appointmentId, locationType: args.locationType ?? "domicile", notes: args.notes ?? null, statusBefore: lead.status, statusAfter: "qualifie" },
     });
+    await refreshLeadAgg(ctx, args.leadId);
     return { rdvId, rdv };
   },
 });
@@ -399,6 +401,7 @@ export const applyAppointmentUpdate = internalMutation({
         details: { before: { scheduledAt: rdv.scheduledAt ?? null }, after: { scheduledAt: args.scheduledAt ?? rdv.scheduledAt ?? null }, leadPatch },
       });
     }
+    if (Object.keys(patch).length > 0) await refreshLeadAgg(ctx, rdv.leadId);
     return null;
   },
 });
@@ -509,6 +512,7 @@ export const applyReassignment = internalMutation({
         details: { before: { commercialId: rdv.commercialId ?? null }, after: { commercialId: args.commercialId } },
       });
     }
+    await refreshLeadAgg(ctx, rdv.leadId);
     return null;
   },
 });

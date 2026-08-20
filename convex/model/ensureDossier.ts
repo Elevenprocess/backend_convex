@@ -14,6 +14,7 @@ import {
   derivePhaseStatus,
 } from "./deriveDelivrabilite";
 import { substepsForPhase } from "./substepCatalog";
+import { refreshLeadAgg } from "./leadAgg";
 
 // ─── Type de l'input ──────────────────────────────────────────────────────────
 
@@ -155,6 +156,9 @@ export async function recomputeClientStatus(
     steps.map((s) => ({ phase: s.phase, status: s.status })),
   );
   await ctx.db.patch(clientId, { statusGlobal, currentPhase, blocked });
+  // statusGlobal alimente lead.agg.delivrabiliteStatus (liste leads enrichie).
+  const client = await ctx.db.get(clientId);
+  if (client) await refreshLeadAgg(ctx, client.leadId);
 }
 
 // ─── Helper privé ─────────────────────────────────────────────────────────────

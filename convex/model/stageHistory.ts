@@ -1,6 +1,7 @@
 import { MutationCtx } from "../_generated/server";
 import { Id } from "../_generated/dataModel";
 import { LeadStatus, StageHistorySource } from "./enums";
+import { refreshLeadAgg } from "./leadAgg";
 
 export async function insertStageHistory(
   ctx: MutationCtx,
@@ -24,7 +25,7 @@ export async function insertStageHistory(
     )
     .first();
   if (existing) return null;
-  return await ctx.db.insert("leadStageHistory", {
+  const id = await ctx.db.insert("leadStageHistory", {
     leadId: args.leadId,
     ghlStageName: args.ghlStageName,
     saasStatus: args.saasStatus,
@@ -33,4 +34,6 @@ export async function insertStageHistory(
     changedAt: args.changedAt,
     source: args.source,
   });
+  await refreshLeadAgg(ctx, args.leadId);
+  return id;
 }

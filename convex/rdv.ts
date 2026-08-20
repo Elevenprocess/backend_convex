@@ -6,6 +6,7 @@ import {
 } from "./model/enums";
 import { requireRole, assertCommercialRole, requireUser } from "./model/access";
 import { insertStageHistory } from "./model/stageHistory";
+import { refreshLeadAgg } from "./model/leadAgg";
 import { deriveLeadStatus } from "./model/deriveLeadStatus";
 import { notifyRdvReceptionFlag } from "./model/notify";
 import {
@@ -93,6 +94,7 @@ export const create = mutation({
         },
       });
     }
+    await refreshLeadAgg(ctx, args.leadId);
     return rdvId;
   },
 });
@@ -192,6 +194,7 @@ export const flagByReception = mutation({
       reason: args.reason,
       newScheduledAt: replan ? args.newScheduledAt : undefined,
     });
+    await refreshLeadAgg(ctx, existing.leadId);
     return null;
   },
 });
@@ -313,6 +316,7 @@ export const update = mutation({
         }
       }
     }
+    await refreshLeadAgg(ctx, existing.leadId);
     return null;
   },
 });

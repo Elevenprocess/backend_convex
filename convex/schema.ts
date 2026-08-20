@@ -131,6 +131,37 @@ export default defineSchema({
     // Champ de recherche dénormalisé legacy (import GHL/migration) : plus alimenté
     // ni lu par le code, conservé optionnel pour tolérer les documents existants.
     searchText: v.optional(v.string()),
+    // Agrégats appels/RDV/devis/dossier/stage dénormalisés, maintenus à
+    // l'écriture (model/leadAgg.ts) — évite le N+1 de la liste enrichie.
+    // Uniquement des valeurs indépendantes de l'heure de lecture ; `v` doit
+    // valoir AGG_VERSION pour être utilisé (sinon repli calcul live).
+    agg: v.optional(
+      v.object({
+        v: v.number(),
+        updatedAt: v.number(),
+        latestCallAt: v.optional(v.number()),
+        firstCallAt: v.optional(v.number()),
+        latestCallComment: v.optional(v.string()),
+        latestCallSetterId: v.optional(v.id("users")),
+        callSetterIds: v.array(v.id("users")),
+        callCount: v.number(),
+        distinctCallDays: v.number(),
+        lastCallDayKey: v.optional(v.string()),
+        callsOnLastCallDay: v.number(),
+        nextCallbackAt: v.optional(v.number()),
+        callbackSetAt: v.optional(v.number()),
+        latestRdvAt: v.optional(v.number()),
+        latestRdvStatus: v.optional(v.string()),
+        latestRdvCommercialId: v.optional(v.id("users")),
+        transferredAt: v.optional(v.number()),
+        hasDevis: v.boolean(),
+        latestDevisAt: v.optional(v.number()),
+        latestDebriefAt: v.optional(v.number()),
+        lastStageChangeAt: v.optional(v.number()),
+        firstStageAt: v.optional(v.number()),
+        delivrabiliteStatus: v.optional(v.string()),
+      }),
+    ),
   })
     .index("by_status_setter", ["status", "setterId"])
     .index("by_setter", ["setterId"])

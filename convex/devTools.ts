@@ -5,6 +5,7 @@ import { internal } from "./_generated/api";
 import { roleValidator, teamValidator, leadStatusValidator } from "./model/enums";
 import { insertStageHistory } from "./model/stageHistory";
 import { enrichLead } from "./model/enrichLead";
+import { refreshLeadAgg } from "./model/leadAgg";
 
 // Outils dev uniquement — internes (jamais appelables par un client) : lancés
 // via `npx convex run devTools:setRole '{"email":"…","role":"admin"}'` avec la
@@ -144,6 +145,7 @@ export const createDebriefLinkFixture = internalMutation({
       scheduledAt: Date.now() - 60 * 60 * 1000,
       createdAt: Date.now(),
     });
+    await refreshLeadAgg(ctx, leadId);
     return { leadId, rdvId };
   },
 });

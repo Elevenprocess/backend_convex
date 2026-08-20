@@ -6,6 +6,7 @@ import { callResultValidator } from "./model/enums";
 import type { CallResult, LeadStatus } from "./model/enums";
 import { requireUser, requireLeadWriteRole, roleOf } from "./model/access";
 import { insertStageHistory } from "./model/stageHistory";
+import { refreshLeadAgg } from "./model/leadAgg";
 import { logActivity, leadLabel, CALL_RESULT_LABEL, LEAD_STATUS_LABEL, label, fmtDateTime } from "./model/activity";
 import { OPEN_RDV_STATUSES } from "./rdv";
 
@@ -157,6 +158,7 @@ export const logCall = mutation({
         at: calledAt,
       });
     }
+    await refreshLeadAgg(ctx, args.leadId);
     return id;
   },
 });

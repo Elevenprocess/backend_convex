@@ -13,6 +13,7 @@ import { webhookProviderValidator, leadStatusValidator } from "./model/enums";
 import { mapGhlLeadPayload } from "./model/ghl/leadWebhook";
 import { mapGhlStageToStatus } from "./model/ghl/stageMapper";
 import { ensureDossier } from "./model/ensureDossier";
+import { refreshLeadAgg } from "./model/leadAgg";
 import { logSystemActivity, leadLabel, LEAD_STATUS_LABEL, label } from "./model/activity";
 import { deriveAcquisitionChannel, isSiteWebUtm } from "./model/acquisitionChannel";
 import { syncProjectFromLeadStatus } from "./model/ghl/projectSync";
@@ -222,6 +223,7 @@ export const applyGhlStageChange = internalMutation({
         ...(input.webhookEventId !== undefined ? { webhookEventId: input.webhookEventId } : {}),
       });
       historyAppended = true;
+      await refreshLeadAgg(ctx, leadId);
     }
 
     // 4) Passage à 'signe' → dossier délivrabilité (une fois). Parité NestJS :

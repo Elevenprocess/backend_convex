@@ -9,6 +9,7 @@ import {
 } from "./model/enums";
 import { requireRole, requireUser, assertCommercialRole } from "./model/access";
 import { insertStageHistory } from "./model/stageHistory";
+import { refreshLeadAgg } from "./model/leadAgg";
 import { deriveLeadStatusFromDebrief } from "./model/deriveLeadStatusFromDebrief";
 import { ensureProjectForLead, markProjectSigned } from "./model/ensureProject";
 import { internal } from "./_generated/api";
@@ -526,6 +527,7 @@ export const submitViaLink = internalMutation({
       });
     }
 
+    await refreshLeadAgg(ctx, leadId);
     await ctx.scheduler.runAfter(0, internal.ghlDebriefLink.pushRdvDebriefScheduled, { rdvId: args.rdvId });
     return { ok: true };
   },
@@ -554,6 +556,7 @@ export const rescheduleViaLink = internalMutation({
         details: { before: { scheduledAt: rdvRow.scheduledAt ?? null }, after: { scheduledAt: args.scheduledAt } },
       });
     }
+    await refreshLeadAgg(ctx, rdvRow.leadId);
     return { ok: true };
   },
 });

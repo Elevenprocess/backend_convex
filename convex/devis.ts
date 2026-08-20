@@ -7,6 +7,7 @@ import { logActivity, leadLabelById, fmtEur } from "./model/activity";
 import { extractFromPdf } from "./model/ocr";
 import { syncStatusToLeadAndProject } from "./model/devisStatusSync";
 import { ensureDossier } from "./model/ensureDossier";
+import { refreshLeadAgg } from "./model/leadAgg";
 import { devisStatusValidator, financingTypeValidator } from "./model/enums";
 
 const COMMERCIAL = ["admin", "commercial", "commercial_lead"] as const;
@@ -131,6 +132,7 @@ export const create = mutation({
         details: { filename: args.filename, sizeBytes: args.sizeBytes, rdvId: args.rdvId ?? null, projectId: args.projectId ?? null },
       });
     }
+    await refreshLeadAgg(ctx, args.leadId);
     return devisId;
   },
 });
@@ -315,6 +317,7 @@ export const markAsSigned = mutation({
         at: now,
       });
     }
+    await refreshLeadAgg(ctx, row.leadId);
     return toResponse(updated!);
   },
 });
@@ -336,6 +339,7 @@ export const remove = mutation({
         details: { filename: row.filename, status: row.status },
       });
     }
+    await refreshLeadAgg(ctx, row.leadId);
     return { id: args.devisId, deleted: true as const };
   },
 });
