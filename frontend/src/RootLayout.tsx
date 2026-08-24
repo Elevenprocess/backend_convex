@@ -8,7 +8,7 @@ import { PersistentLeadSidebar } from './components/leads/PersistentLeadSidebar'
 import { ClipboardToast } from './components/ClipboardToast'
 import { useAuth, impersonationIsReadOnly } from './lib/auth'
 import { convexAuthEnabled } from './lib/convex'
-import { useLeads, useRdvList } from './lib/hooks'
+import { useLeads, useNotificationRdvFilters, useRdvList, useSharedLeads } from './lib/hooks'
 import { useRealtimeSocket } from './lib/realtime'
 import { useTheme } from './lib/theme'
 import { buildCommercialNotifications, buildNotifications, useBrowserNotifications } from './pages/Notifications'
@@ -147,13 +147,18 @@ function useGlobalBrowserNotifications() {
   const status = useAuth((s) => s.status)
   const isCommercial = user?.role === 'commercial'
   const isCommercialTeam = isCommercial || user?.role === 'commercial_lead'
-  const leadFilters = status === 'authed'
+  // Rôles non commerciaux (mode Convex) : leads lus dans le drain partagé
+  // (SharedLeadsKeeper) — un useLeads ici ouvrait un 2e drain complet de la
+  // table par client. Le commercial garde sa liste scopée (assignedToId).
+  const ownLeadsNeeded = isCommercial || !convexAuthEnabled
+  const leadFilters = status === 'authed' && ownLeadsNeeded
     ? (isCommercial && user?.id ? { assignedToId: user.id, limit: 250 } : { limit: 250 })
     : null
-  const rdvFilters = status === 'authed'
-    ? (isCommercial && user?.id ? { commercialId: user.id, limit: 200 } : { limit: 200 })
-    : null
-  const { data: leadsData } = useLeads(leadFilters)
+  const notifRdvFilters = useNotificationRdvFilters(isCommercial ? user?.id : undefined)
+  const rdvFilters = status === 'authed' ? notifRdvFilters : null
+  const sharedLeads = useSharedLeads()
+  const { data: ownLeadsData } = useLeads(leadFilters)
+  const leadsData = ownLeadsNeeded ? ownLeadsData : sharedLeads.data
   const { data: rdvsData } = useRdvList(rdvFilters)
   const minuteTick = useMinuteTick()
   const notifications = useMemo(() => {

@@ -1,4 +1,5 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type QueryCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import {
@@ -365,6 +366,63 @@ export const listSignatures = query({
   },
 });
 
+// Résumé lead embarqué : l'Overview / les notifications affichent nom/ville/
+// téléphone/setter du prospect sans dépendre de la liste /leads. get ciblé par
+// RDV (volume borné par la page ou la fenêtre).
+async function withLeadSummary(ctx: QueryCtx, rows: Doc<"rdv">[]) {
+  return Promise.all(
+    rows.map(async (r) => {
+      const lead = await ctx.db.get(r.leadId);
+      return {
+        ...r,
+        lead: lead
+          ? {
+              id: lead._id,
+              firstName: lead.firstName ?? null,
+              lastName: lead.lastName ?? null,
+              city: lead.city ?? null,
+              phone: lead.phone ?? null,
+              email: lead.email ?? null,
+              setterId: lead.setterId ?? null,
+            }
+          : null,
+      };
+    }),
+  );
+}
+
+// Plage scheduledAt portée par l'INDEX (by_commercial_scheduled / by_scheduledAt)
+// et non par un .filter() : un filtre post-index lit quand même tous les
+// documents hors plage (bande passante DB facturée) et, en pagination, continue
+// de balayer toute la table pour remplir la page.
+function rdvRangeQuery(
+  ctx: QueryCtx,
+  args: { commercialId?: Id<"users">; status?: Doc<"rdv">["status"]; from?: number; to?: number },
+) {
+  const range = <R extends { gte: (f: "scheduledAt", v: number) => R; lte: (f: "scheduledAt", v: number) => R }>(ix: R): R => {
+    let r = ix;
+    if (args.from !== undefined) r = r.gte("scheduledAt", args.from);
+    if (args.to !== undefined) r = r.lte("scheduledAt", args.to);
+    return r;
+  };
+  let q;
+  let rangeViaIndex = true;
+  if (args.commercialId !== undefined) {
+    q = ctx.db.query("rdv").withIndex("by_commercial_scheduled", (ix) => range(ix.eq("commercialId", args.commercialId!)));
+  } else if (args.status !== undefined) {
+    rangeViaIndex = false;
+    q = ctx.db.query("rdv").withIndex("by_status", (ix) => ix.eq("status", args.status!));
+  } else {
+    q = ctx.db.query("rdv").withIndex("by_scheduledAt", (ix) => range(ix));
+  }
+  let ordered = q.order("desc").filter((f) => f.eq(f.field("deletedAt"), undefined));
+  if (!rangeViaIndex) {
+    if (args.from !== undefined) ordered = ordered.filter((f) => f.gte(f.field("scheduledAt"), args.from!));
+    if (args.to !== undefined) ordered = ordered.filter((f) => f.lte(f.field("scheduledAt"), args.to!));
+  }
+  return ordered;
+}
+
 export const list = query({
   args: {
     commercialId: v.optional(v.id("users")),
@@ -376,46 +434,31 @@ export const list = query({
   },
   handler: async (ctx, args) => {
     await requireUser(ctx);
-    let q;
-    if (args.commercialId !== undefined) {
-      q = ctx.db.query("rdv").withIndex("by_commercial_scheduled", (ix) => ix.eq("commercialId", args.commercialId!));
-    } else if (args.status !== undefined) {
-      q = ctx.db.query("rdv").withIndex("by_status", (ix) => ix.eq("status", args.status!));
-    } else {
-      q = ctx.db.query("rdv").withIndex("by_scheduledAt");
-    }
-    let ordered = q.order("desc").filter((f) => f.eq(f.field("deletedAt"), undefined));
+    let ordered = rdvRangeQuery(ctx, args);
     if (args.status !== undefined && args.commercialId !== undefined) {
       ordered = ordered.filter((f) => f.eq(f.field("status"), args.status!));
     }
     if (args.result !== undefined) ordered = ordered.filter((f) => f.eq(f.field("result"), args.result!));
-    if (args.from !== undefined) ordered = ordered.filter((f) => f.gte(f.field("scheduledAt"), args.from!));
-    if (args.to !== undefined) ordered = ordered.filter((f) => f.lte(f.field("scheduledAt"), args.to!));
     const page = await ordered.paginate(args.paginationOpts);
-    // Résumé lead embarqué : l'Overview affiche nom/ville/téléphone/setter du
-    // prospect sans dépendre de la liste /leads (bornée à 500 côté client). Sans
-    // ça, un lead qualifié hors du top-500 s'affichait « Prospect qualifié »
-    // sans coordonnées. get ciblé par RDV de la page (volume borné à paginationOpts).
-    const withLead = await Promise.all(
-      page.page.map(async (r) => {
-        const lead = await ctx.db.get(r.leadId);
-        return {
-          ...r,
-          lead: lead
-            ? {
-                id: lead._id,
-                firstName: lead.firstName ?? null,
-                lastName: lead.lastName ?? null,
-                city: lead.city ?? null,
-                phone: lead.phone ?? null,
-                email: lead.email ?? null,
-                setterId: lead.setterId ?? null,
-              }
-            : null,
-        };
-      }),
-    );
-    return { ...page, page: withLead };
+    return { ...page, page: await withLeadSummary(ctx, page.page) };
+  },
+});
+
+// Fenêtre bornée NON paginée (notifications, agenda, analyses de période) :
+// une seule souscription par jeu d'args, dédupliquée par le client Convex entre
+// tous les composants qui la demandent — là où usePaginatedQuery ouvrait un
+// drain complet de la table par composant (RootLayout + Topbar + Notifications).
+export const listWindow = query({
+  args: {
+    commercialId: v.optional(v.id("users")),
+    from: v.number(),
+    to: v.number(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireUser(ctx);
+    const rows = await rdvRangeQuery(ctx, args).take(Math.min(args.limit ?? 1500, 3000));
+    return withLeadSummary(ctx, rows);
   },
 });
 

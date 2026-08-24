@@ -180,3 +180,52 @@ test("listSignatures ne renvoie que les RDV signés (signatureAt), sans les supp
   const rows = await asUser(t, comId).query(api.rdv.listSignatures, {});
   expect(rows.map((r: any) => r._id)).toEqual([signedId]);
 });
+
+test("list : from/to via l'index (sans commercial et avec commercial)", async () => {
+  const t = makeT();
+  const comId = await insertUser(t, { role: "commercial" });
+  const setterId = await insertUser(t, { role: "setter", email: "win1@ecoi.fr" });
+  const leadA = await makeLead(t, setterId);
+  const leadB = await makeLead(t, setterId);
+  const day = 86_400_000;
+  const now = Date.UTC(2026, 7, 24, 12);
+  await t.run(async (ctx: any) => {
+    await ctx.db.insert("rdv", { leadId: leadA, commercialId: comId, locationType: "domicile", status: "planifie", scheduledAt: now + day });
+    await ctx.db.insert("rdv", { leadId: leadB, commercialId: comId, locationType: "domicile", status: "honore", scheduledAt: now - 200 * day });
+  });
+  const all = await asUser(t, comId).query(api.rdv.list, { paginationOpts: { numItems: 10, cursor: null } });
+  expect(all.page).toHaveLength(2);
+  const recent = await asUser(t, comId).query(api.rdv.list, {
+    from: now - 90 * day, to: now + 30 * day, paginationOpts: { numItems: 10, cursor: null },
+  });
+  expect(recent.page).toHaveLength(1);
+  expect(recent.page[0].leadId).toBe(leadA);
+  const byCom = await asUser(t, comId).query(api.rdv.list, {
+    commercialId: comId, from: now - 90 * day, to: now + 30 * day, paginationOpts: { numItems: 10, cursor: null },
+  });
+  expect(byCom.page).toHaveLength(1);
+});
+
+test("listWindow : fenêtre bornée, résumé lead embarqué, supprimés exclus", async () => {
+  const t = makeT();
+  const comId = await insertUser(t, { role: "commercial" });
+  const other = await insertUser(t, { role: "commercial", email: "win2b@ecoi.fr" });
+  const setterId = await insertUser(t, { role: "setter", email: "win2@ecoi.fr" });
+  const leadA = await asUser(t, setterId).mutation(api.leads.create, { firstName: "Ana", lastName: "Win" });
+  const leadB = await makeLead(t, setterId);
+  const day = 86_400_000;
+  const now = Date.UTC(2026, 7, 24, 12);
+  await t.run(async (ctx: any) => {
+    await ctx.db.insert("rdv", { leadId: leadA, commercialId: comId, locationType: "domicile", status: "planifie", scheduledAt: now + day });
+    await ctx.db.insert("rdv", { leadId: leadB, commercialId: other, locationType: "domicile", status: "planifie", scheduledAt: now + 2 * day });
+    await ctx.db.insert("rdv", { leadId: leadB, commercialId: comId, locationType: "domicile", status: "honore", scheduledAt: now - 200 * day });
+    await ctx.db.insert("rdv", { leadId: leadB, commercialId: comId, locationType: "domicile", status: "annule", scheduledAt: now, deletedAt: now });
+  });
+  const win = await asUser(t, comId).query(api.rdv.listWindow, { from: now - 90 * day, to: now + 30 * day });
+  expect(win.map((r: any) => r.leadId).sort()).toEqual([leadA, leadB].sort());
+  expect(win.find((r: any) => r.leadId === leadA)?.lead?.firstName).toBe("Ana");
+  const mine = await asUser(t, comId).query(api.rdv.listWindow, { commercialId: comId, from: now - 90 * day, to: now + 30 * day });
+  expect(mine).toHaveLength(1);
+  const capped = await asUser(t, comId).query(api.rdv.listWindow, { from: now - 90 * day, to: now + 30 * day, limit: 1 });
+  expect(capped).toHaveLength(1);
+});

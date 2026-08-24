@@ -6,7 +6,7 @@ import 'ldrs/react/Grid.css'
 import { Icon } from '../Icon'
 import { useDisplayUser } from '../../lib/role'
 import { useAuth } from '../../lib/auth'
-import { useLeads, useRdvList, useSharedLeads } from '../../lib/hooks'
+import { useLeads, useNotificationRdvFilters, useRdvList, useSharedLeads } from '../../lib/hooks'
 import { convexAuthEnabled } from '../../lib/convex'
 import { useNetworkActivity } from '../../lib/networkActivity'
 import { useNavSidebar } from '../../lib/navSidebar'
@@ -40,7 +40,8 @@ export function Topbar(_props: TopbarProps) {
   const isCommercial = authUser?.role === 'commercial'
   const isCommercialTeam = isCommercial || authUser?.role === 'commercial_lead'
   const leadNotificationFilters = isCommercial && authUser?.id ? { assignedToId: authUser.id, limit: 250 } : { limit: 250 }
-  const rdvNotificationFilters = isCommercial && authUser?.id ? { commercialId: authUser.id, limit: 200 } : { limit: 200 }
+  // Fenêtre RDV bornée (−90 j/+30 j), même souscription que RootLayout/Notifications.
+  const rdvNotificationFilters = useNotificationRdvFilters(isCommercial ? authUser?.id : undefined)
   // Rôles non commerciaux : la liste vient du drain partagé monté dans
   // RequireAuth — la Topbar re-montait sinon un abonnement complet à chaque
   // navigation. Le commercial garde sa liste scopée (assignedToId).

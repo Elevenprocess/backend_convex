@@ -3,7 +3,7 @@ import { create } from 'zustand'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 import { getFunctionName } from 'convex/server'
 import { convexClient } from './convex'
-import { adsReport, adBudget, adDepositsList, type ConvexAdBudget, type ConvexAdDeposit, simulatorFunnel, type ConvexSimulatorFunnel, analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, callLogsListByLead, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsListEnriched, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, substepsList, usersGet, usersList, usersDirectory, leadsGetEnriched, analyticsSetterLeaderboard } from './convexApi'
+import { adsReport, adBudget, adDepositsList, type ConvexAdBudget, type ConvexAdDeposit, simulatorFunnel, type ConvexSimulatorFunnel, analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, callLogsListByLead, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsListEnriched, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, rdvListWindow, substepsList, usersGet, usersList, usersDirectory, leadsGetEnriched, analyticsSetterLeaderboard } from './convexApi'
 import type { ConvexUserDoc, SetterLeaderboardEntry, ConvexActivityDoc } from './convexApi'
 import { activityLogForLead, activityLogList, activityLogMyScope, type ActivityListArgs, type ActivityDomain } from './convexApi'
 import { mapConvexAcompte, mapConvexCallLog, mapConvexClient, mapConvexCommercialObjective, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexSubstep, mapConvexUser } from './convexMappers'
@@ -44,7 +44,10 @@ type AsyncProgressive<T> = Async<T> & {
 }
 
 const noop = () => {}
-const PAGE_SIZE = 200
+// Taille des pages réactives : chaque écriture sur un doc d'une page ré-exécute
+// TOUTE la page côté serveur, pour chaque client abonné (bande passante DB
+// facturée) → pages courtes = ré-exécutions bon marché. Le drain reste complet.
+const PAGE_SIZE = 100
 // Leads : première page PETITE pour peindre l'écran vite (l'enrichissement
 // serveur — appels/RDV/devis par lead — domine la latence), puis le drain
 // enchaîne automatiquement des pages plus grosses jusqu'au bout (demande user
@@ -53,7 +56,7 @@ const PAGE_SIZE = 200
 // être complète). Garde-fou LEADS_DRAIN_MAX : au-delà, on s'arrête (une base
 // de dizaines de milliers de leads saturerait la RAM de l'onglet).
 const LEADS_FIRST_PAGE = 100
-const LEADS_DRAIN_PAGE = 400
+const LEADS_DRAIN_PAGE = 100
 const LEADS_DRAIN_MAX = 5000
 
 // ─── Persistance disque des listes (stale-while-revalidate) ──────────────────
@@ -83,8 +86,28 @@ if (typeof window !== 'undefined') {
     }
   }, 60_000)
 }
-function useSessionNow(): number {
+export function useSessionNow(): number {
   return sessionNowStore((s) => s.now)
+}
+
+// Fenêtre RDV des notifications (RootLayout, Topbar, page Notifications) :
+// les règles regardent au plus 7 j en arrière (signalements accueil), les
+// « débriefs à faire » récents et les RDV imminents → −90 j / +30 j couvre
+// tout, contre un drain complet de la table rdv par composant auparavant.
+// Bornes dérivées du `now` de session (stable, rollover quotidien) → args
+// stables → une seule souscription partagée par le client Convex.
+const NOTIF_RDV_PAST_MS = 90 * 86_400_000
+const NOTIF_RDV_FUTURE_MS = 30 * 86_400_000
+export function useNotificationRdvFilters(commercialId?: string): {
+  commercialId?: string; fromDate: string; toDate: string; limit: number
+} {
+  const now = useSessionNow()
+  return useMemo(() => ({
+    ...(commercialId ? { commercialId } : {}),
+    fromDate: new Date(now - NOTIF_RDV_PAST_MS).toISOString(),
+    toDate: new Date(now + NOTIF_RDV_FUTURE_MS).toISOString(),
+    limit: 200,
+  }), [commercialId, now])
 }
 
 function leadsCacheKey(userId: string | undefined, filters: {
@@ -249,13 +272,20 @@ export function useConvexRdvList(filters?: {
   // leadId paginait TOUTE la table rdv puis filtrait côté client.
   const byLead = useQuery(rdvListByLead, leadId ? { leadId } : 'skip')
 
-  const args = filters === null || leadId
+  // Avec une période (fromDate/toDate) : query fenêtrée rdv:listWindow (plage
+  // portée par l'index, non paginée, dédupliquée entre composants). Sans
+  // période : drain paginé classique de la table.
+  const from = filters?.fromDate ? Date.parse(filters.fromDate) : undefined
+  const to = filters?.toDate ? Date.parse(filters.toDate) : undefined
+  const windowed = filters !== null && !leadId && from !== undefined && to !== undefined
+  const windowRows = useQuery(
+    rdvListWindow,
+    windowed ? { commercialId: filters?.commercialId, from: from!, to: to! } : 'skip',
+  )
+
+  const args = filters === null || leadId || windowed
     ? ('skip' as const)
-    : {
-        commercialId: filters?.commercialId,
-        from: filters?.fromDate ? Date.parse(filters.fromDate) : undefined,
-        to: filters?.toDate ? Date.parse(filters.toDate) : undefined,
-      }
+    : { commercialId: filters?.commercialId, from, to }
   const { results, status, loadMore } = usePaginatedQuery(rdvList, args, { initialNumItems: PAGE_SIZE })
   useEffect(() => {
     if (status === 'CanLoadMore') loadMore(PAGE_SIZE)
@@ -263,20 +293,21 @@ export function useConvexRdvList(filters?: {
 
   const data = useMemo(() => {
     if (leadId) return (byLead ?? []).map(mapConvexRdv)
+    if (windowed) return (windowRows ?? []).map(mapConvexRdv)
     return results.map(mapConvexRdv)
-  }, [results, leadId, byLead])
+  }, [results, leadId, byLead, windowed, windowRows])
 
   // Stale-while-revalidate : un changement d'args (nouvelle période) fait
   // repartir usePaginatedQuery de zéro (LoadingFirstPage, results vides). On
   // continue d'afficher la dernière liste connue pendant le rechargement au
   // lieu de vider les graphes ; `loading` reste vrai pour qui veut un spinner.
-  const listLoading = !leadId && args !== 'skip' && status === 'LoadingFirstPage'
+  const listLoading = !leadId && (windowed ? windowRows === undefined : args !== 'skip' && status === 'LoadingFirstPage')
   const [heldList, setHeldList] = useState<RdvResponse[] | null>(null)
-  if (!leadId && args !== 'skip' && !listLoading && heldList !== data) setHeldList(data)
+  if (!leadId && filters !== null && !listLoading && heldList !== data) setHeldList(data)
 
   return {
     data: filters === null ? null : (listLoading && heldList ? heldList : data),
-    loading: filters !== null && (leadId ? byLead === undefined : status === 'LoadingFirstPage'),
+    loading: filters !== null && (leadId ? byLead === undefined : listLoading),
     error: null,
     refetch: noop,
   }
@@ -300,10 +331,14 @@ export function useConvexLeadDebriefs(leadId?: string | null): Async<DebriefResp
 // ─── Analytics ──────────────────────────────────────────────
 // `now` doit être STABLE entre les rendus : le passer via Date.now() à chaque
 // render ferait boucler le useQuery (args différents → refetch en boucle). On
-// le fige au montage, bucketé à 5 min (le serveur ne s'en sert que pour la
-// troncature "live" et le fallback de plage).
+// le fige au montage, bucketé à 15 min (le serveur ne s'en sert que pour la
+// troncature "live" et le fallback de plage). Ce bucket sert aussi de TTL aux
+// stats ponctuelles (useOneShotQuery) : leads:stats / setterLeaderboard /
+// summary scannent des tables entières (3 à 5 Mo lus par exécution) — 15 min
+// divise leur coût par 3 par rapport à l'ancien bucket de 5 min.
+const STABLE_NOW_BUCKET_MS = 15 * 60_000
 function useStableNow(): number {
-  return useMemo(() => Math.floor(Date.now() / 300_000) * 300_000, [])
+  return useMemo(() => Math.floor(Date.now() / STABLE_NOW_BUCKET_MS) * STABLE_NOW_BUCKET_MS, [])
 }
 
 // Stale-while-revalidate : quand les args d'un useQuery changent (ex. nouvelle

@@ -4,7 +4,8 @@ import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { Icon, type IconName } from '../components/Icon'
 import { LoadingBlock, Spinner } from '../components/Spinner'
-import { useLeads, useNotifications, useRdvList } from '../lib/hooks'
+import { useLeads, useNotificationRdvFilters, useNotifications, useRdvList, useSharedLeads } from '../lib/hooks'
+import { convexAuthEnabled } from '../lib/convex'
 import { markNotificationRead } from '../lib/api'
 import { notifyRealtimeRefresh } from '../lib/realtime'
 import { useAuth } from '../lib/auth'
@@ -41,9 +42,17 @@ export function Notifications() {
   // notifs ; le lead n'a pas de filtre de scope donc reçoit toute l'équipe.
   const isCommercial = user?.role === 'commercial'
   const isCommercialTeam = isCommercial || user?.role === 'commercial_lead'
-  const leadFilters = isCommercial && user?.id ? { assignedToId: user.id, limit: 250 } : { limit: 250 }
-  const rdvFilters = isCommercial && user?.id ? { commercialId: user.id, limit: 200 } : { limit: 200 }
-  const { data: leadsData, loading: leadsLoading } = useLeads(leadFilters)
+  // Rôles non commerciaux (mode Convex) : leads du drain partagé (pas de 2e
+  // drain complet) ; RDV sur la fenêtre bornée des notifications.
+  const ownLeadsNeeded = isCommercial || !convexAuthEnabled
+  const leadFilters = ownLeadsNeeded
+    ? (isCommercial && user?.id ? { assignedToId: user.id, limit: 250 } : { limit: 250 })
+    : null
+  const rdvFilters = useNotificationRdvFilters(isCommercial ? user?.id : undefined)
+  const sharedLeads = useSharedLeads()
+  const { data: ownLeadsData, loading: ownLeadsLoading } = useLeads(leadFilters)
+  const leadsData = ownLeadsNeeded ? ownLeadsData : sharedLeads.data
+  const leadsLoading = ownLeadsNeeded ? ownLeadsLoading : sharedLeads.loading
   const { data: rdvsData, loading: rdvLoading } = useRdvList(rdvFilters)
   const { data: persistedData, loading: persistedLoading, refetch: refreshPersisted } = useNotifications({ limit: 50 })
   const leads = leadsData ?? []

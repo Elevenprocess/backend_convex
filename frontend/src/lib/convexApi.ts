@@ -477,6 +477,15 @@ export const rdvList = makeFunctionReference<
   PaginationResult<ConvexRdvDoc>
 >('rdv:list')
 
+// Fenêtre scheduledAt bornée par index, NON paginée : une souscription par jeu
+// d'args, dédupliquée par le client Convex entre composants (notifications,
+// agenda, analyses de période). Résumé lead embarqué comme rdv:list.
+export const rdvListWindow = makeFunctionReference<
+  'query',
+  { commercialId?: string; from: number; to: number; limit?: number },
+  ConvexRdvDoc[]
+>('rdv:listWindow')
+
 // RDV d'un lead via l'index by_lead — évite de paginer toute la table quand on
 // n'affiche que la fiche d'un client.
 export const rdvListByLead = makeFunctionReference<'query', { leadId: string }, ConvexRdvDoc[]>('rdv:listByLead')
