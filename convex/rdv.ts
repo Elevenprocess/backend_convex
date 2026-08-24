@@ -399,21 +399,28 @@ function rdvRangeQuery(
   ctx: QueryCtx,
   args: { commercialId?: Id<"users">; status?: Doc<"rdv">["status"]; from?: number; to?: number },
 ) {
-  const range = <R extends { gte: (f: "scheduledAt", v: number) => R; lte: (f: "scheduledAt", v: number) => R }>(ix: R): R => {
-    let r = ix;
-    if (args.from !== undefined) r = r.gte("scheduledAt", args.from);
-    if (args.to !== undefined) r = r.lte("scheduledAt", args.to);
-    return r;
-  };
+  const { from, to } = args;
   let q;
   let rangeViaIndex = true;
   if (args.commercialId !== undefined) {
-    q = ctx.db.query("rdv").withIndex("by_commercial_scheduled", (ix) => range(ix.eq("commercialId", args.commercialId!)));
+    const commercialId = args.commercialId;
+    q = ctx.db.query("rdv").withIndex("by_commercial_scheduled", (ix) => {
+      const base = ix.eq("commercialId", commercialId);
+      if (from !== undefined && to !== undefined) return base.gte("scheduledAt", from).lte("scheduledAt", to);
+      if (from !== undefined) return base.gte("scheduledAt", from);
+      if (to !== undefined) return base.lte("scheduledAt", to);
+      return base;
+    });
   } else if (args.status !== undefined) {
     rangeViaIndex = false;
     q = ctx.db.query("rdv").withIndex("by_status", (ix) => ix.eq("status", args.status!));
   } else {
-    q = ctx.db.query("rdv").withIndex("by_scheduledAt", (ix) => range(ix));
+    q = ctx.db.query("rdv").withIndex("by_scheduledAt", (ix) => {
+      if (from !== undefined && to !== undefined) return ix.gte("scheduledAt", from).lte("scheduledAt", to);
+      if (from !== undefined) return ix.gte("scheduledAt", from);
+      if (to !== undefined) return ix.lte("scheduledAt", to);
+      return ix;
+    });
   }
   let ordered = q.order("desc").filter((f) => f.eq(f.field("deletedAt"), undefined));
   if (!rangeViaIndex) {
