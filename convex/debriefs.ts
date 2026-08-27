@@ -19,6 +19,7 @@ import {
   commercialSaleActiveFromLeadStatus,
 } from "./model/syncFromCommercial";
 import { notifyDebriefCreated } from "./model/notify";
+import { isGhlConfigured } from "./ghlClient";
 import {
   logActivity, logSystemActivity, leadLabelById, DEBRIEF_OUTCOME_LABEL, label, fmtEur, fmtDateTime,
 } from "./model/activity";
@@ -38,6 +39,13 @@ function debriefSentence(a: {
 }
 
 const COMMERCIAL = ["admin", "commercial", "commercial_lead"] as const;
+
+// Miroir du débrief en note contact GHL (les commerciaux vivent dans GHL au
+// quotidien) : action best-effort planifiée hors transaction, jamais bloquante.
+async function scheduleGhlNote(ctx: MutationCtx, debriefId: Id<"debriefs">): Promise<void> {
+  if (!isGhlConfigured()) return;
+  await ctx.scheduler.runAfter(0, internal.ghlContactNote.pushDebriefNote, { debriefId });
+}
 
 // Champs métier partagés createForLead / create (hors clés de rattachement).
 const DEBRIEF_FIELDS = {
@@ -206,6 +214,7 @@ export const createForLead = mutation({
       "debriefs",
       buildDebriefDoc(args, { leadId: args.leadId, projectId, commercialId }) as any,
     );
+    await scheduleGhlNote(ctx, debriefId);
 
     await applyLeadEffect(ctx, args.leadId, args.outcome, args.nonSaleReason, args.rdvId);
     await ensureDossierForVente(ctx, {
@@ -272,6 +281,7 @@ export const create = mutation({
         commercialId,
       }) as any,
     );
+    await scheduleGhlNote(ctx, debriefId);
 
     await applyLeadEffect(ctx, project.leadId, args.outcome, args.nonSaleReason, args.rdvId);
     await ensureDossierForVente(ctx, {
@@ -465,10 +475,11 @@ export const submitViaLink = internalMutation({
       projectId = await ensureProjectForLead(ctx, { leadId, commercialId });
     }
 
-    await ctx.db.insert(
+    const debriefId = await ctx.db.insert(
       "debriefs",
       buildDebriefDoc({ ...args, rdvId: args.rdvId }, { leadId, projectId, commercialId }) as any,
     );
+    await scheduleGhlNote(ctx, debriefId);
     await ensureDossierForVente(ctx, {
       outcome: args.outcome, leadId, projectId, rdvId: args.rdvId,
       montantTotal: args.montantTotal, financingType: args.financingType,
@@ -623,6 +634,7 @@ export const update = mutation({
       }
     }
     await ctx.db.patch(args.debriefId, patch);
+    if (Object.keys(patch).length > 0) await scheduleGhlNote(ctx, args.debriefId);
 
     // Re-dérive le statut lead si outcome/nonSaleReason changent (détaché RDV).
     if (existing.leadId && (args.outcome !== undefined || args.nonSaleReason !== undefined)) {

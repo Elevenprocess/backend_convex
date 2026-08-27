@@ -5,6 +5,7 @@ import { SplitPanel } from '../../components/SplitPanel'
 import { LeadFiltersBar } from '../../components/LeadFiltersBar'
 import { LoadingBlock } from '../../components/Spinner'
 import { useLeads, useUsers } from '../../lib/hooks'
+import { isRetourSettersActive } from '../../lib/leadRetour'
 import { DEFAULT_LEAD_FILTERS, applyLeadFilters, sortCallbackLeadsByNextCallback, type LeadListFilters } from '../../lib/leadFilters'
 import {
   STATUS_BADGE,
@@ -149,6 +150,8 @@ export function LeadsSplit() {
 function isLongTermRelanceLead(lead: LeadResponse): boolean {
   const canAgeToLongTerm = lead.status === 'pas_de_reponse' || lead.status === 'a_rappeler' || lead.status === 'relance'
   if (!canAgeToLongTerm) return false
+  // Renvoyé par les commerciaux : reste en relance court terme (vient d'être remis aux setters).
+  if (isRetourSettersActive(lead)) return false
   const noAnswerAttempts = 'consecutiveNoAnswerCount' in lead ? Number(lead.consecutiveNoAnswerCount ?? 0) : 0
   const relanceAge = Math.max(lead.joursRelance ?? 0, noAnswerAttempts)
   return relanceAge >= LONG_TERM_RELANCE_THRESHOLD_DAYS

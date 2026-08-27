@@ -15,6 +15,7 @@ import { normalizeSearchText, phoneMatches, phoneSearchVariants } from '../../li
 import { DossierCard } from '../../components/suivi/DossierCard'
 import { ManualLeadModal } from '../../components/leads/ManualLeadModal'
 import { buildDossiers, readWorkflowState } from '../../lib/suivi'
+import { isRetourSettersActive } from '../../lib/leadRetour'
 import { DEFAULT_LEAD_FILTERS, applyLeadFilters, leadFiltersActive, matchesLeadDateRange, sortCallbackLeadsByNextCallback, type LeadArrivedAtFilter, type LeadDateField, type LeadHasFilter, type LeadLastCallFilter, type LeadListFilters } from '../../lib/leadFilters'
 import {
   STATUS_BADGE,
@@ -837,6 +838,21 @@ function LeadsAdmin() {
 
 // ===== Helpers =====
 
+function RetourSettersBadge({ lead }: { lead: LeadResponse }) {
+  if (!isRetourSettersActive(lead) || !lead.retourSetters) return null
+  const d = new Date(lead.retourSetters.at)
+  const label = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
+  const from = lead.retourSetters.fromStage ? ` — était « ${lead.retourSetters.fromStage} »` : ''
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.08em] text-rouille"
+      title={`Déjà en contact avec l'équipe — renvoyé par les commerciaux le ${d.toLocaleDateString('fr-FR')}${from}. Voir l'historique avant de rappeler.`}
+    >
+      <Icon name="arrow-left" size={10} /> déjà contacté · retour commerciaux {label}
+    </span>
+  )
+}
+
 // Contact déjà connu qui a renvoyé le formulaire (re-simulation) : signal fort
 // de recontact — le webhook GHL a marqué resubmittedAt (et repassé les leads
 // perdus/sans réponse en « à rappeler »).
@@ -868,12 +884,16 @@ function isQualifiedLeadStatus(lead: LeadResponse): boolean {
 
 const RELANCE_LONG_TERM_THRESHOLD = 11
 
+// Un lead renvoyé par les commerciaux reste en relance COURT terme quel que
+// soit son nombre de jours d'appel : il vient d'être remis aux setters.
 function isLongTermRelanceLead(lead: LeadResponse): boolean {
-  return lead.status === 'pas_de_reponse' && (lead.joursRelance ?? 0) >= RELANCE_LONG_TERM_THRESHOLD
+  return lead.status === 'pas_de_reponse' && !isRetourSettersActive(lead)
+    && (lead.joursRelance ?? 0) >= RELANCE_LONG_TERM_THRESHOLD
 }
 
 function isShortTermSansReponseLead(lead: LeadResponse): boolean {
-  return lead.status === 'pas_de_reponse' && (lead.joursRelance ?? 0) < RELANCE_LONG_TERM_THRESHOLD
+  return lead.status === 'pas_de_reponse'
+    && (isRetourSettersActive(lead) || (lead.joursRelance ?? 0) < RELANCE_LONG_TERM_THRESHOLD)
 }
 
 function filterSetterLeadsByStatus(leads: LeadResponse[], filter: SetterFilter): LeadResponse[] {
@@ -1115,6 +1135,7 @@ function renderSetterCell(
                 <span className="lead-name-sub" title={lead.city}>{lead.city}</span>
               )}
               <ResubmittedBadge lead={lead} />
+              <RetourSettersBadge lead={lead} />
             </div>
           </div>
         </Td>
@@ -1191,6 +1212,7 @@ function renderAdminCell(
       <Td key={key} className="lead-sticky-cell">
         <span className="block max-w-[155px] font-semibold truncate" title={fullName(lead)}>{fullName(lead)}</span>
         <ResubmittedBadge lead={lead} />
+        <RetourSettersBadge lead={lead} />
       </Td>
     )
     case 'statut': return <Td key={key}><span className={`status-badge ${statusBadgeForLead(lead)}`}>{statusLabelForLead(lead)}</span></Td>

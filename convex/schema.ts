@@ -117,6 +117,16 @@ export default defineSchema({
     // Dernier renvoi de formulaire d'acquisition par un contact DÉJÀ connu
     // (webhook GHL en doublon — ex. re-simulation) : signal de recontact.
     resubmittedAt: v.optional(v.number()),
+    // Renvoi par les commerciaux (étape GHL « (BIS) Retour aux Setters 🔙 ») :
+    // le lead repasse en relance court terme (pas_de_reponse) ; on garde d'où
+    // il vient (étape/statut GHL précédents) pour l'historique côté setters.
+    retourSetters: v.optional(
+      v.object({
+        at: v.number(),
+        fromStage: v.optional(v.string()),
+        fromStatus: v.optional(leadStatusValidator),
+      }),
+    ),
     datePassageRelance: v.optional(v.number()),
     // pont GHL (non alimenté cette tranche)
     monetaryValue: v.optional(v.number()),
@@ -455,6 +465,10 @@ export default defineSchema({
     acomptePercent: v.optional(v.number()),
     acompteAmount: v.optional(v.number()),
     customEcheancier: v.boolean(),
+    // Note contact GHL (miroir du débrief, ghlContactNote.ts) : id de la note
+    // pour la mettre à jour au lieu de la dupliquer + date du dernier push OK.
+    ghlNoteId: v.optional(v.string()),
+    ghlNotePushedAt: v.optional(v.number()),
     deletedAt: v.optional(v.number()),
     // Vraie date de création Render (debriefs.created_at). Posé par la migration ;
     // les débriefs live laissent _creationTime faire foi. Lu en priorité par les

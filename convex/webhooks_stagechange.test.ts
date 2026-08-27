@@ -178,3 +178,75 @@ describe("applyGhlStageChange — signé-gagne + bootstrap", () => {
     expect((await t.run((ctx) => ctx.db.get(leadId)))?.deletedAt).toBe(base.occurredAt);
   });
 });
+
+describe("applyGhlStageChange — (BIS) Retour aux Setters", () => {
+  const RETOUR = "(BIS) Retour aux Setters 🔙";
+
+  it("lead en RDV planifié renvoyé → pas_de_reponse (relance court terme) + retourSetters (étape/statut d'origine) + notif setter + journal", async () => {
+    const t = makeT();
+    const setterId = await t.run((ctx) =>
+      ctx.db.insert("users", { email: "s@ecoi.re", name: "Sam", role: "setter", active: true }),
+    );
+    const leadId = await t.run((ctx) =>
+      ctx.db.insert("leads", {
+        source: "ghl", externalId: "c1", status: "rdv_pris",
+        ghlStageName: "5. RDV Planifié 📅", firstName: "Jean", lastName: "Payet", setterId,
+      }),
+    );
+    const r = await t.mutation(internal.webhooks.applyGhlStageChange, { ...base, ghlStageName: RETOUR });
+    expect(r).toMatchObject({ leadId, created: false, statusChanged: true, sideEffect: "retour_setters" });
+    const lead = await t.run((ctx) => ctx.db.get(leadId));
+    expect(lead).toMatchObject({
+      status: "pas_de_reponse", ghlStageName: RETOUR,
+      retourSetters: { at: base.occurredAt, fromStage: "5. RDV Planifié 📅", fromStatus: "rdv_pris" },
+    });
+    const notifs = await t.run((ctx) => ctx.db.query("notifications").collect());
+    expect(notifs).toHaveLength(1);
+    expect(notifs[0]).toMatchObject({ userId: setterId, type: "lead.retour_setters" });
+    expect(notifs[0].body).toContain("5. RDV Planifié");
+    const logs = await t.run((ctx) => ctx.db.query("activityLog").collect());
+    expect(logs.some((l) => l.action === "lead.retour_setters" && l.summary.includes("renvoyé aux setters"))).toBe(true);
+  });
+
+  it("replay du même stage → retourSetters conservé (fromStage pas écrasé par l'étape retour), pas de 2e notif", async () => {
+    const t = makeT();
+    const leadId = await t.run((ctx) =>
+      ctx.db.insert("leads", { source: "ghl", externalId: "c1", status: "rdv_pris", ghlStageName: "5. RDV Planifié 📅" }),
+    );
+    await t.mutation(internal.webhooks.applyGhlStageChange, { ...base, ghlStageName: RETOUR });
+    await t.mutation(internal.webhooks.applyGhlStageChange, { ...base, occurredAt: base.occurredAt + 60_000, ghlStageName: RETOUR });
+    const lead = await t.run((ctx) => ctx.db.get(leadId));
+    expect(lead?.retourSetters).toMatchObject({ at: base.occurredAt, fromStage: "5. RDV Planifié 📅" });
+    const notifs = await t.run((ctx) => ctx.db.query("notifications").collect());
+    expect(notifs).toHaveLength(0); // aucun setter ni setter_lead → personne à prévenir
+  });
+
+  it("sans setter attitré → notifie les setter_lead actifs", async () => {
+    const t = makeT();
+    const leadSetterId = await t.run((ctx) =>
+      ctx.db.insert("users", { email: "l@ecoi.re", name: "Lead", role: "setter_lead", active: true }),
+    );
+    await t.run((ctx) => ctx.db.insert("users", { email: "x@ecoi.re", name: "X", role: "setter_lead", active: false }));
+    await t.run((ctx) =>
+      ctx.db.insert("leads", { source: "ghl", externalId: "c1", status: "rdv_pris", ghlStageName: "5. RDV Planifié 📅" }),
+    );
+    await t.mutation(internal.webhooks.applyGhlStageChange, { ...base, ghlStageName: RETOUR });
+    const notifs = await t.run((ctx) => ctx.db.query("notifications").collect());
+    expect(notifs.map((n) => n.userId)).toEqual([leadSetterId]);
+  });
+
+  it("backfill silencieux → marqueur posé mais ni notif ni journal", async () => {
+    const t = makeT();
+    const setterId = await t.run((ctx) =>
+      ctx.db.insert("users", { email: "s@ecoi.re", name: "Sam", role: "setter", active: true }),
+    );
+    const leadId = await t.run((ctx) =>
+      ctx.db.insert("leads", { source: "ghl", externalId: "c1", status: "rdv_pris", ghlStageName: "5. RDV Planifié 📅", setterId }),
+    );
+    await t.mutation(internal.webhooks.applyGhlStageChange, { ...base, ghlStageName: RETOUR, silent: true });
+    const lead = await t.run((ctx) => ctx.db.get(leadId));
+    expect(lead?.retourSetters?.at).toBe(base.occurredAt);
+    expect(await t.run((ctx) => ctx.db.query("notifications").collect())).toHaveLength(0);
+    expect(await t.run((ctx) => ctx.db.query("activityLog").collect())).toHaveLength(0);
+  });
+});

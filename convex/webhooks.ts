@@ -8,7 +8,7 @@ import { v } from "convex/values";
 import { internalAction, internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import type { MutationCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { webhookProviderValidator, leadStatusValidator } from "./model/enums";
 import { mapGhlLeadPayload } from "./model/ghl/leadWebhook";
 import { mapGhlStageToStatus } from "./model/ghl/stageMapper";
@@ -17,14 +17,15 @@ import { refreshLeadAgg } from "./model/leadAgg";
 import { logSystemActivity, leadLabel, LEAD_STATUS_LABEL, label } from "./model/activity";
 import { deriveAcquisitionChannel, isSiteWebUtm } from "./model/acquisitionChannel";
 import { syncProjectFromLeadStatus } from "./model/ghl/projectSync";
+import { notifyRetourSetters } from "./model/notify";
 
 // Résolution d'un contact GHL vers son lead — les deux familles d'ids :
 // lead natif Convex → l'id GHL est dans externalId (source "ghl") ;
 // lead migré de Render → externalId = uuid Postgres, l'id GHL est dans
 // ghlContactId (backfillé). Ne chercher que externalId recréait chaque client
 // migré en doublon « nouveau » à chaque webhook le concernant.
-async function findLeadByGhlContact(
-  ctx: MutationCtx,
+export async function findLeadByGhlContact(
+  ctx: QueryCtx,
   ghlContactId: string,
 ): Promise<Doc<"leads"> | null> {
   const byExternal = await ctx.db
@@ -149,6 +150,7 @@ export const applyGhlStageChange = internalMutation({
     let leadId: Id<"leads">;
     let created = false;
     let statusChanged = false;
+    let retourApplied = false;
     let previousStatus: Doc<"leads">["status"] | undefined;
 
     if (!existing) {
@@ -168,10 +170,12 @@ export const applyGhlStageChange = internalMutation({
         ...(input.monetaryValue !== undefined ? { monetaryValue: input.monetaryValue } : {}),
         ...(input.lostReason !== undefined ? { lostReason: input.lostReason } : {}),
         ...(mapped.sideEffect === "archived" ? { deletedAt: input.occurredAt } : {}),
+        ...(mapped.sideEffect === "retour_setters" ? { retourSetters: { at: input.occurredAt } } : {}),
         ...(input.silent ? { createdAt: input.occurredAt } : {}),
       });
       created = true;
       statusChanged = true;
+      retourApplied = mapped.sideEffect === "retour_setters";
     } else {
       leadId = existing._id;
       previousStatus = existing.status;
@@ -199,6 +203,22 @@ export const applyGhlStageChange = internalMutation({
       }
       if (mapped.sideEffect === "archived" && existing.deletedAt === undefined) {
         patch.deletedAt = input.occurredAt;
+      }
+      // Retour aux setters : on mémorise d'où vient le lead (étape/statut GHL
+      // avant le renvoi) — seulement sur un vrai passage dans l'étape, pas sur
+      // un replay du même stage (sinon fromStage serait l'étape retour elle-même).
+      if (
+        mapped.sideEffect === "retour_setters" &&
+        (existing.ghlStageName !== normalizedStage || existing.retourSetters === undefined)
+      ) {
+        patch.retourSetters = {
+          at: input.occurredAt,
+          ...(existing.ghlStageName && existing.ghlStageName !== normalizedStage
+            ? { fromStage: existing.ghlStageName }
+            : {}),
+          fromStatus: existing.status,
+        };
+        retourApplied = true;
       }
       await ctx.db.patch(leadId, patch);
     }
@@ -238,8 +258,20 @@ export const applyGhlStageChange = internalMutation({
       }
     }
 
+    // 4b) Retour aux setters : prévenir le setter du lead (sinon les setter_lead)
+    // pour qu'il sache que ce prospect revient en relance court terme.
+    if (retourApplied && !input.silent) {
+      const leadDoc = await ctx.db.get(leadId);
+      if (leadDoc) {
+        await notifyRetourSetters(ctx, {
+          lead: leadDoc,
+          fromStage: leadDoc.retourSetters?.fromStage,
+        });
+      }
+    }
+
     // 5) Journal d'activité (jamais en backfill silencieux : ce n'est pas une action).
-    if (!input.silent && (created || statusChanged || mapped.sideEffect === "archived")) {
+    if (!input.silent && (created || statusChanged || retourApplied || mapped.sideEffect === "archived")) {
       const leadDoc = await ctx.db.get(leadId);
       const subject = leadLabel(leadDoc);
       const nextStatus = leadDoc?.status ?? mapped.status ?? "nouveau";
@@ -248,6 +280,10 @@ export const applyGhlStageChange = internalMutation({
       if (created) {
         action = "lead.created";
         summary = `Prospect ${subject} créé depuis GHL (étape « ${normalizedStage} »)`;
+      } else if (retourApplied) {
+        action = "lead.retour_setters";
+        const from = leadDoc?.retourSetters?.fromStage;
+        summary = `Prospect ${subject} renvoyé aux setters par les commerciaux${from ? ` (était « ${from} »)` : ""} — repassé « ${label(LEAD_STATUS_LABEL, nextStatus)} »`;
       } else if (mapped.sideEffect === "archived") {
         action = "lead.archived";
         summary = `Prospect ${subject} archivé depuis GHL (étape « ${normalizedStage} »)`;

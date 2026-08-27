@@ -142,3 +142,18 @@ export function shouldNotifyVtDateChange(input: {
   if (input.nextDate === undefined) return false;
   return (input.nextDate ?? null) !== (input.beforeDate ?? null);
 }
+
+// Lead renvoyé aux setters par les commerciaux (étape GHL « (BIS) Retour aux
+// Setters ») : il revient dans l'onglet « Sans réponse » (relance court terme),
+// déjà contacté par l'équipe.
+export function retourSettersMessage(input: {
+  leadName: string;
+  fromStage?: string | null;
+}): { type: string; title: string; body: string } {
+  const from = input.fromStage ? ` (était « ${input.fromStage} »)` : "";
+  return {
+    type: "lead.retour_setters",
+    title: "Prospect renvoyé par les commerciaux",
+    body: `${input.leadName} revient en relance court terme (onglet « Sans réponse »)${from}. Il a déjà été en contact avec l'équipe : consulte son historique avant de le rappeler.`,
+  };
+}

@@ -51,6 +51,9 @@ export type ConvexLeadDoc = {
   referrerId?: string
   lastContactAt?: number
   resubmittedAt?: number
+  // Renvoi par les commerciaux (étape GHL « (BIS) Retour aux Setters 🔙 ») :
+  // date + étape/statut d'origine, pour l'historique côté setters.
+  retourSetters?: { at: number; fromStage?: string; fromStatus?: string }
   latestCallAt?: number
   firstCallAt?: number
   latestCallComment?: string

@@ -1,6 +1,7 @@
 /**
- * Mapping des 17 stages du pipeline GHL "1. CRM Vente 📊" vers le `LeadStatus`
- * du SaaS (10 valeurs). Réalité métier au 2026-05-15.
+ * Mapping des 18 stages du pipeline GHL "1. CRM Vente 📊" vers le `LeadStatus`
+ * du SaaS (11 valeurs). Réalité métier au 2026-05-15 ; « (BIS) Retour aux
+ * Setters 🔙 » ajouté le 2026-08-27 (retour terrain des commerciaux).
  *
  * Portage verbatim de `ECOI_backend/src/modules/webhooks/ghl-stage-mapper.ts`
  * (Tranche 8a). Le nom de stage GHL brut est aussi conservé en clair sur
@@ -16,7 +17,13 @@ import type { LeadStatus } from "../enums";
  * Drapeau optionnel propagé au caller pour qu'il puisse, en plus du status,
  * marquer le rdv lié (no_show / reporté) ou archiver le lead.
  */
-export type GhlStageSideEffect = "rdv_no_show" | "rdv_reporte" | "archived";
+export type GhlStageSideEffect = "rdv_no_show" | "rdv_reporte" | "archived" | "retour_setters";
+
+/** Étape GHL où les commerciaux renvoient un lead aux setters (souvent un
+ *  RDV planifié resté sans suite). Statut `pas_de_reponse` = onglet « Sans
+ *  réponse » (relance court terme) : le prospect a DÉJÀ été en contact avec
+ *  l'équipe, il ne doit pas réapparaître comme un nouveau ni un simple rappel. */
+export const RETOUR_SETTERS_STAGE = "(BIS) Retour aux Setters 🔙";
 
 export interface GhlStageMapping {
   readonly status: LeadStatus;
@@ -29,6 +36,7 @@ export const GHL_STAGE_MAP: Record<string, GhlStageMapping> = {
   "1. Prospects Archivés 📦": { status: "perdu", sideEffect: "archived" },
   "2. Suivi & Relance 🔄": { status: "relance" },
   "3. Pas Qualifiés ❌": { status: "pas_qualifie" },
+  [RETOUR_SETTERS_STAGE]: { status: "pas_de_reponse", sideEffect: "retour_setters" },
   "(BIS) Retour à l'Assistant 🔙": { status: "nouveau" },
   "4. Qualification Commerciale 📋": { status: "qualifie" },
   "(BIS) Prospects Attribués 🫴": { status: "qualifie" },

@@ -15,6 +15,10 @@ import {
   DELIVRABILITE_STATUS_LABEL,
   DELIVRABILITE_STATUS_BADGE,
   CALL_RESULT_LABEL,
+  DEBRIEF_OUTCOME_LABEL,
+  DEBRIEF_NON_SALE_REASON_LABEL,
+  DEBRIEF_REFLEXION_REASON_LABEL,
+  DEBRIEF_SUIVI_REASON_LABEL,
   fullName,
   initials as leadInitials,
   type LeadResponse,
@@ -34,6 +38,7 @@ import { DebriefRow } from '../../components/leads/project/ProjectDebriefsTab'
 import { AssignCommercialModal } from '../../components/leads/AssignCommercialModal'
 import { RdvReceptionFlagModal } from '../../components/rdv/RdvReceptionFlagModal'
 import { CollapsibleSection } from '../../components/CollapsibleSection'
+import { isRetourSettersActive } from '../../lib/leadRetour'
 
 type TimelineItem = {
   icon: IconName
@@ -294,6 +299,11 @@ export function LeadDetail() {
       </div>
 
       <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 flex flex-col gap-4 lg:gap-6 overflow-y-auto flex-grow">
+        {/* Lead renvoyé par les commerciaux (GHL « Retour aux Setters ») : contexte
+            du retour en tête de fiche, pour rappeler en connaissance de cause. */}
+        {!isCommercialView && isRetourSettersActive(lead) && (
+          <RetourSettersBanner lead={lead} rdvs={rdvs ?? []} debriefs={debriefs} userMap={userMap} />
+        )}
         {/* Haut : Infos (gauche) + Projets (droite), cartes de MÊME hauteur */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 items-stretch">
           {/* Infos client + attribution + données */}
@@ -544,6 +554,88 @@ const ACTIVITY_ICON: Record<string, { icon: IconName; bg: string; color: string 
   workflow_substep: { icon: 'check', bg: 'bg-success-tint', color: 'text-success' },
   document: { icon: 'inbox', bg: 'bg-success-tint', color: 'text-success' },
   acompte: { icon: 'tag', bg: 'bg-rouille-tint', color: 'text-rouille' },
+}
+
+const RDV_STATUS_SHORT: Record<string, string> = {
+  planifie: 'planifié', honore: 'honoré', no_show: 'no-show', reporte: 'reporté', annule: 'annulé',
+}
+
+function debriefReasonLabel(d: DebriefResponse): string | null {
+  if (d.outcome === 'non_vente' && d.nonSaleReason) return DEBRIEF_NON_SALE_REASON_LABEL[d.nonSaleReason] ?? d.nonSaleReason
+  if (d.outcome === 'en_reflexion' && d.reflexionReason) return DEBRIEF_REFLEXION_REASON_LABEL[d.reflexionReason] ?? d.reflexionReason
+  if (d.outcome === 'suivi_prevu' && d.suiviReason) return DEBRIEF_SUIVI_REASON_LABEL[d.suiviReason] ?? d.suiviReason
+  return null
+}
+
+// Bandeau « retour des commerciaux » : d'où vient le lead (étape GHL), son
+// dernier RDV et son dernier débrief — l'historique que les setters ont
+// demandé pour rappeler un prospect renvoyé sans repartir de zéro.
+function RetourSettersBanner({
+  lead, rdvs, debriefs, userMap,
+}: {
+  lead: LeadResponse
+  rdvs: RdvResponse[]
+  debriefs: DebriefResponse[]
+  userMap: Map<string, UserResponse>
+}) {
+  const info = lead.retourSetters
+  if (!info) return null
+  const at = new Date(info.at)
+  const byDateDesc = (a: string, b: string) => new Date(b).getTime() - new Date(a).getTime()
+  const lastRdv = [...rdvs].sort((a, b) => byDateDesc(a.scheduledAt, b.scheduledAt))[0]
+  const lastDebrief = [...debriefs].sort((a, b) => byDateDesc(a.createdAt, b.createdAt))[0]
+  const rdvCommercial = lastRdv?.commercialId ? userMap.get(lastRdv.commercialId) : undefined
+  const debriefCommercial = lastDebrief ? userMap.get(lastDebrief.commercialId) : undefined
+  const reason = lastDebrief ? debriefReasonLabel(lastDebrief) : null
+  const fromLabel = info.fromStage ?? (info.fromStatus ? STATUS_LABEL[info.fromStatus] : null)
+  const fmt = (iso: string) => new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+
+  return (
+    <section className="rounded-[18px] border border-rouille/40 bg-rouille-tint p-4 sm:p-5 flex flex-col gap-3">
+      <div className="flex items-center gap-2 text-rouille font-black uppercase text-[11px] tracking-[0.12em]">
+        <Icon name="arrow-left" size={14} />
+        Retour des commerciaux — {fmt(info.at)}
+      </div>
+      <p className="text-sm">
+        Ce prospect a <b>déjà été en contact avec l'équipe</b> : les commerciaux l'ont renvoyé aux setters depuis GHL le {at.toLocaleDateString('fr-FR')}
+        {fromLabel ? <> (il était en « <b>{fromLabel}</b> »)</> : null}. Il est classé en relance court terme
+        (onglet « Sans réponse ») : vérifie ce qui s'est passé avant de le rappeler.
+      </p>
+      <ul className="text-sm grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
+        <li>
+          <span className="text-faint">Dernier RDV : </span>
+          {lastRdv ? (
+            <b>
+              {fmt(lastRdv.scheduledAt)} · {RDV_STATUS_SHORT[lastRdv.status] ?? lastRdv.status}
+              {rdvCommercial ? ` · ${rdvCommercial.name}` : ''}
+            </b>
+          ) : <span className="text-faint">aucun</span>}
+        </li>
+        <li>
+          <span className="text-faint">Dernier débrief : </span>
+          {lastDebrief ? (
+            <b>
+              {DEBRIEF_OUTCOME_LABEL[lastDebrief.outcome] ?? lastDebrief.outcome}
+              {reason ? ` — ${reason}` : ''}
+              {debriefCommercial ? ` · ${debriefCommercial.name}` : ''}
+            </b>
+          ) : <span className="text-faint">aucun</span>}
+        </li>
+        {lastDebrief?.notes && (
+          <li className="sm:col-span-2">
+            <span className="text-faint">Remarques du commercial : </span>
+            <span className="whitespace-pre-line">{lastDebrief.notes}</span>
+          </li>
+        )}
+        {lead.latestCallComment && (
+          <li className="sm:col-span-2">
+            <span className="text-faint">Dernier commentaire setter : </span>
+            <span className="whitespace-pre-line">{lead.latestCallComment}</span>
+          </li>
+        )}
+      </ul>
+    </section>
+  )
 }
 
 // Historique de la fiche = journal d'activité (qui a fait quoi, phrase FR) +

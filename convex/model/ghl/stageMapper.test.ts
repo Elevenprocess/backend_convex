@@ -22,6 +22,9 @@ describe("mapGhlStageToStatus", () => {
     expect(mapGhlStageToStatus("7. RDV Pas Qualifié ⚠️")).toMatchObject({ status: "perdu" });
     expect(mapGhlStageToStatus("9. Relance Long Terme ⏳")).toMatchObject({ status: "perdu" });
     expect(mapGhlStageToStatus("(BIS) Retour à l'Assistant 🔙")).toMatchObject({ status: "nouveau" });
+    expect(mapGhlStageToStatus("(BIS) Retour aux Setters 🔙")).toMatchObject({
+      status: "pas_de_reponse", sideEffect: "retour_setters", isKnown: true,
+    });
     expect(mapGhlStageToStatus("(BIS) Prospects Attribués 🫴")).toMatchObject({ status: "qualifie" });
     expect(mapGhlStageToStatus("(BIS) En cours de traitement")).toMatchObject({ status: "qualifie" });
   });

@@ -14,6 +14,13 @@ crons.interval(
   internal.ghlDebriefLink.syncDebriefLinksScheduled, {},
 );
 
+// Retour aux setters : les commerciaux déplacent des leads dans l'étape GHL
+// « (BIS) Retour aux Setters 🔙 » ; le webhook opportunité GHL n'étant pas
+// branché en pratique, on interroge GHL et on n'applique que les entrées
+// récentes (fenêtre glissante, dédupliquées). No-op tant que
+// GHL_SYNC_ENABLED !== "true".
+crons.interval("ghl-retour-setters-sync", { minutes: 15 }, internal.ghlRetourSetters.syncScheduled, {});
+
 // Synchro équipe GHL → comptes Velora (mapGhlCommercials, additif — la purge
 // des partants reste manuelle) — 05:30 à La Réunion. No-op tant que
 // GHL_SYNC_ENABLED !== "true".

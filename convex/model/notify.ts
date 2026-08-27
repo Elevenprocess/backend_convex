@@ -5,7 +5,9 @@
 
 import type { MutationCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
-import { acompte40Message, acompteRelanceMessage, acompteSoldeMessage, acompteTrancheMessage, debriefCreatedMessage, rdvCancelledMessage, rdvRescheduledMessage, vtDateChangedMessage } from "./notifMessages";
+import { acompte40Message, acompteRelanceMessage, acompteSoldeMessage, acompteTrancheMessage, debriefCreatedMessage, rdvCancelledMessage, rdvRescheduledMessage, retourSettersMessage, vtDateChangedMessage } from "./notifMessages";
+import type { Doc } from "../_generated/dataModel";
+import { leadLabel } from "./activity";
 import { acompteStateForClient, todayReunion } from "./acompteGuard";
 import { roleOf } from "./access";
 
@@ -38,6 +40,33 @@ export async function notifyDebriefCreated(
         ...(input.leadId !== undefined ? { leadId: input.leadId } : {}),
         ...(input.rdvId !== undefined ? { rdvId: input.rdvId } : {}),
       },
+    });
+  }
+}
+
+/**
+ * Lead renvoyé aux setters depuis GHL : notifie le setter du lead ; sans
+ * setter attitré, les setter_lead actifs (le lead tombe dans la file commune).
+ */
+export async function notifyRetourSetters(
+  ctx: MutationCtx,
+  input: { lead: Doc<"leads">; fromStage?: string | null },
+): Promise<void> {
+  const msg = retourSettersMessage({ leadName: leadLabel(input.lead), fromStage: input.fromStage });
+  let recipients: Id<"users">[] = [];
+  if (input.lead.setterId) {
+    const setter = await ctx.db.get(input.lead.setterId);
+    if (setter && setter.deletedAt === undefined && setter.active !== false) recipients = [setter._id];
+  }
+  if (recipients.length === 0) {
+    recipients = (await ctx.db.query("users").collect())
+      .filter((u) => u.role === "setter_lead" && u.active !== false && u.deletedAt === undefined)
+      .map((u) => u._id);
+  }
+  for (const userId of recipients) {
+    await createNotification(ctx, {
+      userId, type: msg.type, title: msg.title, body: msg.body,
+      payload: { leadId: input.lead._id },
     });
   }
 }
