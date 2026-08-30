@@ -175,7 +175,7 @@ function LeadsSuivi() {
 }
 
 
-type SetterFilter = 'nouveau' | 'sans_reponse' | 'rappel' | 'qualifie' | 'perdu' | 'relance_lt'
+type SetterFilter = 'nouveau' | 'sans_reponse' | 'relance_ct' | 'rappel' | 'qualifie' | 'perdu' | 'relance_lt'
 type SetterMissingFilter = 'all' | 'any' | 'phone' | 'address' | 'postalCode' | 'email' | 'city'
 
 const SETTER_MISSING_FILTERS: { key: SetterMissingFilter; label: string; icon: IconName }[] = [
@@ -188,9 +188,10 @@ const SETTER_MISSING_FILTERS: { key: SetterMissingFilter; label: string; icon: I
   { key: 'city', label: 'Sans ville', icon: 'map-pin' },
 ]
 
-const SETTER_STATUS_FILTERS: { key: SetterFilter; label: string; icon: IconName; countKey: 'nouveau' | 'sansReponse' | 'rappel' | 'qualifie' | 'perdu' | 'relanceLt' }[] = [
+const SETTER_STATUS_FILTERS: { key: SetterFilter; label: string; icon: IconName; countKey: 'nouveau' | 'sansReponse' | 'relanceCt' | 'rappel' | 'qualifie' | 'perdu' | 'relanceLt' }[] = [
   { key: 'nouveau', label: 'Nouveaux', icon: 'sparkles', countKey: 'nouveau' },
   { key: 'sans_reponse', label: 'Sans réponse', icon: 'phone-off', countKey: 'sansReponse' },
+  { key: 'relance_ct', label: 'Relance court terme', icon: 'arrow-left', countKey: 'relanceCt' },
   { key: 'rappel', label: 'À rappeler', icon: 'phone', countKey: 'rappel' },
   { key: 'qualifie', label: 'Qualifiés', icon: 'check', countKey: 'qualifie' },
   { key: 'perdu', label: 'Non qualifiés', icon: 'x', countKey: 'perdu' },
@@ -299,6 +300,7 @@ function LeadsSetter() {
     all: categoryLeads.length,
     nouveau: categoryLeads.filter(isNouveauLead).length,
     sansReponse: categoryLeads.filter(isShortTermSansReponseLead).length,
+    relanceCt: categoryLeads.filter(isRetourCommerciauxLead).length,
     rappel: categoryLeads.filter(isCallbackLead).length,
     qualifie: categoryLeads.filter(isQualifiedLeadStatus).length,
     perdu: categoryLeads.filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie').length,
@@ -884,16 +886,26 @@ function isQualifiedLeadStatus(lead: LeadResponse): boolean {
 
 const RELANCE_LONG_TERM_THRESHOLD = 11
 
-// Un lead renvoyé par les commerciaux reste en relance COURT terme quel que
-// soit son nombre de jours d'appel : il vient d'être remis aux setters.
+// « Relance court terme » = leads renvoyés aux setters par les commerciaux
+// (étape GHL « Retour aux Setters » : RDV planifié resté sans suite / non
+// honoré). Ils ont déjà eu un contact avec l'équipe et doivent être rappelés
+// en priorité — onglet dédié, distinct de « Sans réponse » (ne décroche pas).
+// Un lead que le setter a ensuite classé non qualifié/perdu sort de l'onglet.
+function isRetourCommerciauxLead(lead: LeadResponse): boolean {
+  return isRetourSettersActive(lead) && lead.status !== 'perdu' && lead.status !== 'pas_qualifie'
+}
+
+// Un lead renvoyé par les commerciaux ne vieillit jamais en relance LONG terme
+// quel que soit son nombre de jours d'appel : il vient d'être remis aux setters.
 function isLongTermRelanceLead(lead: LeadResponse): boolean {
   return lead.status === 'pas_de_reponse' && !isRetourSettersActive(lead)
     && (lead.joursRelance ?? 0) >= RELANCE_LONG_TERM_THRESHOLD
 }
 
+// « Sans réponse » = ne décroche pas au téléphone (hors retours commerciaux).
 function isShortTermSansReponseLead(lead: LeadResponse): boolean {
-  return lead.status === 'pas_de_reponse'
-    && (isRetourSettersActive(lead) || (lead.joursRelance ?? 0) < RELANCE_LONG_TERM_THRESHOLD)
+  return lead.status === 'pas_de_reponse' && !isRetourSettersActive(lead)
+    && (lead.joursRelance ?? 0) < RELANCE_LONG_TERM_THRESHOLD
 }
 
 function filterSetterLeadsByStatus(leads: LeadResponse[], filter: SetterFilter): LeadResponse[] {
@@ -902,6 +914,8 @@ function filterSetterLeadsByStatus(leads: LeadResponse[], filter: SetterFilter):
       return leads.filter(isNouveauLead)
     case 'sans_reponse':
       return leads.filter(isShortTermSansReponseLead)
+    case 'relance_ct':
+      return leads.filter(isRetourCommerciauxLead)
     case 'rappel':
       return leads.filter(isCallbackLead)
     case 'qualifie':

@@ -598,8 +598,8 @@ function RetourSettersBanner({
       </div>
       <p className="text-sm">
         Ce prospect a <b>déjà été en contact avec l'équipe</b> : les commerciaux l'ont renvoyé aux setters depuis GHL le {at.toLocaleDateString('fr-FR')}
-        {fromLabel ? <> (il était en « <b>{fromLabel}</b> »)</> : null}. Il est classé en relance court terme
-        (onglet « Sans réponse ») : vérifie ce qui s'est passé avant de le rappeler.
+        {fromLabel ? <> (il était en « <b>{fromLabel}</b> »)</> : null}. Il est classé dans l'onglet
+        « <b>Relance court terme</b> » : à rappeler en priorité, vérifie ce qui s'est passé avant.
       </p>
       <ul className="text-sm grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
         <li>

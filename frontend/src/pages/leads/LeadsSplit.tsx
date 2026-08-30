@@ -158,12 +158,14 @@ function isLongTermRelanceLead(lead: LeadResponse): boolean {
 }
 
 function statusLabelForLead(lead: LeadResponse): string {
+  if (isRetourSettersActive(lead) && lead.status === 'pas_de_reponse') return 'Relance court terme'
   if (isLongTermRelanceLead(lead)) return 'Relance à long terme'
   if (lead.status === 'perdu' || lead.status === 'pas_qualifie') return 'Non qualifié'
   return STATUS_LABEL[lead.status]
 }
 
 function statusBadgeForLead(lead: LeadResponse): string {
+  if (isRetourSettersActive(lead) && lead.status === 'pas_de_reponse') return 'bg-rouille-tint text-rouille'
   if (isLongTermRelanceLead(lead)) return 'bg-cuivre-tint text-cuivre'
   if (lead.status === 'perdu' || lead.status === 'pas_qualifie') return 'bg-rouille-tint text-rouille'
   return STATUS_BADGE[lead.status]

@@ -144,8 +144,8 @@ export function shouldNotifyVtDateChange(input: {
 }
 
 // Lead renvoyé aux setters par les commerciaux (étape GHL « (BIS) Retour aux
-// Setters ») : il revient dans l'onglet « Sans réponse » (relance court terme),
-// déjà contacté par l'équipe.
+// Setters ») : il revient dans l'onglet « Relance court terme » des setters,
+// déjà contacté par l'équipe (RDV resté sans suite).
 export function retourSettersMessage(input: {
   leadName: string;
   fromStage?: string | null;
@@ -154,6 +154,6 @@ export function retourSettersMessage(input: {
   return {
     type: "lead.retour_setters",
     title: "Prospect renvoyé par les commerciaux",
-    body: `${input.leadName} revient en relance court terme (onglet « Sans réponse »)${from}. Il a déjà été en contact avec l'équipe : consulte son historique avant de le rappeler.`,
+    body: `${input.leadName} revient en relance court terme (onglet « Relance court terme »)${from}. Il a déjà été en contact avec l'équipe : consulte son historique avant de le rappeler.`,
   };
 }
