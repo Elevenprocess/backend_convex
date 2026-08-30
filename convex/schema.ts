@@ -127,6 +127,9 @@ export default defineSchema({
         fromStatus: v.optional(leadStatusValidator),
       }),
     ),
+    // Dernière lecture des notes contact GHL (ghlContactNotes.ts) — throttle
+    // du rafraîchissement + affichage « remarques à jour le … » sur la fiche.
+    ghlNotesSyncedAt: v.optional(v.number()),
     datePassageRelance: v.optional(v.number()),
     // pont GHL (non alimenté cette tranche)
     monetaryValue: v.optional(v.number()),
@@ -186,6 +189,25 @@ export default defineSchema({
     // _creationTime, arbitraire depuis la migration.
     .index("by_createdAt", ["createdAt"])
     .index("by_status_createdAt", ["status", "createdAt"]),
+
+  // Miroir LOCAL des notes/remarques écrites sur la fiche contact GHL (par les
+  // commerciaux, au quotidien dans GHL). Lues via GET /contacts/{id}/notes au
+  // retour aux setters et à l'ouverture de la fiche (ghlContactNotes.ts) ; les
+  // notes que Velora a elle-même poussées (débriefs, debriefs.ghlNoteId) sont
+  // exclues pour ne pas doubler les débriefs déjà affichés.
+  ghlContactNotes: defineTable({
+    leadId: v.id("leads"),
+    ghlNoteId: v.string(),
+    body: v.string(),
+    ghlUserId: v.optional(v.string()),
+    // Nom résolu via users.ghlUserId au moment de la synchro (snapshot).
+    authorName: v.optional(v.string()),
+    dateAdded: v.number(),
+    syncedAt: v.number(),
+  })
+    .index("by_lead", ["leadId"])
+    .index("by_lead_dateAdded", ["leadId", "dateAdded"])
+    .index("by_ghlNoteId", ["ghlNoteId"]),
 
   leadStageHistory: defineTable({
     leadId: v.id("leads"),

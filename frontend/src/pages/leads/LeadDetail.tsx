@@ -5,8 +5,9 @@ import { Topbar } from '../../components/shell/Topbar'
 import { Icon, type IconName } from '../../components/Icon'
 import { LoadingScreen } from '../../components/Spinner'
 import { useLead, useRdvList, useCallLogs, useUsers, useStartCall } from '../../lib/hooks'
-import { useConvexLeadActivity } from '../../lib/convexHooks'
-import type { ConvexActivityDoc } from '../../lib/convexApi'
+import { useConvexLeadActivity, useConvexGhlNotes } from '../../lib/convexHooks'
+import { ghlContactNotesRefresh, type ConvexActivityDoc, type ConvexGhlNote } from '../../lib/convexApi'
+import { convexClient } from '../../lib/convex'
 import { ROLE_LABELS } from '../../lib/role'
 import {
   PROJECT_STATUS_LABEL,
@@ -64,7 +65,23 @@ export function LeadDetail() {
   const { data: rdvs } = useRdvList(id ? { leadId: id, limit: 50 } : undefined)
   const { data: calls } = useCallLogs(id ? { leadId: id, limit: 50 } : undefined)
   const { data: activity } = useConvexLeadActivity(id)
+  const { data: ghlNotesData } = useConvexGhlNotes(id)
+  const ghlNotes = ghlNotesData?.notes ?? []
   const { data: users } = useUsers()
+
+  // Remarques GHL : lecture auto à l'ouverture de la fiche (throttlée côté
+  // serveur, ≤ 1 appel GHL / 10 min / lead) + bouton « Actualiser ».
+  const [ghlRefreshing, setGhlRefreshing] = useState(false)
+  const refreshGhlNotes = async (force: boolean) => {
+    if (!id || !convexClient) return
+    setGhlRefreshing(true)
+    try { await convexClient.action(ghlContactNotesRefresh, { leadId: id, force }) } catch { /* best-effort */ }
+    finally { setGhlRefreshing(false) }
+  }
+  useEffect(() => {
+    if (!id || !convexClient) return
+    void convexClient.action(ghlContactNotesRefresh, { leadId: id }).catch(() => undefined)
+  }, [id])
 
   const userMap = useMemo(() => {
     const m = new Map<string, UserResponse>()
@@ -216,7 +233,7 @@ export function LeadDetail() {
       ? { label: DELIVRABILITE_STATUS_LABEL[lead.delivrabiliteStatus], className: DELIVRABILITE_STATUS_BADGE[lead.delivrabiliteStatus] }
       : { label: STATUS_LABEL[lead.status], className: STATUS_BADGE[lead.status] }
 
-  const timeline = buildTimeline(rdvs ?? [], calls ?? [], userMap, activity ?? [])
+  const timeline = buildTimeline(rdvs ?? [], calls ?? [], userMap, activity ?? [], ghlNotes)
 
   // Accueil : signalement d'une annulation/report reçue sur le numéro central.
   // Cible le RDV ouvert (planifié/reporté) le plus récent de ce prospect.
@@ -302,7 +319,7 @@ export function LeadDetail() {
         {/* Lead renvoyé par les commerciaux (GHL « Retour aux Setters ») : contexte
             du retour en tête de fiche, pour rappeler en connaissance de cause. */}
         {!isCommercialView && isRetourSettersActive(lead) && (
-          <RetourSettersBanner lead={lead} rdvs={rdvs ?? []} debriefs={debriefs} userMap={userMap} />
+          <RetourSettersBanner lead={lead} rdvs={rdvs ?? []} debriefs={debriefs} userMap={userMap} ghlNotes={ghlNotes} />
         )}
         {/* Haut : Infos (gauche) + Projets (droite), cartes de MÊME hauteur */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 items-stretch">
@@ -386,7 +403,23 @@ export function LeadDetail() {
         {/* Bas : Historique + Débriefs côte à côte, hauteur fixe + scroll */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 items-stretch">
           <div className="glass-card p-6 flex flex-col">
-            <span className="eyebrow block mb-3">Historique</span>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <span className="eyebrow">Historique</span>
+              {ghlNotesData?.hasGhlContact && (
+                <button
+                  type="button"
+                  onClick={() => void refreshGhlNotes(true)}
+                  disabled={ghlRefreshing}
+                  className="text-[10px] font-black uppercase tracking-wider text-faint hover:text-cuivre disabled:opacity-60 inline-flex items-center gap-1"
+                  title={ghlNotesData.syncedAt
+                    ? `Remarques GHL à jour le ${formatDateTime(new Date(ghlNotesData.syncedAt).toISOString())}`
+                    : 'Lire les remarques de la fiche GHL'}
+                >
+                  {ghlRefreshing ? <Spinner size={10} /> : <Icon name="message" size={10} />}
+                  {ghlNotes.length} remarque{ghlNotes.length > 1 ? 's' : ''} GHL · actualiser
+                </button>
+              )}
+            </div>
             <div className="h-[340px] overflow-y-auto pr-1">
               {timeline.length === 0 ? (
                 <p className="text-sm text-faint">Aucun événement enregistré pour ce lead.</p>
@@ -571,12 +604,13 @@ function debriefReasonLabel(d: DebriefResponse): string | null {
 // dernier RDV et son dernier débrief — l'historique que les setters ont
 // demandé pour rappeler un prospect renvoyé sans repartir de zéro.
 function RetourSettersBanner({
-  lead, rdvs, debriefs, userMap,
+  lead, rdvs, debriefs, userMap, ghlNotes = [],
 }: {
   lead: LeadResponse
   rdvs: RdvResponse[]
   debriefs: DebriefResponse[]
   userMap: Map<string, UserResponse>
+  ghlNotes?: ConvexGhlNote[]
 }) {
   const info = lead.retourSetters
   if (!info) return null
@@ -623,8 +657,21 @@ function RetourSettersBanner({
         </li>
         {lastDebrief?.notes && (
           <li className="sm:col-span-2">
-            <span className="text-faint">Remarques du commercial : </span>
+            <span className="text-faint">Remarques du commercial (débrief) : </span>
             <span className="whitespace-pre-line">{lastDebrief.notes}</span>
+          </li>
+        )}
+        {ghlNotes.length > 0 && (
+          <li className="sm:col-span-2">
+            <span className="text-faint">Remarques GHL ({ghlNotes.length}) : </span>
+            <ul className="mt-1 space-y-1">
+              {ghlNotes.slice(0, 3).map((n) => (
+                <li key={n.id} className="whitespace-pre-line">
+                  <b>{fmt(new Date(n.dateAdded).toISOString())}{n.authorName ? ` · ${n.authorName}` : ''}</b> — {n.body}
+                </li>
+              ))}
+              {ghlNotes.length > 3 && <li className="text-faint">… les autres sont dans l'historique ci-dessous.</li>}
+            </ul>
           </li>
         )}
         {lead.latestCallComment && (
@@ -645,8 +692,23 @@ function buildTimeline(
   calls: CallLogResponse[],
   userMap: Map<string, UserResponse>,
   activity: ConvexActivityDoc[] = [],
+  ghlNotes: ConvexGhlNote[] = [],
 ): TimelineItem[] {
   const items: (TimelineItem & { sortKey: number })[] = []
+
+  // Remarques écrites sur la fiche contact GHL (par les commerciaux) — miroir
+  // ghlContactNotes, pour que les setters voient ce qui s'est dit sans ouvrir GHL.
+  for (const n of ghlNotes) {
+    items.push({
+      icon: 'message',
+      iconBg: 'bg-rouille-tint',
+      iconColor: 'text-rouille',
+      title: `Remarque GHL${n.authorName ? ` · ${n.authorName}` : ''}`,
+      date: formatDateTime(new Date(n.dateAdded).toISOString()),
+      desc: n.body,
+      sortKey: n.dateAdded,
+    })
+  }
 
   const journalSince = activity.length > 0 ? Math.min(...activity.map((a) => a.at)) : Number.POSITIVE_INFINITY
   for (const a of activity) {

@@ -267,6 +267,9 @@ export const applyGhlStageChange = internalMutation({
           lead: leadDoc,
           fromStage: leadDoc.retourSetters?.fromStage,
         });
+        // Remarques écrites par les commerciaux sur la fiche GHL → miroir local
+        // pour que le setter les voie dans Velora (ghlContactNotes).
+        await ctx.scheduler.runAfter(0, internal.ghlContactNotes.pull, { leadId });
       }
     }
 

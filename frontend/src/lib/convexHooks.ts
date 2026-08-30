@@ -5,7 +5,7 @@ import { getFunctionName } from 'convex/server'
 import { convexClient } from './convex'
 import { adsReport, adBudget, adDepositsList, type ConvexAdBudget, type ConvexAdDeposit, simulatorFunnel, type ConvexSimulatorFunnel, analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, callLogsListByLead, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsListEnriched, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, rdvListWindow, substepsList, usersGet, usersList, usersDirectory, leadsGetEnriched, analyticsSetterLeaderboard } from './convexApi'
 import type { ConvexUserDoc, SetterLeaderboardEntry, ConvexActivityDoc } from './convexApi'
-import { activityLogForLead, activityLogList, activityLogMyScope, type ActivityListArgs, type ActivityDomain } from './convexApi'
+import { activityLogForLead, activityLogList, activityLogMyScope, ghlContactNotesListByLead, type ActivityListArgs, type ActivityDomain, type ConvexGhlNotesResult } from './convexApi'
 import { mapConvexAcompte, mapConvexCallLog, mapConvexClient, mapConvexCommercialObjective, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexSubstep, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
 import { fetchCache } from './fetchCacheStore'
@@ -850,6 +850,13 @@ export function useConvexLeadActivity(leadId: string | undefined, limit = 200): 
   const rows = useQuery(activityLogForLead, leadId ? { leadId, limit } : 'skip')
   const data = useMemo(() => (leadId ? (rows ?? null) : []), [leadId, rows])
   return { data, loading: Boolean(leadId) && rows === undefined, error: null, refetch: noop }
+}
+
+// Remarques GHL d'un prospect (fiche) : miroir local des notes de la fiche
+// contact GHL, rafraîchi côté serveur (ghlContactNotes:refresh).
+export function useConvexGhlNotes(leadId: string | undefined): Async<ConvexGhlNotesResult> {
+  const rows = useQuery(ghlContactNotesListByLead, leadId ? { leadId } : 'skip')
+  return { data: leadId ? (rows ?? null) : null, loading: Boolean(leadId) && rows === undefined, error: null, refetch: noop }
 }
 
 // ─── Journal d'activité (page Historique) ────────────────────────────────────

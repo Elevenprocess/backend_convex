@@ -872,6 +872,25 @@ export const activityLogForLead = makeFunctionReference<
   ConvexActivityDoc[]
 >('activityLog:forLead')
 
+// ─── Remarques GHL (notes de la fiche contact, écrites par les commerciaux) ──
+export type ConvexGhlNote = {
+  id: string
+  ghlNoteId: string
+  body: string
+  dateAdded: number
+  authorName: string | null
+  ghlUserId: string | null
+}
+export type ConvexGhlNotesResult = { hasGhlContact: boolean; syncedAt: number | null; notes: ConvexGhlNote[] }
+export const ghlContactNotesListByLead = makeFunctionReference<'query', { leadId: string }, ConvexGhlNotesResult>(
+  'ghlContactNotes:listByLead',
+)
+export const ghlContactNotesRefresh = makeFunctionReference<
+  'action',
+  { leadId: string; force?: boolean },
+  { ok: boolean; total?: number; inserted?: number; reason?: string }
+>('ghlContactNotes:refresh')
+
 // ─── Clés API agents (Paramètres → Clés API) ────────────────────────────────
 export type ConvexApiToken = {
   id: string

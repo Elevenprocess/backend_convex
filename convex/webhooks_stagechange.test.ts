@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 import { internal } from "./_generated/api";
 import { makeT } from "./test.kit";
 
+// Le retour aux setters planifie la lecture des notes GHL (runAfter 0) : on
+// draine pour ne pas laisser fuir d'écriture planifiée après le test.
+async function drain(t: { finishInProgressScheduledFunctions: () => Promise<void> }) {
+  await new Promise((r) => setTimeout(r, 25));
+  await t.finishInProgressScheduledFunctions();
+}
+
 const base = {
   externalId: "c1",
   ghlPipelineId: "p1",
@@ -194,6 +201,7 @@ describe("applyGhlStageChange — (BIS) Retour aux Setters", () => {
       }),
     );
     const r = await t.mutation(internal.webhooks.applyGhlStageChange, { ...base, ghlStageName: RETOUR });
+    await drain(t);
     expect(r).toMatchObject({ leadId, created: false, statusChanged: true, sideEffect: "retour_setters" });
     const lead = await t.run((ctx) => ctx.db.get(leadId));
     expect(lead).toMatchObject({
@@ -214,7 +222,9 @@ describe("applyGhlStageChange — (BIS) Retour aux Setters", () => {
       ctx.db.insert("leads", { source: "ghl", externalId: "c1", status: "rdv_pris", ghlStageName: "5. RDV Planifié 📅" }),
     );
     await t.mutation(internal.webhooks.applyGhlStageChange, { ...base, ghlStageName: RETOUR });
+    await drain(t);
     await t.mutation(internal.webhooks.applyGhlStageChange, { ...base, occurredAt: base.occurredAt + 60_000, ghlStageName: RETOUR });
+    await drain(t);
     const lead = await t.run((ctx) => ctx.db.get(leadId));
     expect(lead?.retourSetters).toMatchObject({ at: base.occurredAt, fromStage: "5. RDV Planifié 📅" });
     const notifs = await t.run((ctx) => ctx.db.query("notifications").collect());
@@ -231,6 +241,7 @@ describe("applyGhlStageChange — (BIS) Retour aux Setters", () => {
       ctx.db.insert("leads", { source: "ghl", externalId: "c1", status: "rdv_pris", ghlStageName: "5. RDV Planifié 📅" }),
     );
     await t.mutation(internal.webhooks.applyGhlStageChange, { ...base, ghlStageName: RETOUR });
+    await drain(t);
     const notifs = await t.run((ctx) => ctx.db.query("notifications").collect());
     expect(notifs.map((n) => n.userId)).toEqual([leadSetterId]);
   });
@@ -244,6 +255,7 @@ describe("applyGhlStageChange — (BIS) Retour aux Setters", () => {
       ctx.db.insert("leads", { source: "ghl", externalId: "c1", status: "rdv_pris", ghlStageName: "5. RDV Planifié 📅", setterId }),
     );
     await t.mutation(internal.webhooks.applyGhlStageChange, { ...base, ghlStageName: RETOUR, silent: true });
+    await drain(t);
     const lead = await t.run((ctx) => ctx.db.get(leadId));
     expect(lead?.retourSetters?.at).toBe(base.occurredAt);
     expect(await t.run((ctx) => ctx.db.query("notifications").collect())).toHaveLength(0);
