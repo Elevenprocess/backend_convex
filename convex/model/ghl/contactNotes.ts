@@ -45,8 +45,18 @@ export function parseGhlNotes(raw: unknown, now: number = Date.now()): GhlNote[]
   return out.sort((a, b) => b.dateAdded - a.dateAdded);
 }
 
-/** Notes à garder = celles que Velora n'a pas écrites elle-même (miroir débrief). */
+/**
+ * Notes générées par Velora elle-même sur la fiche GHL — déjà visibles dans
+ * Velora (commentaire setter du RDV, débrief) : inutile de les ré-importer.
+ */
+const VELORA_NOTE_PREFIXES = ["RDV ECOI", "DÉBRIEF RDV — Velora", "DEBRIEF RDV — Velora"];
+export function isVeloraGeneratedNote(body: string): boolean {
+  const head = body.trimStart();
+  return VELORA_NOTE_PREFIXES.some((p) => head.startsWith(p));
+}
+
+/** Notes à garder = celles que Velora n'a pas écrites elle-même (id miroir débrief ou en-tête Velora). */
 export function excludeMirroredNotes(notes: GhlNote[], mirroredIds: Iterable<string>): GhlNote[] {
   const skip = new Set(mirroredIds);
-  return notes.filter((n) => !skip.has(n.id));
+  return notes.filter((n) => !skip.has(n.id) && !isVeloraGeneratedNote(n.body));
 }

@@ -32,8 +32,15 @@ describe("parseGhlNotes", () => {
     expect(out.find((n) => n.id === "b")?.dateAdded).toBe(1700000000000);
   });
 
-  it("excludeMirroredNotes retire les notes poussées par Velora", () => {
-    const notes = parseGhlNotes({ notes: [{ id: "mir", body: "débrief" }, { id: "ghl", body: "remarque" }] });
+  it("excludeMirroredNotes retire les notes poussées par Velora (id miroir débrief, en-tête RDV setter / débrief)", () => {
+    const notes = parseGhlNotes({
+      notes: [
+        { id: "mir", body: "débrief" },
+        { id: "rdv", body: "RDV ECOI — Secteur Est — Jean\n\nCréneau : …\n\nCOMMENTAIRE SETTER\n…" },
+        { id: "deb", body: "DÉBRIEF RDV — Velora (mis à jour)\nRÉSULTAT : …" },
+        { id: "ghl", body: "Client rappelé, veut un devis batterie" },
+      ],
+    });
     expect(excludeMirroredNotes(notes, ["mir"]).map((n) => n.id)).toEqual(["ghl"]);
   });
 });

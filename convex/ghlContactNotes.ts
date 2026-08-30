@@ -17,6 +17,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { ghlRequest, isGhlConfigured } from "./ghlClient";
 import { requireUser } from "./model/access";
+import { findLeadByGhlContact } from "./webhooks";
 import { excludeMirroredNotes, parseGhlNotes } from "./model/ghl/contactNotes";
 
 const UUID_PREFIX = /^[0-9a-f]{8}-[0-9a-f]{4}/;
@@ -130,10 +131,27 @@ async function pullNotes(
   }
 }
 
-/** Planifié par le retour aux setters (et utilisable en backfill ciblé). */
+export const leadIdByContact = internalQuery({
+  args: { contactId: v.string() },
+  handler: async (ctx, args) => (await findLeadByGhlContact(ctx, args.contactId))?._id ?? null,
+});
+
+/**
+ * Planifié par le retour aux setters ; utilisable à la main par leadId ou par
+ * id contact GHL : `npx convex run ghlContactNotes:pull '{"contactId":"…"}'`.
+ */
+type PullResult = { ok: boolean; total?: number; inserted?: number; reason?: string };
 export const pull = internalAction({
-  args: { leadId: v.id("leads") },
-  handler: async (ctx, args) => pullNotes(ctx, args.leadId),
+  args: { leadId: v.optional(v.id("leads")), contactId: v.optional(v.string()) },
+  handler: async (ctx, args): Promise<PullResult> => {
+    let leadId: Id<"leads"> | null = args.leadId ?? null;
+    if (!leadId && args.contactId) {
+      const found: Id<"leads"> | null = await ctx.runQuery(internal.ghlContactNotes.leadIdByContact, { contactId: args.contactId });
+      leadId = found;
+    }
+    if (!leadId) return { ok: false, reason: "lead_not_found" };
+    return await pullNotes(ctx, leadId);
+  },
 });
 
 export const canRefresh = internalQuery({
