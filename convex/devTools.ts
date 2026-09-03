@@ -199,7 +199,9 @@ export const repairQualifiesAvecRdvOuvert = internalMutation({
     const REGRESSED = new Set(
       args.statuses ?? ["pas_de_reponse", "a_rappeler", "relance", "pas_qualifie"],
     );
-    const OPEN = new Set(["planifie", "reporte"]);
+    // Seuls les RDV planifiés bloquent la régression (cf. leadHasPlannedRdv) :
+    // un RDV reporté sans date rend le lead aux setters.
+    const OPEN = new Set(["planifie"]);
 
     const rdvRows = await ctx.db.query("rdv").collect();
     const openLeadIds = new Set(
@@ -381,5 +383,107 @@ export const timeListEnriched = internalQuery({
     const enriched = await Promise.all(page.page.map((lead) => enrichLead(ctx, lead, now)));
     const t2 = Date.now();
     return { rows: enriched.length, paginateMs: t1 - t0, enrichMs: t2 - t1, totalMs: t2 - t0 };
+  },
+});
+
+// Réparation ponctuelle (03/09/2026) : avant la correction de logCall, un
+// appel « pas de réponse » sur un lead appelé ≥11 jours distincts était
+// auto-promu en « relance » (affiché dans l'onglet « À rappeler ») au lieu de
+// passer en « pas_de_reponse ». Remet en « pas_de_reponse » les leads
+// a_rappeler/relance dont le DERNIER appel est un non-joint sans rappel
+// planifié ET postérieur (ou égal) au dernier changement de statut — donc
+// non repassés « à rappeler » depuis (RDV reporté, re-soumission…).
+// Dry-run par défaut ; `{"apply": true}` pour écrire.
+// `npx convex run devTools:repairSansReponseApresNonJoint '{"apply": true}'`
+export const repairSansReponseApresNonJoint = internalMutation({
+  args: {
+    apply: v.optional(v.boolean()),
+    // Nombre max de leads réparés par appel (limites de lecture/écriture d'une
+    // mutation) : relancer jusqu'à count = 0.
+    limit: v.optional(v.number()),
+    // Par défaut on ne répare que la signature exacte de l'ancienne règle :
+    // dernier appel non joint ET entrée d'historique « relance » posée à la
+    // même milliseconde par cet appel. `strict: false` élargit aux leads
+    // a_rappeler/relance sans changement de statut postérieur au dernier appel.
+    strict: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const NO_ANSWER = new Set(["non_joint", "messagerie", "injoignable"]);
+    const strict = args.strict !== false;
+    const limit = args.limit ?? 40;
+    const candidates: Array<{ leadId: string; from: string; name: string; lastCallAt: number }> = [];
+    let applied = 0;
+    for (const status of ["a_rappeler", "relance"] as const) {
+      const leads = await ctx.db
+        .query("leads")
+        .withIndex("by_status_createdAt", (q) => q.eq("status", status))
+        .collect();
+      for (const lead of leads) {
+        if (lead.deletedAt !== undefined) continue;
+        const lastCall = await ctx.db
+          .query("callLogs")
+          .withIndex("by_lead_calledAt", (q) => q.eq("leadId", lead._id))
+          .order("desc")
+          .first();
+        if (!lastCall || !NO_ANSWER.has(lastCall.result) || lastCall.nextCallbackAt !== undefined) continue;
+        const lastStage = await ctx.db
+          .query("leadStageHistory")
+          .withIndex("by_lead_changedAt", (q) => q.eq("leadId", lead._id))
+          .order("desc")
+          .first();
+        if (lastStage && lastStage.changedAt > lastCall.calledAt) continue;
+        if (strict && !(lastStage && lastStage.saasStatus === "relance" && lastStage.changedAt === lastCall.calledAt)) continue;
+        // Re-soumission simulateur postérieure au dernier appel : le lead a été
+        // repassé « à rappeler » légitimement (sans historique d'étape).
+        if (lead.resubmittedAt !== undefined && lead.resubmittedAt > lastCall.calledAt) continue;
+        const rdvRows = await ctx.db
+          .query("rdv")
+          .withIndex("by_lead", (q) => q.eq("leadId", lead._id))
+          .collect();
+        if (rdvRows.some((r) => r.deletedAt === undefined && r.status === "planifie")) continue;
+        candidates.push({
+          leadId: lead._id,
+          from: lead.status,
+          name: [lead.firstName, lead.lastName].filter(Boolean).join(" "),
+          lastCallAt: lastCall.calledAt,
+        });
+        if (args.apply && applied < limit) {
+          applied++;
+          await ctx.db.patch(lead._id, { status: "pas_de_reponse" });
+          await insertStageHistory(ctx, {
+            leadId: lead._id,
+            ghlStageName: "pas_de_reponse",
+            saasStatus: "pas_de_reponse",
+            assignedToId: lead.assignedToId,
+            changedAt: Date.now(),
+            source: "manual",
+          });
+          await refreshLeadAgg(ctx, lead._id);
+        }
+      }
+    }
+    return { applied, count: candidates.length, leads: candidates };
+  },
+});
+
+// Chronologie d'un lead (statut, historique d'étapes, appels, RDV). Lecture seule.
+// `npx convex run devTools:debugLeadTimeline '{"leadId":"..."}'`
+export const debugLeadTimeline = internalQuery({
+  args: { leadId: v.id("leads") },
+  handler: async (ctx, args) => {
+    const lead = await ctx.db.get(args.leadId);
+    if (!lead) return null;
+    const iso = (ms?: number) => (ms === undefined ? null : new Date(ms).toISOString());
+    const stages = await ctx.db.query("leadStageHistory").withIndex("by_lead_changedAt", (q) => q.eq("leadId", args.leadId)).collect();
+    const calls = await ctx.db.query("callLogs").withIndex("by_lead_calledAt", (q) => q.eq("leadId", args.leadId)).collect();
+    const rdvs = await ctx.db.query("rdv").withIndex("by_lead", (q) => q.eq("leadId", args.leadId)).collect();
+    return {
+      status: lead.status, source: lead.source, createdAt: iso(lead.createdAt),
+      lastContactAt: iso(lead.lastContactAt), datePassageRelance: iso(lead.datePassageRelance),
+      resubmittedAt: iso(lead.resubmittedAt), ghlStage: lead.ghlStageName ?? null,
+      stages: stages.map((s) => ({ at: iso(s.changedAt), stage: s.ghlStageName, status: s.saasStatus, source: s.source })),
+      calls: calls.map((c) => ({ at: iso(c.calledAt), result: c.result, cb: iso(c.nextCallbackAt) })),
+      rdvs: rdvs.map((r) => ({ at: iso(r.scheduledAt), status: r.status, result: r.result ?? null, deleted: r.deletedAt !== undefined })),
+    };
   },
 });

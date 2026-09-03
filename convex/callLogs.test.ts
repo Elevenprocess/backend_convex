@@ -132,3 +132,45 @@ test("logCall() d'un commercial ne s'approprie pas le lead (setterId intact)", a
   await asUser(t, commercialId).mutation(api.callLogs.logCall, { leadId, result: "joint" });
   expect((await t.run((ctx) => ctx.db.get(leadId)))?.setterId).toBeUndefined();
 });
+
+test("logCall() non_joint sur un lead « à rappeler » → pas_de_reponse (même après 11 jours d'appels)", async () => {
+  const t = makeT();
+  const setterId = await insertUser(t, { role: "setter" });
+  const leadId = await asUser(t, setterId).mutation(api.leads.create, { firstName: "Rap" });
+  // 12 jours d'appels distincts déjà loggés (ancienne auto-promotion « relance »).
+  await t.run(async (ctx) => {
+    for (let d = 1; d <= 12; d++) {
+      await ctx.db.insert("callLogs", { leadId, setterId, calledAt: Date.now() - d * 86_400_000, result: "non_joint" });
+    }
+  });
+  await asUser(t, setterId).mutation(api.callLogs.logCall, { leadId, result: "rappel_planifie", nextCallbackAt: Date.now() + 3_600_000 });
+  expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("a_rappeler");
+
+  await asUser(t, setterId).mutation(api.callLogs.logCall, { leadId, result: "non_joint" });
+  expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("pas_de_reponse");
+});
+
+test("logCall() non_joint sur un lead « relance » (étape GHL) → pas_de_reponse", async () => {
+  const t = makeT();
+  const setterId = await insertUser(t, { role: "setter" });
+  const leadId = await asUser(t, setterId).mutation(api.leads.create, { firstName: "Rel" });
+  await t.run((ctx) => ctx.db.patch(leadId, { status: "relance" }));
+  await asUser(t, setterId).mutation(api.callLogs.logCall, { leadId, result: "messagerie" });
+  expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("pas_de_reponse");
+});
+
+test("logCall() non_joint sur un lead « à rappeler » après RDV reporté sans date → pas_de_reponse", async () => {
+  const t = makeT();
+  const setterId = await insertUser(t, { role: "setter" });
+  const commercialId = await insertUser(t, { role: "commercial", email: "com2@ecoi.fr" });
+  const leadId = await asUser(t, setterId).mutation(api.leads.create, { firstName: "Rep" });
+  const rdvId = await asUser(t, commercialId).mutation(api.rdv.create, {
+    leadId, commercialId, scheduledAt: Date.now() + 86_400_000,
+  });
+  // RDV reporté sans nouvelle date → lead rendu aux setters (a_rappeler).
+  await asUser(t, commercialId).mutation(api.rdv.update, { rdvId, status: "reporte" });
+  expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("a_rappeler");
+
+  await asUser(t, setterId).mutation(api.callLogs.logCall, { leadId, result: "non_joint" });
+  expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("pas_de_reponse");
+});

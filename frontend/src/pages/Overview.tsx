@@ -316,7 +316,7 @@ function OverviewSetter() {
     () =>
       (leads ?? [])
         .filter((l) => belongsToSetter(l, me?.id))
-        .filter((l) => l.nextCallbackAt && (l.status === 'a_rappeler' || l.status === 'relance' || Boolean(l.nextCallbackAt)))
+        .filter((l) => l.nextCallbackAt && isCallbackStatus(l.status))
         .filter((l) => callbackBucket(l.nextCallbackAt) === callbackTab)
         .sort((a, b) => new Date(a.nextCallbackAt!).getTime() - new Date(b.nextCallbackAt!).getTime()),
     [leads, me?.id, callbackTab],
@@ -2114,6 +2114,13 @@ function todayLogicalCallSeries(calls: CallLogResponse[], classified: LeadRespon
 function dayLabel(day: string): string {
   const d = new Date(`${day}T12:00:00`)
   return d.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '')
+}
+
+// Seul un lead encore « À rappeler » (ou en relance GHL) porte un rappel actif :
+// un lead passé « Sans réponse » garde l'ancienne date en agrégat mais ne doit
+// plus apparaître dans la file de rappels.
+function isCallbackStatus(status: string): boolean {
+  return status === 'a_rappeler' || status === 'relance'
 }
 
 function callbackBucket(iso: string | null): 'late' | 'today' | 'tomorrow' | 'later' {

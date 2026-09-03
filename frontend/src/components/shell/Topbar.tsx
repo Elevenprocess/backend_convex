@@ -241,8 +241,11 @@ function activeNotificationIds(
   const ids: string[] = []
 
   for (const lead of leads) {
-    const callbackAt = lead.nextCallbackAt ? new Date(lead.nextCallbackAt).getTime() : null
-    if (callbackAt && callbackAt <= now && (lead.status === 'a_rappeler' || lead.status === 'relance' || lead.nextCallbackAt)) {
+    // Un rappel n'est actif que si le lead est encore « À rappeler » (ou relance
+    // GHL) : passé « Sans réponse », l'ancienne date de rappel ne notifie plus.
+    const hasCallback = lead.status === 'a_rappeler' || lead.status === 'relance'
+    const callbackAt = hasCallback && lead.nextCallbackAt ? new Date(lead.nextCallbackAt).getTime() : null
+    if (callbackAt && callbackAt <= now) {
       ids.push(`callback-late-${lead.id}`)
     } else if (callbackAt && callbackAt <= in10Min && callbackAt > now) {
       ids.push(`callback-soon-${lead.id}`)

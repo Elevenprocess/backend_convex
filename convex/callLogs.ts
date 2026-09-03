@@ -8,7 +8,6 @@ import { requireUser, requireLeadWriteRole, roleOf } from "./model/access";
 import { insertStageHistory } from "./model/stageHistory";
 import { refreshLeadAgg } from "./model/leadAgg";
 import { logActivity, leadLabel, CALL_RESULT_LABEL, LEAD_STATUS_LABEL, label, fmtDateTime } from "./model/activity";
-import { OPEN_RDV_STATUSES } from "./rdv";
 
 // Portage de CallLogsService : le résultat d'appel dérive le statut du lead
 // (c'est ce qui fait « bouger » la classification côté leads).
@@ -27,25 +26,21 @@ const CALL_RESULT_TO_LEAD_STATUS: Partial<Record<CallResult, LeadStatus>> = {
   rdv_pris: "qualifie",
 };
 
-const LONG_TERM_RELANCE_CALL_DAYS = 11;
-const LONG_TERM_RELANCE_ELIGIBLE: ReadonlySet<LeadStatus> = new Set([
-  "a_rappeler", "pas_de_reponse", "relance",
-]);
 const DOWNSTREAM_PROJECT_STATUSES: ReadonlySet<string> = new Set([
   "signe", "signature_en_cours", "devis_en_cours",
 ]);
 
-// Un RDV ouvert (planifié/reporté) gouverne le statut du lead : c'est le
+// Un RDV PLANIFIÉ (créneau réel à venir) gouverne le statut du lead : c'est le
 // cycle de vie du RDV (rdv.update → deriveLeadStatus) qui le fera bouger,
 // pas un simple appel de confirmation tombé sur messagerie.
-async function leadHasOpenRdv(ctx: MutationCtx, leadId: Id<"leads">): Promise<boolean> {
+// Un RDV « reporté » sans date, lui, a rendu le lead aux setters (« À
+// rappeler ») : leurs appels doivent pouvoir le reclasser (sans réponse…).
+async function leadHasPlannedRdv(ctx: MutationCtx, leadId: Id<"leads">): Promise<boolean> {
   const rows = await ctx.db
     .query("rdv")
     .withIndex("by_lead", (q) => q.eq("leadId", leadId))
     .collect();
-  return rows.some(
-    (r) => r.deletedAt === undefined && (OPEN_RDV_STATUSES as readonly string[]).includes(r.status),
-  );
+  return rows.some((r) => r.deletedAt === undefined && r.status === "planifie");
 }
 
 async function leadHasDownstreamProject(ctx: MutationCtx, leadId: Id<"leads">): Promise<boolean> {
@@ -56,16 +51,6 @@ async function leadHasDownstreamProject(ctx: MutationCtx, leadId: Id<"leads">): 
   return projects.some(
     (p) => p.deletedAt === undefined && DOWNSTREAM_PROJECT_STATUSES.has(p.status),
   );
-}
-
-// Nombre de jours calendaires distincts (UTC) où le lead a été appelé.
-async function countDistinctCallDays(ctx: MutationCtx, leadId: Id<"leads">): Promise<number> {
-  const rows = await ctx.db
-    .query("callLogs")
-    .withIndex("by_lead_calledAt", (q) => q.eq("leadId", leadId))
-    .collect();
-  const days = new Set(rows.map((r) => Math.floor(r.calledAt / 86_400_000)));
-  return days.size;
 }
 
 // Un appel fait bouger le statut du lead : réservé aux rôles commerciaux/setter.
@@ -105,21 +90,17 @@ export const logCall = mutation({
       patch.setterId = user._id;
     }
     // On ne régresse jamais un lead terminal, un lead avec un projet aval,
-    // ni un lead qualifié avec un RDV encore ouvert.
+    // ni un lead qualifié avec un RDV encore planifié.
+    // NB : plus d'auto-promotion « relance » après 11 jours d'appels — elle
+    // renvoyait un lead « pas de réponse » dans l'onglet « À rappeler » (qui
+    // affiche a_rappeler + relance). La relance long terme est dérivée côté
+    // liste à partir de joursRelance, le statut reste pas_de_reponse.
     if (
       derivedStatus &&
       !TERMINAL_LEAD_STATUSES.has(lead.status) &&
       !(await leadHasDownstreamProject(ctx, args.leadId)) &&
-      !(await leadHasOpenRdv(ctx, args.leadId))
+      !(await leadHasPlannedRdv(ctx, args.leadId))
     ) {
-      // Auto-promotion « relance » : ≥11 jours d'appels distincts, mais seulement
-      // pour une action de relance (jamais sur une décision explicite refus/joint).
-      if (
-        LONG_TERM_RELANCE_ELIGIBLE.has(derivedStatus) &&
-        (await countDistinctCallDays(ctx, args.leadId)) >= LONG_TERM_RELANCE_CALL_DAYS
-      ) {
-        derivedStatus = "relance";
-      }
       patch.status = derivedStatus;
       if (derivedStatus === "a_rappeler" && args.nextCallbackAt) {
         patch.datePassageRelance = args.nextCallbackAt;

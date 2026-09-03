@@ -573,7 +573,10 @@ function RdvTab({ lead, userMap, onSaved }: { lead: LeadResponse; userMap?: Map<
 
   if (loading) return <LoadingBlock />
 
-  const callbackCard = lead.nextCallbackAt ? <CallbackCard nextCallbackAt={lead.nextCallbackAt} /> : null
+  // Rappel affiché seulement tant que le lead est encore « À rappeler » : un
+  // lead passé « Sans réponse » conserve l'ancienne date en agrégat.
+  const callbackActive = lead.status === 'a_rappeler' || lead.status === 'relance'
+  const callbackCard = callbackActive && lead.nextCallbackAt ? <CallbackCard nextCallbackAt={lead.nextCallbackAt} /> : null
   const matchedGhlEvents = findLeadGhlEvents(lead, ghlEvents)
   if (rdvs.length === 0 && matchedGhlEvents.length === 0) {
     return (
