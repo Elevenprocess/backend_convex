@@ -487,3 +487,30 @@ export const debugLeadTimeline = internalQuery({
     };
   },
 });
+
+// État du « retour aux setters » : leads marqués retourSetters (par statut) et
+// derniers passages par l'étape GHL « (BIS) Retour aux Setters 🔙 ». Lecture seule.
+// `npx convex run devTools:debugRetourSetters`
+export const debugRetourSetters = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const iso = (ms?: number) => (ms === undefined ? null : new Date(ms).toISOString());
+    const leads = await ctx.db.query("leads").collect();
+    const byStatus: Record<string, number> = {};
+    let marked = 0;
+    for (const l of leads) {
+      if (l.deletedAt !== undefined || !l.retourSetters) continue;
+      marked++;
+      byStatus[l.status] = (byStatus[l.status] ?? 0) + 1;
+    }
+    const hist = await ctx.db.query("leadStageHistory").withIndex("by_changedAt").order("desc").take(3000);
+    const retour = hist.filter((h) => h.ghlStageName === "(BIS) Retour aux Setters 🔙");
+    const recent = [];
+    for (const h of retour.slice(0, 12)) {
+      const lead = await ctx.db.get(h.leadId);
+      recent.push({ at: iso(h.changedAt), source: h.source, status: lead?.status ?? null, marked: Boolean(lead?.retourSetters),
+        name: [lead?.firstName, lead?.lastName].filter(Boolean).join(" ") });
+    }
+    return { marked, byStatus, retourEntriesInLast3000: retour.length, recent };
+  },
+});

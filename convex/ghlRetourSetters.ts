@@ -116,3 +116,54 @@ export const syncScheduled = internalAction({
     return null;
   },
 });
+
+/** Diagnostic : lignes brutes de l'étape (dates de passage, contact). Lecture seule.
+ *  `npx convex run ghlRetourSetters:debugRows` */
+export const debugRows = internalAction({
+  args: {},
+  handler: async (): Promise<unknown> => {
+    if (!isGhlConfigured()) return null;
+    const rows = await fetchStageOpportunities();
+    const dates = rows.map((r) => Date.parse(r.lastStageChangeAt ?? r.updatedAt ?? "")).filter(Number.isFinite).sort((a, b) => b - a);
+    const iso = (ms: number) => new Date(ms).toISOString();
+    return {
+      fetched: rows.length,
+      withContact: rows.filter((r) => r.contact?.id || r.contactId).length,
+      withLastStageChangeAt: rows.filter((r) => r.lastStageChangeAt).length,
+      newest5: dates.slice(0, 5).map(iso),
+      oldest: dates.length ? iso(dates[dates.length - 1]) : null,
+      sample: rows.slice(0, 2).map((r) => ({ ...r, contact: r.contact ? { id: r.contact.id, name: r.contact.name } : r.contact })),
+      keys: rows[0] ? Object.keys(rows[0] as object) : [],
+    };
+  },
+});
+
+/** Diagnostic : pour chaque étape du pipeline, nombre d'opportunités (1re page)
+ *  et dates des derniers passages. `npx convex run ghlRetourSetters:debugPipelineStages` */
+export const debugPipelineStages = internalAction({
+  args: {},
+  handler: async (): Promise<unknown> => {
+    if (!isGhlConfigured()) return null;
+    const locationId = requireGhlLocationId();
+    const pipelineId = process.env.GHL_RETOUR_SETTERS_PIPELINE_ID || DEFAULT_PIPELINE_ID;
+    const pipes = (await ghlRequest("/opportunities/pipelines", { query: { locationId } })) as
+      { pipelines?: Array<{ id: string; name: string; stages?: Array<{ id: string; name: string }> }> } | null;
+    const out: Array<Record<string, unknown>> = [];
+    for (const p of pipes?.pipelines ?? []) {
+      for (const s of p.stages ?? []) {
+        if (p.id !== pipelineId && !/retour aux setters/i.test(s.name)) continue;
+        const res = (await ghlRequest("/opportunities/search", {
+          query: { location_id: locationId, pipeline_id: p.id, pipeline_stage_id: s.id, limit: 100 },
+        })) as { opportunities?: GhlOpportunityRow[]; meta?: { total?: number } } | null;
+        const rows = res?.opportunities ?? [];
+        const dates = rows.map((r) => Date.parse(r.lastStageChangeAt ?? "")).filter(Number.isFinite).sort((a, b) => b - a);
+        out.push({
+          pipeline: p.name, stage: s.name, stageId: s.id, total: res?.meta?.total ?? rows.length,
+          newestStageChange: dates[0] ? new Date(dates[0]).toISOString().slice(0, 10) : null,
+          movesLast7d: dates.filter((d) => d > Date.now() - 7 * 86_400_000).length,
+        });
+      }
+    }
+    return out;
+  },
+});
