@@ -6,6 +6,7 @@ import { roleValidator, teamValidator, leadStatusValidator } from "./model/enums
 import { insertStageHistory } from "./model/stageHistory";
 import { enrichLead } from "./model/enrichLead";
 import { refreshLeadAgg } from "./model/leadAgg";
+import { findLeadByGhlContact } from "./webhooks";
 
 // Outils dev uniquement — internes (jamais appelables par un client) : lancés
 // via `npx convex run devTools:setRole '{"email":"…","role":"admin"}'` avec la
@@ -512,5 +513,62 @@ export const debugRetourSetters = internalQuery({
         name: [lead?.firstName, lead?.lastName].filter(Boolean).join(" ") });
     }
     return { marked, byStatus, retourEntriesInLast3000: retour.length, recent };
+  },
+});
+
+// Leads « À rappeler » côté setters (a_rappeler / relance) qui ont DÉJÀ eu un
+// RDV avec un commercial. Lecture seule — sert à décider s'ils relèvent de la
+// « Relance court terme » (retour aux setters). `npx convex run devTools:listRappelAvecRdv`
+export const listRappelAvecRdv = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const iso = (ms?: number) => (ms === undefined ? null : new Date(ms).toISOString().slice(0, 16));
+    const out = [];
+    for (const status of ["a_rappeler", "relance"] as const) {
+      const leads = await ctx.db.query("leads").withIndex("by_status_createdAt", (q) => q.eq("status", status)).collect();
+      for (const l of leads) {
+        if (l.deletedAt !== undefined) continue;
+        const rdvs = (await ctx.db.query("rdv").withIndex("by_lead", (q) => q.eq("leadId", l._id)).collect())
+          .filter((r) => r.deletedAt === undefined);
+        if (rdvs.length === 0) continue;
+        const last = [...rdvs].sort((a, b) => (b.scheduledAt ?? 0) - (a.scheduledAt ?? 0))[0];
+        const calls = await ctx.db.query("callLogs").withIndex("by_lead_calledAt", (q) => q.eq("leadId", l._id)).order("desc").take(1);
+        const debriefs = (await ctx.db.query("debriefs").withIndex("by_lead", (q) => q.eq("leadId", l._id)).collect())
+          .filter((d) => d.deletedAt === undefined);
+        const stages = await ctx.db.query("leadStageHistory").withIndex("by_lead_changedAt", (q) => q.eq("leadId", l._id)).order("desc").take(1);
+        const commercial = last.commercialId ? await ctx.db.get(last.commercialId) : null;
+        out.push({
+          leadId: l._id, name: [l.firstName, l.lastName].filter(Boolean).join(" "), status: l.status,
+          contactId: l.ghlContactId ?? l.externalId ?? null, ghlStage: l.ghlStageName ?? null,
+          retourSetters: l.retourSetters ? iso(l.retourSetters.at) : null,
+          nextCallbackAt: iso(l.agg?.nextCallbackAt), resubmittedAt: iso(l.resubmittedAt),
+          rdvCount: rdvs.length, lastRdv: { at: iso(last.scheduledAt), status: last.status, result: last.result ?? null,
+            commercial: commercial?.name ?? null },
+          debrief: debriefs.length ? { outcome: debriefs[debriefs.length - 1].outcome, nonSale: debriefs[debriefs.length - 1].nonSaleReason ?? null } : null,
+          lastCall: calls[0] ? { at: iso(calls[0].calledAt), result: calls[0].result } : null,
+          lastStage: stages[0] ? { at: iso(stages[0].changedAt), stage: stages[0].ghlStageName, source: stages[0].source } : null,
+        });
+      }
+    }
+    return out;
+  },
+});
+
+// Statut Velora des contacts GHL passés en paramètre (lecture seule) — sert à
+// croiser l'étape GHL « Retour aux Setters » avec l'état Velora.
+export const statusByGhlContacts = internalQuery({
+  args: { contactIds: v.array(v.string()) },
+  handler: async (ctx, args) => {
+
+    const byStatus: Record<string, number> = {};
+    let unknown = 0;
+    const rappel: Array<{ name: string; status: string }> = [];
+    for (const id of args.contactIds) {
+      const lead = await findLeadByGhlContact(ctx, id);
+      if (!lead || lead.deletedAt !== undefined) { unknown++; continue; }
+      byStatus[lead.status] = (byStatus[lead.status] ?? 0) + 1;
+      if (lead.status === "a_rappeler" || lead.status === "relance") rappel.push({ name: [lead.firstName, lead.lastName].filter(Boolean).join(" "), status: lead.status });
+    }
+    return { total: args.contactIds.length, unknownInVelora: unknown, byStatus, rappel };
   },
 });

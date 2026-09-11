@@ -167,3 +167,50 @@ export const debugPipelineStages = internalAction({
     return out;
   },
 });
+
+/** Diagnostic : leads « À rappeler » ayant déjà eu un RDV, croisés avec l'étape
+ *  GHL réelle de leur opportunité (pipeline CRM Vente). Lecture seule.
+ *  `npx convex run ghlRetourSetters:debugRappelAvecRdv` */
+export const debugRappelAvecRdv = internalAction({
+  args: { maxLookups: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<unknown> => {
+    if (!isGhlConfigured()) return null;
+    const locationId = requireGhlLocationId();
+    const pipelineId = process.env.GHL_RETOUR_SETTERS_PIPELINE_ID || DEFAULT_PIPELINE_ID;
+    const pipes = (await ghlRequest("/opportunities/pipelines", { query: { locationId } })) as
+      { pipelines?: Array<{ id: string; name: string; stages?: Array<{ id: string; name: string }> }> } | null;
+    const stageName = new Map<string, string>();
+    for (const p of pipes?.pipelines ?? []) for (const s of p.stages ?? []) stageName.set(s.id, `${p.id === pipelineId ? "" : p.name + " / "}${s.name}`);
+    const leads = (await ctx.runQuery(internal.devTools.listRappelAvecRdv, {})) as Array<Record<string, unknown> & { contactId: string | null }>;
+    const max = args.maxLookups ?? 150;
+    const out = [];
+    let lookups = 0;
+    for (const l of leads) {
+      let ghl: unknown = "non consulté";
+      if (l.contactId && lookups < max) {
+        lookups++;
+        const res = (await ghlRequest("/opportunities/search", {
+          query: { location_id: locationId, contact_id: l.contactId, limit: 20 },
+        })) as { opportunities?: Array<{ pipelineId?: string; pipelineStageId?: string; status?: string; lastStageChangeAt?: string }> } | null;
+        ghl = (res?.opportunities ?? []).map((o) => ({
+          stage: stageName.get(o.pipelineStageId ?? "") ?? o.pipelineStageId ?? null,
+          status: o.status ?? null, movedAt: (o.lastStageChangeAt ?? "").slice(0, 16),
+        }));
+      } else if (!l.contactId) ghl = "pas d'id contact";
+      out.push({ ...l, ghl });
+    }
+    return { count: out.length, lookups, leads: out };
+  },
+});
+
+/** Diagnostic : statut Velora des opportunités présentes dans l'étape GHL
+ *  « Retour aux Setters ». `npx convex run ghlRetourSetters:debugStageLeadsStatus` */
+export const debugStageLeadsStatus = internalAction({
+  args: {},
+  handler: async (ctx): Promise<unknown> => {
+    if (!isGhlConfigured()) return null;
+    const rows = await fetchStageOpportunities();
+    const ids = [...new Set(rows.map((r) => r.contact?.id || r.contactId || "").filter(Boolean))];
+    return await ctx.runQuery(internal.devTools.statusByGhlContacts, { contactIds: ids });
+  },
+});
