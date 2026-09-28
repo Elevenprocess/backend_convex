@@ -33,7 +33,7 @@ const CLOSING_PIPELINE = "CRM Vente";
 
 // ─── Helpers GHL (parsing minimal des réponses opportunity) ───────────────────
 
-function normalizeText(value: string): string {
+export function normalizeText(value: string): string {
   return value.normalize("NFC").replace(/\s+/g, " ").trim().toLowerCase();
 }
 
@@ -41,9 +41,9 @@ function str(v: unknown): string | undefined {
   return typeof v === "string" && v.trim() ? v.trim() : undefined;
 }
 
-type PipelineInfo = { id: string; name: string; stages: Array<{ id: string; name: string }> };
+export type PipelineInfo = { id: string; name: string; stages: Array<{ id: string; name: string }> };
 
-async function listPipelines(): Promise<PipelineInfo[]> {
+export async function listPipelines(): Promise<PipelineInfo[]> {
   const raw = (await ghlRequest("/opportunities/pipelines", {
     query: { locationId: requireGhlLocationId() },
   })) as { pipelines?: Array<Record<string, unknown>> } | null;
@@ -57,7 +57,7 @@ async function listPipelines(): Promise<PipelineInfo[]> {
   }));
 }
 
-async function findOpportunityForContact(
+export async function findOpportunityForContact(
   contactId: string,
 ): Promise<{ id: string; pipelineId: string; pipelineStageId: string } | null> {
   const pipelines = await listPipelines();

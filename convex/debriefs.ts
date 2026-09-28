@@ -45,6 +45,9 @@ const COMMERCIAL = ["admin", "commercial", "commercial_lead"] as const;
 async function scheduleGhlNote(ctx: MutationCtx, debriefId: Id<"debriefs">): Promise<void> {
   if (!isGhlConfigured()) return;
   await ctx.scheduler.runAfter(0, internal.ghlContactNote.pushDebriefNote, { debriefId });
+  // « Suivi prévu / en réflexion » : l'opportunité quitte « RDV Planifié » pour
+  // « Retour aux Setters » (no-op pour les autres résultats, cf. ghlDebriefStage).
+  await ctx.scheduler.runAfter(0, internal.ghlDebriefStage.moveAfterDebrief, { debriefId });
 }
 
 // Champs métier partagés createForLead / create (hors clés de rattachement).
