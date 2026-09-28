@@ -520,11 +520,11 @@ export const debugRetourSetters = internalQuery({
 // RDV avec un commercial. Lecture seule — sert à décider s'ils relèvent de la
 // « Relance court terme » (retour aux setters). `npx convex run devTools:listRappelAvecRdv`
 export const listRappelAvecRdv = internalQuery({
-  args: {},
-  handler: async (ctx) => {
+  args: { statuses: v.optional(v.array(leadStatusValidator)) },
+  handler: async (ctx, args) => {
     const iso = (ms?: number) => (ms === undefined ? null : new Date(ms).toISOString().slice(0, 16));
     const out = [];
-    for (const status of ["a_rappeler", "relance"] as const) {
+    for (const status of args.statuses ?? (["a_rappeler", "relance"] as const)) {
       const leads = await ctx.db.query("leads").withIndex("by_status_createdAt", (q) => q.eq("status", status)).collect();
       for (const l of leads) {
         if (l.deletedAt !== undefined) continue;

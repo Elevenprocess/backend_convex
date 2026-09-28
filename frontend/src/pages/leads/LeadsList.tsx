@@ -15,7 +15,7 @@ import { normalizeSearchText, phoneMatches, phoneSearchVariants } from '../../li
 import { DossierCard } from '../../components/suivi/DossierCard'
 import { ManualLeadModal } from '../../components/leads/ManualLeadModal'
 import { buildDossiers, readWorkflowState } from '../../lib/suivi'
-import { isRetourSettersActive } from '../../lib/leadRetour'
+import { hasHadRdv, isRelanceCourtTerme, isRetourSettersActive } from '../../lib/leadRetour'
 import { DEFAULT_LEAD_FILTERS, applyLeadFilters, leadFiltersActive, matchesLeadDateRange, sortCallbackLeadsByNextCallback, type LeadArrivedAtFilter, type LeadDateField, type LeadHasFilter, type LeadLastCallFilter, type LeadListFilters } from '../../lib/leadFilters'
 import {
   STATUS_BADGE,
@@ -841,7 +841,18 @@ function LeadsAdmin() {
 // ===== Helpers =====
 
 function RetourSettersBadge({ lead }: { lead: LeadResponse }) {
-  if (!isRetourSettersActive(lead) || !lead.retourSetters) return null
+  if (!isRetourSettersActive(lead) || !lead.retourSetters) {
+    if (lead.status !== 'pas_de_reponse' || !hasHadRdv(lead) || !lead.latestRdvAt) return null
+    const rdv = new Date(lead.latestRdvAt)
+    return (
+      <span
+        className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.08em] text-rouille"
+        title={`Déjà vu en RDV par un commercial le ${rdv.toLocaleDateString('fr-FR')} — ne décroche plus depuis. Voir le débrief avant de rappeler.`}
+      >
+        <Icon name="arrow-left" size={10} /> déjà vu en RDV {rdv.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}
+      </span>
+    )
+  }
   const d = new Date(lead.retourSetters.at)
   const label = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
   const from = lead.retourSetters.fromStage ? ` — était « ${lead.retourSetters.fromStage} »` : ''
@@ -886,25 +897,25 @@ function isQualifiedLeadStatus(lead: LeadResponse): boolean {
 
 const RELANCE_LONG_TERM_THRESHOLD = 11
 
-// « Relance court terme » = leads renvoyés aux setters par les commerciaux
-// (étape GHL « Retour aux Setters » : RDV planifié resté sans suite / non
-// honoré). Ils ont déjà eu un contact avec l'équipe et doivent être rappelés
-// en priorité — onglet dédié, distinct de « Sans réponse » (ne décroche pas).
-// Un lead que le setter a ensuite classé non qualifié/perdu sort de l'onglet.
+// « Relance court terme » = leads déjà vus par l'équipe commerciale : renvoyés
+// aux setters (étape GHL « Retour aux Setters ») ou passés « sans réponse »
+// après un RDV. Ils doivent être rappelés en priorité — onglet dédié, distinct
+// de « Sans réponse » (ne décroche pas). Un lead que le setter a ensuite classé
+// non qualifié/perdu sort de l'onglet (cf. lib/leadRetour.ts).
 function isRetourCommerciauxLead(lead: LeadResponse): boolean {
-  return isRetourSettersActive(lead) && lead.status !== 'perdu' && lead.status !== 'pas_qualifie'
+  return isRelanceCourtTerme(lead)
 }
 
-// Un lead renvoyé par les commerciaux ne vieillit jamais en relance LONG terme
-// quel que soit son nombre de jours d'appel : il vient d'être remis aux setters.
+// Un lead déjà vu par les commerciaux ne vieillit jamais en relance LONG terme
+// quel que soit son nombre de jours d'appel : il reste à rappeler en priorité.
 function isLongTermRelanceLead(lead: LeadResponse): boolean {
-  return lead.status === 'pas_de_reponse' && !isRetourSettersActive(lead)
+  return lead.status === 'pas_de_reponse' && !isRelanceCourtTerme(lead)
     && (lead.joursRelance ?? 0) >= RELANCE_LONG_TERM_THRESHOLD
 }
 
-// « Sans réponse » = ne décroche pas au téléphone (hors retours commerciaux).
+// « Sans réponse » = ne décroche pas au téléphone (hors leads déjà vus en RDV).
 function isShortTermSansReponseLead(lead: LeadResponse): boolean {
-  return lead.status === 'pas_de_reponse' && !isRetourSettersActive(lead)
+  return lead.status === 'pas_de_reponse' && !isRelanceCourtTerme(lead)
     && (lead.joursRelance ?? 0) < RELANCE_LONG_TERM_THRESHOLD
 }
 

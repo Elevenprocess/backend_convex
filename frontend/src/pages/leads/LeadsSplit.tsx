@@ -5,7 +5,7 @@ import { SplitPanel } from '../../components/SplitPanel'
 import { LeadFiltersBar } from '../../components/LeadFiltersBar'
 import { LoadingBlock } from '../../components/Spinner'
 import { useLeads, useUsers } from '../../lib/hooks'
-import { isRetourSettersActive } from '../../lib/leadRetour'
+import { isRelanceCourtTerme } from '../../lib/leadRetour'
 import { DEFAULT_LEAD_FILTERS, applyLeadFilters, sortCallbackLeadsByNextCallback, type LeadListFilters } from '../../lib/leadFilters'
 import {
   STATUS_BADGE,
@@ -150,22 +150,22 @@ export function LeadsSplit() {
 function isLongTermRelanceLead(lead: LeadResponse): boolean {
   const canAgeToLongTerm = lead.status === 'pas_de_reponse' || lead.status === 'a_rappeler' || lead.status === 'relance'
   if (!canAgeToLongTerm) return false
-  // Renvoyé par les commerciaux : reste en relance court terme (vient d'être remis aux setters).
-  if (isRetourSettersActive(lead)) return false
+  // Déjà vu par les commerciaux : reste en relance court terme (à rappeler en priorité).
+  if (isRelanceCourtTerme(lead)) return false
   const noAnswerAttempts = 'consecutiveNoAnswerCount' in lead ? Number(lead.consecutiveNoAnswerCount ?? 0) : 0
   const relanceAge = Math.max(lead.joursRelance ?? 0, noAnswerAttempts)
   return relanceAge >= LONG_TERM_RELANCE_THRESHOLD_DAYS
 }
 
 function statusLabelForLead(lead: LeadResponse): string {
-  if (isRetourSettersActive(lead) && lead.status === 'pas_de_reponse') return 'Relance court terme'
+  if (isRelanceCourtTerme(lead) && lead.status === 'pas_de_reponse') return 'Relance court terme'
   if (isLongTermRelanceLead(lead)) return 'Relance à long terme'
   if (lead.status === 'perdu' || lead.status === 'pas_qualifie') return 'Non qualifié'
   return STATUS_LABEL[lead.status]
 }
 
 function statusBadgeForLead(lead: LeadResponse): string {
-  if (isRetourSettersActive(lead) && lead.status === 'pas_de_reponse') return 'bg-rouille-tint text-rouille'
+  if (isRelanceCourtTerme(lead) && lead.status === 'pas_de_reponse') return 'bg-rouille-tint text-rouille'
   if (isLongTermRelanceLead(lead)) return 'bg-cuivre-tint text-cuivre'
   if (lead.status === 'perdu' || lead.status === 'pas_qualifie') return 'bg-rouille-tint text-rouille'
   return STATUS_BADGE[lead.status]
