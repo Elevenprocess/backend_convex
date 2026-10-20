@@ -11,6 +11,7 @@ import { mapGhlStageToStatus } from "./model/ghl/stageMapper";
 import { checkWebhookSecret, clientIp, importsDisabled } from "./model/ghl/webhookAuth";
 import { signDebriefToken, verifyDebriefToken } from "./model/debriefLinkToken";
 import { normalizePublicDebriefBody } from "./model/debriefLinkBody";
+import { normalizeSolteoWebhook } from "./model/solteo/webhook";
 import { createApiHandler } from "./apiV1/router";
 import { ROUTES } from "./apiV1/routes";
 
@@ -437,5 +438,35 @@ const apiV1 = httpAction(createApiHandler(ROUTES));
 for (const method of ["GET", "POST", "PATCH", "DELETE"] as const) {
   http.route({ pathPrefix: "/api/v1/", method, handler: apiV1 });
 }
+
+
+/**
+ * ELE-179 — Webhook Soltéo (1 envoi, 10 s, sans retry ni signature). Secret
+ * dans l'URL (?token=SOLTEO_WEBHOOK_SECRET), fail-closed. On enregistre,
+ * dédoublonne et répond 200 tout de suite ; le traitement (relecture API,
+ * plan GHL journalisé ou appliqué selon SOLTEO_GHL_WRITE_ENABLED) est planifié.
+ */
+http.route({
+  path: "/webhooks/solteo",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    const expected = process.env.SOLTEO_WEBHOOK_SECRET;
+    const received = new URL(req.url).searchParams.get("token");
+    if (!expected || !received || received !== expected) return json({ message: "forbidden" }, 403);
+    let raw = "";
+    let body: unknown = null;
+    try { raw = await req.text(); body = JSON.parse(raw); } catch { return json({ ok: false, message: "Body JSON invalide" }); }
+    const n = normalizeSolteoWebhook(body);
+    const r = await ctx.runMutation(internal.solteo.recordEvent, {
+      dedupeKey: n.dedupeKey,
+      eventType: n.eventType,
+      ...(n.projectId !== undefined ? { projectId: n.projectId } : {}),
+      ...(n.quoteId !== undefined ? { quoteId: n.quoteId } : {}),
+      payload: raw.slice(0, 50_000),
+      now: Date.now(),
+    });
+    return json({ ok: true, eventId: r.eventId, duplicate: r.duplicate });
+  }),
+});
 
 export default http;

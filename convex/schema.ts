@@ -265,6 +265,59 @@ export default defineSchema({
     processedAt: v.optional(v.number()),
   }).index("by_status", ["status"]),
 
+  // ELE-177/179/180 : écarts de synchro signalés (jamais écrasés).
+  syncDiscrepancies: defineTable({
+    key: v.string(),
+    source: v.union(v.literal("ghl_calendar"), v.literal("solteo")),
+    kind: v.string(),
+    entityRef: v.string(),
+    details: v.string(),
+    firstSeenAt: v.number(),
+    lastSeenAt: v.number(),
+    count: v.number(),
+    resolvedAt: v.optional(v.number()),
+  }).index("by_key", ["key"]).index("by_kind", ["kind"]),
+
+  // ELE-179 : file des webhooks Soltéo (1 envoi, sans retry ni signature →
+  // simple signal ; on relit toujours l'état via l'API).
+  solteoEvents: defineTable({
+    dedupeKey: v.string(),
+    eventType: v.string(),
+    projectId: v.optional(v.string()),
+    quoteId: v.optional(v.string()),
+    payload: v.string(),
+    status: v.union(
+      v.literal("queued"), v.literal("processed"), v.literal("ignored"), v.literal("failed"),
+    ),
+    error: v.optional(v.string()),
+    receivedAt: v.number(),
+    processedAt: v.optional(v.number()),
+  }).index("by_dedupeKey", ["dedupeKey"]).index("by_status", ["status"]),
+
+  // ELE-179 : suivi idempotent des devis signés Soltéo → GHL (plan journalisé
+  // tant que SOLTEO_GHL_WRITE_ENABLED !== "true").
+  solteoSignedQuotes: defineTable({
+    quoteId: v.string(),
+    projectId: v.string(),
+    totalPriceTtc: v.optional(v.number()),
+    signedAt: v.optional(v.string()),
+    ghlOpportunityId: v.optional(v.string()),
+    ghlContactId: v.optional(v.string()),
+    status: v.union(
+      v.literal("logged"),        // plan calculé, écriture GHL désactivée
+      v.literal("amount_set"),    // montant posé, étape pas encore changée
+      v.literal("stage_set"),     // terminé (montant PUIS étape 11)
+      v.literal("already_ok"),    // GHL déjà conforme
+      v.literal("skipped"),       // garde-fou (montant ≤ 0, opp introuvable…)
+      v.literal("error"),
+    ),
+    plan: v.string(),
+    reason: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_quoteId", ["quoteId"]).index("by_status", ["status"]),
+
+  syncCursors: defineTable({ name: v.string(), value: v.number() }).index("by_name", ["name"]),
+
   // Fallback de classification du canal d'acquisition : rawSource (normalisé
   // lowercase/trim, unique par convention d'écriture) → canal.
   acquisitionSourceMap: defineTable({

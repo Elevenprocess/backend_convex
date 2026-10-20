@@ -23,8 +23,9 @@ import {
 } from "./model/ghl/sectorConfig";
 import {
   SYNCED_NOTES_PREFIX, boundRdvEventsRange, buildSyncedRdvNotes, leadPatchFromGhlEvent,
-  mapGhlStatusToRdvStatus, scopeGhlEventsToCommercial, splitDateRange,
+  decideRdvStatusFromGhl, mapGhlStatusToRdvStatus, scopeGhlEventsToCommercial, splitDateRange,
 } from "./model/ghl/calendarSync";
+import { recordDiscrepancy } from "./model/syncDiscrepancies";
 import { shouldRearmDebriefOnReschedule } from "./model/rdvReschedule";
 import type { GhlCalendarEvent, GhlContactInfo } from "./model/ghl/calendarTypes";
 
@@ -196,7 +197,24 @@ export const persistGhlEvents = internalMutation({
         const patch: Record<string, unknown> = {};
         if (existing.commercialId !== event.commercialId) patch.commercialId = event.commercialId;
         if (existing.scheduledAt !== scheduledAt) patch.scheduledAt = scheduledAt;
-        if (existing.status !== status) patch.status = status;
+        // ELE-177 : jamais de rétrogradation ; écart journalisé, jamais écrasé.
+        const decision = decideRdvStatusFromGhl({
+          existingStatus: existing.status,
+          existingResult: existing.result,
+          existingDebriefFilledAt: existing.debriefFilledAt,
+          ghlStatus: event.status,
+        });
+        if (decision.kind === "set") patch.status = decision.status;
+        else if (decision.kind === "conflict") {
+          await recordDiscrepancy(ctx, {
+            key: `ghl_calendar:rdv_status:${event.id}:${decision.incoming}`,
+            source: "ghl_calendar",
+            kind: "rdv_status_conflict",
+            entityRef: event.id,
+            details: decision.reason,
+            now: args.now,
+          });
+        }
         if (existing.debriefFilledAt === undefined) {
           const notes = buildSyncedRdvNotes(event as GhlCalendarEvent);
           if (existing.notes !== notes) patch.notes = notes;
