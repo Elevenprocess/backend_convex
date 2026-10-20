@@ -44,8 +44,13 @@ crons.interval("simulator-stats-sync", { minutes: 30 }, internal.simulatorStats.
 crons.interval("hermes-debrief-catchup", { minutes: 30 }, internal.hermesDebrief.relayOverdue, {});
 
 // ELE-179 — Rattrapage Soltéo (le webhook n'a ni retry ni signature) :
-// toutes les 20 min. No-op sans SOLTEO_API_KEY ; écritures GHL seulement si
+// toutes les 10 min (source principale : pas d'URL webhook réglable côté Soltéo). No-op sans SOLTEO_API_KEY ; écritures GHL seulement si
 // SOLTEO_GHL_WRITE_ENABLED === "true" (sinon plan journalisé).
-crons.interval("solteo-catch-up", { minutes: 20 }, internal.solteo.catchUpScheduled, {});
+crons.interval("solteo-catch-up", { minutes: 10 }, internal.solteo.catchUpScheduled, {});
+
+// ELE-180 — Contrôle GHL étape 11 sans devis Soltéo puis résumé quotidien
+// des écarts à Erwan (notification Velora) — 08:30 / 09:00 à La Réunion.
+crons.daily("ghl-signed-without-solteo", { hourUTC: 4, minuteUTC: 30 }, internal.solteo.checkGhlSignedWithoutSolteo, {});
+crons.daily("sync-discrepancy-digest", { hourUTC: 5, minuteUTC: 0 }, internal.syncAlerts.dailyDigest, {});
 
 export default crons;

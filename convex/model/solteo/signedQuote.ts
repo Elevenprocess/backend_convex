@@ -43,7 +43,7 @@ export function findSignedStage(pipelines: GhlPipelines): { pipelineId: string; 
 export type GhlOpp = { id: string; pipelineId?: string; pipelineStageId?: string; monetaryValue?: number; status?: string };
 
 export type GhlStep =
-  | { op: "set_amount"; opportunityId: string; monetaryValue: number }
+  | { op: "set_amount"; opportunityId: string; monetaryValue: number; customFields?: Array<{ id: string; field_value: string }> }
   | { op: "move_stage"; opportunityId: string; pipelineId: string; pipelineStageId: string };
 
 export type GhlPlan =
@@ -54,6 +54,8 @@ export function buildGhlPlan(i: {
   totalPriceTtc: number | null | undefined;
   opp: GhlOpp | null;
   target: { pipelineId: string; stageId: string } | null;
+  /** ELE-176 : champ opportunité « Date de signature » écrit AVANT le changement d'étape. */
+  signedAtField?: { id: string; date: string };
 }): GhlPlan {
   const notes: string[] = [];
   const ttc = i.totalPriceTtc;
@@ -76,6 +78,12 @@ export function buildGhlPlan(i: {
       op: "move_stage", opportunityId: i.opp.id,
       pipelineId: i.target.pipelineId, pipelineStageId: i.target.stageId,
     });
+  }
+  if (!inStage && i.signedAtField) {
+    const cf = [{ id: i.signedAtField.id, field_value: i.signedAtField.date }];
+    const first = steps[0];
+    if (first && first.op === "set_amount") first.customFields = cf;
+    else steps.unshift({ op: "set_amount", opportunityId: i.opp.id, monetaryValue: amount, customFields: cf });
   }
   return { ok: true, steps, notes };
 }

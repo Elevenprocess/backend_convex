@@ -24,9 +24,15 @@ import {
   type GhlOpp, type GhlPipelines, type SolteoProjectDetails,
 } from "./model/solteo/signedQuote";
 import { recordDiscrepancy } from "./model/syncDiscrepancies";
+import { decideVeloraSale, parseSolteoDate, pickSaleRdv } from "./model/solteo/veloraSale";
+import { refreshLeadAgg } from "./model/leadAgg";
 
 export function solteoGhlWritesEnabled(): boolean {
   return process.env.SOLTEO_GHL_WRITE_ENABLED === "true";
+}
+
+export function solteoVeloraWritesEnabled(): boolean {
+  return process.env.SOLTEO_VELORA_WRITE_ENABLED === "true";
 }
 
 const CURSOR = "solteo_projects_updatedAt";
@@ -131,7 +137,9 @@ export const upsertSignedQuote = internalMutation({
       .query("solteoSignedQuotes")
       .withIndex("by_quoteId", (q) => q.eq("quoteId", args.quoteId))
       .first();
-    if (existing) await ctx.db.patch(existing._id, { ...row, updatedAt: now });
+    // reason explicite : un motif périmé (ex. opportunity_not_found) est effacé
+    // dès que le devis est relié (patch undefined = suppression du champ).
+    if (existing) await ctx.db.patch(existing._id, { ...row, reason: row.reason, updatedAt: now });
     else await ctx.db.insert("solteoSignedQuotes", { ...row, updatedAt: now });
     if (discrepancy) {
       await recordDiscrepancy(ctx, {
@@ -218,7 +226,9 @@ export async function handleProject(ctx: ActionCtx, projectId: string, quoteId?:
   if (!offer) return "no_signed_offer";
 
   const prev = await ctx.runQuery(internal.solteo.getSignedQuote, { quoteId: offer.id });
-  if (prev && TERMINAL.has(prev.status)) return prev.status;
+  if (prev && TERMINAL.has(prev.status) && (prev.veloraAppliedAt !== undefined || !solteoVeloraWritesEnabled())) {
+    return prev.status;
+  }
 
   const base = {
     quoteId: offer.id,
@@ -239,11 +249,24 @@ export async function handleProject(ctx: ActionCtx, projectId: string, quoteId?:
   })) as { pipelines?: GhlPipelines } | null;
   const target = findSignedStage(pipelines?.pipelines ?? []);
   const { opp, contactId, note } = await resolveOpportunity(details, target?.pipelineId);
-  const plan = buildGhlPlan({ totalPriceTtc: offer.totalPrice, opp, target });
+  const fieldId = process.env.SOLTEO_GHL_SIGNED_AT_FIELD_ID;
+  const signedMs = parseSolteoDate(offer.signedAt);
+  const signedDate = signedMs !== undefined ? new Date(signedMs + 4 * 3600 * 1000).toISOString().slice(0, 10) : undefined;
+  const plan = buildGhlPlan({
+    totalPriceTtc: offer.totalPrice, opp, target,
+    ...(fieldId && signedDate ? { signedAtField: { id: fieldId, date: signedDate } } : {}),
+  });
   const ids = {
     ...(opp?.id ? { ghlOpportunityId: opp.id } : {}),
     ...(contactId ? { ghlContactId: contactId } : {}),
   };
+
+  if (contactId && typeof offer.totalPrice === "number" && offer.totalPrice > 0) {
+    await ctx.runMutation(internal.solteo.applySaleToVelora, {
+      quoteId: offer.id, projectId: details.id, ghlContactId: contactId, ttc: offer.totalPrice,
+      ...(offer.signedAt ? { signedAt: offer.signedAt } : {}),
+    });
+  }
 
   if (!plan.ok) {
     await ctx.runMutation(internal.solteo.upsertSignedQuote, {
@@ -271,7 +294,8 @@ export async function handleProject(ctx: ActionCtx, projectId: string, quoteId?:
     for (const step of plan.steps) {
       if (step.op === "set_amount") {
         await ghlRequest(`/opportunities/${encodeURIComponent(step.opportunityId)}`, {
-          method: "PUT", body: { monetaryValue: step.monetaryValue },
+          method: "PUT",
+          body: { monetaryValue: step.monetaryValue, ...(step.customFields ? { customFields: step.customFields } : {}) },
         });
         await ctx.runMutation(internal.solteo.upsertSignedQuote, { ...base, ...ids, status: "amount_set", plan: planJson });
       } else {
@@ -332,5 +356,91 @@ export const catchUpScheduled = internalAction({
     }
     await ctx.runMutation(internal.solteo.setCursor, { name: CURSOR, value: maxSeen });
     return { scanned, handled };
+  },
+});
+
+// ─── Devis signé → Velora (fill-only, écarts signalés) ─────────────────────
+
+export const applySaleToVelora = internalMutation({
+  args: {
+    quoteId: v.string(), projectId: v.string(), ghlContactId: v.string(),
+    ttc: v.number(), signedAt: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<string> => {
+    const now = Date.now();
+    const ref = `project=${args.projectId} quote=${args.quoteId} contact=${args.ghlContactId}`;
+    const flag = async (kind: string, details: string) =>
+      recordDiscrepancy(ctx, { key: `solteo:${kind}:${args.quoteId}`, source: "solteo", kind, entityRef: ref, details, now });
+    const mark = async (outcome: string, applied: boolean) => {
+      const row = await ctx.db.query("solteoSignedQuotes").withIndex("by_quoteId", (q) => q.eq("quoteId", args.quoteId)).first();
+      const fields = { veloraOutcome: outcome.slice(0, 500), ...(applied ? { veloraAppliedAt: now } : {}) };
+      if (row) await ctx.db.patch(row._id, fields);
+      else {
+        await ctx.db.insert("solteoSignedQuotes", {
+          quoteId: args.quoteId, projectId: args.projectId, ghlContactId: args.ghlContactId,
+          totalPriceTtc: args.ttc, status: "logged", plan: "[]", updatedAt: now, ...fields,
+        });
+      }
+      return outcome;
+    };
+    let lead = (await ctx.db.query("leads").withIndex("by_externalId", (q) => q.eq("externalId", args.ghlContactId)).collect())
+      .find((l) => l.deletedAt === undefined);
+    if (!lead) {
+      lead = (await ctx.db.query("leads").withIndex("by_ghlContactId", (q) => q.eq("ghlContactId", args.ghlContactId)).collect())
+        .find((l) => l.deletedAt === undefined);
+    }
+    if (!lead) { await flag("vente_solteo_sans_lead", "aucun lead Velora pour ce contact GHL"); return mark("no_lead", false); }
+    const rdvs = (await ctx.db.query("rdv").withIndex("by_lead", (q) => q.eq("leadId", lead!._id)).collect())
+      .filter((r) => r.deletedAt === undefined);
+    const signedAtMs = parseSolteoDate(args.signedAt);
+    const rdv = pickSaleRdv(rdvs, signedAtMs);
+    if (!rdv) { await flag("vente_solteo_sans_rdv", `lead ${lead._id} sans RDV`); return mark("no_rdv", false); }
+    const d = decideVeloraSale(rdv, { ttc: args.ttc, ...(signedAtMs !== undefined ? { signedAtMs } : {}) });
+    for (const x of d.discrepancies) await flag(x.kind, `rdv ${rdv._id} : ${x.details}`);
+    if (!solteoVeloraWritesEnabled()) return mark(`logged:${JSON.stringify(d.patch)}`, false);
+    if (Object.keys(d.patch).length > 0) await ctx.db.patch(rdv._id, d.patch);
+    if (lead.status !== "signe" && lead.status !== "perdu") await ctx.db.patch(lead._id, { status: "signe" });
+    else if (lead.status === "perdu") await flag("lead_perdu_vs_vente", `lead ${lead._id} perdu mais devis signé`);
+    await refreshLeadAgg(ctx, lead._id);
+    return mark(Object.keys(d.patch).length > 0 ? `applied:${Object.keys(d.patch).join(",")}` : "nothing_to_do", true);
+  },
+});
+
+// ─── ELE-180 : GHL étape 11 sans devis Soltéo (contrôle quotidien) ─────────
+
+export const checkGhlSignedWithoutSolteo = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ checked: number; flagged: number } | null> => {
+    if (!isGhlConfigured() || !isSolteoConfigured()) return null;
+    const locationId = requireGhlLocationId();
+    const pipes = (await ghlRequest("/opportunities/pipelines", { query: { locationId } })) as { pipelines?: GhlPipelines } | null;
+    const target = findSignedStage(pipes?.pipelines ?? []);
+    if (!target) return null;
+    const since = Date.now() - 7 * 24 * 3600 * 1000;
+    const res = (await ghlRequest("/opportunities/search", {
+      query: { location_id: locationId, pipeline_id: target.pipelineId, pipeline_stage_id: target.stageId, limit: 100 },
+    })) as { opportunities?: Array<GhlOpp & { lastStageChangeAt?: string; contact?: { id?: string; name?: string } }> } | null;
+    let checked = 0; let flagged = 0;
+    for (const o of res?.opportunities ?? []) {
+      if (Date.parse(o.lastStageChangeAt ?? "") < since) continue;
+      checked++;
+      const found = (await solteoGet("/external/v1/projects", { externalId: o.id, perPage: 5 })) as { items?: unknown[] } | null;
+      if ((found?.items ?? []).length > 0) continue;
+      flagged++;
+      await ctx.runMutation(internal.solteo.flagDiscrepancy, {
+        key: `solteo:ghl_signe_sans_devis_solteo:${o.id}`, kind: "ghl_signe_sans_devis_solteo",
+        entityRef: `opp=${o.id} contact=${o.contact?.id ?? "?"} ${o.contact?.name ?? ""}`.trim(),
+        details: `étape 11 depuis ${o.lastStageChangeAt}, aucun projet Soltéo avec externalId=${o.id} (montant GHL ${o.monetaryValue ?? "?"})`,
+      });
+    }
+    return { checked, flagged };
+  },
+});
+
+export const flagDiscrepancy = internalMutation({
+  args: { key: v.string(), kind: v.string(), entityRef: v.string(), details: v.string() },
+  handler: async (ctx, args) => {
+    await recordDiscrepancy(ctx, { ...args, source: "solteo", now: Date.now() });
+    return null;
   },
 });

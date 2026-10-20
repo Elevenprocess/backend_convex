@@ -13,6 +13,8 @@ import type * as model_solteo_webhook from "../model/solteo/webhook.js";
 import type * as model_syncDiscrepancies from "../model/syncDiscrepancies.js";
 import type * as solteo from "../solteo.js";
 import type * as solteoClient from "../solteoClient.js";
+import type * as model_solteo_veloraSale from "../model/solteo/veloraSale.js";
+import type * as syncAlerts from "../syncAlerts.js";
 import type * as acompteReminders from "../acompteReminders.js";
 import type * as activityLog from "../activityLog.js";
 import type * as adDeposits from "../adDeposits.js";
@@ -129,6 +131,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "model/solteo/veloraSale": typeof model_solteo_veloraSale;
+  "syncAlerts": typeof syncAlerts;
   "model/solteo/signedQuote": typeof model_solteo_signedQuote;
   "model/solteo/webhook": typeof model_solteo_webhook;
   "model/syncDiscrepancies": typeof model_syncDiscrepancies;

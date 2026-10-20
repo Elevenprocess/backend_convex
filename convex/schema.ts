@@ -276,7 +276,8 @@ export default defineSchema({
     lastSeenAt: v.number(),
     count: v.number(),
     resolvedAt: v.optional(v.number()),
-  }).index("by_key", ["key"]).index("by_kind", ["kind"]),
+    notifiedAt: v.optional(v.number()),
+  }).index("by_key", ["key"]).index("by_kind", ["kind"]).index("by_lastSeen", ["lastSeenAt"]),
 
   // ELE-179 : file des webhooks Soltéo (1 envoi, sans retry ni signature →
   // simple signal ; on relit toujours l'état via l'API).
@@ -313,6 +314,8 @@ export default defineSchema({
     ),
     plan: v.string(),
     reason: v.optional(v.string()),
+    veloraAppliedAt: v.optional(v.number()),
+    veloraOutcome: v.optional(v.string()),
     updatedAt: v.number(),
   }).index("by_quoteId", ["quoteId"]).index("by_status", ["status"]),
 
