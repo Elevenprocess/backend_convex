@@ -66,7 +66,7 @@ export function AcceptInvitation() {
         </button>
 
         <div className="text-center text-sm text-muted">
-          <Link to="/login" className="hover:text-text font-semibold">Retour connexion</Link>
+          <Link viewTransition to="/login" className="hover:text-text font-semibold">Retour connexion</Link>
         </div>
       </form>
     </main>

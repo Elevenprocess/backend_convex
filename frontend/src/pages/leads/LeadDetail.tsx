@@ -205,7 +205,7 @@ export function LeadDetail() {
         <main className="p-8 flex items-center justify-center flex-grow">
           <div className="glass-card p-12 text-center">
             <p className="text-muted mb-4">{error ?? "Ce lead n'existe pas (ou plus)."}</p>
-            <Link to={listPath} className="btn-primary inline-block px-4 py-2 rounded-xl text-sm">Retour à la liste</Link>
+            <Link viewTransition to={listPath} className="btn-primary inline-block px-4 py-2 rounded-xl text-sm">Retour à la liste</Link>
           </div>
         </main>
       </AppShell>

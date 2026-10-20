@@ -120,7 +120,7 @@ export function ProjectDetailPage() {
       <Topbar eyebrow="PROJET" title={project?.name || 'Projet'} />
       <main className="suivi-page flex-grow overflow-y-auto px-4 sm:px-8 pt-4 pb-8">
         <nav className="suivi-breadcrumb">
-          <Link to={ficheHref}>← {dossier ? (fullName(dossier.lead) || 'Fiche client') : 'Fiche client'}</Link>
+          <Link viewTransition to={ficheHref}>← {dossier ? (fullName(dossier.lead) || 'Fiche client') : 'Fiche client'}</Link>
         </nav>
 
         {(loading && !project) || (leadLoading && !dossier) ? (
@@ -128,7 +128,7 @@ export function ProjectDetailPage() {
         ) : error || !project || !dossier ? (
           <div className="suivi-empty">
             <p>{error ?? 'Projet introuvable.'}</p>
-            <Link to={ficheHref}>Retour à la fiche</Link>
+            <Link viewTransition to={ficheHref}>Retour à la fiche</Link>
           </div>
         ) : (
           <>

@@ -6,6 +6,8 @@ import { PersistentCallSidebar } from './components/call/PersistentCallSidebar'
 import { SidebarRevealPill } from './components/call/SidebarRevealPill'
 import { PersistentLeadSidebar } from './components/leads/PersistentLeadSidebar'
 import { ClipboardToast } from './components/ClipboardToast'
+import { NavProgress } from './components/NavProgress'
+import { prefetchMainPagesWhenIdle } from './lib/routeChunks'
 import { useAuth, impersonationIsReadOnly } from './lib/auth'
 import { convexAuthEnabled } from './lib/convex'
 import { useLeads, useNotificationRdvFilters, useRdvList, useSharedLeads } from './lib/hooks'
@@ -17,6 +19,7 @@ export function RootLayout() {
   useRealtimeSocket()
   useAuthSessionKeeper()
   useGlobalBrowserNotifications()
+  useIdlePagePrefetch()
   const hydrateTheme = useTheme((s) => s.hydrateTheme)
 
   useEffect(() => {
@@ -25,6 +28,7 @@ export function RootLayout() {
 
   return (
     <>
+      <NavProgress />
       <ScrollReset />
       <ViewAsBanner />
       <Outlet />
@@ -176,4 +180,19 @@ function useMinuteTick(): number {
     return () => window.clearInterval(interval)
   }, [])
   return tick
+}
+
+// Une fois connecté, précharge les pages principales du rôle pendant les temps
+// morts : la première visite de chaque page n'attend plus son chunk.
+function useIdlePagePrefetch() {
+  const status = useAuth((s) => s.status)
+  const role = useAuth((s) => s.user?.role)
+  useEffect(() => {
+    if (status !== 'authed') return
+    return prefetchMainPagesWhenIdle(
+      role === 'technicien'
+        ? ['TechnicienPlanning', 'TechnicienDossiers', 'FicheInterventionVT', 'MesInterventions']
+        : ['Overview', 'LeadsList', 'LeadDetail', 'RdvCalendar', 'RdvDetail', 'Suivi', 'SuiviDetail', 'Analytics', 'Finances', 'Notifications', 'Settings'],
+    )
+  }, [status, role])
 }

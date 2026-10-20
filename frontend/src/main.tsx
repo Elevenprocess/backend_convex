@@ -15,40 +15,41 @@ import { ConvexAuthProvider } from '@convex-dev/auth/react'
 import { convexClient } from './lib/convex'
 import { ConvexAuthBridge } from './components/auth/ConvexAuthBridge'
 import { hydrateFetchCache } from './lib/hooks'
+import { chunk, loadPage } from './lib/routeChunks'
 
 // Lazy: all actual page components (named exports → .then mapping)
-const Overview = lazy(() => import('./pages/Overview').then((m) => ({ default: m.Overview })))
-const LeadsList = lazy(() => import('./pages/leads/LeadsList').then((m) => ({ default: m.LeadsList })))
-const LeadDetail = lazy(() => import('./pages/leads/LeadDetail').then((m) => ({ default: m.LeadDetail })))
-const LeadsSplit = lazy(() => import('./pages/leads/LeadsSplit').then((m) => ({ default: m.LeadsSplit })))
-const ClientsList = lazy(() => import('./pages/clients/ClientsList').then((m) => ({ default: m.ClientsList })))
-const MesInterventions = lazy(() => import('./pages/technicien/MesInterventions').then((m) => ({ default: m.MesInterventions })))
-const ProjectDetail = lazy(() => import('./pages/projects/ProjectDetail').then((m) => ({ default: m.ProjectDetail })))
-const RdvCalendar = lazy(() => import('./pages/rdv/RdvCalendar').then((m) => ({ default: m.RdvCalendar })))
-const RdvDetail = lazy(() => import('./pages/rdv/RdvDetail').then((m) => ({ default: m.RdvDetail })))
-const RdvSplit = lazy(() => import('./pages/rdv/RdvSplit').then((m) => ({ default: m.RdvSplit })))
-const Analytics = lazy(() => import('./pages/Analytics').then((m) => ({ default: m.Analytics })))
-const Ads = lazy(() => import('./pages/Ads').then((m) => ({ default: m.Ads })))
-const Suivi = lazy(() => import('./pages/Suivi').then((m) => ({ default: m.Suivi })))
-const Finances = lazy(() => import('./pages/Finances').then((m) => ({ default: m.Finances })))
-const Interventions = lazy(() => import('./pages/Interventions').then((m) => ({ default: m.Interventions })))
-const SuiviDetail = lazy(() => import('./pages/SuiviDetail').then((m) => ({ default: m.SuiviDetail })))
-const FicheCompletePage = lazy(() => import('./pages/SuiviFiche').then((m) => ({ default: m.FicheCompletePage })))
-const ProjectDetailPage = lazy(() => import('./pages/ProjectDetail').then((m) => ({ default: m.ProjectDetailPage })))
-const ProfilSetter = lazy(() => import('./pages/profils/ProfilSetter').then((m) => ({ default: m.ProfilSetter })))
-const ProfilCommercial = lazy(() => import('./pages/profils/ProfilCommercial').then((m) => ({ default: m.ProfilCommercial })))
-const Settings = lazy(() => import('./pages/Settings').then((m) => ({ default: m.Settings })))
-const MyProfile = lazy(() => import('./pages/MyProfile').then((m) => ({ default: m.MyProfile })))
-const AcceptInvitation = lazy(() => import('./pages/AcceptInvitation').then((m) => ({ default: m.AcceptInvitation })))
-const ApiDocs = lazy(() => import('./pages/ApiDocs').then((m) => ({ default: m.ApiDocs })))
-const DebriefMagicPage = lazy(() => import('./pages/DebriefMagicPage').then((m) => ({ default: m.DebriefMagicPage })))
-const Notifications = lazy(() => import('./pages/Notifications').then((m) => ({ default: m.Notifications })))
-const Journal = lazy(() => import('./pages/Journal').then((m) => ({ default: m.Journal })))
-const CallFullScreen = lazy(() => import('./pages/call/CallFullScreen').then((m) => ({ default: m.CallFullScreen })))
-const CallSplit = lazy(() => import('./pages/call/CallSplit').then((m) => ({ default: m.CallSplit })))
-const TechnicienPlanning = lazy(() => import('./pages/technicien/TechnicienPlanning').then((m) => ({ default: m.TechnicienPlanning })))
-const TechnicienDossiers = lazy(() => import('./pages/technicien/TechnicienDossiers').then((m) => ({ default: m.TechnicienDossiers })))
-const FicheInterventionVT = lazy(() => import('./pages/technicien/FicheInterventionVT').then((m) => ({ default: m.FicheInterventionVT })))
+const Overview = lazy(() => loadPage('Overview'))
+const LeadsList = lazy(() => loadPage('LeadsList'))
+const LeadDetail = lazy(() => loadPage('LeadDetail'))
+const LeadsSplit = lazy(() => loadPage('LeadsSplit'))
+const ClientsList = lazy(() => loadPage('ClientsList'))
+const MesInterventions = lazy(() => loadPage('MesInterventions'))
+const ProjectDetail = lazy(() => loadPage('ProjectDetail'))
+const RdvCalendar = lazy(() => loadPage('RdvCalendar'))
+const RdvDetail = lazy(() => loadPage('RdvDetail'))
+const RdvSplit = lazy(() => loadPage('RdvSplit'))
+const Analytics = lazy(() => loadPage('Analytics'))
+const Ads = lazy(() => loadPage('Ads'))
+const Suivi = lazy(() => loadPage('Suivi'))
+const Finances = lazy(() => loadPage('Finances'))
+const Interventions = lazy(() => loadPage('Interventions'))
+const SuiviDetail = lazy(() => loadPage('SuiviDetail'))
+const FicheCompletePage = lazy(() => loadPage('FicheCompletePage'))
+const ProjectDetailPage = lazy(() => loadPage('ProjectDetailPage'))
+const ProfilSetter = lazy(() => loadPage('ProfilSetter'))
+const ProfilCommercial = lazy(() => loadPage('ProfilCommercial'))
+const Settings = lazy(() => loadPage('Settings'))
+const MyProfile = lazy(() => loadPage('MyProfile'))
+const AcceptInvitation = lazy(() => loadPage('AcceptInvitation'))
+const ApiDocs = lazy(() => loadPage('ApiDocs'))
+const DebriefMagicPage = lazy(() => loadPage('DebriefMagicPage'))
+const Notifications = lazy(() => loadPage('Notifications'))
+const Journal = lazy(() => loadPage('Journal'))
+const CallFullScreen = lazy(() => loadPage('CallFullScreen'))
+const CallSplit = lazy(() => loadPage('CallSplit'))
+const TechnicienPlanning = lazy(() => loadPage('TechnicienPlanning'))
+const TechnicienDossiers = lazy(() => loadPage('TechnicienDossiers'))
+const FicheInterventionVT = lazy(() => loadPage('FicheInterventionVT'))
 
 function RoleHome() {
   const role = useAuth((s) => s.user?.role)
@@ -92,45 +93,46 @@ const router = createHashRouter([
   {
     element: <RootLayout />,
     errorElement: <RouteError />,
+    hydrateFallbackElement: <RouteFallback />,
     children: [
       { path: '/', element: <Landing /> },
       { path: '/login', element: <Login /> },
-      { path: '/accept-invitation', element: <AcceptInvitation /> },
-      { path: '/debrief/:token', element: <DebriefMagicPage /> },
-      { path: '/api-docs', element: <ApiDocs /> },
+      { path: '/accept-invitation', lazy: chunk('AcceptInvitation'), element: <AcceptInvitation /> },
+      { path: '/debrief/:token', lazy: chunk('DebriefMagicPage'), element: <DebriefMagicPage /> },
+      { path: '/api-docs', lazy: chunk('ApiDocs'), element: <ApiDocs /> },
       {
         element: <RequireAuth />,
         children: [
-          { path: '/planning', element: <TechnicienPlanning /> },
-          { path: '/mes-dossiers', element: <TechnicienDossiers /> },
-          { path: '/overview', element: <NoTechnicien><Overview /></NoTechnicien> },
-          { path: '/leads', element: <NoTechnicien><LeadsList /></NoTechnicien> },
-          { path: '/leads/split', element: <LeadsSplit /> },
-          { path: '/leads/:id', element: <LeadDetail /> },
-          { path: '/client', element: <NoTechnicien><ClientsList /></NoTechnicien> },
-          { path: '/client/:id', element: <NoTechnicien><LeadDetail /></NoTechnicien> },
-          { path: '/projects/:id', element: <ProjectDetail /> },
-          { path: '/rdv', element: <RdvCalendarGuard><RdvCalendar /></RdvCalendarGuard> },
-          { path: '/rdv/split', element: <RdvSplit /> },
-          { path: '/rdv/:id', element: <RdvDetail /> },
-          { path: '/analytics', element: <NoTechnicien><Analytics /></NoTechnicien> },
-          { path: '/ads', element: <RequireAdsAccess><Ads /></RequireAdsAccess> },
-          { path: '/suivi', element: <NoTechnicien><Suivi /></NoTechnicien> },
-          { path: '/suivi/:id', element: <SuiviDetail /> },
-          { path: '/suivi/:id/fiche', element: <FicheCompletePage /> },
-          { path: '/suivi/:id/projet/:projectId', element: <ProjectDetailPage /> },
-          { path: '/finances', element: <NoTechnicien><Finances /></NoTechnicien> },
-          { path: '/interventions', element: <Interventions /> },
-          { path: '/mes-interventions', element: <MesInterventions /> },
-          { path: '/fiche-vt/:clientId', element: <FicheInterventionVT /> },
-          { path: '/team/setters/:id', element: <ProfilSetter /> },
-          { path: '/team/commerciaux/:id', element: <ProfilCommercial /> },
-          { path: '/settings', element: <Settings /> },
-          { path: '/profile', element: <MyProfile /> },
-          { path: '/notifications', element: <NoTechnicien><Notifications /></NoTechnicien> },
-          { path: '/journal', element: <NoTechnicien><Journal /></NoTechnicien> },
-          { path: '/call/:id', element: <CallFullScreen /> },
-          { path: '/call/split', element: <CallSplit /> },
+          { path: '/planning', lazy: chunk('TechnicienPlanning'), element: <TechnicienPlanning /> },
+          { path: '/mes-dossiers', lazy: chunk('TechnicienDossiers'), element: <TechnicienDossiers /> },
+          { path: '/overview', lazy: chunk('Overview'), element: <NoTechnicien><Overview /></NoTechnicien> },
+          { path: '/leads', lazy: chunk('LeadsList'), element: <NoTechnicien><LeadsList /></NoTechnicien> },
+          { path: '/leads/split', lazy: chunk('LeadsSplit'), element: <LeadsSplit /> },
+          { path: '/leads/:id', lazy: chunk('LeadDetail'), element: <LeadDetail /> },
+          { path: '/client', lazy: chunk('ClientsList'), element: <NoTechnicien><ClientsList /></NoTechnicien> },
+          { path: '/client/:id', lazy: chunk('LeadDetail'), element: <NoTechnicien><LeadDetail /></NoTechnicien> },
+          { path: '/projects/:id', lazy: chunk('ProjectDetail'), element: <ProjectDetail /> },
+          { path: '/rdv', lazy: chunk('RdvCalendar'), element: <RdvCalendarGuard><RdvCalendar /></RdvCalendarGuard> },
+          { path: '/rdv/split', lazy: chunk('RdvSplit'), element: <RdvSplit /> },
+          { path: '/rdv/:id', lazy: chunk('RdvDetail'), element: <RdvDetail /> },
+          { path: '/analytics', lazy: chunk('Analytics'), element: <NoTechnicien><Analytics /></NoTechnicien> },
+          { path: '/ads', lazy: chunk('Ads'), element: <RequireAdsAccess><Ads /></RequireAdsAccess> },
+          { path: '/suivi', lazy: chunk('Suivi'), element: <NoTechnicien><Suivi /></NoTechnicien> },
+          { path: '/suivi/:id', lazy: chunk('SuiviDetail'), element: <SuiviDetail /> },
+          { path: '/suivi/:id/fiche', lazy: chunk('FicheCompletePage'), element: <FicheCompletePage /> },
+          { path: '/suivi/:id/projet/:projectId', lazy: chunk('ProjectDetailPage'), element: <ProjectDetailPage /> },
+          { path: '/finances', lazy: chunk('Finances'), element: <NoTechnicien><Finances /></NoTechnicien> },
+          { path: '/interventions', lazy: chunk('Interventions'), element: <Interventions /> },
+          { path: '/mes-interventions', lazy: chunk('MesInterventions'), element: <MesInterventions /> },
+          { path: '/fiche-vt/:clientId', lazy: chunk('FicheInterventionVT'), element: <FicheInterventionVT /> },
+          { path: '/team/setters/:id', lazy: chunk('ProfilSetter'), element: <ProfilSetter /> },
+          { path: '/team/commerciaux/:id', lazy: chunk('ProfilCommercial'), element: <ProfilCommercial /> },
+          { path: '/settings', lazy: chunk('Settings'), element: <Settings /> },
+          { path: '/profile', lazy: chunk('MyProfile'), element: <MyProfile /> },
+          { path: '/notifications', lazy: chunk('Notifications'), element: <NoTechnicien><Notifications /></NoTechnicien> },
+          { path: '/journal', lazy: chunk('Journal'), element: <NoTechnicien><Journal /></NoTechnicien> },
+          { path: '/call/:id', lazy: chunk('CallFullScreen'), element: <CallFullScreen /> },
+          { path: '/call/split', lazy: chunk('CallSplit'), element: <CallSplit /> },
           { path: '*', element: <RoleHome /> },
         ],
       },

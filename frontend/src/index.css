@@ -6723,3 +6723,62 @@ button.fin-kpi:focus-visible { outline: 2px solid var(--color-or); outline-offse
 .overview-scope-btn.is-active { background: var(--color-or-dark); color: #fff; }
 [data-theme="dark"] .overview-scope-toggle { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); }
 .overview-lead-full { margin-top: 18px; min-width: 0; }
+
+/* ======================================================================
+   Fluidité (même grammaire que les plateformes Kalvi Delivery / Outreach)
+   - Changement de page : transition de vue native (React Router
+     `viewTransition`). La barre latérale ne bouge pas ; seul le contenu
+     fait un fondu (sortie 90 ms, entrée 160 ms, courbe ease-out forte).
+   - Navigateurs sans View Transitions : changement instantané, rien ne casse.
+   ====================================================================== */
+:root {
+  --v-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --v-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+.app-sidebar { view-transition-name: v-rail; }
+.app-main { view-transition-name: v-page; }
+::view-transition { pointer-events: none; }
+::view-transition-old(root) { display: none; }
+::view-transition-new(root) { animation: none; }
+::view-transition-group(v-rail) { z-index: 100; animation: none; }
+::view-transition-old(v-rail), ::view-transition-new(v-rail) { animation: none; }
+::view-transition-group(v-page) { animation: none; }
+::view-transition-old(v-page) { animation: 90ms ease-out both v-page-out; }
+::view-transition-new(v-page) { animation: 180ms var(--v-ease-out) both v-page-in; }
+@keyframes v-page-out { to { opacity: 0; } }
+@keyframes v-page-in { from { opacity: 0; transform: translateY(4px); } }
+
+/* Fil de progression (navigation qui attend un chunk). */
+.nav-progress {
+  position: fixed; inset: 0 0 auto 0; height: 2px; z-index: 9999; pointer-events: none;
+  transform-origin: 0 50%; transform: scaleX(0); opacity: 0;
+  background: currentColor; color: var(--color-accent, #111);
+}
+.nav-progress.is-active {
+  opacity: 1; transform: scaleX(0.85);
+  transition: transform 2.5s var(--v-ease-out), opacity 120ms ease;
+}
+
+/* Squelette à reflet, et fallback de route différé (120 ms). */
+.v-skel {
+  display: block; border-radius: 8px; color: transparent; user-select: none;
+  background: linear-gradient(90deg, #efefef 0%, #f8f8f8 50%, #efefef 100%);
+  background-size: 200% 100%; animation: v-reflet 1.2s linear infinite;
+}
+@keyframes v-reflet { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.route-fallback {
+  display: flex; flex-direction: column; gap: 14px; width: min(920px, 100%);
+  margin: 0 auto; padding: 48px 32px; animation: v-fondu 200ms ease-out 120ms backwards;
+}
+.route-fallback__title { height: 28px; width: 38%; }
+.route-fallback__line { height: 14px; width: 62%; }
+.route-fallback__block { height: 260px; width: 100%; border-radius: 14px; }
+@keyframes v-fondu { from { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(*), ::view-transition-new(*), ::view-transition-group(*) {
+    animation-duration: 0s !important; animation-delay: 0s !important;
+  }
+  .v-skel { animation: none; }
+  .nav-progress.is-active { transition: none; }
+}

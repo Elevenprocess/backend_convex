@@ -150,7 +150,7 @@ export function FicheCompletePage() {
       />
       <main className="suivi-page flex-grow overflow-y-auto px-4 sm:px-8 pt-4 pb-8">
         <nav className="suivi-breadcrumb">
-          <Link to="/suivi">← Tous les dossiers</Link>
+          <Link viewTransition to="/suivi">← Tous les dossiers</Link>
         </nav>
 
         {isLoading ? (
@@ -158,7 +158,7 @@ export function FicheCompletePage() {
         ) : !dossier ? (
           <div className="suivi-empty">
             <p>Dossier introuvable.</p>
-            <Link to="/suivi">Retour à la liste</Link>
+            <Link viewTransition to="/suivi">Retour à la liste</Link>
           </div>
         ) : (
           <div className="suivi-split">

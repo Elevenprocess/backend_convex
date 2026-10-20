@@ -29,7 +29,7 @@ export function AppShell({ children, blobsKey, flat = false }: AppShellProps) {
       <div className="relative z-20 w-full h-full flex">
         <Sidebar />
         <div
-          className={`flex-grow flex flex-col min-w-0 transition-[margin] duration-200 ease-out ${reserveLeadSidebar ? 'appshell-reserve-rail' : ''}`}
+          className={`app-main flex-grow flex flex-col min-w-0 transition-[margin] duration-200 ease-out ${reserveLeadSidebar ? 'appshell-reserve-rail' : ''}`}
         >
           {children}
         </div>
