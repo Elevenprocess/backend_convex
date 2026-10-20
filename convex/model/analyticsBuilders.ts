@@ -593,7 +593,10 @@ function buildSetterRows(leadsRows: LeadRow[], calls: CallRow[], userRows: UserR
         .filter((l): l is LeadRow => Boolean(l));
       const classified = ownLeads.filter(isClassifiedLead);
       const ownCalls = callsBySetter.get(u.id) ?? [];
-      const synthetic = Math.max(0, classified.length - ownCalls.length);
+      // Appel « synthétique » = lead classé que personne n'a appelé dans la
+      // période (traitement connu par lastContactAt seulement).
+      const calledLeadIds = new Set(ownCalls.map((c) => c.leadId));
+      const synthetic = classified.filter((l) => !calledLeadIds.has(l.id)).length;
       const counts = countResults(ownCalls);
       addSyntheticResults(counts, classified, synthetic);
       const callsTotal = ownCalls.length + synthetic;
@@ -639,6 +642,10 @@ export function groupCallsBySetter(calls: CallRow[]): Map<string, CallRow[]> {
   return map;
 }
 
+// Un lead appelé dans la période revient aux setters qui l'ont appelé, et à eux
+// seuls : le setter propriétaire ne se voit plus crédité des appels de ses
+// collègues sur ses leads (double comptage, 72 appels affichés pour 49 réels le
+// 20/10). Un lead que personne n'a appelé reste à son propriétaire.
 export function groupLeadIdsBySetter(leadsRows: LeadRow[], calls: CallRow[]): Map<string, Set<string>> {
   const map = new Map<string, Set<string>>();
   const add = (setterId: string | null | undefined, leadId: string | null | undefined) => {
@@ -647,8 +654,13 @@ export function groupLeadIdsBySetter(leadsRows: LeadRow[], calls: CallRow[]): Ma
     ids.add(leadId);
     map.set(setterId, ids);
   };
-  for (const lead of leadsRows) add(lead.setterId, lead.id);
-  for (const call of calls) add(call.setterId, call.leadId);
+  const calledLeadIds = new Set<string>();
+  for (const call of calls) {
+    if (!call.setterId || !call.leadId) continue;
+    calledLeadIds.add(call.leadId);
+    add(call.setterId, call.leadId);
+  }
+  for (const lead of leadsRows) if (!calledLeadIds.has(lead.id)) add(lead.setterId, lead.id);
   return map;
 }
 
