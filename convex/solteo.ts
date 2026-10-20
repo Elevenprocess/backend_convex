@@ -141,6 +141,11 @@ export const upsertSignedQuote = internalMutation({
     // dès que le devis est relié (patch undefined = suppression du champ).
     if (existing) await ctx.db.patch(existing._id, { ...row, reason: row.reason, updatedAt: now });
     else await ctx.db.insert("solteoSignedQuotes", { ...row, updatedAt: now });
+    if (["logged", "amount_set", "stage_set", "already_ok"].includes(args.status)) {
+      const stale = await ctx.db.query("syncDiscrepancies")
+        .withIndex("by_key", (q) => q.eq("key", `solteo:opportunity_not_found:${args.quoteId}`)).unique();
+      if (stale && stale.resolvedAt === undefined) await ctx.db.patch(stale._id, { resolvedAt: now });
+    }
     if (discrepancy) {
       await recordDiscrepancy(ctx, {
         key: `solteo:${discrepancy.kind}:${args.quoteId}`,
@@ -166,7 +171,13 @@ export const listRetryable = internalQuery({
         .take(20);
       for (const r of rows) out.push({ projectId: r.projectId, quoteId: r.quoteId });
     }
-    return out.slice(0, 20);
+    if (process.env.SOLTEO_VELORA_WRITE_ENABLED === "true") {
+      for (const status of ["already_ok", "stage_set"] as const) {
+        const rows = await ctx.db.query("solteoSignedQuotes").withIndex("by_status", (q) => q.eq("status", status)).collect();
+        for (const r of rows) if (r.veloraAppliedAt === undefined && r.ghlContactId) out.push({ projectId: r.projectId, quoteId: r.quoteId });
+      }
+    }
+    return out.slice(0, 30);
   },
 });
 
@@ -348,7 +359,7 @@ export const catchUpScheduled = internalAction({
       }
       if (!res?.pages || page >= res.pages) break;
     }
-    if (solteoGhlWritesEnabled()) {
+    {
       const retry = await ctx.runQuery(internal.solteo.listRetryable, {});
       for (const r of retry) {
         try { await handleProject(ctx, r.projectId, r.quoteId); } catch { /* journalisé au prochain passage */ }
@@ -426,6 +437,12 @@ export const checkGhlSignedWithoutSolteo = internalAction({
       checked++;
       const found = (await solteoGet("/external/v1/projects", { externalId: o.id, perPage: 5 })) as { items?: unknown[] } | null;
       if ((found?.items ?? []).length > 0) continue;
+      // Repli : projet Soltéo au nom du contact (dossiers historiques non reliés) → pas d'alerte.
+      const name = (o.contact?.name ?? "").trim();
+      if (name) {
+        const byName = (await solteoGet("/external/v1/projects", { q: name, perPage: 5 })) as { items?: unknown[] } | null;
+        if ((byName?.items ?? []).length > 0) continue;
+      }
       flagged++;
       await ctx.runMutation(internal.solteo.flagDiscrepancy, {
         key: `solteo:ghl_signe_sans_devis_solteo:${o.id}`, kind: "ghl_signe_sans_devis_solteo",

@@ -41,3 +41,21 @@ export const dailyDigest = internalMutation({
     return { total: rows.length, recipients: recipients.length };
   },
 });
+
+/** Maintenance : clôture des écarts d'un type (faux positifs) et marque leurs alertes comme lues. */
+export const resolveKind = internalMutation({
+  args: { kind: v.string() },
+  handler: async (ctx, args): Promise<{ resolved: number; notifications: number }> => {
+    const now = Date.now();
+    const rows = await ctx.db.query("syncDiscrepancies").withIndex("by_kind", (q) => q.eq("kind", args.kind)).collect();
+    let resolved = 0;
+    for (const r of rows) if (r.resolvedAt === undefined) { await ctx.db.patch(r._id, { resolvedAt: now }); resolved++; }
+    let notifications = 0;
+    for (const n of await ctx.db.query("notifications").collect()) {
+      if (n.type === "sync_discrepancy" && n.readAt === undefined && n.title.endsWith(args.kind)) {
+        await ctx.db.patch(n._id, { readAt: now }); notifications++;
+      }
+    }
+    return { resolved, notifications };
+  },
+});

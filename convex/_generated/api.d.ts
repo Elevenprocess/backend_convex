@@ -8,13 +8,6 @@
  * @module
  */
 
-import type * as model_solteo_signedQuote from "../model/solteo/signedQuote.js";
-import type * as model_solteo_webhook from "../model/solteo/webhook.js";
-import type * as model_syncDiscrepancies from "../model/syncDiscrepancies.js";
-import type * as solteo from "../solteo.js";
-import type * as solteoClient from "../solteoClient.js";
-import type * as model_solteo_veloraSale from "../model/solteo/veloraSale.js";
-import type * as syncAlerts from "../syncAlerts.js";
 import type * as acompteReminders from "../acompteReminders.js";
 import type * as activityLog from "../activityLog.js";
 import type * as adDeposits from "../adDeposits.js";
@@ -106,9 +99,13 @@ import type * as model_notify from "../model/notify.js";
 import type * as model_ocr from "../model/ocr.js";
 import type * as model_passwordCrypto from "../model/passwordCrypto.js";
 import type * as model_rdvReschedule from "../model/rdvReschedule.js";
+import type * as model_solteo_signedQuote from "../model/solteo/signedQuote.js";
+import type * as model_solteo_veloraSale from "../model/solteo/veloraSale.js";
+import type * as model_solteo_webhook from "../model/solteo/webhook.js";
 import type * as model_stageHistory from "../model/stageHistory.js";
 import type * as model_substepCatalog from "../model/substepCatalog.js";
 import type * as model_substepGating from "../model/substepGating.js";
+import type * as model_syncDiscrepancies from "../model/syncDiscrepancies.js";
 import type * as model_syncFromCommercial from "../model/syncFromCommercial.js";
 import type * as model_vtCalendar from "../model/vtCalendar.js";
 import type * as notifications from "../notifications.js";
@@ -118,6 +115,9 @@ import type * as projects from "../projects.js";
 import type * as rdv from "../rdv.js";
 import type * as referrers from "../referrers.js";
 import type * as simulatorStats from "../simulatorStats.js";
+import type * as solteo from "../solteo.js";
+import type * as solteoClient from "../solteoClient.js";
+import type * as syncAlerts from "../syncAlerts.js";
 import type * as testSeed from "../testSeed.js";
 import type * as users from "../users.js";
 import type * as webhooks from "../webhooks.js";
@@ -131,13 +131,6 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  "model/solteo/veloraSale": typeof model_solteo_veloraSale;
-  "syncAlerts": typeof syncAlerts;
-  "model/solteo/signedQuote": typeof model_solteo_signedQuote;
-  "model/solteo/webhook": typeof model_solteo_webhook;
-  "model/syncDiscrepancies": typeof model_syncDiscrepancies;
-  "solteo": typeof solteo;
-  "solteoClient": typeof solteoClient;
   acompteReminders: typeof acompteReminders;
   activityLog: typeof activityLog;
   adDeposits: typeof adDeposits;
@@ -229,9 +222,13 @@ declare const fullApi: ApiFromModules<{
   "model/ocr": typeof model_ocr;
   "model/passwordCrypto": typeof model_passwordCrypto;
   "model/rdvReschedule": typeof model_rdvReschedule;
+  "model/solteo/signedQuote": typeof model_solteo_signedQuote;
+  "model/solteo/veloraSale": typeof model_solteo_veloraSale;
+  "model/solteo/webhook": typeof model_solteo_webhook;
   "model/stageHistory": typeof model_stageHistory;
   "model/substepCatalog": typeof model_substepCatalog;
   "model/substepGating": typeof model_substepGating;
+  "model/syncDiscrepancies": typeof model_syncDiscrepancies;
   "model/syncFromCommercial": typeof model_syncFromCommercial;
   "model/vtCalendar": typeof model_vtCalendar;
   notifications: typeof notifications;
@@ -241,6 +238,9 @@ declare const fullApi: ApiFromModules<{
   rdv: typeof rdv;
   referrers: typeof referrers;
   simulatorStats: typeof simulatorStats;
+  solteo: typeof solteo;
+  solteoClient: typeof solteoClient;
+  syncAlerts: typeof syncAlerts;
   testSeed: typeof testSeed;
   users: typeof users;
   webhooks: typeof webhooks;
