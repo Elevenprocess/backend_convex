@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react'
+import { Notifications } from '../pages/Notifications'
 
 // Chunks des pages (React.lazy). Chaque import est mémoïsé : la route, le
 // survol d'un lien de la barre latérale et le préchargement en tâche de fond
@@ -31,7 +32,9 @@ const factories = {
   AcceptInvitation: () => import('../pages/AcceptInvitation').then((m) => ({ default: m.AcceptInvitation })),
   ApiDocs: () => import('../pages/ApiDocs').then((m) => ({ default: m.ApiDocs })),
   DebriefMagicPage: () => import('../pages/DebriefMagicPage').then((m) => ({ default: m.DebriefMagicPage })),
-  Notifications: () => import('../pages/Notifications').then((m) => ({ default: m.Notifications })),
+  // Déjà dans le bundle principal (RootLayout l'importe) : pas de chunk séparé,
+  // sinon cycle d'initialisation entre chunks (« d is not a function »).
+  Notifications: () => Promise.resolve({ default: Notifications }),
   Journal: () => import('../pages/Journal').then((m) => ({ default: m.Journal })),
   CallFullScreen: () => import('../pages/call/CallFullScreen').then((m) => ({ default: m.CallFullScreen })),
   CallSplit: () => import('../pages/call/CallSplit').then((m) => ({ default: m.CallSplit })),
