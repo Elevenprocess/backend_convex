@@ -51,9 +51,13 @@ export const resolveKind = internalMutation({
     let resolved = 0;
     for (const r of rows) if (r.resolvedAt === undefined) { await ctx.db.patch(r._id, { resolvedAt: now }); resolved++; }
     let notifications = 0;
-    for (const n of await ctx.db.query("notifications").collect()) {
-      if (n.type === "sync_discrepancy" && n.readAt === undefined && n.title.endsWith(args.kind)) {
-        await ctx.db.patch(n._id, { readAt: now }); notifications++;
+    for (const userId of await alertRecipients(ctx)) {
+      const unread = await ctx.db.query("notifications")
+        .withIndex("by_user_read", (q) => q.eq("userId", userId).eq("readAt", undefined)).collect();
+      for (const n of unread) {
+        if (n.type === "sync_discrepancy" && n.title.endsWith(args.kind)) {
+          await ctx.db.patch(n._id, { readAt: now }); notifications++;
+        }
       }
     }
     return { resolved, notifications };

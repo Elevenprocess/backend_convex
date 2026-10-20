@@ -427,7 +427,10 @@ export const checkGhlSignedWithoutSolteo = internalAction({
     const pipes = (await ghlRequest("/opportunities/pipelines", { query: { locationId } })) as { pipelines?: GhlPipelines } | null;
     const target = findSignedStage(pipes?.pipelines ?? []);
     if (!target) return null;
-    const since = Date.now() - 7 * 24 * 3600 * 1000;
+    // SOLTEO_CHECK_SINCE_MS : ignore les passages en étape 11 antérieurs (corrections
+    // manuelles en masse du 20/10 sur des dossiers historiques non reliés).
+    const floor = Number(process.env.SOLTEO_CHECK_SINCE_MS ?? 0) || 0;
+    const since = Math.max(Date.now() - 7 * 24 * 3600 * 1000, floor);
     const res = (await ghlRequest("/opportunities/search", {
       query: { location_id: locationId, pipeline_id: target.pipelineId, pipeline_stage_id: target.stageId, limit: 100 },
     })) as { opportunities?: Array<GhlOpp & { lastStageChangeAt?: string; contact?: { id?: string; name?: string } }> } | null;
