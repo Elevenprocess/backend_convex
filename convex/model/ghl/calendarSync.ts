@@ -22,6 +22,48 @@ export function mapGhlStatusToRdvStatus(status?: string): RdvStatus {
   return "planifie";
 }
 
+/**
+ * ELE-177 — Garde-fou : GHL fait foi pour les RDV, mais seuls ses statuts
+ * FINAUX (showed / noshow / cancelled / rescheduled) font évoluer Velora.
+ * `confirmed`, `booked`, `new`, vide ou inconnu ne rétrograde jamais un RDV
+ * clôturé (statut final, result ou débrief posé). Deux statuts finaux
+ * divergents = écart journalisé, jamais écrasé.
+ */
+const FINAL_RDV_STATUSES: ReadonlySet<string> = new Set(["honore", "no_show", "annule", "reporte"]);
+
+export type RdvStatusDecision =
+  | { kind: "set"; status: RdvStatus }
+  | { kind: "keep" }
+  | { kind: "conflict"; incoming: RdvStatus; reason: string };
+
+export function isFinalGhlStatus(status?: string): boolean {
+  return mapGhlStatusToRdvStatus(status) !== "planifie";
+}
+
+export function decideRdvStatusFromGhl(i: {
+  existingStatus: string;
+  existingResult?: string;
+  existingDebriefFilledAt?: number;
+  ghlStatus?: string;
+}): RdvStatusDecision {
+  const incoming = mapGhlStatusToRdvStatus(i.ghlStatus);
+  if (incoming === i.existingStatus) return { kind: "keep" };
+  // Statut GHL non final : n'apporte aucune information → on ne touche à rien.
+  if (incoming === "planifie") return { kind: "keep" };
+  const locked =
+    FINAL_RDV_STATUSES.has(i.existingStatus) ||
+    i.existingResult !== undefined ||
+    i.existingDebriefFilledAt !== undefined;
+  if (!locked) return { kind: "set", status: incoming };
+  return {
+    kind: "conflict",
+    incoming,
+    reason: `GHL=${i.ghlStatus ?? "?"} (→${incoming}) vs Velora=${i.existingStatus}` +
+      (i.existingResult ? `/result=${i.existingResult}` : "") +
+      (i.existingDebriefFilledAt !== undefined ? "/débriefé" : ""),
+  };
+}
+
 export function buildSyncedRdvNotes(event: GhlCalendarEvent): string {
   return [
     SYNCED_NOTES_PREFIX,

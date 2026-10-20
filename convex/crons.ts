@@ -43,4 +43,9 @@ crons.interval("simulator-stats-sync", { minutes: 30 }, internal.simulatorStats.
 // (2 max par passage, espacés — jamais de rafale WhatsApp).
 crons.interval("hermes-debrief-catchup", { minutes: 30 }, internal.hermesDebrief.relayOverdue, {});
 
+// ELE-179 — Rattrapage Soltéo (le webhook n'a ni retry ni signature) :
+// toutes les 20 min. No-op sans SOLTEO_API_KEY ; écritures GHL seulement si
+// SOLTEO_GHL_WRITE_ENABLED === "true" (sinon plan journalisé).
+crons.interval("solteo-catch-up", { minutes: 20 }, internal.solteo.catchUpScheduled, {});
+
 export default crons;
