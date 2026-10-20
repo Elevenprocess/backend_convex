@@ -619,7 +619,7 @@ function UserRow({ user, ghlUsers, onMapped, onEdit, compact = false, sector = n
   }
 
   function openProfile() {
-    if (profileHref) navigate(profileHref)
+    if (profileHref) navigate(profileHref, { viewTransition: true })
   }
 
   return (
@@ -662,7 +662,7 @@ function UserRow({ user, ghlUsers, onMapped, onEdit, compact = false, sector = n
       <td className="px-3 py-3" onClick={stop}>
         <div className="flex items-center justify-end gap-2">
           <button
-            onClick={canImpersonate ? () => { viewAs(user); navigate('/overview') } : undefined}
+            onClick={canImpersonate ? () => { viewAs(user); navigate('/overview', { viewTransition: true }) } : undefined}
             disabled={!canImpersonate}
             className="inline-flex items-center justify-center w-[88px] h-8 rounded-lg border border-or/30 text-xs font-semibold text-or hover:bg-or-tint hover:border-or transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
           >

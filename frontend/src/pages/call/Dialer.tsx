@@ -82,7 +82,7 @@ export function Dialer() {
           <div className="w-full max-w-[320px] space-y-3">
             <button
               disabled={!number}
-              onClick={() => navigate(`/call/split?number=${encodeURIComponent(number)}`)}
+              onClick={() => navigate(`/call/split?number=${encodeURIComponent(number)}`, { viewTransition: true })}
               className="btn-primary w-full rounded-2xl py-4 flex items-center justify-center gap-2 disabled:opacity-40"
             >
               <Icon name="phone" size={18} />

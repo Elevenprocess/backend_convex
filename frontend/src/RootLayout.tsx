@@ -1,10 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { CallBubble } from './components/call/CallBubble'
-import { ChatPanel } from './components/assistant/ChatPanel'
-import { PersistentCallSidebar } from './components/call/PersistentCallSidebar'
 import { SidebarRevealPill } from './components/call/SidebarRevealPill'
-import { PersistentLeadSidebar } from './components/leads/PersistentLeadSidebar'
 import { ClipboardToast } from './components/ClipboardToast'
 import { NavProgress } from './components/NavProgress'
 import { prefetchMainPagesWhenIdle } from './lib/routeChunks'
@@ -15,6 +11,10 @@ import { useRealtimeSocket } from './lib/realtime'
 import { useTheme } from './lib/theme'
 import { buildCommercialNotifications, buildNotifications, useBrowserNotifications } from './pages/Notifications'
 
+const CallBubble = lazy(() => import('./components/call/CallBubble').then((m) => ({ default: m.CallBubble })))
+const ChatPanel = lazy(() => import('./components/assistant/ChatPanel').then((m) => ({ default: m.ChatPanel })))
+const PersistentCallSidebar = lazy(() => import('./components/call/PersistentCallSidebar').then((m) => ({ default: m.PersistentCallSidebar })))
+const PersistentLeadSidebar = lazy(() => import('./components/leads/PersistentLeadSidebar').then((m) => ({ default: m.PersistentLeadSidebar })))
 export function RootLayout() {
   useRealtimeSocket()
   useAuthSessionKeeper()
@@ -32,6 +32,9 @@ export function RootLayout() {
       <ScrollReset />
       <ViewAsBanner />
       <Outlet />
+      {/* Panneaux lourds (SplitPanel, appel, assistant) : chargés à part,
+          après la première peinture. */}
+      <Suspense fallback={null}>
       <PersistentLeadSidebar />
       <PersistentCallSidebar />
       <SidebarRevealPill />
@@ -39,6 +42,7 @@ export function RootLayout() {
       {/* Assistant IA (endpoints /assistant/*) : NestJS only, pas encore porté
           sur Convex → masqué en mode Convex pour ne pas spammer le backend. */}
       {!convexAuthEnabled && <ChatPanel />}
+      </Suspense>
       <ClipboardToast />
     </>
   )
@@ -53,7 +57,7 @@ function ViewAsBanner() {
   // d'entrée du bouton « Explorer ») plutôt que sur la dernière page consultée.
   const handleExit = () => {
     exitViewAs()
-    navigate('/settings')
+    navigate('/settings', { viewTransition: true })
   }
   if (!viewAsUser || !realUser) return null
   const readOnly = impersonationIsReadOnly(realUser.role, viewAsUser.role)

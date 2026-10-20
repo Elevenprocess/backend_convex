@@ -32,7 +32,7 @@ export function CallBubble() {
         style={{ borderRadius: 999 }}
         onClick={() => {
           expand()
-          navigate('/call/split')
+          navigate('/call/split', { viewTransition: true })
         }}
       >
         <div className="relative">

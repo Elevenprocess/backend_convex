@@ -363,7 +363,7 @@ function TrackingRdvRow({
   return (
     <div className="p-4 hover:bg-cream/30 transition">
       <div className="flex flex-col lg:flex-row lg:items-start gap-3 justify-between">
-        <button type="button" onClick={() => navigate(`/leads/${rdv.leadId}`)} className="text-left min-w-0">
+        <button type="button" onClick={() => navigate(`/leads/${rdv.leadId}`, { viewTransition: true })} className="text-left min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-black text-sm truncate">{name}</p>
             <StatusPill label={rdvStatusLabel(rdv.status)} tone={rdv.status === 'honore' ? 'green' : rdv.status === 'no_show' || rdv.status === 'annule' ? 'red' : 'neutral'} />
@@ -598,7 +598,7 @@ function StageColumn({
               key={lead.id}
               lead={lead}
               commercial={lead.assignedToId ? userMap.get(lead.assignedToId) : undefined}
-              onOpen={() => navigate(`/leads/${lead.id}`)}
+              onOpen={() => navigate(`/leads/${lead.id}`, { viewTransition: true })}
             />
           ))
         )}
@@ -695,7 +695,7 @@ function CommercialRow({ row }: { row: PipelineCommercialKpi }) {
   const navigate = useNavigate()
   return (
     <tr
-      onClick={() => navigate(`/team/commerciaux/${row.userId}`)}
+      onClick={() => navigate(`/team/commerciaux/${row.userId}`, { viewTransition: true })}
       className="border-t border-line-soft hover:bg-cream/40 cursor-pointer"
     >
       <td className="px-4 py-3">
@@ -778,7 +778,7 @@ function StuckRow({ lead }: { lead: PipelineStuckLead }) {
   const name = [lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.email || '—'
   return (
     <tr
-      onClick={() => navigate(`/leads/${lead.leadId}`)}
+      onClick={() => navigate(`/leads/${lead.leadId}`, { viewTransition: true })}
       className="border-t border-line-soft hover:bg-cream/40 cursor-pointer"
     >
       <td className="px-4 py-3 font-bold">{name}</td>

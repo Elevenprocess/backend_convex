@@ -6782,3 +6782,24 @@ button.fin-kpi:focus-visible { outline: 2px solid var(--color-or); outline-offse
   .v-skel { animation: none; }
   .nav-progress.is-active { transition: none; }
 }
+
+/* Cascade d'entrée (grammaire Kalvi Outreach) : les blocs d'une page arrivent
+   à 50 ms d'écart (150 ms au plus), les premières lignes de tableau à 20 ms
+   (100 ms au plus). « backwards » et non « both » : aucune transformation ne
+   reste appliquée après l'animation (sinon chaque bloc devient un calque et
+   les menus déroulants passent dessous). */
+@keyframes v-entre { from { opacity: 0; transform: translateY(6px); } }
+.app-main > * { animation: v-entre 220ms var(--v-ease-out) backwards; }
+.app-main > :nth-child(2) { animation-delay: 50ms; }
+.app-main > :nth-child(3) { animation-delay: 100ms; }
+.app-main > :nth-child(n+4) { animation-delay: 150ms; }
+.app-main tbody tr { animation: v-fondu 200ms var(--v-ease-out) backwards; }
+.app-main tbody tr:nth-child(2) { animation-delay: 20ms; }
+.app-main tbody tr:nth-child(3) { animation-delay: 40ms; }
+.app-main tbody tr:nth-child(4) { animation-delay: 60ms; }
+.app-main tbody tr:nth-child(5) { animation-delay: 80ms; }
+.app-main tbody tr:nth-child(n+6) { animation-delay: 100ms; }
+@media (prefers-reduced-motion: reduce) {
+  /* On garde un fondu court, sans déplacement. */
+  .app-main > *, .app-main tbody tr { animation-name: v-fondu !important; animation-duration: 120ms !important; animation-delay: 0ms !important; }
+}

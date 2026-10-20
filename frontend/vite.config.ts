@@ -35,6 +35,11 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: (id) => {
+          // Vendors stables dans leurs propres chunks : mis en cache par le
+          // navigateur d'un déploiement à l'autre (seul le code de l'app change).
+          if (/node_modules\/(react|react-dom|scheduler)\//.test(id)) return 'react'
+          if (/node_modules\/(react-router|react-router-dom)\//.test(id)) return 'router'
+          if (/node_modules\/(convex|@convex-dev)\//.test(id)) return 'convex'
           if (id.includes('node_modules/recharts')) return 'recharts'
           if (id.includes('node_modules/ogl')) return 'ogl'
           if (id.includes('node_modules/socket.io-client')) return 'socket'

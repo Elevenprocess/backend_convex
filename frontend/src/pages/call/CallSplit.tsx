@@ -71,7 +71,7 @@ export function CallSplit() {
   const handleHangup = async () => {
     if (!lead) {
       endCall()
-      navigate('/leads')
+      navigate('/leads', { viewTransition: true })
       return
     }
     if (result) {
@@ -89,7 +89,7 @@ export function CallSplit() {
       }
     }
     endCall()
-    navigate(`/leads/${lead.id}`)
+    navigate(`/leads/${lead.id}`, { viewTransition: true })
   }
 
   if (!lead && !manualNumber) {
@@ -111,7 +111,7 @@ export function CallSplit() {
           <div className="glass-card p-8 text-center max-w-md">
             <p className="text-rouille font-semibold mb-2">{callError}</p>
             <button
-              onClick={() => navigate(lead ? `/leads/${lead.id}` : '/dialer')}
+              onClick={() => navigate(lead ? `/leads/${lead.id}` : '/dialer', { viewTransition: true })}
               className="btn-primary px-4 py-2 rounded-xl text-sm mt-2"
             >
               Retour
@@ -134,7 +134,7 @@ export function CallSplit() {
           <button
             onClick={() => {
               minimize()
-              if (lead) navigate(`/leads/${lead.id}`)
+              if (lead) navigate(`/leads/${lead.id}`, { viewTransition: true })
               else navigate(-1)
             }}
             className="absolute top-6 right-6 flex items-center gap-2 px-4 py-2 rounded-full bg-white/70 backdrop-blur-xl border border-white/80 shadow-sm text-xs font-semibold text-text hover:bg-white/90"

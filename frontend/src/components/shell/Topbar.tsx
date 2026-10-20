@@ -86,14 +86,14 @@ export function Topbar(_props: TopbarProps) {
 
   const handleSignOut = async () => {
     await signOut()
-    navigate('/', { replace: true })
+    navigate('/', { viewTransition: true, replace: true })
   }
 
   const runSearch = () => {
     const q = search.trim()
     if (!q) return
     setOpenMenu(null)
-    navigate(leadSearchPath(authUser?.role, q))
+    navigate(leadSearchPath(authUser?.role, q), { viewTransition: true })
   }
 
   return (
@@ -151,7 +151,7 @@ export function Topbar(_props: TopbarProps) {
         </div>
 
         <button
-          onClick={() => navigate('/notifications')}
+          onClick={() => navigate('/notifications', { viewTransition: true })}
           className="topbar-action relative"
           title="Notifications"
         >
@@ -174,8 +174,8 @@ export function Topbar(_props: TopbarProps) {
             </button>
             {openMenu === 'settings' && (
               <DropdownFrame className="w-56 p-1.5">
-                <SbMenuItem icon="settings" label="Paramètres SaaS" onClick={() => { setOpenMenu(null); navigate('/settings') }} />
-                <SbMenuItem icon="chart" label="Analyse" onClick={() => { setOpenMenu(null); navigate('/analytics') }} />
+                <SbMenuItem icon="settings" label="Paramètres SaaS" onClick={() => { setOpenMenu(null); navigate('/settings', { viewTransition: true }) }} />
+                <SbMenuItem icon="chart" label="Analyse" onClick={() => { setOpenMenu(null); navigate('/analytics', { viewTransition: true }) }} />
               </DropdownFrame>
             )}
           </div>
@@ -203,7 +203,7 @@ export function Topbar(_props: TopbarProps) {
                   <div className="text-[11px] text-faint capitalize truncate">{user.role}</div>
                 </div>
               </div>
-              <SbMenuItem icon="users" label="Mon profil" onClick={() => { setOpenMenu(null); navigate('/profile') }} />
+              <SbMenuItem icon="users" label="Mon profil" onClick={() => { setOpenMenu(null); navigate('/profile', { viewTransition: true }) }} />
               <SbMenuItem
                 icon={isDark ? 'sun' : 'moon'}
                 label={isDark ? 'Thème clair' : 'Thème sombre'}

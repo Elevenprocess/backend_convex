@@ -185,7 +185,7 @@ export function LeadDetail() {
       const project = await resolveVenteProject()
       if (!project) return
       await saveDebrief({ ...payload, projectId: project.id })
-      navigate(`/projects/${project.id}`)
+      navigate(`/projects/${project.id}`, { viewTransition: true })
     })()
   }
 
@@ -251,7 +251,7 @@ export function LeadDetail() {
       />
       <div className="px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 flex items-center gap-2 flex-shrink-0 flex-wrap">
         <button
-          onClick={() => navigate(listPath)}
+          onClick={() => navigate(listPath, { viewTransition: true })}
           className="text-muted hover:text-text flex items-center gap-1 text-sm shrink-0"
         >
           <Icon name="arrow-left" size={16} />
@@ -394,8 +394,8 @@ export function LeadDetail() {
             <CreateProjectInline
               lead={lead}
               projects={projects}
-              onCreated={(p) => { setProjects((prev) => [p, ...prev]); navigate(`/projects/${p.id}`) }}
-              onOpenProject={(p) => navigate(`/projects/${p.id}`)}
+              onCreated={(p) => { setProjects((prev) => [p, ...prev]); navigate(`/projects/${p.id}`, { viewTransition: true }) }}
+              onOpenProject={(p) => navigate(`/projects/${p.id}`, { viewTransition: true })}
             />
           </div>
         </div>
@@ -492,7 +492,7 @@ export function LeadDetail() {
               setDebriefRefreshKey((k) => k + 1)
               if (outcome === 'vente') {
                 setDebriefOpen(false)
-                if (projectId) navigate(`/projects/${projectId}`)
+                if (projectId) navigate(`/projects/${projectId}`, { viewTransition: true })
               }
             }}
             className="fixed top-0 right-0 bottom-0 z-[140]"
