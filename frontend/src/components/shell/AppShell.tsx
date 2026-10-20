@@ -1,4 +1,4 @@
-import { createContext, useContext, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useId, useLayoutEffect, useState, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { HelpFab } from './HelpFab'
@@ -14,10 +14,9 @@ type AppShellProps = {
 }
 
 type ShellOptions = { blobsKey?: keyof typeof BLOB_PRESETS; flat: boolean }
-type ShellRegistry = { register: (id: number, opts: ShellOptions) => void; unregister: (id: number) => void }
+type ShellRegistry = { register: (id: string, opts: ShellOptions) => void; unregister: (id: string) => void }
 
 const ShellContext = createContext<ShellRegistry | null>(null)
-let nextShellId = 1
 
 // Coque persistante : montée UNE fois sous RequireAuth. La barre latérale, le
 // fond et l'aide ne sont plus recréés à chaque changement de page ; seule la
@@ -28,8 +27,8 @@ let nextShellId = 1
 // L'Outlet garde toujours la même position dans l'arbre : basculer la coque
 // ne remonte jamais la page.
 export function PersistentShell({ children }: { children: ReactNode }) {
-  const [entries, setEntries] = useState<Array<[number, ShellOptions]>>([])
-  const registry = useRef<ShellRegistry>({
+  const [entries, setEntries] = useState<Array<[string, ShellOptions]>>([])
+  const [registry] = useState<ShellRegistry>(() => ({
     register: (id, opts) =>
       setEntries((prev) => {
         const i = prev.findIndex(([k]) => k === id)
@@ -39,7 +38,7 @@ export function PersistentShell({ children }: { children: ReactNode }) {
         return next
       }),
     unregister: (id) => setEntries((prev) => prev.filter(([k]) => k !== id)),
-  }).current
+  }))
   const current = entries.length ? entries[entries.length - 1][1] : null
   return (
     <ShellContext.Provider value={registry}>
@@ -78,17 +77,15 @@ function ShellFrame({ options, children }: { options: ShellOptions | null; child
 
 export function AppShell({ children, blobsKey, flat = false }: AppShellProps) {
   const registry = useContext(ShellContext)
-  const idRef = useRef(0)
-  if (idRef.current === 0) idRef.current = nextShellId++
+  const id = useId()
   useLayoutEffect(() => {
     if (!registry) return
-    registry.register(idRef.current, { blobsKey, flat })
-  }, [registry, blobsKey, flat])
+    registry.register(id, { blobsKey, flat })
+  }, [registry, id, blobsKey, flat])
   useLayoutEffect(() => {
     if (!registry) return
-    const id = idRef.current
     return () => registry.unregister(id)
-  }, [registry])
+  }, [registry, id])
   if (registry) return <>{children}</>
   return <StandaloneShell blobsKey={blobsKey} flat={flat}>{children}</StandaloneShell>
 }
