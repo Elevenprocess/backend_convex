@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { prefetchPath } from '../../lib/routeChunks'
 import { Icon, type IconName } from '../Icon'
 import { useRole, useDisplayUser, type Role } from '../../lib/role'
 import { useAuth } from '../../lib/auth'
@@ -306,6 +307,10 @@ export function Sidebar() {
                   <NavLink
                     key={section.id + item.to + item.label}
                     to={item.to}
+                    viewTransition
+                    onMouseEnter={() => prefetchPath(item.to)}
+                    onFocus={() => prefetchPath(item.to)}
+                    onTouchStart={() => prefetchPath(item.to)}
                     className={({ isActive }) => `sb-item ${isActive ? 'is-active' : ''}`}
                     data-tip={item.label}
                     title={item.label}

@@ -143,7 +143,7 @@ function NotificationCard({ notif }: { notif: Notif }) {
         </div>
         <p className={`text-sm text-muted mt-1 ${isCalled || isRead ? 'line-through' : ''}`}>{notif.body}</p>
         <div className="mt-3 flex items-center gap-2">
-          {notif.to && <Link to={notif.to} className="text-xs font-semibold text-or-dark hover:underline">Ouvrir</Link>}
+          {notif.to && <Link viewTransition to={notif.to} className="text-xs font-semibold text-or-dark hover:underline">Ouvrir</Link>}
           {autoResolved ? (
             <span className="text-xs font-semibold rounded-full border border-success/40 bg-success-tint text-success px-3 py-1 inline-flex items-center gap-1">
               <Icon name="check" size={12} /> Déjà appelé

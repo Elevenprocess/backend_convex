@@ -74,7 +74,7 @@ export function ApiDocs() {
   return (
     <div className="min-h-screen bg-black text-white">
       <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-white/[0.06] bg-black/80 px-6 backdrop-blur-xl sm:px-10">
-        <Link to="/" className="flex items-center gap-3">
+        <Link viewTransition to="/" className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/12 bg-white/[0.08] text-xs font-black">V</div>
           <p className="text-[11px] font-black uppercase tracking-[0.32em] text-white/70">VELORA · API</p>
         </Link>

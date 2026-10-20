@@ -72,7 +72,7 @@ export function ProjectDetail() {
         <main className="p-8 flex items-center justify-center flex-grow">
           <div className="glass-card p-12 text-center">
             <p className="text-muted mb-4">{error ?? "Ce projet n'existe pas (ou plus)."}</p>
-            <Link to={leadListPath(role)} className="btn-primary inline-block px-4 py-2 rounded-xl text-sm">
+            <Link viewTransition to={leadListPath(role)} className="btn-primary inline-block px-4 py-2 rounded-xl text-sm">
               Retour à la liste
             </Link>
           </div>

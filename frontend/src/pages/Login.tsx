@@ -89,12 +89,12 @@ export function Login() {
 
 
       <header className="relative z-10 flex h-20 items-center justify-between px-6 sm:px-10 lg:px-14">
-        <Link to="/" className="flex items-center gap-3">
+        <Link viewTransition to="/" className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/12 bg-white/[0.08] text-sm font-black backdrop-blur-2xl">V</div>
           <p className="text-xs font-black uppercase tracking-[0.32em] text-white/80">VELORA</p>
         </Link>
 
-        <Link
+        <Link viewTransition
           to="/"
           className="rounded-full border border-white/12 bg-white/[0.07] px-4 py-2 text-xs font-bold text-white/80 backdrop-blur-2xl transition hover:border-white/25 hover:bg-white/12"
         >

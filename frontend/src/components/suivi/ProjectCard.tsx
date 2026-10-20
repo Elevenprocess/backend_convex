@@ -25,7 +25,7 @@ export function ProjectCard({
   const documents = project.attachments.filter((a) => a.kind !== 'photo').length
   const progress = workflowPhaseProgress(client)
   return (
-    <Link to={to} className={`fiche-project-card group flex items-center gap-4 rounded-2xl border p-4 transition-colors hover:border-cuivre ${cancelled ? 'border-rouille/40 bg-rouille-tint/30' : 'border-line bg-cream'}`}>
+    <Link viewTransition to={to} className={`fiche-project-card group flex items-center gap-4 rounded-2xl border p-4 transition-colors hover:border-cuivre ${cancelled ? 'border-rouille/40 bg-rouille-tint/30' : 'border-line bg-cream'}`}>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-2">
           <h3 className={`text-base font-semibold ${cancelled ? 'text-muted line-through' : 'text-text'}`}>{project.name || 'Projet'}</h3>

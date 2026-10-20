@@ -89,7 +89,7 @@ export function Landing() {
             <p className="text-xs font-black uppercase tracking-[0.32em] text-white/80">VELORA</p>
           </div>
 
-          <Link
+          <Link viewTransition
             to={isAuthed ? '/overview' : '/login'}
             className="rounded-full border border-white/12 bg-white/[0.07] px-4 py-2 text-xs font-bold text-white/80 backdrop-blur-2xl transition hover:border-white/25 hover:bg-white/12"
           >
@@ -114,7 +114,7 @@ export function Landing() {
               Appels, RDV et ventes réunis dans une seule vue claire.
             </p>
 
-            <Link
+            <Link viewTransition
               to={isAuthed ? '/overview' : '/login'}
               className="mt-9 rounded-full bg-white px-6 py-3 text-xs font-black uppercase tracking-[0.2em] text-black shadow-[0_24px_80px_rgba(255,255,255,0.14)] transition hover:-translate-y-0.5 hover:bg-white/90"
             >
@@ -213,7 +213,7 @@ export function Landing() {
           <p className="text-xs text-white/35">
             © {new Date().getFullYear()} Electro Concept OI — CRM de gestion commerciale
           </p>
-          <Link
+          <Link viewTransition
             to="/login"
             className="text-xs font-bold text-white/50 underline-offset-4 transition hover:text-white/80 hover:underline"
           >

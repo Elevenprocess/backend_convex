@@ -136,7 +136,7 @@ export function DossierSidebar({ dossier, onLeadUpdated }: Props) {
       </div>
 
       <div className="suivi-side-actions">
-        <Link to={`/suivi/${dossier.id}/fiche`} className="suivi-side-cta">
+        <Link viewTransition to={`/suivi/${dossier.id}/fiche`} className="suivi-side-cta">
           Fiche complète
         </Link>
       </div>

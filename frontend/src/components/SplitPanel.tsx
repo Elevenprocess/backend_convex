@@ -149,7 +149,7 @@ export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, chi
         >
           <Icon name="phone" size={14} />
         </button>
-        <Link to={leadDetailPath(role, lead.id)} className="text-xs font-semibold text-or hover:underline whitespace-nowrap">
+        <Link viewTransition to={leadDetailPath(role, lead.id)} className="text-xs font-semibold text-or hover:underline whitespace-nowrap">
           Fiche →
         </Link>
         {onClose && (
