@@ -463,7 +463,7 @@ function AnalyticsAdmin() {
               <thead className="bg-or-tint">
                 <tr className="text-left eyebrow">
                   <Th>SETTER</Th>
-                  <Th>APPELS LOGIQUES</Th>
+                  <Th>APPELS RÉELS</Th>
                   <Th>CLASSIFIÉS</Th>
                   <Th>JOINTS</Th>
                   <Th>QUALIFIÉS</Th>

@@ -648,8 +648,10 @@ function buildSetterRows(
       const ownCalls = callsBySetter.get(u.id) ?? [];
       // Appel « synthétique » = lead classé que personne n'a appelé dans la
       // période (traitement connu par lastContactAt seulement).
+      // Vue admin : appels RÉELS seulement, comme le KPI « appels réels » du haut
+      // (somme des lignes = ce KPI ; 164 affichés pour 143 réels le 20/10).
       const calledLeadIds = new Set(ownCalls.map((c) => c.leadId));
-      const synthetic = classified.filter((l) => !calledLeadIds.has(l.id)).length;
+      const synthetic = credit ? 0 : classified.filter((l) => !calledLeadIds.has(l.id)).length;
       const counts = countResults(ownCalls);
       addSyntheticResults(counts, classified, synthetic);
       const callsTotal = ownCalls.length + synthetic;
@@ -683,13 +685,17 @@ function buildSetterRows(
   rows.sort((a, b) => b.calls - a.calls);
 
   const unassigned = creditedQualified.get(UNASSIGNED_SETTER_ID) ?? 0;
-  if (unassigned > 0) {
+  // Appels sans setter (ou passés par un non-setter) : même ligne « Non attribué ».
+  const orphanCalls = credit ? calls.filter((c) => !c.setterId || !setterIds.has(c.setterId)) : [];
+  if (unassigned > 0 || orphanCalls.length > 0) {
+    const counts = countResults(orphanCalls);
+    const noAnswer = (counts.non_joint ?? 0) + (counts.injoignable ?? 0) + (counts.messagerie ?? 0);
     rows.push({
       id: UNASSIGNED_SETTER_ID,
-      name: "Non attribué (RDV sans setter)",
+      name: "Non attribué (sans setter)",
       initials: "—",
-      calls: 0,
-      connected: 0,
+      calls: orphanCalls.length,
+      connected: Math.max(0, orphanCalls.length - noAnswer),
       classified: 0,
       qualified: unassigned,
       rdvPris: 0,

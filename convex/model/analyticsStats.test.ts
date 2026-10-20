@@ -146,3 +146,26 @@ test("qualificationDates : un RDV saisi après coup est daté du jour du RDV, pa
   expect(qualificationDates(rdvs, range).length).toBe(0);
   expect(qualificationDates([{ leadId: null, status: "honore", createdAt: T, scheduledAt: old }] as any[], range).length).toBe(0);
 });
+
+test("buildAdminStats : somme des appels par setter = appels réels du KPI (orphelins en « Non attribué »)", () => {
+  const users = [
+    { id: "S1", name: "Setter Un", role: "setter" },
+    { id: "A1", name: "Admin", role: "admin" },
+  ];
+  const leads = [
+    { id: "L1", source: "ghl", status: "pas_qualifie", setterId: "S1", createdAt: T, lastContactAt: T }, // classé sans appel loggé
+    { id: "L2", source: "ghl", status: "pas_de_reponse", setterId: "S1", createdAt: T },
+  ] as any[];
+  const calls = [
+    { leadId: "L2", setterId: "S1", calledAt: T, result: "non_joint" },
+    { leadId: "L2", setterId: "A1", calledAt: T + 1000, result: "joint" },
+    { leadId: "L2", setterId: null, calledAt: T + 2000, result: "non_joint" },
+  ] as any[];
+  const s = buildAdminStats(leads, calls, [], users, range, undefined, new Map());
+  expect(s.loggedCalls).toBe(3);
+  const by = Object.fromEntries(s.setters.map((r: any) => [r.id, r]));
+  expect(by.S1.calls).toBe(1); // plus d'appel synthétique pour L1
+  expect(by.__non_attribue.calls).toBe(2);
+  expect(by.__non_attribue.connected).toBe(1);
+  expect(s.setters.reduce((sum: number, r: any) => sum + r.calls, 0)).toBe(s.loggedCalls);
+});
