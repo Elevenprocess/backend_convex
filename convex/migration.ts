@@ -434,3 +434,16 @@ export const upsertVtTech = internalMutation({
     return { inserted, skipped, unresolved };
   },
 });
+
+/** Relie un lead à son contact GHL (fill-only : n écrase jamais un ghlContactId existant). */
+export const setLeadGhlContactId = internalMutation({
+  args: { leadId: v.id("leads"), ghlContactId: v.string() },
+  handler: async (ctx, args): Promise<string> => {
+    const lead = await ctx.db.get(args.leadId);
+    if (!lead) return "not_found";
+    if (lead.ghlContactId === args.ghlContactId) return "already_set";
+    if (lead.ghlContactId) return `conflict:${lead.ghlContactId}`;
+    await ctx.db.patch(args.leadId, { ghlContactId: args.ghlContactId });
+    return "set";
+  },
+});
