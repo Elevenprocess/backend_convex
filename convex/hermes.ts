@@ -32,7 +32,7 @@ export const kpis = query({
   handler: async (ctx, args) => {
     await requireServiceKey(ctx, args.apiKey);
     const range = buildRange(args.from, args.to, args.days ?? 365, args.now);
-    const { calls, leadRows, rdvAll, userRows, latestCallByLead, firstRdvByLead } =
+    const { calls, leadRows, rdvAll, userRows, latestCallByLead, firstRdvByLead, setterByLead } =
       await loadSummaryData(ctx, range);
     return {
       generatedAt: new Date(args.now).toISOString(),
@@ -42,7 +42,7 @@ export const kpis = query({
         to: new Date(range.toMs).toISOString(),
         days: range.days,
       },
-      admin: buildAdminStats(leadRows, calls, rdvAll, userRows, range, latestCallByLead, firstRdvByLead),
+      admin: buildAdminStats(leadRows, calls, rdvAll, userRows, range, latestCallByLead, firstRdvByLead, setterByLead),
     };
   },
 });

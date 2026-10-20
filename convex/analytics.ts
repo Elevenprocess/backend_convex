@@ -157,7 +157,11 @@ function loadFirstRdvByLead(
   for (const r of rdvDocs) {
     if (r.deletedAt !== undefined || !r.leadId) continue;
     if (sourceByLead.get(r.leadId) === "airtable_migration") continue;
-    const t = bizCreatedAt(r);
+    // Un RDV saisi après coup (correction, rattrapage de signature) ne peut pas
+    // avoir été pris après avoir eu lieu : sa qualification est datée au plus
+    // tard du jour du RDV. Sans ça, 22 ventes de 2025 recréées le 20/10/2026
+    // ont compté comme 22 qualifications du jour.
+    const t = Math.min(bizCreatedAt(r), r.scheduledAt ?? Infinity);
     const current = map.get(r.leadId);
     if (current === undefined || t < current) map.set(r.leadId, t);
   }
@@ -217,7 +221,9 @@ export async function loadSummaryData(ctx: QueryCtx, range: RangeMs) {
     .map((u) => ({ id: u._id, name: u.name ?? "", role: roleOf(u) }));
   const latestCallByLead = buildLatestCallByLead(calls);
   const qualifierByLead = buildQualifierByLead(calls);
-  return { calls, leadRows, rdvAll, userRows, latestCallByLead, qualifierByLead, firstRdvByLead };
+  const setterByLead = new Map<string, string>();
+  for (const l of leadDocs) if (l.setterId) setterByLead.set(l._id, l.setterId);
+  return { calls, leadRows, rdvAll, userRows, latestCallByLead, qualifierByLead, firstRdvByLead, setterByLead };
 }
 
 export const summary = query({
@@ -268,7 +274,7 @@ export const summary = query({
       };
     }
 
-    const { calls, leadRows, rdvAll, userRows, latestCallByLead, qualifierByLead, firstRdvByLead } =
+    const { calls, leadRows, rdvAll, userRows, latestCallByLead, qualifierByLead, firstRdvByLead, setterByLead } =
       await loadSummaryData(ctx, range);
 
     if (role === "setter") {
@@ -299,7 +305,7 @@ export const summary = query({
     return {
       ...base,
       admin: isAdminView
-        ? buildAdminStats(leadRows, calls, rdvAll, userRows, range, latestCallByLead, firstRdvByLead)
+        ? buildAdminStats(leadRows, calls, rdvAll, userRows, range, latestCallByLead, firstRdvByLead, setterByLead)
         : null,
     };
   },

@@ -28,9 +28,12 @@ export type SetterAverages = {
   qualifiedPerCallRate: number
 }
 
-/** Un setter compte comme actif s'il a au moins un appel ou un lead traité. */
+/** Ligne « Non attribué » renvoyée par le backend (qualifiés sans setter) : pas un setter. */
+export const UNASSIGNED_SETTER_ID = '__non_attribue'
+
+/** Un setter compte comme actif s'il a au moins un appel, un lead traité ou un qualifié. */
 function isActiveSetter(s: AnalyticsSetterPerf): boolean {
-  return (s.calls ?? 0) > 0 || (s.classified ?? 0) > 0
+  return (s.calls ?? 0) > 0 || (s.classified ?? 0) > 0 || (s.qualified ?? 0) > 0
 }
 
 function round1(n: number): number {
@@ -38,7 +41,8 @@ function round1(n: number): number {
 }
 
 export function computeSetterAverages(setters: AnalyticsSetterPerf[], days: number): SetterAverages {
-  const active = setters.filter(isActiveSetter)
+  const realSetters = setters.filter((s) => s.id !== UNASSIGNED_SETTER_ID)
+  const active = realSetters.filter(isActiveSetter)
   const n = active.length
   const safeDays = Math.max(1, Math.round(days || 0))
   const totalCalls = active.reduce((sum, s) => sum + (s.calls ?? 0), 0)
@@ -48,7 +52,7 @@ export function computeSetterAverages(setters: AnalyticsSetterPerf[], days: numb
 
   return {
     activeSetters: n,
-    totalSetters: setters.length,
+    totalSetters: realSetters.length,
     totalCalls,
     totalQualified,
     avgCallsPerSetter: round1(avgCallsPerSetter),

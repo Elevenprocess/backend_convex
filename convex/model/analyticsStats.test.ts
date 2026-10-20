@@ -112,3 +112,37 @@ test("buildAdminStats : nouveaux leads hors imports, funnel monotone, lignes éq
   // commercial_lead ferme aussi : présent dans le classement commerciaux
   expect(a.commercials.map((r: any) => r.id)).toContain("CL");
 });
+
+test("buildAdminStats : somme des qualifiés par setter = KPI Qualifiés (reste en « Non attribué »)", () => {
+  const users = [
+    { id: "S1", name: "Setter Un", role: "setter" },
+    { id: "S2", name: "Setter Deux", role: "setter" },
+  ];
+  const leads = [
+    { id: "L1", source: "ghl", status: "qualifie", setterId: "S1", createdAt: T },
+    { id: "L2", source: "ghl", status: "rdv_pris", createdAt: T },
+  ] as any[];
+  const calls = [
+    { leadId: "L1", setterId: "S2", calledAt: T, result: "rdv_pris" },
+  ] as any[];
+  const rdvs = [
+    { leadId: "L1", status: "planifie", createdAt: T, scheduledAt: T + 86400000 },
+    { leadId: "L2", status: "planifie", createdAt: T, scheduledAt: T + 86400000 }, // pris dans GHL, sans appel
+    { leadId: "L3", status: "planifie", createdAt: T, scheduledAt: T + 86400000 }, // lead hors période, propriétaire S1
+  ] as any[];
+  const first = new Map([["L1", T], ["L2", T], ["L3", T]]);
+  const s = buildAdminStats(leads, calls, rdvs, users, range, undefined, first, new Map([["L3", "S1"]]));
+  expect(s.qualified).toBe(3);
+  const by = Object.fromEntries(s.setters.map((r: any) => [r.id, r.qualified]));
+  expect(by.S2).toBe(1); // dernier appelant de L1
+  expect(by.S1).toBe(1); // propriétaire de L3
+  expect(by.__non_attribue).toBe(1); // L2 : aucun setter
+  expect(s.setters.reduce((sum: number, r: any) => sum + r.qualified, 0)).toBe(s.qualified);
+});
+
+test("qualificationDates : un RDV saisi après coup est daté du jour du RDV, pas de la saisie", () => {
+  const old = Date.UTC(2025, 8, 10, 8, 0);
+  const rdvs = [{ leadId: "L1", status: "honore", result: "signe", createdAt: T, scheduledAt: old }] as any[];
+  expect(qualificationDates(rdvs, range).length).toBe(0);
+  expect(qualificationDates([{ leadId: null, status: "honore", createdAt: T, scheduledAt: old }] as any[], range).length).toBe(0);
+});

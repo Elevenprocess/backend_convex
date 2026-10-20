@@ -238,6 +238,19 @@ export function qualificationDates(
   range: RangeMs,
   firstRdvByLead?: Map<string, number>,
 ): number[] {
+  return qualificationEvents(rdvs, range, firstRdvByLead).map((e) => e.at);
+}
+
+/**
+ * Même ensemble que qualificationDates, avec le lead de chaque qualification
+ * (null pour un RDV sans lead) : le tableau par setter se répartit CETTE liste,
+ * pour que la somme des lignes égale toujours le KPI « Qualifiés ».
+ */
+export function qualificationEvents(
+  rdvs: RdvRow[],
+  range: RangeMs,
+  firstRdvByLead?: Map<string, number>,
+): { leadId: string | null; at: number }[] {
   const firstByLead = new Map<string, number>();
   for (const row of rdvs) {
     if (!row.leadId) continue;
@@ -246,13 +259,19 @@ export function qualificationDates(
       if (known !== undefined) firstByLead.set(row.leadId, known);
       continue;
     }
+    const at = Math.min(row.createdAt, row.scheduledAt ?? Infinity);
     const current = firstByLead.get(row.leadId);
-    if (current === undefined || row.createdAt < current) firstByLead.set(row.leadId, row.createdAt);
+    if (current === undefined || at < current) firstByLead.set(row.leadId, at);
   }
-  const dates: number[] = [];
-  for (const firstAt of firstByLead.values()) if (isInRange(firstAt, range)) dates.push(firstAt);
-  for (const row of rdvs) if (!row.leadId && isInRange(row.createdAt, range)) dates.push(row.createdAt);
-  return dates;
+  const events: { leadId: string | null; at: number }[] = [];
+  for (const [leadId, firstAt] of firstByLead) if (isInRange(firstAt, range)) events.push({ leadId, at: firstAt });
+  for (const row of rdvs) {
+    if (row.leadId) continue;
+    // RDV saisi après coup : daté au plus tard du jour du RDV (cf. loadFirstRdvByLead).
+    const at = Math.min(row.createdAt, row.scheduledAt ?? Infinity);
+    if (isInRange(at, range)) events.push({ leadId: null, at });
+  }
+  return events;
 }
 
 export function buildDailyEvolution(
@@ -528,6 +547,7 @@ export function buildAdminStats(
   range: RangeMs,
   latestCallByLead = buildLatestCallByLead(calls),
   firstRdvByLead?: Map<string, number>,
+  setterByLead?: Map<string, string>,
 ) {
   const scopedCalls = filterRange(calls, range, (c) => c.calledAt);
   const scopedLeads = leadsRows.filter((l) => isLeadActiveInRange(l, range, latestCallByLead));
@@ -541,7 +561,8 @@ export function buildAdminStats(
   // setter, événement daté). Plus jamais le statut ACTUEL des leads : il incluait
   // rdv_pris/rdv_honore/signe (le pipeline des commerciaux) et regonflait les
   // périodes passées à chaque qualification tardive.
-  const qualified = qualificationDates(rdvs, range, firstRdvByLead).length;
+  const qualificationList = qualificationEvents(rdvs, range, firstRdvByLead);
+  const qualified = qualificationList.length;
   // RDV pris = leads ayant atteint le stage RDV. Plus de clamp ≤ qualified : les
   // deux KPI mesurent des choses différentes (qualifications de la période vs
   // RDV commerciaux actifs).
@@ -573,16 +594,48 @@ export function buildAdminStats(
     resultSegments: resultSegments(resultCounts),
     hourlyCalls: buildHourlyCalls(scopedCalls, range),
     dailyEvolution: buildDailyEvolution(leadsRows, calls, rdvs, range, latestCallByLead, firstRdvByLead),
-    setters: buildSetterRows(scopedLeads, scopedCalls, userRows),
+    setters: buildSetterRows(scopedLeads, scopedCalls, userRows, {
+      leadIds: qualificationList.map((e) => e.leadId),
+      setterByLead,
+    }),
     commercials: buildCommercialRows(scopedRdvs, userRows),
   };
 }
 
-function buildSetterRows(leadsRows: LeadRow[], calls: CallRow[], userRows: UserRow[]) {
+export const UNASSIGNED_SETTER_ID = "__non_attribue";
+
+type QualificationCredit = {
+  // Leads qualifiés de la période (null = RDV sans lead), cf. qualificationEvents.
+  leadIds: (string | null)[];
+  // Setter propriétaire de chaque lead, tous leads confondus (repli sans appel).
+  setterByLead?: Map<string, string>;
+};
+
+function buildSetterRows(
+  leadsRows: LeadRow[],
+  calls: CallRow[],
+  userRows: UserRow[],
+  credit?: QualificationCredit,
+) {
   const callsBySetter = groupCallsBySetter(calls);
   const leadIdsBySetter = groupLeadIdsBySetter(leadsRows, calls);
   const leadsById = new Map(leadsRows.map((l) => [l.id, l]));
   const qualifierByLead = buildQualifierByLead(calls);
+  const setterIds = new Set(userRows.filter((u) => u.role === "setter").map((u) => u.id));
+  // Vue admin : chaque qualification du KPI global va au setter qui a fait
+  // basculer le lead (dernier appelant, sinon propriétaire) ; le reste (RDV pris
+  // dans GHL sans setter, saisie back-office) part en « Non attribué ». La somme
+  // des lignes égale toujours le KPI « Qualifiés ».
+  const creditedQualified = new Map<string, number>();
+  if (credit) {
+    for (const leadId of credit.leadIds) {
+      const owner = leadId
+        ? (qualifierByLead.get(leadId) ?? leadsById.get(leadId)?.setterId ?? credit.setterByLead?.get(leadId))
+        : undefined;
+      const key = owner && setterIds.has(owner) ? owner : UNASSIGNED_SETTER_ID;
+      creditedQualified.set(key, (creditedQualified.get(key) ?? 0) + 1);
+    }
+  }
 
   const rows = userRows
     .filter((u) => u.role === "setter")
@@ -603,9 +656,9 @@ function buildSetterRows(leadsRows: LeadRow[], calls: CallRow[], userRows: UserR
       const noAnswer = (counts.non_joint ?? 0) + (counts.injoignable ?? 0) + (counts.messagerie ?? 0);
       const connected = Math.max(0, callsTotal - noAnswer);
       // Seul le setter qui a réellement qualifié (dernier appelant) est crédité.
-      const qualified = classified.filter(
-        (l) => isQualifiedLead(l) && qualifierMatches(l, u.id, qualifierByLead),
-      ).length;
+      const qualified = credit
+        ? (creditedQualified.get(u.id) ?? 0)
+        : classified.filter((l) => isQualifiedLead(l) && qualifierMatches(l, u.id, qualifierByLead)).length;
       const rdvPris = Math.min(
         qualified,
         classified.filter(
@@ -627,8 +680,23 @@ function buildSetterRows(leadsRows: LeadRow[], calls: CallRow[], userRows: UserR
 
   const totalCalls = rows.reduce((sum, r) => sum + r.calls, 0);
   for (const r of rows) r.efficiency = pct(r.calls, totalCalls);
+  rows.sort((a, b) => b.calls - a.calls);
 
-  return rows.sort((a, b) => b.calls - a.calls);
+  const unassigned = creditedQualified.get(UNASSIGNED_SETTER_ID) ?? 0;
+  if (unassigned > 0) {
+    rows.push({
+      id: UNASSIGNED_SETTER_ID,
+      name: "Non attribué (RDV sans setter)",
+      initials: "—",
+      calls: 0,
+      connected: 0,
+      classified: 0,
+      qualified: unassigned,
+      rdvPris: 0,
+      efficiency: 0,
+    });
+  }
+  return rows;
 }
 
 export function groupCallsBySetter(calls: CallRow[]): Map<string, CallRow[]> {
