@@ -155,7 +155,7 @@ function LeadsSuivi() {
               onChange={(e) => setQuery(e.target.value)}
               className="suivi-search"
             />
-            <button type="button" onClick={() => navigate('/suivi')} className="rounded-full bg-success text-white px-4 py-2 text-xs font-black">Suivi global</button>
+            <button type="button" onClick={() => navigate('/suivi', { viewTransition: true })} className="rounded-full bg-success text-white px-4 py-2 text-xs font-black">Suivi global</button>
           </div>
         </div>
         {(loading || rdvLoading) && filtered.length === 0 ? <LoadingBlock label="Chargement dossiers signés…" /> : error ? (
@@ -165,7 +165,7 @@ function LeadsSuivi() {
         ) : (
           <section className="suivi-grid">
             {filtered.map((dossier) => (
-              <DossierCard key={dossier.id} dossier={dossier} onClick={() => navigate(`/suivi/${dossier.id}/fiche`)} />
+              <DossierCard key={dossier.id} dossier={dossier} onClick={() => navigate(`/suivi/${dossier.id}/fiche`, { viewTransition: true })} />
             ))}
           </section>
         )}

@@ -30,7 +30,7 @@ export function AcceptInvitation() {
     try {
       await acceptInvitation({ token, password })
       setDone(true)
-      window.setTimeout(() => navigate('/login'), 1500)
+      window.setTimeout(() => navigate('/login', { viewTransition: true }), 1500)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invitation impossible')
     } finally {

@@ -267,7 +267,7 @@ export function Interventions() {
 function TerrainInterventionCard({ row }: { row: TerrainIntervention }) {
   const navigate = useNavigate()
   const medallion = TYPE_MEDALLION[row.type]
-  const open = () => navigate(`/suivi/${row.leadId}/fiche`)
+  const open = () => navigate(`/suivi/${row.leadId}/fiche`, { viewTransition: true })
   return (
     <article
       className="glass-card p-4 sm:p-5 cursor-pointer transition-colors duration-200 hover:border-or/40"

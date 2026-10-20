@@ -70,7 +70,7 @@ export function RdvDetail() {
         <main className="p-8 flex items-center justify-center flex-grow">
           <div className="glass-card p-12 text-center">
             <p className="text-muted mb-4">{rdvError ?? "Ce RDV n'existe pas (ou plus)."}</p>
-            <button onClick={() => navigate('/rdv')} className="btn-primary px-4 py-2 rounded-xl text-sm">Retour calendrier</button>
+            <button onClick={() => navigate('/rdv', { viewTransition: true })} className="btn-primary px-4 py-2 rounded-xl text-sm">Retour calendrier</button>
           </div>
         </main>
       </AppShell>
@@ -111,7 +111,7 @@ export function RdvDetail() {
         title={`${lead ? fullName(lead) : 'Prospect'} — ${formatDateShort(rdv.scheduledAt)}`}
       />
       <div className="px-8 pt-4 flex items-center gap-3 flex-shrink-0">
-        <button onClick={() => navigate('/rdv')} className="text-muted hover:text-text flex items-center gap-1 text-sm">
+        <button onClick={() => navigate('/rdv', { viewTransition: true })} className="text-muted hover:text-text flex items-center gap-1 text-sm">
           <Icon name="arrow-left" size={16} />
           Retour
         </button>
@@ -128,7 +128,7 @@ export function RdvDetail() {
           )}
           <button className="btn-secondary px-4 py-2 rounded-xl text-sm">Reprogrammer</button>
           <button
-            onClick={() => lead && navigate(`/leads/${lead.id}?debrief=${rdv.id}`)}
+            onClick={() => lead && navigate(`/leads/${lead.id}?debrief=${rdv.id}`, { viewTransition: true })}
             disabled={!lead}
             className="btn-primary px-5 py-2 rounded-xl text-sm disabled:opacity-50"
           >
@@ -244,7 +244,7 @@ export function RdvDetail() {
               <span className={`status-badge ${STATUS_BADGE[lead.status]} mt-2 inline-block`}>{STATUS_LABEL[lead.status]}</span>
               {lead.phone && <div className="mt-3 text-xs text-muted">{lead.phone}</div>}
               <button
-                onClick={() => navigate(`/leads/${lead.id}`)}
+                onClick={() => navigate(`/leads/${lead.id}`, { viewTransition: true })}
                 className="mt-4 text-xs font-semibold text-or hover:underline"
               >
                 Voir la fiche complète →

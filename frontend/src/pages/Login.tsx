@@ -55,7 +55,7 @@ export function Login() {
     setError(null)
     try {
       await signIn(email, password)
-      navigate(redirectTo, { replace: true })
+      navigate(redirectTo, { viewTransition: true, replace: true })
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.status === 401 ? 'E-mail ou mot de passe incorrect.' : err.message)

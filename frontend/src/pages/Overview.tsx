@@ -143,7 +143,7 @@ function OverviewSuivi() {
               </div>
               <span className="dfx-funnel-total">{fmtCompact(pipeline.activeCount)} actifs</span>
             </div>
-            <DeliveryFunnel pipeline={pipeline} onSelect={(phase) => navigate(`/suivi?phase=${phase}`)} />
+            <DeliveryFunnel pipeline={pipeline} onSelect={(phase) => navigate(`/suivi?phase=${phase}`, { viewTransition: true })} />
           </div>
           <div className="overview-delivery-kpis">
             <DeliveryKpi icon="grid" label="Dossiers actifs" value={pipeline.activeCount} sub="en livraison" />
@@ -178,7 +178,7 @@ function OverviewSuivi() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className={`text-[10px] font-black px-2 py-1 rounded-full ${badge.cls}`}>{badge.text}</span>
-                      <button onClick={() => navigate(`/suivi/${row.client.leadId}/fiche`)}>Suivi</button>
+                      <button onClick={() => navigate(`/suivi/${row.client.leadId}/fiche`, { viewTransition: true })}>Suivi</button>
                     </div>
                   </div>
                 )
@@ -262,7 +262,7 @@ function OverviewResponsableTechnique() {
               {unassigned.slice(0, 6).map((c) => (
                 <div key={c.id} className="overview-role-row overview-role-row--no-avatar">
                   <div><strong>{c.lead.fullName ?? c.lead.phone ?? 'Dossier'}</strong><small>{c.lead.city ?? '—'}</small></div>
-                  <button onClick={() => navigate(`/suivi/${c.leadId}/fiche`)}>Attribuer</button>
+                  <button onClick={() => navigate(`/suivi/${c.leadId}/fiche`, { viewTransition: true })}>Attribuer</button>
                 </div>
               ))}
               {unassigned.length === 0 && <div className="text-xs text-faint">Tout est attribué 🎉</div>}
@@ -282,7 +282,7 @@ function OverviewResponsableTechnique() {
                 { label: 'Install. en cours', value: pipeline.installation.en_cours },
                 { label: 'Install. posées', value: pipeline.installation.fait },
               ]).map((stage) => (
-                <button key={stage.label} type="button" onClick={() => navigate('/suivi')} className="rounded-[18px] border border-line-soft bg-white/70 px-4 py-4 text-left hover:border-success/50 transition">
+                <button key={stage.label} type="button" onClick={() => navigate('/suivi', { viewTransition: true })} className="rounded-[18px] border border-line-soft bg-white/70 px-4 py-4 text-left hover:border-success/50 transition">
                   <strong className="block text-2xl tabular-nums">{stage.value}</strong>
                   <small className="text-muted">{stage.label}</small>
                 </button>
@@ -370,9 +370,9 @@ function OverviewSetter() {
         activeTab={tab}
         onTabChange={(id) => {
           setTab(id)
-          if (id === 'leads') navigate('/leads')
-          if (id === 'notifications') navigate('/notifications')
-          if (id === 'performance') navigate('/analytics')
+          if (id === 'leads') navigate('/leads', { viewTransition: true })
+          if (id === 'notifications') navigate('/notifications', { viewTransition: true })
+          if (id === 'performance') navigate('/analytics', { viewTransition: true })
         }}
       />
       <main className="overview-shot-page flex-grow overflow-auto">
@@ -542,7 +542,7 @@ function CommercialDebriefsToFill({ debriefs, limit = 8 }: { debriefs: { rdv: Rd
               key={rdv.id}
               className="commercial-qualified-row"
               style={{ background: 'none', border: 'none', font: 'inherit', textAlign: 'left', width: '100%', cursor: 'pointer' }}
-              onClick={() => rdv.leadId && navigate(`${leadDetailPath(role, rdv.leadId)}?debrief=${rdv.id}`)}
+              onClick={() => rdv.leadId && navigate(`${leadDetailPath(role, rdv.leadId)}?debrief=${rdv.id}`, { viewTransition: true })}
               disabled={!rdv.leadId}
             >
               <div className="overview-role-avatar">{userInitials(name)}</div>
@@ -735,7 +735,7 @@ function OverviewCommercialLead() {
         activeTab={tab}
         onTabChange={(id) => {
           setTab(id)
-          if (id === 'rdv') navigate('/rdv')
+          if (id === 'rdv') navigate('/rdv', { viewTransition: true })
         }}
       />
       <main className="overview-shot-page overview-commercial-page flex-grow overflow-auto">
@@ -955,8 +955,8 @@ function OverviewAdmin() {
         activeTab={tab}
         onTabChange={(id) => {
           setTab(id)
-          if (id === 'setters') navigate('/settings')
-          if (id === 'commerciaux' || id === 'ventes') navigate('/analytics')
+          if (id === 'setters') navigate('/settings', { viewTransition: true })
+          if (id === 'commerciaux' || id === 'ventes') navigate('/analytics', { viewTransition: true })
         }}
       />
       <main className="overview-shot-page flex-grow overflow-auto">
@@ -1006,7 +1006,7 @@ function OverviewAdmin() {
             <div className="shot-calendar-head">
               <span>{formatShortDate(new Date(funnelRange.from))}</span>
               <strong>Entonnoir CRM</strong>
-              <button onClick={() => navigate('/analytics')}>Détails</button>
+              <button onClick={() => navigate('/analytics', { viewTransition: true })}>Détails</button>
             </div>
             <FunnelFlowMap totals={overviewFunnelTotals} />
           </div>

@@ -143,7 +143,7 @@ export function Suivi() {
   // Compat redirect : /suivi?lead=X → fiche client complète.
   const legacyLead = params.get('lead')
   useEffect(() => {
-    if (legacyLead) navigate(`/suivi/${legacyLead}/fiche`, { replace: true })
+    if (legacyLead) navigate(`/suivi/${legacyLead}/fiche`, { viewTransition: true, replace: true })
   }, [legacyLead, navigate])
 
   useEffect(() => {
@@ -313,7 +313,7 @@ export function Suivi() {
                   }}
                 >
                   {rowItems.map((d) => (
-                    <DossierCard key={d.id} dossier={d} client={clientByLead.get(d.id)} projectCount={projectCountByLead.get(d.id)} onClick={() => navigate(`/suivi/${d.id}/fiche`)} />
+                    <DossierCard key={d.id} dossier={d} client={clientByLead.get(d.id)} projectCount={projectCountByLead.get(d.id)} onClick={() => navigate(`/suivi/${d.id}/fiche`, { viewTransition: true })} />
                   ))}
                 </div>
               )

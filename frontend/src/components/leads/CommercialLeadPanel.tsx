@@ -49,7 +49,7 @@ export function CommercialLeadPanel({
 
   function openFullProfile() {
     onClose()
-    navigate(leadDetailPath(role, lead.id))
+    navigate(leadDetailPath(role, lead.id), { viewTransition: true })
   }
 
   // Reset quand on change de lead.
@@ -121,7 +121,7 @@ export function CommercialLeadPanel({
     if (projectToOpen) {
       // Vente → rediriger vers le projet créé/réutilisé
       onClose()
-      navigate(`/projects/${projectToOpen.id}`)
+      navigate(`/projects/${projectToOpen.id}`, { viewTransition: true })
     } else {
       // Non-vente → fermer la sidebar
       onClose()
@@ -144,7 +144,7 @@ export function CommercialLeadPanel({
           // Chemin RDV : le projet vente est déjà résolu/rattaché par le sidebar.
           if (outcome === 'vente' && projectId) {
             onClose()
-            navigate(`/projects/${projectId}`)
+            navigate(`/projects/${projectId}`, { viewTransition: true })
           }
         }}
         className={className}
@@ -175,7 +175,7 @@ export function CommercialLeadPanel({
             onOpenFullProfile={openFullProfile}
             onOpenProject={(p) => {
               onClose()
-              navigate(`/projects/${p.id}`)
+              navigate(`/projects/${p.id}`, { viewTransition: true })
             }}
           />
         )}

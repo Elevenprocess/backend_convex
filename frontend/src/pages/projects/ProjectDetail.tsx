@@ -86,7 +86,7 @@ export function ProjectDetail() {
       <Topbar eyebrow="PROJET" title={project.name} />
       <div className="px-4 sm:px-6 lg:px-10 pt-4 pb-2 flex items-center gap-3 flex-shrink-0 flex-wrap border-b border-line-soft">
         <button
-          onClick={() => navigate(leadDetailPath(role, project.leadId))}
+          onClick={() => navigate(leadDetailPath(role, project.leadId), { viewTransition: true })}
           className="inline-flex items-center gap-1.5 text-muted hover:text-text text-[13px] font-medium"
         >
           <Icon name="arrow-left" size={15} />
@@ -104,7 +104,7 @@ export function ProjectDetail() {
           <ProjectDetailView
             project={project}
             lead={lead}
-            onBack={() => navigate(leadDetailPath(role, lead.id))}
+            onBack={() => navigate(leadDetailPath(role, lead.id), { viewTransition: true })}
             onChanged={(updated) => {
               if (updated) setProject(updated)
               setRefreshKey((k) => k + 1)

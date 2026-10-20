@@ -67,7 +67,7 @@ export function Journal() {
     const target = entityTarget(row, role)
     if (!target) return
     if (target.leadId) selectLead(target.leadId)
-    navigate(target.path)
+    navigate(target.path, { viewTransition: true })
   }
 
   // Recherche (locale, sur les lignes chargées) légèrement débouncée.

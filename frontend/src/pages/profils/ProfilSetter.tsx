@@ -43,7 +43,7 @@ export function ProfilSetter() {
           <Icon name="arrow-left" size={16} />
           Retour
         </button>
-        <button onClick={() => navigate('/leads')} className="btn-secondary px-4 py-2 rounded-xl text-sm ml-auto">Voir leads</button>
+        <button onClick={() => navigate('/leads', { viewTransition: true })} className="btn-secondary px-4 py-2 rounded-xl text-sm ml-auto">Voir leads</button>
       </div>
 
       <main className="profile-page flex-grow overflow-auto px-6 pt-4 pb-8 md:px-8">

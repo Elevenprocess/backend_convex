@@ -237,10 +237,10 @@ export function Sidebar() {
   const handleSignOut = async () => {
     setUserMenu(false)
     await signOut()
-    navigate('/', { replace: true })
+    navigate('/', { viewTransition: true, replace: true })
   }
 
-  const goSearch = () => navigate(leadListPath(role))
+  const goSearch = () => navigate(leadListPath(role), { viewTransition: true })
 
   return (
     <>
@@ -256,7 +256,7 @@ export function Sidebar() {
       <button
         type="button"
         className="sb-workspace"
-        onClick={() => navigate('/overview')}
+        onClick={() => navigate('/overview', { viewTransition: true })}
         title="VELORA"
       >
         <span className="sb-workspace-logo">
@@ -351,7 +351,7 @@ export function Sidebar() {
               className="sb-menu-item"
               onClick={() => {
                 setUserMenu(false)
-                navigate('/profile')
+                navigate('/profile', { viewTransition: true })
               }}
             >
               <Icon name="users" size={14} strokeWidth={1.75} />

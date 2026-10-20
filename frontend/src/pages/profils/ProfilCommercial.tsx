@@ -238,7 +238,7 @@ export function ProfilCommercial() {
         <div className="ml-auto flex items-center gap-2 text-xs text-muted">
           <span className={`status-badge ${member.ghlUserId ? 'bg-success-tint text-success' : 'bg-rouille-tint text-rouille'}`}>GHL : {member.ghlUserId ? 'relié' : 'non relié'}</span>
           <span className="status-badge bg-info-tint text-info">Secteur : {sectorInfo.label}</span>
-          <button onClick={() => navigate('/rdv')} className="btn-secondary px-3 py-1.5 rounded-xl text-xs">Voir RDV</button>
+          <button onClick={() => navigate('/rdv', { viewTransition: true })} className="btn-secondary px-3 py-1.5 rounded-xl text-xs">Voir RDV</button>
         </div>
       </div>
 

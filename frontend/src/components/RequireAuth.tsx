@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth'
 import { convexAuthEnabled } from '../lib/convex'
 import { SharedLeadsKeeper } from '../lib/hooks'
 import { LoadingBlock } from './Spinner'
+import { PersistentShell } from './shell/AppShell'
 
 export function RequireAuth() {
   const status = useAuth((s) => s.status)
@@ -32,7 +33,9 @@ export function RequireAuth() {
   return (
     <>
       {keepSharedLeads && <SharedLeadsKeeper />}
-      <Outlet />
+      <PersistentShell>
+        <Outlet />
+      </PersistentShell>
     </>
   )
 }

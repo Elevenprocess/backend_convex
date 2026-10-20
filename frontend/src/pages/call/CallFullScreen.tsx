@@ -74,7 +74,7 @@ export function CallFullScreen() {
       <div className="w-full h-screen flex items-center justify-center bg-cream">
         <div className="glass-card p-12 text-center">
           <p className="text-muted mb-4">{error ?? 'Lead introuvable'}</p>
-          <button onClick={() => navigate('/leads')} className="btn-primary px-4 py-2 rounded-xl text-sm">
+          <button onClick={() => navigate('/leads', { viewTransition: true })} className="btn-primary px-4 py-2 rounded-xl text-sm">
             Retour à la liste
           </button>
         </div>
@@ -88,7 +88,7 @@ export function CallFullScreen() {
         <div className="glass-card p-12 text-center max-w-md">
           <p className="text-rouille font-semibold mb-2">Appel impossible</p>
           <p className="text-muted text-sm mb-4">{callError}</p>
-          <button onClick={() => navigate(`/leads/${lead.id}`)} className="btn-primary px-4 py-2 rounded-xl text-sm">
+          <button onClick={() => navigate(`/leads/${lead.id}`, { viewTransition: true })} className="btn-primary px-4 py-2 rounded-xl text-sm">
             Retour à la fiche
           </button>
         </div>
@@ -119,7 +119,7 @@ export function CallFullScreen() {
       }
     }
     endCall()
-    navigate(`/leads/${lead.id}`)
+    navigate(`/leads/${lead.id}`, { viewTransition: true })
   }
 
   return (

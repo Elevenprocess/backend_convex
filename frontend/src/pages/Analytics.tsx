@@ -152,7 +152,7 @@ function AnalyticsSuivi() {
                     data-phase={phase}
                     className="text-left rounded-lg -m-1 p-1 hover:bg-line-soft/40 transition-colors"
                     title={`Voir les dossiers en ${PHASE_LABEL[phase]}`}
-                    onClick={() => navigate(`/suivi?phase=${phase}`)}
+                    onClick={() => navigate(`/suivi?phase=${phase}`, { viewTransition: true })}
                   >
                     <Goal
                       label={PHASE_LABEL[phase]}

@@ -180,7 +180,7 @@ export function RdvCalendar() {
   const openCalendarItem = (item: CalendarItem) => {
     if (item.source === 'vt') {
       if (role === 'admin' || role === 'delivrabilite' || role === 'responsable_technique' || role === 'back_office') {
-        navigate(`/suivi/${item.vt.leadId}/fiche`)
+        navigate(`/suivi/${item.vt.leadId}/fiche`, { viewTransition: true })
       } else {
         setVtPopup(item.vt) // technicien : popup lecture seule
       }
@@ -189,13 +189,13 @@ export function RdvCalendar() {
     if (item.source === 'local') {
       // Clic sur un RDV client → fiche du lead (historique, débriefs, projets),
       // pas la page RDV brute. Repli sur la page RDV si le lead manque.
-      if (item.rdv.leadId) navigate(leadDetailPath(role, item.rdv.leadId))
-      else navigate(`/rdv/${item.id}`)
+      if (item.rdv.leadId) navigate(leadDetailPath(role, item.rdv.leadId), { viewTransition: true })
+      else navigate(`/rdv/${item.id}`, { viewTransition: true })
       return
     }
     const lead = item.event.contactId ? leadByExternalId.get(item.event.contactId) : undefined
     const search = lead ? fullName(lead) : item.event.contactPhone || item.event.contactName || item.event.contactEmail || item.event.title || ''
-    if (search) navigate(leadSearchPath(role, search))
+    if (search) navigate(leadSearchPath(role, search), { viewTransition: true })
   }
 
   const calendarItems = useMemo(() => {
@@ -383,7 +383,7 @@ export function RdvCalendar() {
           </div>
         )}
         {ghlLoading && <Spinner size={16} stroke={3} className="text-xs text-muted shrink-0" />}
-        <button onClick={() => navigate('/rdv/split')} className="btn-primary ml-auto px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <button onClick={() => navigate('/rdv/split', { viewTransition: true })} className="btn-primary ml-auto px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 shrink-0">
           <Icon name="plus" size={14} />
           <span className="hidden sm:inline">Nouveau RDV</span>
           <span className="sm:hidden">RDV</span>
