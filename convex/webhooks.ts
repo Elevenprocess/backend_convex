@@ -181,7 +181,10 @@ export const applyGhlStageChange = internalMutation({
       previousStatus = existing.status;
       const patch: Partial<Doc<"leads">> = { ghlStageName: normalizedStage };
       if (input.ghlPipelineId !== undefined) patch.ghlPipelineId = input.ghlPipelineId;
-      if (input.monetaryValue !== undefined) patch.monetaryValue = input.monetaryValue;
+      // ELE-178 garde-fou : un montant GHL vide/0 n écrase jamais un montant connu.
+      if (input.monetaryValue !== undefined && (input.monetaryValue > 0 || !(existing.monetaryValue && existing.monetaryValue > 0))) {
+        patch.monetaryValue = input.monetaryValue;
+      }
       if (input.lostReason !== undefined) patch.lostReason = input.lostReason;
       if (assignedToId !== undefined) patch.assignedToId = assignedToId;
       if (mapped.isKnown && mapped.status) {
