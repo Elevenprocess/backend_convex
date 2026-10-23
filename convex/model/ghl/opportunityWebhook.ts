@@ -62,7 +62,14 @@ export function normalizeOpportunityWebhook(
   if (!externalId) {
     throw new GhlOpportunityWebhookValidationError("contact_id manquant dans le payload");
   }
-  const ghlStageName = pick(p.stage_name, p.stageName, p.pipeline_stage, p.pipelineStage);
+  // `pipleline_stage` : faute de frappe du token standard GHL
+  // ({{opportunity.pipleline_stage}}), c'est la clé qu'envoie réellement le
+  // workflow « Velora | Webhook Opportunité ». Sans elle on retombait sur la
+  // recherche API GHL, en retard de quelques secondes sur un changement
+  // d'étape → lead remis à l'étape précédente (Veronique Lebon, 23/10).
+  const ghlStageName = pick(
+    p.stage_name, p.stageName, p.pipeline_stage, p.pipelineStage, p.pipleline_stage,
+  );
   if (!ghlStageName) {
     throw new GhlOpportunityWebhookValidationError("stage_name manquant dans le payload");
   }

@@ -53,6 +53,12 @@ describe("normalizeOpportunityWebhook", () => {
     expect(n.ghlAssignedUserId).toBe("u9");
   });
 
+  it("stage via pipleline_stage (faute de frappe du token GHL standard) : lu tel quel", () => {
+    const n = normalizeOpportunityWebhook(
+      { contact_id: "c1", pipleline_stage: "5. RDV Planifié 📅" }, NOW);
+    expect(n.ghlStageName).toBe("5. RDV Planifié 📅");
+  });
+
   it("occurred_at absent ou invalide → nowMs ; event absent → opportunity.changed", () => {
     expect(normalizeOpportunityWebhook({ contact_id: "c", stage_name: "s" }, NOW).occurredAt).toBe(NOW);
     expect(normalizeOpportunityWebhook(
