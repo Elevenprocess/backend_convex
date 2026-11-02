@@ -5,10 +5,13 @@ import { MagicKpi } from '../components/kpi/MagicKpi'
 import { AppShell } from '../components/shell/AppShell'
 import { Topbar } from '../components/shell/Topbar'
 import { useAuth } from '../lib/auth'
+import { convexAuthEnabled } from '../lib/convex'
+import type { SetterLiveRow } from '../lib/convexApi'
+import { localDayBounds, todayCallStats, todayHourlySeries, weekDailySeries, type ActivityPoint } from '../lib/setterActivity'
 import { leadDetailPath } from '../lib/leadPaths'
 import { useDisplayUser } from '../lib/role'
-import { useCallLogs, useClients, useLeads, useLeadStats, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary, useCommercialObjectives, useDebriefAnalytics, useSetterLeaderboard, prefetchAnalyticsFunnel, prefetchAnalyticsSummary, type DebriefAnalyticsResponse } from '../lib/hooks'
-import { STATUS_LABEL, DEBRIEF_ACCEPTANCE_FACTOR_LABEL, DEBRIEF_NON_SALE_REASON_LABEL, fullName, initials, type AnalyticsAdminSummary, type AnalyticsFunnelResponse, type CallLogResponse, type CommercialObjectiveResponse, type DebriefAcceptanceFactor, type DebriefNonSaleReason, type LeadResponse, type LeadStatus, type RdvResponse, type RdvLeadSummary, type UserResponse } from '../lib/types'
+import { useCallLogs, useClients, useLeads, useLeadStats, useRdvList, useUsers, useStartCall, useAnalyticsFunnel, useAnalyticsSummary, useCommercialObjectives, useDebriefAnalytics, useSetterLiveDay, useSharedLeads, prefetchAnalyticsFunnel, prefetchAnalyticsSummary, type DebriefAnalyticsResponse } from '../lib/hooks'
+import { STATUS_LABEL, DEBRIEF_ACCEPTANCE_FACTOR_LABEL, DEBRIEF_NON_SALE_REASON_LABEL, fullName, initials, type AnalyticsAdminSummary, type AnalyticsFunnelResponse, type CommercialObjectiveResponse, type DebriefAcceptanceFactor, type DebriefNonSaleReason, type LeadResponse, type LeadStatus, type RdvResponse, type RdvLeadSummary, type UserResponse } from '../lib/types'
 import { ObjectivesEditorModal } from '../components/overview/ObjectivesEditorModal'
 import { TerrainMonthlyChart } from '../components/overview/TerrainMonthlyChart'
 import { computeTechnicienStats, computeTerrainPipeline, selectUnassignedVt, type TechnicienStat } from '../lib/technicienStats'
@@ -298,6 +301,20 @@ function OverviewResponsableTechnique() {
 }
 
 // ----- F2 Setter -----
+// Bornes du jour local, stables pour que l'abonnement ne change qu'à minuit
+// (y compris sur une page restée ouverte toute la nuit).
+function useLocalDayBounds() {
+  const [bounds, setBounds] = useState(() => localDayBounds(new Date()))
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      const next = localDayBounds(new Date())
+      setBounds((prev) => (prev.fromMs === next.fromMs ? prev : next))
+    }, 60_000)
+    return () => window.clearInterval(interval)
+  }, [])
+  return bounds
+}
+
 function OverviewSetter() {
   const navigate = useNavigate()
   const startCall = useStartCall()
@@ -306,11 +323,16 @@ function OverviewSetter() {
   const [tab, setTab] = useState('overview')
   const [callbackTab, setCallbackTab] = useState<'late' | 'today' | 'tomorrow'>('today')
   const [activityRange, setActivityRange] = useState<'today' | 'week'>('today')
-  const { data: leads = [] } = useLeads({ limit: 500 })
+  // Mode Convex : drain partagé déjà monté dans RequireAuth. Un useLeads ici
+  // retéléchargeait toute la base à chaque visite, avec un re-rendu par page.
+  const sharedLeads = useSharedLeads()
+  const { data: ownLeads } = useLeads(convexAuthEnabled ? null : { limit: 500 })
+  const leads = convexAuthEnabled ? sharedLeads.data : ownLeads
   const { data: calls = [] } = useCallLogs(me?.id ? { setterId: me.id, limit: 500 } : { limit: 500 })
-  // « Nouveaux aujourd'hui » = flux entrant GLOBAL du jour (compte serveur exact),
-  // pas les leads du setter : le KPI mesure ce qui est arrivé, pas ce qu'il traite.
-  const { data: leadStats } = useLeadStats()
+  const dayBounds = useLocalDayBounds()
+  const { data: liveRows } = useSetterLiveDay(dayBounds)
+  const myLiveRow = liveRows?.find((r) => r.id === me?.id)
+  const leadStatsToday = useLeadStats().data?.leadsToday ?? 0
 
   const callbacks = useMemo(
     () =>
@@ -324,37 +346,27 @@ function OverviewSetter() {
 
   const stats = useMemo(() => {
     const list = leads ?? []
+    const now = new Date()
     const ownLeads = list.filter((l) => belongsToSetter(l, me?.id))
-    const classified = ownLeads.filter(isClassifiedLead)
     const loggedCalls = calls ?? []
-    const appels = Math.max(loggedCalls.length, classified.length)
-    // A lead is "connected" if we actually spoke to them — includes qualifie, pas_qualifie, rdv_*, signe, perdu.
-    // Status nouveau/relance/a_rappeler/pas_de_reponse = no contact yet.
-    const connectedStatuses: LeadStatus[] = ['qualifie', 'pas_qualifie', 'rdv_pris', 'rdv_honore', 'signe', 'perdu']
-    const qualifiedStatuses: LeadStatus[] = ['qualifie', 'rdv_pris', 'rdv_honore', 'signe']
-    const connexions = Math.max(
-      loggedCalls.filter((c) => c.result === 'joint' || c.result === 'rdv_pris').length,
-      classified.filter((l) => connectedStatuses.includes(l.status)).length,
-    )
-    const qualifies = classified.filter((l) => qualifiedStatuses.includes(l.status) && qualifiedBySetter(l, me?.id)).length
-    const rdvPris = classified.filter((l) => (l.status === 'rdv_pris' || l.status === 'rdv_honore' || l.status === 'signe') && qualifiedBySetter(l, me?.id)).length
-    // Compte serveur exact (toute la base) ; repli sur la fenêtre chargée —
-    // TOUS les leads du jour, pas seulement ceux du setter.
-    const leadsToday = leadStats?.leadsToday ?? list.filter((l) => isCreatedToday(l.createdAt)).length
+    const { calls: appels, connected: connexions } = todayCallStats(loggedCalls, now)
+    const qualifies = myLiveRow?.qualified ?? 0
     return {
       appels,
       connexions,
       qualifies,
-      rdvPris,
-      leadsToday,
+      rdvPris: myLiveRow?.rdvPris ?? 0,
+      // Le compte serveur est ponctuel : le décompte des leads chargés, lui, suit
+      // les arrivées en direct. Le plus grand des deux couvre le drain en cours.
+      leadsToday: Math.max(leadStatsToday, list.filter((l) => isCreatedToday(l.createdAt)).length),
       total: ownLeads.length,
       ownLeads,
       qualifRate: ratePct(connexions, qualifies),
       connectionRate: ratePct(appels, connexions),
-      activityToday: todayLogicalCallSeries(loggedCalls, classified),
-      activityWeek: weekLogicalCallSeries(loggedCalls, classified),
+      activityToday: todayHourlySeries(loggedCalls, now),
+      activityWeek: weekDailySeries(loggedCalls, now),
     }
-  }, [leads, calls, me?.id, leadStats?.leadsToday])
+  }, [leads, calls, me?.id, leadStatsToday, myLiveRow?.qualified, myLiveRow?.rdvPris, dayBounds.fromMs])
 
   return (
     <AppShell flat>
@@ -379,7 +391,7 @@ function OverviewSetter() {
         <div className="overview-air-header">
           <div>
             <span className="shot-eyebrow">VELORA · setter</span>
-            <h1>Mon activité appels</h1>
+            <h1>Mon activité du jour</h1>
           </div>
           <div className="overview-profile-chip">
             <div className="overview-profile-photo">
@@ -466,14 +478,14 @@ function OverviewSetter() {
           </div>
 
           <div className="overview-air-card overview-role-side">
-            <CardHead title="Progression réelle" icon="check" />
+            <CardHead title="Progression du jour" icon="check" />
             <TaskLine icon="phone" title="Appels" sub={`${fmtCompact(stats.appels)} appels enregistrés`} done={stats.appels > 0} />
             <TaskLine icon="users" title="Connexions" sub={`${fmtCompact(stats.connexions)} contacts joints`} done={stats.connexions > 0} />
             <TaskLine icon="target" title="Qualifiés" sub={`${fmtCompact(stats.qualifies)} prospects qualifiés`} done={stats.qualifies > 0} />
             <TaskLine icon="trophy" title="RDV" sub={`${fmtCompact(stats.rdvPris)} rendez-vous pris`} done={stats.rdvPris > 0} />
           </div>
 
-          <SetterLeaderboardCard meId={me?.id} />
+          <SetterLeaderboardCard rows={liveRows} meId={me?.id} />
         </section>
       </main>
     </AppShell>
@@ -483,13 +495,12 @@ function OverviewSetter() {
 // Classement minimal du jour (version réduite du tableau « Performances par
 // setter » d'Analytics) : uniquement les setters avec de l'activité, appels +
 // qualifiés envoyés aux commerciaux.
-function SetterLeaderboardCard({ meId }: { meId?: string }) {
-  const { data: rows, loading } = useSetterLeaderboard({ days: 1 })
+function SetterLeaderboardCard({ rows, meId }: { rows: SetterLiveRow[] | null | undefined; meId?: string }) {
   return (
     <div className="overview-air-card overview-role-side">
       <CardHead title="Performances setters" icon="trophy" />
       <div className="overview-role-list">
-        {loading && !rows?.length ? (
+        {!rows ? (
           <div className="text-xs text-faint">Chargement…</div>
         ) : !rows?.length ? (
           <div className="text-xs text-faint">Aucune activité setter aujourd'hui.</div>
@@ -2028,10 +2039,6 @@ function callsPerLead(calls: number, leads: number): string {
   return (calls / leads).toFixed(calls >= leads * 10 ? 0 : 1)
 }
 
-function isClassifiedLead(lead: LeadResponse): boolean {
-  return lead.status !== 'nouveau'
-}
-
 function isCreatedToday(createdAt: string | null | undefined): boolean {
   if (!createdAt) return false
   const created = new Date(createdAt)
@@ -2067,53 +2074,6 @@ function leadsKpiLabelFor(mode: FunnelPeriodMode): string {
 function belongsToSetter(lead: LeadResponse, setterId: string | undefined): boolean {
   if (!setterId) return true
   return lead.setterId === setterId || (lead.assignedSetterIds ?? []).includes(setterId)
-}
-
-// La qualification d'un lead n'est créditée qu'au setter qui l'a réellement fait
-// basculer = celui de son dernier appel loggé (repli sur le propriétaire si aucun
-// appel tracé). Sinon plusieurs setters ayant appelé le même lead se voyaient tous
-// créditer la qualification (cf. même logique côté backend analytics).
-function qualifiedBySetter(lead: LeadResponse, setterId: string | undefined): boolean {
-  if (!setterId) return true
-  return (lead.latestCallSetterId ?? lead.setterId) === setterId
-}
-
-type ActivityPoint = { label: string; value: number }
-
-function isoDayKey(iso: string | null | undefined): string | null {
-  if (!iso) return null
-  return iso.slice(0, 10)
-}
-
-function isoHour(iso: string | null | undefined): number | null {
-  if (!iso) return null
-  const d = new Date(iso)
-  const hour = d.getHours()
-  return Number.isNaN(hour) ? null : hour
-}
-
-
-function weekLogicalCallSeries(calls: CallLogResponse[], classified: LeadResponse[]): ActivityPoint[] {
-  return lastNDays(7).map((day) => {
-    const logged = calls.filter((c) => isoDayKey(c.calledAt) === day).length
-    const classifs = classified.filter((l) => isoDayKey(l.updatedAt) === day).length
-    return { label: dayLabel(day), value: Math.max(logged, classifs) }
-  })
-}
-
-function todayLogicalCallSeries(calls: CallLogResponse[], classified: LeadResponse[]): ActivityPoint[] {
-  const today = new Date().toISOString().slice(0, 10)
-  const hours = Array.from({ length: 12 }, (_, i) => 8 + i)
-  return hours.map((hour) => {
-    const logged = calls.filter((c) => isoDayKey(c.calledAt) === today && isoHour(c.calledAt) === hour).length
-    const classifs = classified.filter((l) => isoDayKey(l.updatedAt) === today && isoHour(l.updatedAt) === hour).length
-    return { label: `${hour}h`, value: Math.max(logged, classifs) }
-  })
-}
-
-function dayLabel(day: string): string {
-  const d = new Date(`${day}T12:00:00`)
-  return d.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '')
 }
 
 // Seul un lead encore « À rappeler » (ou en relance GHL) porte un rappel actif :
@@ -2341,15 +2301,6 @@ function textIncludes(value: string | null | undefined, needles: string[]): bool
   const normalized = value.toLocaleLowerCase('fr-FR')
   return needles.some((needle) => normalized.includes(needle.toLocaleLowerCase('fr-FR')))
 }
-
-function lastNDays(n: number): string[] {
-  return Array.from({ length: n }, (_, i) => {
-    const d = new Date()
-    d.setDate(d.getDate() - (n - 1 - i))
-    return d.toISOString().slice(0, 10)
-  })
-}
-
 
 // ===== Atoms =====
 

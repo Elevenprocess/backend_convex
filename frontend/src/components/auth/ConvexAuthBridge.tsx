@@ -8,6 +8,14 @@ import { configureAuthBackend, useAuth } from '../../lib/auth'
 // Pont entre Convex Auth et le store zustand useAuth : l'app entière continue
 // de lire s.user / s.status sans savoir d'où vient la session. Monté une seule
 // fois sous <ConvexAuthProvider> (main.tsx), ne rend rien.
+// Renouvellement de jeton ou reconnexion : un état transitoire ne doit pas
+// ramener une session déjà ouverte sur l'écran « Chargement… », ce qui démonte
+// toute l'app et relance tous ses chargements. Une vraie fin de session passe
+// par isAuthenticated=false (guest).
+function keepAuthedElseLoading() {
+  if (useAuth.getState().status !== 'authed') useAuth.setState({ status: 'loading' })
+}
+
 export function ConvexAuthBridge() {
   const { signIn, signOut } = useAuthActions()
   const { isLoading, isAuthenticated } = useConvexAuth()
@@ -35,7 +43,7 @@ export function ConvexAuthBridge() {
 
   useEffect(() => {
     if (isLoading) {
-      useAuth.setState({ status: 'loading' })
+      keepAuthedElseLoading()
       return
     }
     if (!isAuthenticated) {
@@ -43,7 +51,11 @@ export function ConvexAuthBridge() {
       return
     }
     // Session Convex active : on attend users:me (undefined = requête en vol).
-    if (me === undefined || me === null) {
+    if (me === undefined) {
+      keepAuthedElseLoading()
+      return
+    }
+    if (me === null) {
       useAuth.setState({ status: 'loading' })
       return
     }

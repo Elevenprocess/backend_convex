@@ -3,8 +3,8 @@ import { create } from 'zustand'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 import { getFunctionName } from 'convex/server'
 import { convexClient } from './convex'
-import { adsReport, adBudget, adDepositsList, type ConvexAdBudget, type ConvexAdDeposit, simulatorFunnel, type ConvexSimulatorFunnel, analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, callLogsListByLead, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsListEnriched, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, rdvListWindow, substepsList, usersGet, usersList, usersDirectory, leadsGetEnriched, analyticsSetterLeaderboard } from './convexApi'
-import type { ConvexUserDoc, SetterLeaderboardEntry, ConvexActivityDoc } from './convexApi'
+import { adsReport, adBudget, adDepositsList, type ConvexAdBudget, type ConvexAdDeposit, simulatorFunnel, type ConvexSimulatorFunnel, analyticsCommercialStats, analyticsDebriefStats, analyticsFunnel, analyticsSetterStats, analyticsSummary, callLogsListBySetter, callLogsListByLead, clientsList, commercialObjectivesListByPeriod, debriefsListByLead, leadsListEnriched, leadsStats, paymentsListAcomptes, rdvList, rdvListByLead, rdvListWindow, substepsList, usersGet, usersList, usersDirectory, leadsGetEnriched, analyticsSetterLiveDay } from './convexApi'
+import type { ConvexUserDoc, SetterLiveRow, ConvexActivityDoc } from './convexApi'
 import { activityLogForLead, activityLogList, activityLogMyScope, ghlContactNotesListByLead, type ActivityListArgs, type ActivityDomain, type ConvexGhlNotesResult } from './convexApi'
 import { mapConvexAcompte, mapConvexCallLog, mapConvexClient, mapConvexCommercialObjective, mapConvexDebrief, mapConvexLead, mapConvexRdv, mapConvexSubstep, mapConvexUser } from './convexMappers'
 import { useAuth } from './auth'
@@ -616,29 +616,15 @@ export function useConvexSimulatorFunnel(
 const SETTER_STATS_ROLES = new Set<Role>(['admin', 'setter', 'setter_lead', 'commercial', 'commercial_lead'])
 const COMMERCIAL_STATS_ROLES = new Set<Role>(['admin', 'commercial', 'commercial_lead'])
 
-// Classement minimal des setters (carte Overview) : appels + qualifiés du jour
-// par défaut. Même pattern one-shot + sticky que les autres stats.
-export function useConvexSetterLeaderboard(
-  filters?: { from?: string; to?: string; days?: number },
-): Async<SetterLeaderboardEntry[]> {
-  const now = useStableNow()
+// Tableau de bord setter : abonnement réactif léger (la query ne lit que la
+// plage demandée). Derniers chiffres connus affichés aussitôt au retour sur la page.
+export function useConvexSetterLiveDay(bounds: { fromMs: number; toMs: number }): Async<SetterLiveRow[]> {
   const role = useAuth((s) => s.user?.role)
   const uid = useAuth((s) => s.user?.id)
-  const allowed = !!role && SETTER_STATS_ROLES.has(role)
-  const res = useOneShotQuery(
-    analyticsSetterLeaderboard,
-    allowed ? { now, days: filters?.days, from: filters?.from, to: filters?.to } : 'skip',
-  )
-  const key = allowed
-    ? `kpi:setterboard:${uid ?? '?'}:${filters?.days ?? ''}:${filters?.from ?? ''}:${filters?.to ?? ''}`
-    : null
-  const sticky = usePersistentSticky(key, res)
-  return {
-    data: allowed ? ((sticky ?? null) as SetterLeaderboardEntry[] | null) : [],
-    loading: allowed && res === undefined,
-    error: null,
-    refetch: noop,
-  }
+  const allowed = !!role && SUMMARY_ROLES.has(role)
+  const res = useQuery(analyticsSetterLiveDay, allowed ? bounds : 'skip')
+  const sticky = usePersistentSticky(allowed ? `kpi:setterLive:${uid ?? '?'}:${bounds.fromMs}` : null, res)
+  return { data: allowed ? (sticky ?? null) : null, loading: allowed && res === undefined, error: null, refetch: noop }
 }
 
 export function useConvexSetterStats(

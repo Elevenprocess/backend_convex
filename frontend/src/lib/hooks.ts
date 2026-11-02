@@ -51,7 +51,7 @@ import {
   useConvexAdsReport,
   useConvexDebriefAnalytics,
   useConvexSetterStats,
-  useConvexSetterLeaderboard,
+  useConvexSetterLiveDay,
   useConvexLead,
   useConvexLeadDebriefs,
   useConvexLeadStats,
@@ -757,15 +757,14 @@ export const useSetterStats: typeof useSetterStatsRest = convexAuthEnabled
   ? (useConvexSetterStats as unknown as typeof useSetterStatsRest)
   : useSetterStatsRest
 
-// Classement minimal des setters (Overview) — Convex uniquement : pas
-// d'équivalent REST, on renvoie une liste vide hors mode Convex.
-const useSetterLeaderboardRest: typeof useConvexSetterLeaderboard = () => ({
+// Activité setters du jour — Convex uniquement : pas d'équivalent REST.
+const useSetterLiveDayRest: typeof useConvexSetterLiveDay = () => ({
   data: [],
   loading: false,
   error: null,
   refetch: () => {},
 })
-export const useSetterLeaderboard = convexAuthEnabled ? useConvexSetterLeaderboard : useSetterLeaderboardRest
+export const useSetterLiveDay = convexAuthEnabled ? useConvexSetterLiveDay : useSetterLiveDayRest
 
 function useCommercialObjectivesRest(period: string | null): Async<CommercialObjectiveResponse[]> {
   return useFetch<CommercialObjectiveResponse[]>(

@@ -253,7 +253,7 @@ function AnalyticsSetter({ name }: { name: string }) {
       <Topbar eyebrow="STATISTIQUES / SETTER" title={`Mes performances — ${name}`} />
       <div className="px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 flex items-center justify-between gap-2 sm:gap-4 flex-shrink-0 flex-wrap">
         <div className="text-xs text-faint font-semibold">
-          Moteur d'analyse backend : {range.label}.{loading && <AnalyticsInlineLoading />}{error ? ` Erreur: ${error}` : ''}
+          Moteur d'analyse backend : {range.label}.{loading && !data && <AnalyticsInlineLoading />}{error ? ` Erreur: ${error}` : ''}
         </div>
         <DateRangePicker value={period} onChange={setPeriod} align="right" />
       </div>
