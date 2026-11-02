@@ -71,16 +71,34 @@ test("buildSetterStats : qualification créditée au DERNIER appelant seulement"
   expect(s1.answered).toBeGreaterThanOrEqual(1); // il a bien joint le lead
 });
 
-test("buildSetterStats : appels synthétiques pour les classifiés sans appel loggé", () => {
+test("buildSetterStats : seuls les appels réels comptent, comme dans la vue admin", () => {
   const leads = [
+    // Lead du setter, classé, jamais appelé par lui dans la période.
     { id: "L1", source: "ghl", status: "pas_qualifie", setterId: "S1", createdAt: T, lastContactAt: T },
+    // Lead du setter, rappelé par un collègue : l'appel n'est pas le sien.
+    { id: "L2", source: "ghl", status: "pas_de_reponse", setterId: "S1", createdAt: T, lastContactAt: T },
+    { id: "L3", source: "ghl", status: "pas_de_reponse", setterId: "S1", createdAt: T, lastContactAt: T },
   ] as any[];
-  const s = buildSetterStats(leads, [], [], "S1", range);
-  expect(s.loggedCalls).toBe(0);
-  expect(s.syntheticCalls).toBe(1);
+  const calls = [
+    { leadId: "L2", setterId: "S2", calledAt: T, result: "non_joint" },
+    { leadId: "L3", setterId: "S1", calledAt: T, result: "non_joint" },
+  ] as any[];
+  const own = calls.filter((c) => c.setterId === "S1");
+  const s = buildSetterStats(leads, own, [], "S1", range);
+  expect(s.loggedCalls).toBe(1);
+  expect(s.syntheticCalls).toBe(0);
   expect(s.calls).toBe(1);
+  expect(s.dailyCalls.reduce((sum: number, n: number) => sum + n, 0)).toBe(1);
+  expect(s.resultSegments.reduce((sum: any, x: any) => sum + x.value, 0)).toBe(1);
+  // Le classement du lead reste connu, seul le compteur d'appels change.
   expect(s.notQualified).toBe(1);
-  expect(s.classified).toBe(1);
+  expect(s.classified).toBe(3);
+
+  const admin = buildAdminStats(leads, calls, [], [
+    { id: "S1", name: "Setter Un", role: "setter" },
+    { id: "S2", name: "Setter Deux", role: "setter" },
+  ] as any[], range);
+  expect(admin.setters.find((r: any) => r.id === "S1")!.calls).toBe(s.calls);
 });
 
 test("buildAdminStats : nouveaux leads hors imports, funnel monotone, lignes équipe", () => {

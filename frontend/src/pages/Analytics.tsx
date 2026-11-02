@@ -260,7 +260,7 @@ function AnalyticsSetter({ name }: { name: string }) {
       <main className="p-3 sm:p-6 md:p-8 pt-3 sm:pt-4 overflow-y-auto space-y-4 sm:space-y-6 flex-grow">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
           <BigStatCard label="NOUVEAUX PROSPECTS" value={fmtInt(stats.newLeads)} sub="Entrées du système sur la période" accent="info" icon="inbox" />
-          <BigStatCard label="APPELS EFFECTUÉS" value={fmtInt(stats.calls)} delta={`${stats.callsPerDay}/j`} sub={`${stats.syntheticCalls} déduits des statuts`} accent="green" icon="phone" trend={stats.dailyCalls} />
+          <BigStatCard label="APPELS EFFECTUÉS" value={fmtInt(stats.calls)} delta={`${stats.callsPerDay}/j`} sub="Appels réellement enregistrés" accent="green" icon="phone" trend={stats.dailyCalls} />
           <BigStatCard label="PROSPECTS AYANT RÉPONDU" value={fmtInt(stats.answered)} delta={`${stats.responseRate}%`} deltaTone={stats.responseRate >= 50 ? 'success' : 'warn'} sub="Taux réponse = répondu / nouveaux prospects" accent="success" icon="message" progress={stats.responseRate} />
           <BigStatCard label="RDV PRIS" value={fmtInt(stats.rdvPris)} delta={`${stats.globalRdvRate}%`} deltaTone={stats.globalRdvRate >= 10 ? 'success' : 'warn'} sub="Taux global RDV = RDV / nouveaux prospects" accent="gold" icon="calendar" trend={stats.dailyEvolution.map((d) => d.rdv)} />
         </div>
@@ -685,7 +685,7 @@ function getAnalyticsWarmupRanges(): PeriodRange[] {
 function setterTableRows(stats: AnalyticsSetterSummary) {
   return [
     ['Nouveaux prospects', fmtInt(stats.newLeads), 'Entrées sur la période'],
-    ['Appels logiques', fmtInt(stats.calls), `${stats.loggedCalls} réels + ${stats.syntheticCalls} ETL`],
+    ['Appels', fmtInt(stats.calls), 'Appels réellement enregistrés'],
     ['Prospects ayant répondu', fmtInt(stats.answered), `${stats.responseRate}% des nouveaux leads`],
     ['Qualifiés', fmtInt(stats.qualified), `${stats.qualificationRate}% après réponse`],
     ['RDV pris', fmtInt(stats.rdvPris), `${stats.globalRdvRate}% global`],

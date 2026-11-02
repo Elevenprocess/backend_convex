@@ -67,7 +67,7 @@ test("buildSetterLeaderboard : les appels d'un collègue sur mes leads ne me son
     { id: "L1", setterId: "S1", source: "ghl", status: "pas_de_reponse", createdAt: D1_9H },
     { id: "L2", setterId: "S1", source: "ghl", status: "pas_de_reponse", createdAt: D1_9H },
     { id: "L3", setterId: "S2", source: "ghl", status: "qualifie", createdAt: D1_9H },
-    // Lead de S1 classé sans appel loggé : reste un appel synthétique pour S1.
+    // Lead de S1 classé sans appel loggé : pas d'appel réel, rien à créditer.
     { id: "L4", setterId: "S1", source: "ghl", status: "pas_qualifie", createdAt: D1_9H, lastContactAt: D2_10H },
   ] as any[];
   const calls = [
@@ -78,7 +78,7 @@ test("buildSetterLeaderboard : les appels d'un collègue sur mes leads ne me son
   ] as any[];
   const rows = buildSetterLeaderboard(leads, calls, users, range);
   const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
-  expect(byId.S1.calls).toBe(2); // L1 + L4 synthétique, pas L2
+  expect(byId.S1.calls).toBe(1); // L1 seul : ni L2 (appelé par S2), ni L4 (aucun appel)
   expect(byId.S2.calls).toBe(2);
-  expect(rows.reduce((sum, r) => sum + r.calls, 0)).toBe(4);
+  expect(rows.reduce((sum, r) => sum + r.calls, 0)).toBe(3);
 });

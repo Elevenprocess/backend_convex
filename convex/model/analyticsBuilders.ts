@@ -426,12 +426,11 @@ export function buildSetterStats(
   const scopedLeads = ownLeads.filter((l) => isLeadActiveInRange(l, range, latestCallByLead));
   const newLeadRows = ownLeads.filter((l) => isNewLeadInRange(l, range));
   const classifiedLeads = scopedLeads.filter(isClassifiedLead);
-  const scopedCallLeadIds = new Set(scopedCalls.map((c) => c.leadId).filter(Boolean));
-  const classifiedWithoutLoggedCall = classifiedLeads.filter((l) => !scopedCallLeadIds.has(l.id));
-  const syntheticCalls = classifiedWithoutLoggedCall.length;
+  // Appels RÉELS du setter uniquement, comme sa ligne de la vue admin. Déduire un
+  // appel du statut d'un lead de son portefeuille lui créditait le travail des
+  // collègues (Ony, 02/11 : 90 affichés pour 67 réels, 23 leads rappelés par un autre).
   const resultCounts = countResults(scopedCalls);
-  addSyntheticResults(resultCounts, classifiedWithoutLoggedCall, syntheticCalls);
-  const callsTotal = scopedCalls.length + syntheticCalls;
+  const callsTotal = scopedCalls.length;
 
   const answeredIds = new Set<string>();
   const relanceIds = new Set<string>();
@@ -483,7 +482,7 @@ export function buildSetterStats(
     newLeads: newLeadRows.length,
     calls: callsTotal,
     loggedCalls: scopedCalls.length,
-    syntheticCalls,
+    syntheticCalls: 0,
     callsPerDay: Math.round(callsTotal / range.days),
     classified: classifiedLeads.length,
     unclassified: scopedLeads.length - classifiedLeads.length,
@@ -500,7 +499,7 @@ export function buildSetterStats(
     qualificationRate: pct(qualifiedIds.size, answered),
     rdvRate: pct(rdvPris, callsTotal),
     resultSegments: resultSegments(resultCounts),
-    dailyCalls: dailyLogicalCalls(scopedCalls, classifiedLeads, range, latestCallByLead),
+    dailyCalls: dailyLogicalCalls(scopedCalls, [], range, latestCallByLead),
     hourlyCalls: buildHourlyCalls(scopedCalls, range),
     dailyEvolution: buildDailyEvolution(ownLeads, calls, rdvs, range, latestCallByLead, firstRdvByLead),
   };
@@ -646,15 +645,10 @@ function buildSetterRows(
         .filter((l): l is LeadRow => Boolean(l));
       const classified = ownLeads.filter(isClassifiedLead);
       const ownCalls = callsBySetter.get(u.id) ?? [];
-      // Appel « synthétique » = lead classé que personne n'a appelé dans la
-      // période (traitement connu par lastContactAt seulement).
-      // Vue admin : appels RÉELS seulement, comme le KPI « appels réels » du haut
+      // Appels RÉELS seulement, comme le KPI « appels réels » de la vue admin
       // (somme des lignes = ce KPI ; 164 affichés pour 143 réels le 20/10).
-      const calledLeadIds = new Set(ownCalls.map((c) => c.leadId));
-      const synthetic = credit ? 0 : classified.filter((l) => !calledLeadIds.has(l.id)).length;
       const counts = countResults(ownCalls);
-      addSyntheticResults(counts, classified, synthetic);
-      const callsTotal = ownCalls.length + synthetic;
+      const callsTotal = ownCalls.length;
       const noAnswer = (counts.non_joint ?? 0) + (counts.injoignable ?? 0) + (counts.messagerie ?? 0);
       const connected = Math.max(0, callsTotal - noAnswer);
       // Seul le setter qui a réellement qualifié (dernier appelant) est crédité.
