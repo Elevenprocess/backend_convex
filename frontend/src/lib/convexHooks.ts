@@ -449,6 +449,10 @@ const SUMMARY_ROLES = new Set<Role>(['admin', 'setter', 'setter_lead', 'commerci
 const FUNNEL_ROLES = new Set<Role>(['admin', 'commercial_lead'])
 const DEBRIEF_ROLES = new Set<Role>(['admin', 'commercial', 'commercial_lead'])
 
+// defer : ne lance pas encore la requête, mais affiche déjà les derniers chiffres
+// connus de cette plage (comparaison chargée après les chiffres principaux).
+type DeferrableStats = { defer?: boolean }
+
 type DebriefStats = {
   outcomeCounts: { vente: number; non_vente: number; en_reflexion: number; suivi_prevu: number }
   acceptanceFactorCounts: Record<string, number>
@@ -460,14 +464,14 @@ export function useConvexAnalyticsSummary(filters?: {
   days?: number
   from?: string
   to?: string
-}): Async<AnalyticsSummaryResponse> {
+}, opts?: DeferrableStats): Async<AnalyticsSummaryResponse> {
   const now = useStableNow()
   const role = useAuth((s) => s.user?.role)
   const uid = useAuth((s) => s.user?.id)
   const allowed = !!role && SUMMARY_ROLES.has(role)
   const res = useOneShotQuery(
     analyticsSummary,
-    allowed ? { now, days: filters?.days, from: filters?.from, to: filters?.to } : 'skip',
+    allowed && !opts?.defer ? { now, days: filters?.days, from: filters?.from, to: filters?.to } : 'skip',
   )
   // Cache persistant (localStorage) : au cold load on affiche les derniers
   // chiffres connus instantanément, puis Convex revalide. Clé sans `now`.
@@ -487,14 +491,14 @@ export function useConvexAnalyticsFunnel(filters?: {
   to?: string
   setterId?: string
   sector?: string
-}): Async<AnalyticsFunnelResponse> {
+}, opts?: DeferrableStats): Async<AnalyticsFunnelResponse> {
   const now = useStableNow()
   const role = useAuth((s) => s.user?.role)
   const uid = useAuth((s) => s.user?.id)
   const allowed = !!role && FUNNEL_ROLES.has(role)
   const res = useOneShotQuery(
     analyticsFunnel,
-    allowed
+    allowed && !opts?.defer
       ? { now, days: filters?.days, from: filters?.from, to: filters?.to, setterId: filters?.setterId, sector: filters?.sector }
       : 'skip',
   )

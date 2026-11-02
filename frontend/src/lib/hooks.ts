@@ -721,7 +721,7 @@ function useAnalyticsSummaryRest(filters?: {
   days?: number
   from?: string
   to?: string
-}): Async<AnalyticsSummaryResponse> {
+}, _opts?: { defer?: boolean }): Async<AnalyticsSummaryResponse> {
   return useFetch<AnalyticsSummaryResponse>('/analytics/summary', filters, {
     refreshCachedOnMount: true,
     silentInitialLoading: true,
@@ -786,7 +786,7 @@ function useAnalyticsFunnelRest(filters?: {
   to?: string
   setterId?: string
   sector?: string
-}): Async<AnalyticsFunnelResponse> {
+}, _opts?: { defer?: boolean }): Async<AnalyticsFunnelResponse> {
   return useFetch<AnalyticsFunnelResponse>('/analytics/funnel', filters, {
     refreshCachedOnMount: true,
     silentInitialLoading: true,

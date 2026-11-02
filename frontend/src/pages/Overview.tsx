@@ -849,11 +849,11 @@ function OverviewAdmin() {
     }
   }, [])
 
-  const { data: funnel } = useAnalyticsFunnel({
+  const { data: funnel, loading: funnelLoading } = useAnalyticsFunnel({
     from: funnelRange.from,
     to: funnelRange.to,
   })
-  const { data: summary } = useAnalyticsSummary({
+  const { data: summary, loading: summaryLoading } = useAnalyticsSummary({
     from: funnelRange.from,
     to: funnelRange.to,
   })
@@ -903,8 +903,11 @@ function OverviewAdmin() {
   }, reliableNewLeadMs, evolutionEvents), [adminSummary, funnelRange, evolutionGranularity, newLeadTotal, funnelTotals, reliableNewLeadMs, evolutionEvents])
 
   const prevRange = previousRange(funnelRange)
-  const { data: prevFunnel } = useAnalyticsFunnel({ from: prevRange.from, to: prevRange.to })
-  const { data: prevSummary } = useAnalyticsSummary({ from: prevRange.from, to: prevRange.to })
+  // La période de comparaison n'est demandée qu'une fois les chiffres principaux
+  // arrivés : elle double le travail du serveur à chaque choix de date.
+  const deferCompare = { defer: funnelLoading || summaryLoading }
+  const { data: prevFunnel } = useAnalyticsFunnel({ from: prevRange.from, to: prevRange.to }, deferCompare)
+  const { data: prevSummary } = useAnalyticsSummary({ from: prevRange.from, to: prevRange.to }, deferCompare)
   const prevAdmin = prevSummary?.admin ?? null
   const comparePoints = useMemo(() => buildLeadEvolutionPoints(
     prevAdmin?.dailyEvolution ?? [],
