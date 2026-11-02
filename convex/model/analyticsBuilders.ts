@@ -610,7 +610,7 @@ type QualificationCredit = {
   setterByLead?: Map<string, string>;
 };
 
-function buildSetterRows(
+export function buildSetterRows(
   leadsRows: LeadRow[],
   calls: CallRow[],
   userRows: UserRow[],

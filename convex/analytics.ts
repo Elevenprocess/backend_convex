@@ -19,6 +19,9 @@ import {
   buildAdminStats,
   buildSetterStats,
   buildSetterLeaderboard,
+  buildSetterRows,
+  qualificationEvents,
+  UNASSIGNED_SETTER_ID,
   buildCommercialStats,
   isNewLeadInRange,
   isClassifiedLead,
@@ -342,6 +345,75 @@ export const setterLeaderboard = query({
       .filter((u) => u.active !== false)
       .map((u) => ({ id: u._id, name: u.name ?? "", role: roleOf(u) }));
     return buildSetterLeaderboard(leadRows, calls, userRows, range);
+  },
+});
+
+/**
+ * Activité des setters sur une plage courte (le jour du tableau de bord), en
+ * TEMPS RÉEL : contrairement à summary/setterLeaderboard, cette query ne lit
+ * que les appels et les RDV de la plage, plus les RDV et la fiche de ces seuls
+ * leads — jamais toute la table leads — donc l'abonnement reste bon marché.
+ * Mêmes calculs que les lignes setter de la vue admin (buildSetterRows).
+ */
+export const setterLiveDay = query({
+  args: { fromMs: v.number(), toMs: v.number() },
+  handler: async (ctx, args) => {
+    const me = await requireRole(ctx, SUMMARY_ROLES);
+    const range: RangeMs = { fromMs: args.fromMs, toMs: args.toMs, days: 1 };
+    const [callDocs, createdRdv, userDocs] = await Promise.all([
+      ctx.db
+        .query("callLogs")
+        .withIndex("by_calledAt", (q) => q.gte("calledAt", range.fromMs).lte("calledAt", range.toMs))
+        .collect(),
+      ctx.db
+        .query("rdv")
+        .withIndex("by_creation_time", (q) => q.gte("_creationTime", range.fromMs).lte("_creationTime", range.toMs))
+        .collect(),
+      ctx.db.query("users").collect(),
+    ]);
+    const liveRdv = createdRdv.filter((r) => r.deletedAt === undefined);
+    const leadIds = [...new Set(liveRdv.flatMap((r) => (r.leadId ? [r.leadId] : [])))];
+    const [leadDocs, rdvByLead] = await Promise.all([
+      Promise.all(leadIds.map((id) => ctx.db.get(id))),
+      Promise.all(
+        leadIds.map((id) => ctx.db.query("rdv").withIndex("by_lead", (q) => q.eq("leadId", id)).collect()),
+      ),
+    ]);
+    const leads = leadDocs.filter((l): l is Doc<"leads"> => l !== null);
+    const allRdv = rdvByLead.flat();
+    const firstRdvByLead = loadFirstRdvByLead(allRdv, buildSourceByLead(leads));
+    const events = qualificationEvents(
+      [...allRdv, ...liveRdv.filter((r) => !r.leadId)].filter((r) => r.deletedAt === undefined).map(toRdvRow),
+      range,
+      firstRdvByLead,
+    );
+    const setterByLead = new Map<string, string>();
+    for (const l of leads) if (l.setterId) setterByLead.set(l._id, l.setterId);
+    const meRole = roleOf(me);
+    const userRows: UserRow[] = userDocs
+      .filter((u) => u.active !== false)
+      // Le responsable setters voit aussi ses propres chiffres sur son tableau de bord.
+      .map((u) => ({
+        id: u._id,
+        name: u.name ?? "",
+        role: u._id === me._id && meRole === "setter_lead" ? "setter" : roleOf(u),
+      }));
+    return buildSetterRows(
+      leads.filter((l) => l.deletedAt === undefined).map(toLeadRow),
+      callDocs.map(toCallRow),
+      userRows,
+      { leadIds: events.map((e) => e.leadId), setterByLead },
+    )
+      .filter((r) => r.id !== UNASSIGNED_SETTER_ID && (r.calls > 0 || r.qualified > 0))
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        initials: r.initials,
+        calls: r.calls,
+        connected: r.connected,
+        qualified: r.qualified,
+        rdvPris: r.rdvPris,
+      }));
   },
 });
 
