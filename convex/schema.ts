@@ -502,6 +502,7 @@ export default defineSchema({
     .index("by_scheduledAt", ["scheduledAt"])
     .index("by_status", ["status"])
     .index("by_externalId", ["externalId"])
+    .index("by_createdAt", ["createdAt"])
     .index("by_ghlEventId", ["ghlEventId"]),
 
   projects: defineTable({

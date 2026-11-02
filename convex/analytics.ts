@@ -7,7 +7,7 @@
 
 import { query } from "./_generated/server";
 import { v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { requireRole, roleOf } from "./model/access";
 import { buildRange, isInRange, type RangeMs } from "./model/analyticsRange";
@@ -171,25 +171,116 @@ function loadFirstRdvByLead(
   return map;
 }
 
+// Au-delà, les lectures par index se recouvrent tant (un lead créé ET recontacté
+// dans la plage est lu deux fois) qu'un scan complet coûte moins cher.
+const INDEXED_RANGE_MAX_DAYS = 62;
+const usesIndexes = (range: RangeMs) => range.days <= INDEXED_RANGE_MAX_DAYS;
+
+/** Dédoublonne et rend l'ordre d'un scan de table : certains builders en dépendent. */
+function inTableOrder<T extends { _id: string; _creationTime: number }>(docs: T[]): T[] {
+  return [...new Map(docs.map((d) => [d._id, d])).values()].sort((a, b) => a._creationTime - b._creationTime);
+}
+
+/** Lignes dont la date MÉTIER tombe dans la plage (cf. bizCreatedAt) : `createdAt`
+ * s'il existe, `_creationTime` sinon. L'index by_creation_time seul regrouperait
+ * tout l'historique migré sur le jour de migration. */
+async function loadBizCreatedInRange<T extends "leads" | "rdv">(
+  ctx: QueryCtx,
+  table: T,
+  range: RangeMs,
+): Promise<Doc<T>[]> {
+  const [dated, live] = await Promise.all([
+    (ctx.db.query(table) as any)
+      .withIndex("by_createdAt", (q: any) => q.gte("createdAt", range.fromMs).lte("createdAt", range.toMs))
+      .collect() as Promise<Doc<T>[]>,
+    (ctx.db.query(table) as any)
+      .withIndex("by_creation_time", (q: any) => q.gte("_creationTime", range.fromMs).lte("_creationTime", range.toMs))
+      .collect() as Promise<Doc<T>[]>,
+  ]);
+  return [...dated, ...live.filter((d) => d.createdAt === undefined)];
+}
+
 /**
  * Leads « actifs dans la période » (transposition de leadsActiveInRangeWhere) :
  * créés dans la période OU lastContactAt dans la période OU appelés dans la
- * période. PUR : consomme les leads déjà chargés.
+ * période.
  */
-function filterActiveLeads(
-  leadDocs: Doc<"leads">[],
+async function loadActiveLeadRows(
+  ctx: QueryCtx,
   range: RangeMs,
   calledLeadIds: Set<string>,
-): LeadRow[] {
-  return leadDocs
-    .filter((l) => l.deletedAt === undefined)
-    .filter(
+): Promise<LeadRow[]> {
+  let docs: Doc<"leads">[];
+  if (usesIndexes(range)) {
+    const [created, contacted] = await Promise.all([
+      loadBizCreatedInRange(ctx, "leads", range),
+      ctx.db
+        .query("leads")
+        .withIndex("by_lastContact", (q) => q.gte("lastContactAt", range.fromMs).lte("lastContactAt", range.toMs))
+        .collect(),
+    ]);
+    const known = new Set<string>([...created, ...contacted].map((l) => l._id));
+    const called = await Promise.all(
+      [...calledLeadIds].filter((id) => !known.has(id)).map((id) => ctx.db.get(id as Id<"leads">)),
+    );
+    docs = inTableOrder([...created, ...contacted, ...called.filter((l): l is Doc<"leads"> => l !== null)]);
+  } else {
+    docs = (await ctx.db.query("leads").collect()).filter(
       (l) =>
         isInRange(bizCreatedAt(l), range) ||
         isInRange(l.lastContactAt ?? null, range) ||
         calledLeadIds.has(l._id),
-    )
-    .map(toLeadRow);
+    );
+  }
+  return docs.filter((l) => l.deletedAt === undefined).map(toLeadRow);
+}
+
+/**
+ * RDV de la plage (planifiés ou créés dedans) et débriefs détachés, avec ce qu'il
+ * faut pour attribuer les qualifications : date du tout premier RDV et setter de
+ * chaque lead concerné. Sur une plage courte, seuls ces leads-là sont lus.
+ */
+async function loadRdvContext(ctx: QueryCtx, range: RangeMs) {
+  let rdvInRange: Doc<"rdv">[];
+  let detached: RdvRow[];
+  let firstRdvByLead: Map<string, number>;
+  const setterByLead = new Map<string, string>();
+  const isRangeRdv = (r: Doc<"rdv">) =>
+    r.deletedAt === undefined && (isInRange(r.scheduledAt ?? null, range) || isInRange(bizCreatedAt(r), range));
+  if (usesIndexes(range)) {
+    const [scheduled, created, detachedRows] = await Promise.all([
+      ctx.db
+        .query("rdv")
+        .withIndex("by_scheduledAt", (q) => q.gte("scheduledAt", range.fromMs).lte("scheduledAt", range.toMs))
+        .collect(),
+      loadBizCreatedInRange(ctx, "rdv", range),
+      loadDetachedDebriefRdvRows(ctx, range),
+    ]);
+    rdvInRange = inTableOrder([...scheduled, ...created]).filter(isRangeRdv);
+    detached = detachedRows;
+    const leadIds = [
+      ...new Set<string>(
+        [...rdvInRange.map((r) => r.leadId as string | undefined), ...detached.map((r) => r.leadId as string | undefined)].filter(
+          (id): id is string => Boolean(id),
+        ),
+      ),
+    ] as Id<"leads">[];
+    const [leads, rdvByLead] = await Promise.all([
+      Promise.all(leadIds.map((id) => ctx.db.get(id))),
+      Promise.all(leadIds.map((id) => ctx.db.query("rdv").withIndex("by_lead", (q) => q.eq("leadId", id)).collect())),
+    ]);
+    const leadDocs = leads.filter((l): l is Doc<"leads"> => l !== null);
+    firstRdvByLead = loadFirstRdvByLead(rdvByLead.flat(), buildSourceByLead(leadDocs));
+    for (const l of leadDocs) if (l.setterId) setterByLead.set(l._id, l.setterId);
+  } else {
+    const [leadDocs, rdvDocs] = await Promise.all([ctx.db.query("leads").collect(), ctx.db.query("rdv").collect()]);
+    const sourceByLead = buildSourceByLead(leadDocs);
+    rdvInRange = rdvDocs.filter(isRangeRdv);
+    detached = await loadDetachedDebriefRdvRows(ctx, range, undefined, sourceByLead);
+    firstRdvByLead = loadFirstRdvByLead(rdvDocs, sourceByLead);
+    for (const l of leadDocs) if (l.setterId) setterByLead.set(l._id, l.setterId);
+  }
+  return { rdvAll: [...rdvInRange.map(toRdvRow), ...detached], firstRdvByLead, setterByLead };
 }
 
 /**
@@ -205,27 +296,16 @@ export async function loadSummaryData(ctx: QueryCtx, range: RangeMs) {
     .collect();
   const calls = callDocs.map(toCallRow);
   const calledLeadIds = new Set<string>(calls.map((c) => c.leadId as string).filter(Boolean));
-  const [leadDocs, rdvDocs, userDocs] = await Promise.all([
-    ctx.db.query("leads").collect(),
-    ctx.db.query("rdv").collect(),
+  const [leadRows, { rdvAll, firstRdvByLead, setterByLead }, userDocs] = await Promise.all([
+    loadActiveLeadRows(ctx, range, calledLeadIds),
+    loadRdvContext(ctx, range),
     ctx.db.query("users").collect(),
   ]);
-  const sourceByLead = buildSourceByLead(leadDocs);
-  const leadRows = filterActiveLeads(leadDocs, range, calledLeadIds);
-  const detached = await loadDetachedDebriefRdvRows(ctx, range, undefined, sourceByLead);
-  const firstRdvByLead = loadFirstRdvByLead(rdvDocs, sourceByLead);
-  const rdvRows = rdvDocs
-    .filter((r) => r.deletedAt === undefined)
-    .filter((r) => isInRange(r.scheduledAt ?? null, range) || isInRange(bizCreatedAt(r), range))
-    .map(toRdvRow);
-  const rdvAll = [...rdvRows, ...detached];
   const userRows: UserRow[] = userDocs
     .filter((u) => u.active !== false)
     .map((u) => ({ id: u._id, name: u.name ?? "", role: roleOf(u) }));
   const latestCallByLead = buildLatestCallByLead(calls);
   const qualifierByLead = buildQualifierByLead(calls);
-  const setterByLead = new Map<string, string>();
-  for (const l of leadDocs) if (l.setterId) setterByLead.set(l._id, l.setterId);
   return { calls, leadRows, rdvAll, userRows, latestCallByLead, qualifierByLead, firstRdvByLead, setterByLead };
 }
 
@@ -336,11 +416,10 @@ export const setterLeaderboard = query({
       .collect();
     const calls = callDocs.map(toCallRow);
     const calledLeadIds = new Set<string>(calls.map((c) => c.leadId as string).filter(Boolean));
-    const [leadDocs, userDocs] = await Promise.all([
-      ctx.db.query("leads").collect(),
+    const [leadRows, userDocs] = await Promise.all([
+      loadActiveLeadRows(ctx, range, calledLeadIds),
       ctx.db.query("users").collect(),
     ]);
-    const leadRows = filterActiveLeads(leadDocs, range, calledLeadIds);
     const userRows: UserRow[] = userDocs
       .filter((u) => u.active !== false)
       .map((u) => ({ id: u._id, name: u.name ?? "", role: roleOf(u) }));
@@ -438,29 +517,8 @@ export const setterStats = query({
     const setterId = roleOf(user) === "setter" ? user._id : args.setterId;
     const range = buildRange(args.from, args.to, args.days ?? 30, args.now);
 
-    const callDocs = await ctx.db
-      .query("callLogs")
-      .withIndex("by_calledAt", (q) => q.gte("calledAt", range.fromMs).lte("calledAt", range.toMs))
-      .collect();
-    const calls = callDocs.map(toCallRow);
-    const calledLeadIds = new Set<string>(calls.map((c) => c.leadId as string).filter(Boolean));
-    const [leadDocs, rdvDocs] = await Promise.all([
-      ctx.db.query("leads").collect(),
-      ctx.db.query("rdv").collect(),
-    ]);
-    const sourceByLead = buildSourceByLead(leadDocs);
-    const leadRows = filterActiveLeads(leadDocs, range, calledLeadIds);
-    const detached = await loadDetachedDebriefRdvRows(ctx, range, undefined, sourceByLead);
-    const firstRdvByLead = loadFirstRdvByLead(rdvDocs, sourceByLead);
-    const rdvAll = [
-      ...rdvDocs
-        .filter((r) => r.deletedAt === undefined)
-        .filter((r) => isInRange(r.scheduledAt ?? null, range) || isInRange(bizCreatedAt(r), range))
-        .map(toRdvRow),
-      ...detached,
-    ];
-    const latestCallByLead = buildLatestCallByLead(calls);
-    const qualifierByLead = buildQualifierByLead(calls);
+    const { calls, leadRows, rdvAll, latestCallByLead, qualifierByLead, firstRdvByLead } =
+      await loadSummaryData(ctx, range);
     const setterLeadIds = new Set(
       calls.filter((c) => c.setterId === setterId && c.leadId).map((c) => c.leadId as string),
     );
@@ -602,18 +660,16 @@ export const funnel = query({
       .withIndex("by_calledAt", (q) => q.gte("calledAt", range.fromMs).lte("calledAt", range.toMs))
       .collect();
     const calls = callDocs.map(toCallRow);
-    // Funnel = leads/rdv CRÉÉS dans la plage, filtrés sur la date MÉTIER
-    // (createdAt Render) et non _creationTime : l'index by_creation_time
-    // regrouperait tout l'historique migré sur le jour de migration (bug du pic
-    // « 1.2k prospects arrivés »). Scan complet + filtre bizCreatedAt (repli
-    // _creationTime pour les lignes live) → répartition sur les vraies dates.
-    const [allLeadDocs, allRdvDocs, userDocs] = await Promise.all([
-      ctx.db.query("leads").collect(),
-      ctx.db.query("rdv").collect(),
+    // Funnel = leads/rdv CRÉÉS dans la plage, sur la date MÉTIER (cf. bizCreatedAt).
+    const [rangeLeadDocs, rangeRdvDocs, userDocs] = await Promise.all([
+      usesIndexes(range)
+        ? loadBizCreatedInRange(ctx, "leads", range).then(inTableOrder)
+        : ctx.db.query("leads").collect().then((docs) => docs.filter((l) => isInRange(bizCreatedAt(l), range))),
+      usesIndexes(range)
+        ? loadBizCreatedInRange(ctx, "rdv", range).then(inTableOrder)
+        : ctx.db.query("rdv").collect().then((docs) => docs.filter((r) => isInRange(bizCreatedAt(r), range))),
       ctx.db.query("users").collect(),
     ]);
-    const rangeLeadDocs = allLeadDocs.filter((l) => isInRange(bizCreatedAt(l), range));
-    const rangeRdvDocs = allRdvDocs.filter((r) => isInRange(bizCreatedAt(r), range));
     // Détachés : le lead peut être créé HORS plage → get ciblé (volume borné à la
     // plage) plutôt que la map de sources, sinon on raterait l'exclusion historique.
     const detached = await loadDetachedDebriefRdvRows(ctx, range, undefined);
