@@ -32,6 +32,10 @@ const RESULT_OPTIONS: CallResult[] = [
   'messagerie',
 ]
 
+// Prospect déjà qualifié : plus d'appel « pas de réponse » (refusé aussi côté serveur).
+const QUALIFIED_LOCKED = new Set<string>(['qualifie', 'rdv_pris', 'rdv_honore', 'signature_en_cours', 'signe'])
+const NO_ANSWER_RESULTS = new Set<string>(['non_joint', 'messagerie', 'injoignable'])
+
 export function CallFullScreen() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -169,7 +173,7 @@ export function CallFullScreen() {
                 className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm"
               >
                 <option value="">— Sélectionne —</option>
-                {RESULT_OPTIONS.map((r) => (
+                {RESULT_OPTIONS.filter((r) => !(QUALIFIED_LOCKED.has(lead.status) && NO_ANSWER_RESULTS.has(r))).map((r) => (
                   <option key={r} value={r}>{CALL_RESULT_LABEL[r]}</option>
                 ))}
               </select>

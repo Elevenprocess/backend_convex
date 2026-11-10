@@ -47,38 +47,48 @@ test("logCall() dérive le statut lead (classification setter)", async () => {
   expect(hist.some((h) => h.saasStatus === "a_rappeler")).toBe(true);
 });
 
-test("logCall() ne régresse pas un lead terminal (rdv_pris/signe)", async () => {
+test("logCall() refuse un appel « pas de réponse » sur un lead terminal (signe)", async () => {
   const t = makeT();
   const setterId = await insertUser(t, { role: "setter" });
   const leadId = await asUser(t, setterId).mutation(api.leads.create, { firstName: "Term" });
   await t.run((ctx) => ctx.db.patch(leadId, { status: "signe" }));
-  await asUser(t, setterId).mutation(api.callLogs.logCall, { leadId, result: "non_joint" });
+  await expect(
+    asUser(t, setterId).mutation(api.callLogs.logCall, { leadId, result: "non_joint" }),
+  ).rejects.toThrow(/déjà qualifié/);
   expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("signe");
 });
 
-test("logCall() ne régresse pas un lead qualifié avec un RDV ouvert", async () => {
+test("logCall() : une fois qualifié, plus d'appel « pas de réponse » et le crédit reste au qualifieur", async () => {
   const t = makeT();
-  const setterId = await insertUser(t, { role: "setter" });
+  const nirvana = await insertUser(t, { role: "setter", email: "nirvana@ecoi.fr" });
+  const ony = await insertUser(t, { role: "setter", email: "ony@ecoi.fr" });
   const commercialId = await insertUser(t, { role: "commercial", email: "com@ecoi.fr" });
-  const leadId = await asUser(t, setterId).mutation(api.leads.create, { firstName: "Rdv" });
+  const leadId = await asUser(t, ony).mutation(api.leads.create, { firstName: "Kuvan" });
+
+  await asUser(t, ony).mutation(api.callLogs.logCall, { leadId, result: "non_joint" });
+  await asUser(t, nirvana).mutation(api.callLogs.logCall, { leadId, result: "joint" });
+  expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("qualifie");
+
+  for (const result of ["non_joint", "messagerie", "injoignable"] as const) {
+    await expect(
+      asUser(t, ony).mutation(api.callLogs.logCall, { leadId, result }),
+    ).rejects.toThrow(/déjà qualifié/);
+  }
+
+  // Même chose après la prise de RDV (statut rdv_pris / RDV planifié).
   await asUser(t, commercialId).mutation(api.rdv.create, {
-    leadId,
-    commercialId,
-    scheduledAt: Date.now() + 86_400_000,
+    leadId, commercialId, scheduledAt: Date.now() + 86_400_000,
   });
-  expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("qualifie");
+  await t.run((ctx) => ctx.db.patch(leadId, { status: "rdv_pris" }));
+  await expect(
+    asUser(t, ony).mutation(api.callLogs.logCall, { leadId, result: "non_joint" }),
+  ).rejects.toThrow(/déjà qualifié/);
 
-  // Appel de confirmation tombé sur messagerie : le lead reste qualifié.
-  await asUser(t, setterId).mutation(api.callLogs.logCall, { leadId, result: "messagerie" });
-  expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("qualifie");
-
-  // RDV clôturé (honoré) : les appels suivants ne régressent toujours pas
-  // (rdv_honore est terminal).
-  const rdvRows = await t.run((ctx) => ctx.db.query("rdv").collect());
-  await t.run((ctx) => ctx.db.patch(rdvRows[0]._id, { status: "honore" }));
-  await t.run((ctx) => ctx.db.patch(leadId, { status: "rdv_honore" }));
-  await asUser(t, setterId).mutation(api.callLogs.logCall, { leadId, result: "non_joint" });
-  expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("rdv_honore");
+  const logs = await t.run((ctx) =>
+    ctx.db.query("callLogs").withIndex("by_lead_calledAt", (q) => q.eq("leadId", leadId)).collect());
+  expect(logs).toHaveLength(2);
+  const last = logs.sort((x, y) => y.calledAt - x.calledAt)[0];
+  expect(last.setterId).toBe(nirvana);
 });
 
 test("logCall() refuse un rôle non commercial (technicien)", async () => {

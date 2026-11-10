@@ -43,6 +43,10 @@ const DEFAULT_TABS: Tab[] = [
   { id: 'notes', label: 'Notes', icon: 'edit' },
 ]
 
+// Prospect déjà qualifié : plus d'appel « pas de réponse » (refusé aussi côté serveur).
+const QUALIFIED_LOCKED = new Set<string>(['qualifie', 'rdv_pris', 'rdv_honore', 'signature_en_cours', 'signe'])
+const NO_ANSWER_RESULTS = new Set<string>(['non_joint', 'messagerie', 'injoignable'])
+
 const QUICK_RESULTS: CallResult[] = ['joint', 'non_joint', 'rdv_pris', 'refus', 'messagerie']
 
 type YesNo = '' | 'oui' | 'non'
@@ -1267,7 +1271,9 @@ function NotesTab({
             </div>
             <div className="grid grid-cols-1 gap-2">
               <StatusChoice active={setterStatus === 'a_rappeler'} icon="clock" title="À rappeler" text="Date et heure du rappel" onClick={() => { setSetterStatus('a_rappeler'); setResult('rappel_planifie') }} />
-              <StatusChoice active={setterStatus === 'pas_de_reponse'} icon="phone-off" title="Pas de réponse" text="Aucun champ requis" onClick={() => { setSetterStatus('pas_de_reponse'); setResult('non_joint') }} />
+              {!QUALIFIED_LOCKED.has(lead.status) && (
+                <StatusChoice active={setterStatus === 'pas_de_reponse'} icon="phone-off" title="Pas de réponse" text="Aucun champ requis" onClick={() => { setSetterStatus('pas_de_reponse'); setResult('non_joint') }} />
+              )}
               <StatusChoice active={setterStatus === 'non_qualifie'} icon="x" title="Pas qualifié" text="Commentaire obligatoire" onClick={() => { setSetterStatus('non_qualifie'); setResult('refus') }} />
               <StatusChoice active={setterStatus === 'qualifie_specialiste'} icon="target" title="Déjà qualifié par spécialiste" text="Commentaire obligatoire — pas d’envoi GHL" onClick={() => { setSetterStatus('qualifie_specialiste'); setResult('joint') }} />
             </div>
@@ -1422,7 +1428,7 @@ function NotesTab({
           <div className="border-t border-line-soft pt-3">
             <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-2">Résultat rapide existant</div>
             <div className="flex flex-wrap gap-2">
-              {QUICK_RESULTS.map((r) => (
+              {QUICK_RESULTS.filter((r) => !(QUALIFIED_LOCKED.has(lead.status) && NO_ANSWER_RESULTS.has(r))).map((r) => (
                 <button key={r} onClick={() => setResult(result === r ? '' : r)} className={`pill-tab text-xs ${result === r ? 'active' : ''}`}>{CALL_RESULT_LABEL[r]}</button>
               ))}
             </div>
