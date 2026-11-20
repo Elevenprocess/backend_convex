@@ -18,6 +18,7 @@ import { logSystemActivity, leadLabel, LEAD_STATUS_LABEL, label } from "./model/
 import { deriveAcquisitionChannel, isSiteWebUtm } from "./model/acquisitionChannel";
 import { syncProjectFromLeadStatus } from "./model/ghl/projectSync";
 import { notifyRetourSetters } from "./model/notify";
+import { applyTagsToLead } from "./model/promotionAttach";
 
 // Résolution d'un contact GHL vers son lead — les deux familles d'ids :
 // lead natif Convex → l'id GHL est dans externalId (source "ghl") ;
@@ -352,13 +353,17 @@ export const createLeadFromWebhook = internalMutation({
       utmSource: v.optional(v.string()), medium: v.optional(v.string()),
       sessionSource: v.optional(v.string()), canalAcquisition: v.optional(v.string()),
     }),
+    tags: v.optional(v.array(v.string())),
+    // Horloge injectable (tests) ; défaut Date.now().
+    now: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const now = args.now ?? Date.now();
     if (args.externalId !== undefined) {
       const existing = await findLeadByGhlContact(ctx, args.externalId);
       if (existing) {
         const patch: { resubmittedAt: number; status?: "a_rappeler" } = {
-          resubmittedAt: Date.now(),
+          resubmittedAt: now,
         };
         if (existing.status === "perdu" || existing.status === "pas_de_reponse") {
           patch.status = "a_rappeler";
@@ -370,6 +375,7 @@ export const createLeadFromWebhook = internalMutation({
           summary: `Prospect ${leadLabel(existing)} a refait une simulation (re-soumission)${patch.status ? " — repassé « À rappeler »" : ""}`,
           details: { before: { status: existing.status }, after: { status: patch.status ?? existing.status } },
         });
+        await applyTagsToLead(ctx, existing._id, args.tags ?? [], now);
         return { leadId: existing._id, duplicate: true };
       }
     }
@@ -379,7 +385,7 @@ export const createLeadFromWebhook = internalMutation({
     const channel = deriveAcquisitionChannel(args.signals, sourceMap);
 
     const leadId = await ctx.db.insert("leads", {
-      createdAt: Date.now(),
+      createdAt: now,
       ...(args.externalId !== undefined ? { externalId: args.externalId } : {}),
       source: "ghl",
       status: "nouveau",
@@ -395,6 +401,7 @@ export const createLeadFromWebhook = internalMutation({
         details: { channel, canalAcquisition: args.data.canalAcquisition ?? null, utmSource: args.data.utmSource ?? null, campaign: args.data.campaign ?? null },
       });
     }
+    await applyTagsToLead(ctx, leadId, args.tags ?? [], now);
     return { leadId, duplicate: false };
   },
 });

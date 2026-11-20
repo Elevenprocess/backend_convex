@@ -2,10 +2,12 @@
 // lecture « en cours » pour tous. Le rattachement des leads est dans
 // model/promotionAttach.ts (tags) et attachLegacy ci-dessous (statuts).
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireRole, requireUser } from "./model/access";
 import { logActivity } from "./model/activity";
+import { applyTagsToLead } from "./model/promotionAttach";
+import { findLeadByGhlContact } from "./webhooks";
 import { leadStatusValidator } from "./model/enums";
 import {
   normalizeTag, promotionConflict, promotionStatus, reunionDayEndMs, reunionDayStartMs,
@@ -167,5 +169,24 @@ export const active = query({
         _id: p._id, name: p.name, startAt: p.startAt, endAt: p.endAt,
         offer: p.offer, pitch: p.pitch, officeCalendarId: p.officeCalendarId, officeAddress: p.officeAddress,
       }));
+  },
+});
+
+export const applyLeadTags = internalMutation({
+  args: { leadId: v.id("leads"), tags: v.array(v.string()), at: v.number() },
+  handler: async (ctx, args) => {
+    const r = await applyTagsToLead(ctx, args.leadId, args.tags, args.at);
+    return { attached: r.attached };
+  },
+});
+
+/** Route /webhooks/ghl/tags : résout le contact (deux familles d'ids) puis rattache. */
+export const applyContactTags = internalMutation({
+  args: { contactId: v.string(), tags: v.array(v.string()), at: v.number() },
+  handler: async (ctx, args) => {
+    const lead = await findLeadByGhlContact(ctx, args.contactId);
+    if (!lead || lead.deletedAt !== undefined) return { matched: false, attached: false };
+    const r = await applyTagsToLead(ctx, lead._id, args.tags, args.at);
+    return { matched: true, attached: r.attached };
   },
 });

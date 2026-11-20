@@ -11,6 +11,7 @@
  */
 
 import type { AttributionSignals } from "../acquisitionChannel";
+import { parseGhlTags } from "../promotions";
 
 const pick = (...values: unknown[]): string | undefined => {
   for (const v of values) {
@@ -30,6 +31,7 @@ const splitFullName = (
 
 export interface MappedGhlLead {
   externalId?: string;
+  tags: string[];
   signals: AttributionSignals;
   data: {
     firstName?: string; lastName?: string; email?: string; phone?: string;
@@ -81,6 +83,8 @@ export function mapGhlLeadPayload(p: Record<string, unknown>): MappedGhlLead {
 
   return {
     externalId,
+    // Tags du contact : à plat (workflow GHL) ou sous contact.tags.
+    tags: parseGhlTags(p.tags ?? contact.tags),
     signals: {
       fbclid: pick(p.fbclid, custom.fbclid, attr.fbclid),
       gclid: pick(p.gclid, custom.gclid, attr.gclid),
