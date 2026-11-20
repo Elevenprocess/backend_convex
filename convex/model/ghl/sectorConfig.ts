@@ -7,6 +7,9 @@
 
 import type { GhlSectorConfig } from "./calendarTypes";
 
+/** Secteur porté par les événements des calendriers bureau des promotions. */
+export const OFFICE_SECTOR = "Bureau";
+
 export function normalizeSector(value: string): string {
   return value.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }

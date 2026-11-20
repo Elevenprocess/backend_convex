@@ -104,6 +104,10 @@ export type LeadResponse = {
   lastContactAt: string | null
   /** Dernier renvoi de formulaire par ce contact déjà connu (re-simulation). */
   resubmittedAt: string | null
+  /** Promotion de rattachement (Black Friday…), null sinon. */
+  promotionId?: string | null
+  /** Origine du rattachement : tag GHL (nouveaux) ou ciblage par statut (anciens). */
+  promotionSource?: 'tag' | 'statut' | null
   // Lead renvoyé aux setters par les commerciaux depuis GHL (étape « (BIS)
   // Retour aux Setters ») : date ISO + étape/statut d'où il vient.
   retourSetters?: { at: string; fromStage: string | null; fromStatus: LeadStatus | null } | null

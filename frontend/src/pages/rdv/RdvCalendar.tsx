@@ -830,7 +830,7 @@ function RdvBlock({ item, lead, hourHeight, stackIndex, stackTotal, onClick, sty
     ? `${vtKindLabel(item.vt)} — ${item.vt.leadName}`
     : isGhl
       ? ghlEventLabel(item.event)
-      : (lead ? fullName(lead) : localRdvFallbackLabel(item.rdv))
+      : `${item.rdv.locationType === 'agence' ? 'Bureau · ' : ''}${lead ? fullName(lead) : localRdvFallbackLabel(item.rdv)}`
   const detail = isVt
     ? [item.vt.city, item.vt.phone].filter(Boolean).join(' · ')
     : isGhl ? ghlEventDetail(item.event) : localRdvFallbackDetail(item.rdv)

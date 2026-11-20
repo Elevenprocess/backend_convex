@@ -18,7 +18,7 @@ import {
 
 const LOCATION_LABEL: Record<RdvLocation, string> = {
   domicile: 'Visite à domicile',
-  agence: 'En agence',
+  agence: 'Bureau',
   visio: 'Visio',
 }
 

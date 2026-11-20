@@ -3,6 +3,7 @@ import { httpAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { auth } from "./auth";
 import { mapGhlLeadPayload } from "./model/ghl/leadWebhook";
+import { parseGhlTags } from "./model/promotions";
 import {
   GhlOpportunityWebhookValidationError,
   normalizeOpportunityWebhook,
@@ -65,6 +66,7 @@ http.route({
         ...(mapped.externalId !== undefined ? { externalId: mapped.externalId } : {}),
         data: mapped.data,
         signals: mapped.signals,
+        tags: mapped.tags,
       });
       await ctx.runMutation(internal.webhooks.markProcessed, { eventId });
       return json({ ok: true, eventId, leadId: result.leadId, duplicate: result.duplicate });
@@ -155,6 +157,21 @@ http.route({
       });
       await ctx.runMutation(internal.webhooks.markProcessed, { eventId });
 
+      // Promotions : tags du contact portés par le webhook d'opportunité
+      // (best-effort, ne fait jamais échouer le webhook).
+      const opportunityTags = parseGhlTags(
+        payload.tags ?? (payload.contact as Record<string, unknown> | undefined)?.tags,
+      );
+      if (opportunityTags.length > 0) {
+        try {
+          await ctx.runMutation(internal.promotions.applyLeadTags, {
+            leadId: result.leadId, tags: opportunityTags, at: Date.now(),
+          });
+        } catch (err) {
+          console.warn(`applyLeadTags failed (eventId=${eventId}): ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+
       // Sync GHL → projects.status (entrant, best-effort, pas de push sortant).
       const mapped = mapGhlStageToStatus(n.ghlStageName);
       if (mapped.status) {
@@ -226,6 +243,46 @@ function extractId(
   }
   return undefined;
 }
+
+/**
+ * Webhook GHL « tag posé » (workflow Black Friday : action Webhook placée
+ * APRÈS « Ajouter le tag »). Corps { contact_id, tags }. Rattache le lead à
+ * la promo en cours qui porte ce tag. Contact inconnu → 200 matched:false
+ * (il sera traité à son contact.created).
+ */
+http.route({
+  path: "/webhooks/ghl/tags",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    const secret = checkWebhookSecret(req);
+    if (!secret.ok) return json({ message: secret.error }, 403);
+    let payload: Record<string, unknown>;
+    try {
+      payload = (await req.json()) as Record<string, unknown>;
+    } catch {
+      return json({ message: "Body JSON invalide" }, 400);
+    }
+    const contactId = extractId(payload, ["contact_id", "contactId"], ["contact"]);
+    if (!contactId) return json({ message: "contact_id requis" }, 400);
+    const tags = parseGhlTags(payload.tags ?? (payload.contact as Record<string, unknown> | undefined)?.tags);
+
+    const eventId = await ctx.runMutation(internal.webhooks.recordEvent, {
+      provider: "ghl",
+      eventType: "contact.tags",
+      payload: JSON.stringify(payload),
+      ...(clientIp(req) !== undefined ? { ipAddress: clientIp(req) } : {}),
+    });
+    try {
+      const r = await ctx.runMutation(internal.promotions.applyContactTags, { contactId, tags, at: Date.now() });
+      await ctx.runMutation(internal.webhooks.markProcessed, { eventId });
+      return json({ ok: true, eventId, ...r });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erreur inconnue";
+      await ctx.runMutation(internal.webhooks.markFailed, { eventId, error: message });
+      return json({ message }, 500);
+    }
+  }),
+});
 
 /**
  * Webhook GHL "envoi du lien débrief" (workflow → action Webhook au moment où

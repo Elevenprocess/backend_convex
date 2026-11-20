@@ -117,6 +117,13 @@ export default defineSchema({
     // Dernier renvoi de formulaire d'acquisition par un contact DÉJÀ connu
     // (webhook GHL en doublon — ex. re-simulation) : signal de recontact.
     resubmittedAt: v.optional(v.number()),
+    // Promotions (Black Friday…) : derniers tags GHL reçus + rattachement à
+    // une promo (jamais effacé automatiquement). promotionSource distingue les
+    // nouveaux leads taggés (tag) des anciens ciblés par statut (statut).
+    ghlTags: v.optional(v.array(v.string())),
+    promotionId: v.optional(v.id("promotions")),
+    promotionJoinedAt: v.optional(v.number()),
+    promotionSource: v.optional(v.union(v.literal("tag"), v.literal("statut"))),
     // Renvoi par les commerciaux (étape GHL « (BIS) Retour aux Setters 🔙 ») :
     // le lead repasse en relance court terme (pas_de_reponse) ; on garde d'où
     // il vient (étape/statut GHL précédents) pour l'historique côté setters.
@@ -188,7 +195,8 @@ export default defineSchema({
     // Date.now() posé à l'insert pour le natif, backfillé sinon). Jamais
     // _creationTime, arbitraire depuis la migration.
     .index("by_createdAt", ["createdAt"])
-    .index("by_status_createdAt", ["status", "createdAt"]),
+    .index("by_status_createdAt", ["status", "createdAt"])
+    .index("by_promotion", ["promotionId"]),
 
   // Miroir LOCAL des notes/remarques écrites sur la fiche contact GHL (par les
   // commerciaux, au quotidien dans GHL). Lues via GET /contacts/{id}/notes au
@@ -329,6 +337,28 @@ export default defineSchema({
     label: v.string(),
     updatedAt: v.optional(v.number()),
   }).index("by_rawSource", ["rawSource"]),
+
+  // Promotions commerciales datées (ex. Black Friday). Dates en ms, calées
+  // sur les jours Réunion (model/promotions.ts). Statut calculé, jamais stocké.
+  promotions: defineTable({
+    name: v.string(),
+    tag: v.optional(v.string()),
+    tagKey: v.optional(v.string()),
+    startAt: v.number(),
+    endAt: v.number(),
+    offer: v.optional(v.string()),
+    pitch: v.optional(v.string()),
+    officeCalendarId: v.optional(v.string()),
+    officeAddress: v.optional(v.string()),
+    legacyStatuses: v.optional(v.array(leadStatusValidator)),
+    legacyArrivedFrom: v.optional(v.number()),
+    legacyArrivedTo: v.optional(v.number()),
+    archived: v.boolean(),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_endAt", ["endAt"])
+    .index("by_tagKey", ["tagKey"]),
 
   // Dépense publicitaire quotidienne (portage ad_spend_daily NestJS) : une ligne
   // par jour × canal × campagne/adset/annonce, alimentée par la sync Windsor.ai
@@ -494,6 +524,8 @@ export default defineSchema({
     receptionAlertBy: v.optional(v.id("users")),
     // Timestamp de migration legacy (non alimenté/lu par le code), toléré optionnel.
     createdAt: v.optional(v.number()),
+    // Promo pendant laquelle ce RDV a été pris (RDV bureau d'un lead hors promo inclus).
+    promotionId: v.optional(v.id("promotions")),
   })
     .index("by_commercial_scheduled", ["commercialId", "scheduledAt"])
     .index("by_lead", ["leadId"])
@@ -503,7 +535,8 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_externalId", ["externalId"])
     .index("by_createdAt", ["createdAt"])
-    .index("by_ghlEventId", ["ghlEventId"]),
+    .index("by_ghlEventId", ["ghlEventId"])
+    .index("by_promotion", ["promotionId"]),
 
   projects: defineTable({
     externalId: v.optional(v.string()),
