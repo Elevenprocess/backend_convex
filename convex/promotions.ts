@@ -4,14 +4,16 @@
 import { v } from "convex/values";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireRole, requireUser } from "./model/access";
 import { logActivity } from "./model/activity";
 import { applyTagsToLead } from "./model/promotionAttach";
 import { findLeadByGhlContact } from "./webhooks";
+import { OPEN_RDV_STATUSES } from "./rdv";
 import { leadStatusValidator } from "./model/enums";
 import {
-  normalizeTag, parseGhlTags, promotionConflict, promotionStatus, reunionDayEndMs, reunionDayStartMs,
+  legacyRejectReason, normalizeTag, parseGhlTags, promotionConflict, promotionStatus, reunionDayEndMs, reunionDayStartMs,
   type PromotionLike, type PromotionStatus,
 } from "./model/promotions";
 
@@ -254,5 +256,110 @@ export const backfill = action({
       after = r.cursor;
     }
     return { scanned, attached };
+  },
+});
+
+// ---- Anciens leads ciblés par statut (aperçu + rattachement en masse) ----
+
+async function hasUpcomingRdv(ctx: QueryCtx, leadId: Id<"leads">, now: number): Promise<boolean> {
+  const rows = await ctx.db.query("rdv").withIndex("by_lead", (q) => q.eq("leadId", leadId)).collect();
+  return rows.some(
+    (r) => r.deletedAt === undefined
+      && (OPEN_RDV_STATUSES as readonly string[]).includes(r.status)
+      && (r.scheduledAt ?? 0) > now,
+  );
+}
+
+async function legacyReason(ctx: QueryCtx, lead: Doc<"leads">, promo: Doc<"promotions">, now: number) {
+  return legacyRejectReason({
+    status: lead.status,
+    arrivedAt: lead.createdAt ?? lead._creationTime,
+    deletedAt: lead.deletedAt,
+    promotionId: lead.promotionId,
+    hasUpcomingRdv: await hasUpcomingRdv(ctx, lead._id, now),
+  }, promo);
+}
+
+export const previewLegacy = query({
+  args: { promotionId: v.id("promotions"), now: v.number() },
+  handler: async (ctx, { promotionId, now }) => {
+    await requireRole(ctx, ["admin"]);
+    const promo = await ctx.db.get(promotionId);
+    if (!promo) throw new Error("Promotion introuvable.");
+    const byStatus: Record<string, number> = {};
+    let eligible = 0, skipped = 0;
+    for (const status of promo.legacyStatuses ?? []) {
+      const leads = await ctx.db.query("leads").withIndex("by_status_createdAt", (q) => q.eq("status", status)).collect();
+      for (const lead of leads) {
+        const reason = await legacyReason(ctx, lead, promo, now);
+        if (reason === null) { eligible++; byStatus[status] = (byStatus[status] ?? 0) + 1; }
+        else if (reason !== "statut" && reason !== "periode") skipped++;
+      }
+    }
+    return { eligible, byStatus, skipped };
+  },
+});
+
+export const attachLegacyBatch = internalMutation({
+  args: {
+    promotionId: v.id("promotions"),
+    status: leadStatusValidator,
+    cursor: v.union(v.string(), v.null()),
+    now: v.number(),
+  },
+  handler: async (ctx, args): Promise<{ scanned: number; attached: number; skipped: number; cursor: string; done: boolean }> => {
+    const promo = await ctx.db.get(args.promotionId);
+    if (!promo) throw new Error("Promotion introuvable.");
+    const page = await ctx.db
+      .query("leads")
+      .withIndex("by_status_createdAt", (q) => q.eq("status", args.status))
+      .paginate({ numItems: 200, cursor: args.cursor });
+    let attached = 0, skipped = 0;
+    for (const lead of page.page) {
+      const reason = await legacyReason(ctx, lead, promo, args.now);
+      if (reason === null) {
+        await ctx.db.patch(lead._id, { promotionId: promo._id, promotionJoinedAt: args.now, promotionSource: "statut" });
+        attached++;
+      } else if (reason !== "statut" && reason !== "periode") {
+        skipped++;
+      }
+    }
+    if (attached > 0) {
+      await logActivity(ctx, {
+        fallbackSource: "Promotions",
+        action: "promotion.legacy_attached", entityType: "promotion", entityId: promo._id, subject: promo.name,
+        summary: `a rattaché ${attached} ancien(s) lead(s) « ${args.status} » à la promotion « ${promo.name} »`,
+      });
+    }
+    return { scanned: page.page.length, attached, skipped, cursor: page.continueCursor, done: page.isDone };
+  },
+});
+
+export const getInternal = internalQuery({
+  args: { id: v.id("promotions") },
+  handler: async (ctx, { id }) => await ctx.db.get(id),
+});
+
+/** Action admin : rattache les anciens leads des statuts ciblés (idempotent). */
+export const attachLegacy = action({
+  args: { promotionId: v.id("promotions") },
+  handler: async (ctx, { promotionId }): Promise<{ scanned: number; attached: number; skipped: number }> => {
+    await ctx.runQuery(internal.promotions.assertAdmin, {});
+    const now = Date.now();
+    const promo = await ctx.runQuery(internal.promotions.getInternal, { id: promotionId });
+    if (!promo) throw new Error("Promotion introuvable.");
+    if (promotionStatus(promo, now) === "terminee") throw new Error("Promotion terminée : rattachement impossible.");
+    let scanned = 0, attached = 0, skipped = 0;
+    for (const status of promo.legacyStatuses ?? []) {
+      let cursor: string | null = null;
+      for (;;) {
+        const r: { scanned: number; attached: number; skipped: number; cursor: string; done: boolean } =
+          await ctx.runMutation(internal.promotions.attachLegacyBatch, { promotionId, status, cursor, now });
+        scanned += r.scanned; attached += r.attached; skipped += r.skipped;
+        if (r.done) break;
+        cursor = r.cursor;
+      }
+    }
+    return { scanned, attached, skipped };
   },
 });
