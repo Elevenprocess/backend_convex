@@ -57,3 +57,23 @@ describe("rattachement par tag", () => {
     expect(r).toEqual({ matched: false, attached: false });
   });
 });
+
+describe("backfill des tags", () => {
+  it("rejoue les webhooks reçus pendant la promo, idempotent", async () => {
+    const t = makeT();
+    const promoId = await seedPromo(t);
+    const leadId = await t.run((ctx) => ctx.db.insert("leads", { source: "ghl", status: "nouveau", externalId: "c9", createdAt: 1 }));
+    await t.run((ctx) => ctx.db.insert("webhookEvents", {
+      provider: "ghl", eventType: "contact.created", status: "processed",
+      payload: JSON.stringify({ contact_id: "c9", tags: "simulateur,black friday" }),
+    }));
+    // Horodatage des events = _creationTime (now réel en test) : on simule
+    // une promo englobant maintenant.
+    await t.run((ctx) => ctx.db.patch(promoId, { startAt: 0, endAt: Date.now() + 3_600_000 }));
+    const first = await t.mutation(internal.promotions.backfillBatch, { promotionId: promoId, after: 0, batch: 50 });
+    const second = await t.mutation(internal.promotions.backfillBatch, { promotionId: promoId, after: 0, batch: 50 });
+    expect(first).toMatchObject({ scanned: 1, attached: 1, done: true });
+    expect(second.attached).toBe(0);
+    expect((await t.run((ctx) => ctx.db.get(leadId)))?.promotionId).toBe(promoId);
+  });
+});

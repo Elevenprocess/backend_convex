@@ -2,7 +2,8 @@
 // lecture « en cours » pour tous. Le rattachement des leads est dans
 // model/promotionAttach.ts (tags) et attachLegacy ci-dessous (statuts).
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireRole, requireUser } from "./model/access";
 import { logActivity } from "./model/activity";
@@ -10,7 +11,7 @@ import { applyTagsToLead } from "./model/promotionAttach";
 import { findLeadByGhlContact } from "./webhooks";
 import { leadStatusValidator } from "./model/enums";
 import {
-  normalizeTag, promotionConflict, promotionStatus, reunionDayEndMs, reunionDayStartMs,
+  normalizeTag, parseGhlTags, promotionConflict, promotionStatus, reunionDayEndMs, reunionDayStartMs,
   type PromotionLike, type PromotionStatus,
 } from "./model/promotions";
 
@@ -188,5 +189,70 @@ export const applyContactTags = internalMutation({
     if (!lead || lead.deletedAt !== undefined) return { matched: false, attached: false };
     const r = await applyTagsToLead(ctx, lead._id, args.tags, args.at);
     return { matched: true, attached: r.attached };
+  },
+});
+
+function contactIdFromPayload(p: Record<string, unknown>): string | undefined {
+  const contact = (p.contact ?? {}) as Record<string, unknown>;
+  for (const value of [p.contact_id, p.contactId, contact.id, p.id]) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+/** Rejoue un lot de webhooks GHL reçus pendant la promo et rattache les tags (idempotent). */
+export const backfillBatch = internalMutation({
+  args: { promotionId: v.id("promotions"), after: v.number(), batch: v.number() },
+  handler: async (ctx, args): Promise<{ scanned: number; attached: number; cursor: number; done: boolean }> => {
+    const promo = await ctx.db.get(args.promotionId);
+    if (!promo) throw new Error("Promotion introuvable.");
+    const from = Math.max(args.after, promo.startAt - 1);
+    const events = await ctx.db
+      .query("webhookEvents")
+      .withIndex("by_creation_time", (q) => q.gt("_creationTime", from).lte("_creationTime", promo.endAt))
+      .order("asc")
+      .take(args.batch);
+    let attached = 0;
+    let cursor = from;
+    for (const ev of events) {
+      cursor = ev._creationTime;
+      if (ev.provider !== "ghl") continue;
+      let payload: Record<string, unknown>;
+      try { payload = JSON.parse(ev.payload) as Record<string, unknown>; } catch { continue; }
+      const tags = parseGhlTags(payload.tags ?? (payload.contact as Record<string, unknown> | undefined)?.tags);
+      const contactId = contactIdFromPayload(payload);
+      if (tags.length === 0 || !contactId) continue;
+      const lead = await findLeadByGhlContact(ctx, contactId);
+      if (!lead || lead.deletedAt !== undefined) continue;
+      const r = await applyTagsToLead(ctx, lead._id, tags, ev._creationTime);
+      if (r.attached) attached++;
+    }
+    return { scanned: events.length, attached, cursor, done: events.length < args.batch };
+  },
+});
+
+export const assertAdmin = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<{ userId: Id<"users"> }> => {
+    const user = await requireRole(ctx, ["admin"]);
+    return { userId: user._id };
+  },
+});
+
+/** Action admin : rattrape les tags de toute la promo depuis les webhooks stockés. */
+export const backfill = action({
+  args: { promotionId: v.id("promotions") },
+  handler: async (ctx, args): Promise<{ scanned: number; attached: number }> => {
+    await ctx.runQuery(internal.promotions.assertAdmin, {});
+    let after = 0, scanned = 0, attached = 0;
+    for (;;) {
+      const r: { scanned: number; attached: number; cursor: number; done: boolean } =
+        await ctx.runMutation(internal.promotions.backfillBatch, { promotionId: args.promotionId, after, batch: 100 });
+      scanned += r.scanned;
+      attached += r.attached;
+      if (r.done) break;
+      after = r.cursor;
+    }
+    return { scanned, attached };
   },
 });
