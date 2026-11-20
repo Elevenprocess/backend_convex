@@ -49,4 +49,24 @@ describe("anciens leads par statut", () => {
     await expect(asUser(t, admin).action(api.promotions.attachLegacy, { promotionId: promoId })).rejects.toThrow(/terminée/);
     await expect(asUser(t, setter).action(api.promotions.attachLegacy, { promotionId: promoId })).rejects.toThrow(/Accès refusé/);
   });
+
+  it("lead déjà dans une autre promo avec RDV à venir : raison deja_promo, une seule fois ignoré", async () => {
+    const t = makeT();
+    const admin = await insertUser(t, { role: "admin" });
+    const now = Date.now();
+    const base = { startAt: now - 3_600_000, endAt: now + 7 * 86_400_000, archived: false, createdBy: admin, createdAt: now };
+    const autre = await t.run((ctx) => ctx.db.insert("promotions", { name: "Autre", ...base }));
+    const promoId = await t.run((ctx) => ctx.db.insert("promotions", { name: "BF", legacyStatuses: ["perdu"], ...base }));
+    const leadId = await t.run(async (ctx) => {
+      const id = await ctx.db.insert("leads", { source: "ghl", status: "perdu", createdAt: 10, promotionId: autre });
+      await ctx.db.insert("rdv", { leadId: id, scheduledAt: now + 86_400_000, locationType: "domicile", status: "planifie" });
+      return id;
+    });
+    const as = asUser(t, admin);
+    expect(await as.query(api.promotions.previewLegacy, { promotionId: promoId, now }))
+      .toEqual({ eligible: 0, byStatus: {}, skipped: 1 });
+    expect(await as.action(api.promotions.attachLegacy, { promotionId: promoId }))
+      .toMatchObject({ attached: 0, skipped: 1 });
+    expect((await t.run((ctx) => ctx.db.get(leadId)))?.promotionId).toBe(autre);
+  });
 });

@@ -271,15 +271,22 @@ async function hasUpcomingRdv(ctx: QueryCtx, leadId: Id<"leads">, now: number): 
 }
 
 async function legacyReason(ctx: QueryCtx, lead: Doc<"leads">, promo: Doc<"promotions">, now: number) {
-  return legacyRejectReason({
+  const candidate = {
     status: lead.status,
     arrivedAt: lead.createdAt ?? lead._creationTime,
     deletedAt: lead.deletedAt,
     promotionId: lead.promotionId,
-    hasUpcomingRdv: await hasUpcomingRdv(ctx, lead._id, now),
-  }, promo);
+    hasUpcomingRdv: false,
+  };
+  // Les RDV ne sont interrogés que pour un lead encore éligible (rdv_a_venir est la dernière règle).
+  const reason = legacyRejectReason(candidate, promo);
+  if (reason !== null) return reason;
+  return (await hasUpcomingRdv(ctx, lead._id, now)) ? "rdv_a_venir" as const : null;
 }
 
+// Volontairement en une seule query non paginée : la base compte ~2 600 leads.
+// Au-delà de quelques milliers de leads sur les statuts ciblés, il faudra paginer
+// (limites Convex par fonction).
 export const previewLegacy = query({
   args: { promotionId: v.id("promotions"), now: v.number() },
   handler: async (ctx, { promotionId, now }) => {
