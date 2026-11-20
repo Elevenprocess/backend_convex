@@ -15,6 +15,14 @@ describe("promotions.stats", () => {
       const n1 = await ctx.db.insert("leads", { source: "ghl", status: "signe", promotionId: promoId, promotionSource: "tag" });
       await ctx.db.insert("leads", { source: "ghl", status: "nouveau", promotionId: promoId, promotionSource: "tag" });
       const a1 = await ctx.db.insert("leads", { source: "ghl", status: "qualifie", promotionId: promoId, promotionSource: "statut" });
+      // Seul appel = rappel planifié : compte comme joint (comme analytics).
+      const rappel = await ctx.db.insert("leads", { source: "ghl", status: "nouveau", promotionId: promoId, promotionSource: "tag" });
+      await ctx.db.insert("callLogs", { leadId: rappel, setterId: setter, calledAt: 2, result: "rappel_planifie" });
+      // Lead supprimé de la promo : ignoré (avec son RDV).
+      const supprime = await ctx.db.insert("leads", { source: "ghl", status: "signe", promotionId: promoId, promotionSource: "tag", deletedAt: 5 });
+      await ctx.db.insert("rdv", { leadId: supprime, locationType: "domicile", status: "planifie", promotionId: promoId });
+      // RDV supprimé sur un lead compté : ignoré.
+      await ctx.db.insert("rdv", { leadId: n1, locationType: "domicile", status: "planifie", promotionId: promoId, deletedAt: 5 });
       const hors = await ctx.db.insert("leads", { source: "ghl", status: "qualifie" });
       await ctx.db.insert("callLogs", { leadId: n1, setterId: setter, calledAt: 1, result: "joint" });
       await ctx.db.insert("rdv", { leadId: n1, locationType: "domicile", status: "planifie", promotionId: promoId });
@@ -22,7 +30,7 @@ describe("promotions.stats", () => {
       await ctx.db.insert("rdv", { leadId: hors, locationType: "agence", status: "planifie", promotionId: promoId });
     });
     const s = await asUser(t, admin).query(api.promotions.stats, { promotionId: promoId });
-    expect(s.nouveaux).toEqual({ leads: 2, joints: 1, rdvDomicile: 1, rdvBureau: 0, qualifies: 1, signes: 1 });
+    expect(s.nouveaux).toEqual({ leads: 3, joints: 2, rdvDomicile: 1, rdvBureau: 0, qualifies: 1, signes: 1 });
     expect(s.anciens).toEqual({ leads: 1, joints: 0, rdvDomicile: 0, rdvBureau: 1, qualifies: 1, signes: 0 });
     expect(s.rdvBureauHorsPromo).toBe(1);
   });

@@ -12,7 +12,7 @@ import { applyTagsToLead } from "./model/promotionAttach";
 import { findLeadByGhlContact } from "./webhooks";
 import { OPEN_RDV_STATUSES } from "./rdv";
 import { leadStatusValidator } from "./model/enums";
-import { ANSWERED_RESULTS, QUALIFIED_STATUSES } from "./model/funnelMath";
+import { ANSWERED_RESULTS, CALLBACK_RESULTS, QUALIFIED_STATUSES } from "./model/funnelMath";
 import {
   legacyRejectReason, normalizeTag, parseGhlTags, promotionConflict, promotionStatus, reunionDayEndMs, reunionDayStartMs,
   type PromotionLike, type PromotionStatus,
@@ -394,7 +394,7 @@ export const attachLegacy = action({
 
 // ─── Chiffres d'une promotion ────────────────────────────────────
 // Mêmes définitions qu'analytics.ts (model/funnelMath.ts) : « joint » = au moins
-// un appel au résultat ANSWERED_RESULTS, « qualifié » = QUALIFIED_STATUSES,
+// un appel au résultat ANSWERED_RESULTS ou CALLBACK_RESULTS (rappel planifié), « qualifié » = QUALIFIED_STATUSES,
 // « signé » = statut signe. RDV non supprimés, comptés par type de lieu.
 type StatBlock = {
   leads: number; joints: number; rdvDomicile: number; rdvBureau: number; qualifies: number; signes: number;
@@ -417,10 +417,11 @@ export const stats = query({
       if (QUALIFIED_STATUSES.has(lead.status)) block.qualifies++;
       if (lead.status === "signe") block.signes++;
       const calls = await ctx.db.query("callLogs").withIndex("by_lead_calledAt", (q) => q.eq("leadId", lead._id)).collect();
-      if (calls.some((c) => ANSWERED_RESULTS.has(c.result))) block.joints++;
+      if (calls.some((c) => ANSWERED_RESULTS.has(c.result) || CALLBACK_RESULTS.has(c.result))) block.joints++;
       const rdvs = await ctx.db.query("rdv").withIndex("by_lead", (q) => q.eq("leadId", lead._id)).collect();
       for (const r of rdvs) {
         if (r.deletedAt !== undefined) continue;
+        // « visio » est compté avec domicile : tout ce qui n'est pas agence.
         if (r.locationType === "agence") block.rdvBureau++;
         else block.rdvDomicile++;
       }
