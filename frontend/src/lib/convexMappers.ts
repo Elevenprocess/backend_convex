@@ -92,6 +92,8 @@ export function mapConvexLead(doc: ConvexLeadDoc): LeadResponse {
     referrerId: doc.referrerId ?? null,
     lastContactAt: iso(doc.lastContactAt),
     resubmittedAt: iso(doc.resubmittedAt),
+    promotionId: doc.promotionId ?? null,
+    promotionSource: doc.promotionSource ?? null,
     retourSetters: doc.retourSetters
       ? {
           at: new Date(doc.retourSetters.at).toISOString(),
