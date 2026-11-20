@@ -245,14 +245,6 @@ function extractId(
 }
 
 /**
- * Webhook GHL "envoi du lien débrief" (workflow → action Webhook au moment où
- * GHL décide que le commercial doit débriefer, p.ex. fin de rendez-vous).
- * Le backend résout le RDV, signe le lien magique PERMANENT (token sans
- * expiration), l'écrit dans le champ contact `lien_debrief` (best-effort) et
- * répond avec l'URL — le workflow GHL l'envoie ensuite au commercial (SMS/
- * email) via le champ contact ou le mapping de réponse.
- */
-/**
  * Webhook GHL « tag posé » (workflow Black Friday : action Webhook placée
  * APRÈS « Ajouter le tag »). Corps { contact_id, tags }. Rattache le lead à
  * la promo en cours qui porte ce tag. Contact inconnu → 200 matched:false
@@ -292,6 +284,14 @@ http.route({
   }),
 });
 
+/**
+ * Webhook GHL "envoi du lien débrief" (workflow → action Webhook au moment où
+ * GHL décide que le commercial doit débriefer, p.ex. fin de rendez-vous).
+ * Le backend résout le RDV, signe le lien magique PERMANENT (token sans
+ * expiration), l'écrit dans le champ contact `lien_debrief` (best-effort) et
+ * répond avec l'URL — le workflow GHL l'envoie ensuite au commercial (SMS/
+ * email) via le champ contact ou le mapping de réponse.
+ */
 http.route({
   path: "/webhooks/ghl/debrief-link",
   method: "POST",
