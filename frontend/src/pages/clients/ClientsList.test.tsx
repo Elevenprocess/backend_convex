@@ -13,10 +13,12 @@ vi.mock('../../components/shell/Topbar', () => ({ Topbar: () => null }))
 const assignLeadMock = vi.fn()
 const useLeadsMock = vi.fn()
 const useUsersMock = vi.fn()
+const useRdvMock = vi.fn(() => ({ data: [] as unknown[] }))
 vi.mock('../../lib/hooks', () => ({
   useLeads: (...a: unknown[]) => useLeadsMock(...a),
   useLeadsProgressive: (...a: unknown[]) => useLeadsMock(...a),
   useUsers: (...a: unknown[]) => useUsersMock(...a),
+  useRdvListProgressive: () => useRdvMock(),
   assignLead: (...a: unknown[]) => assignLeadMock(...a),
 }))
 
@@ -54,6 +56,7 @@ beforeEach(() => {
   assignLeadMock.mockReset()
   useLeadsMock.mockReturnValue({ data: [client], loading: false, error: null })
   useUsersMock.mockReturnValue({ data: [alice, bob], loading: false, error: null })
+  useRdvMock.mockReturnValue({ data: [] })
 })
 
 describe('ClientsList — action « Donner à… »', () => {
@@ -117,5 +120,26 @@ describe('ClientsList — replier une section = exclure le filtre', () => {
     // Replier la section Statut remet le filtre à « Tout » → le client revient.
     fireEvent.click(screen.getByRole('button', { name: 'Statut' }))
     expect(screen.getByText('Jean Dupont')).toBeInTheDocument()
+  })
+})
+
+describe('ClientsList — badge Bureau', () => {
+  it('affiche le badge Bureau sur un client dont le dernier RDV est au bureau', () => {
+    authStateRef.user = makeUser('u-alice', 'Alice Martin', 'commercial')
+    useLeadsMock.mockReturnValue({ data: [{ ...client, latestRdvAt: '2026-11-25T10:00:00.000Z' }], loading: false, error: null })
+    useRdvMock.mockReturnValue({ data: [
+      { id: 'r1', leadId: 'lead-1', scheduledAt: '2026-11-20T10:00:00.000Z', locationType: 'domicile' },
+      { id: 'r2', leadId: 'lead-1', scheduledAt: '2026-11-25T10:00:00.000Z', locationType: 'agence' },
+    ] })
+    render(<ClientsList />)
+    expect(screen.getByText('Bureau')).toBeInTheDocument()
+  })
+
+  it('pas de badge pour un RDV à domicile', () => {
+    authStateRef.user = makeUser('u-alice', 'Alice Martin', 'commercial')
+    useLeadsMock.mockReturnValue({ data: [{ ...client, latestRdvAt: '2026-11-25T10:00:00.000Z' }], loading: false, error: null })
+    useRdvMock.mockReturnValue({ data: [{ id: 'r1', leadId: 'lead-1', scheduledAt: '2026-11-25T10:00:00.000Z', locationType: 'domicile' }] })
+    render(<ClientsList />)
+    expect(screen.queryByText('Bureau')).not.toBeInTheDocument()
   })
 })

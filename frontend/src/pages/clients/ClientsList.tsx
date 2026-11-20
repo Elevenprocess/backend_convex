@@ -8,10 +8,11 @@ import { Icon, type IconName } from '../../components/Icon'
 import { EmptyState } from '../../components/EmptyState'
 import { LoadingBlock } from '../../components/Spinner'
 import { useAuth } from '../../lib/auth'
-import { useLeadsProgressive, useUsers, syncGhlCalendarEvents } from '../../lib/hooks'
+import { useLeadsProgressive, useRdvListProgressive, useUsers, syncGhlCalendarEvents } from '../../lib/hooks'
 import { useLeadSidebar } from '../../lib/leadSidebar'
 import type { LeadDateField } from '../../lib/leadFilters'
-import { fullName, type LeadResponse, type UserResponse } from '../../lib/types'
+import { fullName, type LeadResponse, type RdvLocation, type UserResponse } from '../../lib/types'
+import { RdvLocationBadge } from '../../components/RdvLocationBadge'
 import { clientBucketForLead, clientStatusBadge, type ClientBucket } from '../../lib/clientStatus'
 import { AssignCommercialModal } from '../../components/leads/AssignCommercialModal'
 import { ManualLeadModal } from '../../components/leads/ManualLeadModal'
@@ -143,6 +144,19 @@ export function ClientsList() {
   // filtres et compteurs du rail voient toute la population client.
   const { data, loading, error, refetch } = useLeadsProgressive(leadsFilter)
   const { data: usersData } = useUsers()
+  // Lieu du dernier RDV de chaque client (badge « Bureau ») : le lead n'expose
+  // que la date, on lit donc la liste des RDV (fenêtre des plus récents).
+  const { data: rdvData } = useRdvListProgressive(
+    seesFullPortfolio || !me?.id ? { fullLimit: 200 } : { commercialId: me.id, fullLimit: 200 },
+  )
+  const rdvLocationByLead = useMemo(() => {
+    const latest = new Map<string, { at: string; location: RdvLocation }>()
+    for (const r of rdvData ?? []) {
+      const cur = latest.get(r.leadId)
+      if (!cur || r.scheduledAt > cur.at) latest.set(r.leadId, { at: r.scheduledAt, location: r.locationType })
+    }
+    return new Map([...latest].map(([id, v]) => [id, v.location]))
+  }, [rdvData])
   const allClients = data ?? []
   const [filter, setFilter] = useState<ClientStatusFilter>('all')
   const [docFilter, setDocFilter] = useState<ClientDocFilter>('all')
@@ -387,6 +401,7 @@ export function ClientsList() {
                           selected={selectedId === c.id}
                           onClick={() => selectLead(c.id)}
                           commercialName={seesFullPortfolio ? commercialNameForLead(c) : null}
+                          rdvLocation={rdvLocationByLead.get(c.id)}
                           onAssign={isManager ? () => setAssignTarget(c) : undefined}
                         />
                       ))}
@@ -422,7 +437,7 @@ export function ClientsList() {
   )
 }
 
-function ClientCard({ client, selected, onClick, commercialName, onAssign }: { client: LeadResponse; selected: boolean; onClick: () => void; commercialName?: string | null; onAssign?: () => void }) {
+function ClientCard({ client, selected, onClick, commercialName, onAssign, rdvLocation }: { client: LeadResponse; selected: boolean; onClick: () => void; commercialName?: string | null; onAssign?: () => void; rdvLocation?: RdvLocation }) {
   // Une fois le projet signé transmis à la délivrabilité, le badge reflète
   // l'avancement du dossier (VT à faire, Installation planifiée…) plutôt que
   // le statut commercial 'Signé'.
@@ -455,6 +470,7 @@ function ClientCard({ client, selected, onClick, commercialName, onAssign }: { c
           <div className="flex items-start gap-1.5">
             <Icon name="calendar" size={12} className="mt-0.5 shrink-0 text-faint" />
             <span className="truncate" title={rdv}>{rdv}</span>
+            {rdvLocation && <RdvLocationBadge location={rdvLocation} />}
           </div>
         )}
         {client.transferredAt && (
