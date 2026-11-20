@@ -12,6 +12,9 @@ import { convexAuthEnabled } from '../../lib/convex'
 import { useLeadSidebar } from '../../lib/leadSidebar'
 import { emitLeadDeselect, emitLeadSelect, useLeadLocks, type LeadLockInfo } from '../../lib/realtime'
 import { normalizeSearchText, phoneMatches, phoneSearchVariants } from '../../lib/searchText'
+import { useActivePromotions } from '../../lib/promotionsApi'
+import { activePromotionIds, promotionLeads, withoutActivePromotionLeads } from '../../lib/promotions'
+import { PromotionBanner, type PromotionSourceFilter } from '../../components/promotions/PromotionBanner'
 import { DossierCard } from '../../components/suivi/DossierCard'
 import { ManualLeadModal } from '../../components/leads/ManualLeadModal'
 import { buildDossiers, readWorkflowState } from '../../lib/suivi'
@@ -175,7 +178,7 @@ function LeadsSuivi() {
 }
 
 
-type SetterFilter = 'nouveau' | 'sans_reponse' | 'relance_ct' | 'rappel' | 'qualifie' | 'perdu' | 'relance_lt'
+type SetterFilter = 'nouveau' | 'sans_reponse' | 'relance_ct' | 'rappel' | 'qualifie' | 'perdu' | 'relance_lt' | 'promotion'
 type SetterMissingFilter = 'all' | 'any' | 'phone' | 'address' | 'postalCode' | 'email' | 'city'
 
 const SETTER_MISSING_FILTERS: { key: SetterMissingFilter; label: string; icon: IconName }[] = [
@@ -188,7 +191,7 @@ const SETTER_MISSING_FILTERS: { key: SetterMissingFilter; label: string; icon: I
   { key: 'city', label: 'Sans ville', icon: 'map-pin' },
 ]
 
-const SETTER_STATUS_FILTERS: { key: SetterFilter; label: string; icon: IconName; countKey: 'nouveau' | 'sansReponse' | 'relanceCt' | 'rappel' | 'qualifie' | 'perdu' | 'relanceLt' }[] = [
+const SETTER_STATUS_FILTERS: { key: SetterFilter; label: string; icon: IconName; countKey: 'nouveau' | 'sansReponse' | 'relanceCt' | 'rappel' | 'qualifie' | 'perdu' | 'relanceLt' | 'promotion' }[] = [
   { key: 'nouveau', label: 'Nouveaux', icon: 'sparkles', countKey: 'nouveau' },
   { key: 'sans_reponse', label: 'Sans réponse', icon: 'phone-off', countKey: 'sansReponse' },
   { key: 'relance_ct', label: 'Relance court terme', icon: 'arrow-left', countKey: 'relanceCt' },
@@ -256,7 +259,21 @@ function LeadsSetter() {
     return m
   }, [usersList])
 
-  const categoryLeads = mine
+  // Promotions en cours : leurs leads ne sont QUE dans l'onglet Promotion
+  // (retour automatique dans les onglets habituels à la fin de la promo).
+  const activePromos = useActivePromotions()
+  const activePromoIds = useMemo(() => activePromotionIds(activePromos), [activePromos])
+  const currentPromo = activePromos[0]
+  const [promoSource, setPromoSource] = useState<PromotionSourceFilter>('all')
+  const promoLeads = useMemo(
+    () => (currentPromo ? promotionLeads(mine, currentPromo._id, promoSource) : []),
+    [mine, currentPromo, promoSource],
+  )
+  const categoryLeads = useMemo(() => withoutActivePromotionLeads(mine, activePromoIds), [mine, activePromoIds])
+  // Si la promo se termine pendant qu'on est sur l'onglet, on retombe sur « Nouveaux ».
+  useEffect(() => {
+    if (filter === 'promotion' && !currentPromo) setFilter('nouveau')
+  }, [filter, currentPromo])
 
   // Leads "à rappeler" dont l'heure de rappel tombe dans les 3 prochaines minutes
   // (futur proche uniquement ; les rappels déjà dépassés ne déclenchent pas).
@@ -305,14 +322,22 @@ function LeadsSetter() {
     qualifie: categoryLeads.filter(isQualifiedLeadStatus).length,
     perdu: categoryLeads.filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie').length,
     relanceLt: categoryLeads.filter(isLongTermRelanceLead).length,
-  }), [categoryLeads])
+    promotion: currentPromo ? promotionLeads(mine, currentPromo._id, 'all').length : 0,
+  }), [categoryLeads, currentPromo, mine])
+
+  const statusFilters = useMemo(
+    () => currentPromo
+      ? [{ key: 'promotion' as const, label: 'Promotion', icon: 'tag' as const, countKey: 'promotion' as const }, ...SETTER_STATUS_FILTERS]
+      : SETTER_STATUS_FILTERS,
+    [currentPromo],
+  )
 
   const missingCounts = useMemo(() => {
-    const withinStatus = filterSetterLeadsByStatus(categoryLeads, filter)
+    const withinStatus = filter === 'promotion' ? promoLeads : filterSetterLeadsByStatus(categoryLeads, filter)
     return Object.fromEntries(
       SETTER_MISSING_FILTERS.map((item) => [item.key, withinStatus.filter((lead) => matchesMissingFilter(lead, item.key)).length]),
     ) as Record<SetterMissingFilter, number>
-  }, [categoryLeads, filter])
+  }, [categoryLeads, promoLeads, filter])
 
   const filtered = useMemo(() => {
     // Recherche insensible à la casse ET aux accents ; les numéros matchent
@@ -322,7 +347,10 @@ function LeadsSetter() {
     // Si une recherche est saisie, elle doit être globale sur toutes les catégories
     // setter, même si l’onglet actif est "Nouveaux", "À rappeler", etc.
     const searching = Boolean(q) || qPhoneVariants.length > 0
-    let list = searching ? categoryLeads : filterSetterLeadsByStatus(categoryLeads, filter)
+    // Recherche globale : retrouve aussi les leads de promo.
+    let list = searching
+      ? mine
+      : filter === 'promotion' ? promoLeads : filterSetterLeadsByStatus(categoryLeads, filter)
     if (missingFilter !== 'all') list = list.filter((l) => matchesMissingFilter(l, missingFilter))
     if (searching) {
       list = list.filter((l) => {
@@ -342,7 +370,7 @@ function LeadsSetter() {
       list = sortCallbackLeadsByNextCallback(list)
     }
     return list
-  }, [categoryLeads, filter, missingFilter, query, callbackSort])
+  }, [mine, promoLeads, categoryLeads, filter, missingFilter, query, callbackSort])
 
   const selected = useMemo(
     () => (selectedId ? mine.find((l) => l.id === selectedId) ?? null : null),
@@ -365,7 +393,7 @@ function LeadsSetter() {
       />
       <div className="flex flex-grow overflow-hidden">
         <LeadsRail
-          statusFilters={SETTER_STATUS_FILTERS}
+          statusFilters={statusFilters}
           missingFilters={SETTER_MISSING_FILTERS}
           filter={filter}
           missingFilter={missingFilter}
@@ -377,6 +405,9 @@ function LeadsSetter() {
         />
 
         <div className="flex-grow flex flex-col min-w-0">
+          {filter === 'promotion' && currentPromo && (
+            <PromotionBanner promo={currentPromo} source={promoSource} onSource={setPromoSource} />
+          )}
           <div className="px-4 sm:px-8 pt-4 flex items-center gap-3 flex-shrink-0 flex-wrap">
             <div className="relative flex-grow max-w-sm min-w-[200px]">
               <Icon name="search" size={16} className="absolute left-3 top-2.5 text-faint" />
@@ -458,7 +489,7 @@ function LeadsSetter() {
                                 title={lockedByOther ? `${lockedBy!.setterName} est en train de bosser sur ce lead` : undefined}
                                 onClick={() => selectLead(l.id)}
                               >
-                                {orderedColumns.map((column) => renderSetterCell(column.key, l, userMap, startCall, setOpenComment, lockedByOther ? lockedBy : null))}
+                                {orderedColumns.map((column) => renderSetterCell(column.key, l, userMap, startCall, setOpenComment, lockedByOther ? lockedBy : null, activePromoIds))}
                               </tr>
                             )
                           })}
@@ -935,6 +966,8 @@ function filterSetterLeadsByStatus(leads: LeadResponse[], filter: SetterFilter):
       return leads.filter((lead) => lead.status === 'perdu' || lead.status === 'pas_qualifie')
     case 'relance_lt':
       return leads.filter(isLongTermRelanceLead)
+    case 'promotion':
+      return leads
   }
 }
 
@@ -1138,6 +1171,7 @@ function renderSetterCell(
   startCall: ReturnType<typeof useStartCall>,
   setOpenComment: (data: { leadName: string; comment: string }) => void,
   lockedBy?: LeadLockInfo | null,
+  activePromoIds?: Set<string>,
 ) {
   switch (key) {
     case 'nom':
@@ -1160,6 +1194,9 @@ function renderSetterCell(
                 <span className="lead-name-sub" title={lead.city}>{lead.city}</span>
               )}
               <ResubmittedBadge lead={lead} />
+              {lead.promotionId && !activePromoIds?.has(lead.promotionId) && (
+                <span className="ml-1 rounded-full bg-or-tint px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-or-dark" title="Lead d'une promotion terminée">Promo</span>
+              )}
               <RetourSettersBadge lead={lead} />
             </div>
           </div>
