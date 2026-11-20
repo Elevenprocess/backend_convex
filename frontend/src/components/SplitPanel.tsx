@@ -20,6 +20,9 @@ import { useCallLogs, useRdvList, useStartCall, createCallLog, createRdv, update
 import { useAuth } from '../lib/auth'
 import { leadDetailPath } from '../lib/leadPaths'
 import { sectorFromCity } from '../lib/sector'
+import { useActivePromotions } from '../lib/promotionsApi'
+import { officePromotion } from '../lib/promotions'
+import { bureauSlotHint, nextStepAfterQualification, previousStepFromRdv, type RdvMode } from './promotions/qualification'
 
 type Tab = { id: string; label: string; icon?: IconName }
 
@@ -963,6 +966,12 @@ function NotesTab({
   const [commentaire, setCommentaire] = useState('')
   const [callbackAt, setCallbackAt] = useState('')
   const [sector, setSector] = useState<'Nord' | 'Sud' | 'Est' | 'Ouest' | ''>('')
+  const activePromos = useActivePromotions()
+  const officePromo = officePromotion(activePromos)
+  const [rdvMode, setRdvMode] = useState<RdvMode>('domicile')
+  // Promo archivée/terminée pendant la saisie : on repasse en domicile.
+  useEffect(() => { if (!officePromo && rdvMode === 'bureau') setRdvMode('domicile') }, [officePromo, rdvMode])
+  const isBureau = rdvMode === 'bureau' && Boolean(officePromo)
   const [rdvDate, setRdvDate] = useState(todayInputValue())
   const [rdvAt, setRdvAt] = useState('')
   const [form, setForm] = useState<LeadNotesForm>(() => leadToNotesForm(lead))
@@ -983,10 +992,12 @@ function NotesTab({
   } : null)
   const { data: ghlConfig } = useGhlCalendarConfig(shouldLoadCalendarData)
   const selectedSectorConfig = ghlConfig?.sectors.find((item) => normalizeSectorKey(item.sector) === normalizeSectorKey(sector))
-  const slotRange = shouldLoadCalendarData && sector ? buildDayRange(rdvDate) : null
+  const slotRange = shouldLoadCalendarData && (sector || isBureau) ? buildDayRange(rdvDate) : null
   const { data: ghlSlotsData, loading: ghlSlotsLoading, refetch: refetchGhlSlots } = useGhlFreeSlots({
-    sector: shouldLoadCalendarData ? sector || undefined : undefined,
-    calendarId: shouldLoadCalendarData ? selectedSectorConfig?.calendarId || undefined : undefined,
+    sector: shouldLoadCalendarData ? (isBureau ? 'Bureau' : sector || undefined) : undefined,
+    calendarId: shouldLoadCalendarData
+      ? (isBureau ? officePromo?.officeCalendarId : selectedSectorConfig?.calendarId) || undefined
+      : undefined,
     from: slotRange?.from,
     to: slotRange?.to,
     timezone: 'Indian/Reunion',
@@ -1125,6 +1136,7 @@ function NotesTab({
     sector,
     eligibilitySummary,
     commentaire,
+    bureau: isBureau ? { address: officePromo?.officeAddress } : undefined,
   })
 
   async function saveCallAndLead(kind: Exclude<SetterStatus, ''>) {
@@ -1158,7 +1170,7 @@ function NotesTab({
       } else {
         setResult('')
         setSuccess(null)
-        setStep('secteur')
+        setStep(nextStepAfterQualification(rdvMode))
       }
       onSaved?.()
     } catch (e) {
@@ -1172,7 +1184,7 @@ function NotesTab({
     setError(null)
     setSaving(true)
     try {
-      if (!sector) throw new Error('Sélectionne un secteur.')
+      if (!isBureau && !sector) throw new Error('Sélectionne un secteur.')
       if (!rdvAt) throw new Error('Choisis une date de rendez-vous.')
       const firstName = cleanField(form.firstName)
       const lastName = cleanField(form.lastName)
@@ -1196,10 +1208,10 @@ function NotesTab({
       const rdvPromise = ghlConfig?.configured
         ? createGhlAppointment({
           leadId: lead.id,
-          sector,
-          calendarId: selectedSectorConfig?.calendarId || undefined,
+          sector: isBureau ? 'Bureau' : sector,
+          calendarId: (isBureau ? officePromo?.officeCalendarId : selectedSectorConfig?.calendarId) || undefined,
           scheduledAt: rdvAtToReunionIso(rdvAt),
-          locationType: 'domicile',
+          locationType: isBureau ? 'agence' : 'domicile',
           notes: rdvTransferNote,
           firstName,
           lastName,
@@ -1213,7 +1225,7 @@ function NotesTab({
           leadId: lead.id,
           commercialId: null,
           scheduledAt: rdvAtToReunionIso(rdvAt),
-          locationType: 'domicile',
+          locationType: isBureau ? 'agence' : 'domicile',
           notes: rdvTransferNote,
         })
       await Promise.all([
@@ -1223,7 +1235,7 @@ function NotesTab({
       ])
       refetchAgenda()
       refetchGhlSlots()
-      setSuccess(ghlConfig?.configured ? 'RDV créé dans GHL, agenda actualisé.' : 'RDV créé en local. Agenda actualisé.')
+      setSuccess(isBureau ? 'RDV au bureau créé dans GHL.' : ghlConfig?.configured ? 'RDV créé dans GHL, agenda actualisé.' : 'RDV créé en local. Agenda actualisé.')
       setStep('done')
       onSaved?.()
     } catch (e) {
@@ -1400,7 +1412,22 @@ function NotesTab({
           <div>
             <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-2">Statut setter</div>
             <div className="grid grid-cols-1 gap-2">
-              <StatusChoice active={setterStatus === 'qualifie'} icon="check" title="Qualifié" text="Secteur et RDV" onClick={() => { setSetterStatus('qualifie'); setResult('joint') }} />
+              <StatusChoice
+                active={setterStatus === 'qualifie' && rdvMode === 'domicile'}
+                icon={officePromo ? 'home' : 'check'}
+                title={officePromo ? 'Qualifié – RDV à domicile' : 'Qualifié'}
+                text="Secteur et RDV"
+                onClick={() => { setSetterStatus('qualifie'); setRdvMode('domicile'); setResult('joint') }}
+              />
+              {officePromo && (
+                <StatusChoice
+                  active={setterStatus === 'qualifie' && rdvMode === 'bureau'}
+                  icon="map-pin"
+                  title="Qualifié – RDV au bureau"
+                  text={`${officePromo.name} · vendredi ou samedi au bureau`}
+                  onClick={() => { setSetterStatus('qualifie'); setRdvMode('bureau'); setResult('joint') }}
+                />
+              )}
             </div>
           </div>
 
@@ -1413,14 +1440,14 @@ function NotesTab({
                 className="bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full h-24 resize-none"
                 autoFocus={isActiveCall}
               />
-              <p className="text-sm text-muted">Valide la qualification pour passer à la sélection du secteur puis au RDV.</p>
+              <p className="text-sm text-muted">{rdvMode === 'bureau' ? 'Valide la qualification pour choisir un créneau au bureau.' : 'Valide la qualification pour passer à la sélection du secteur puis au RDV.'}</p>
               <button
                 onClick={() => saveCallAndLead(setterStatus)}
                 disabled={saving}
                 className="btn-primary w-full rounded-xl py-2 text-sm disabled:opacity-60 flex items-center justify-center gap-2"
               >
                 {saving ? <Spinner size={16} stroke={2} /> : null}
-                Continuer vers secteur
+                {rdvMode === 'bureau' ? 'Continuer vers le calendrier bureau' : 'Continuer vers secteur'}
               </button>
             </div>
           )}
@@ -1479,11 +1506,12 @@ function NotesTab({
       {step === 'rdv' && (
         <div className="space-y-4">
           <div className="rounded-[18px] border border-or/20 bg-or-tint p-3">
-            <div className="text-[10px] font-bold tracking-widest uppercase text-or-dark mb-1">Secteur sélectionné</div>
+            <div className="text-[10px] font-bold tracking-widest uppercase text-or-dark mb-1">{isBureau ? 'RDV au bureau' : 'Secteur sélectionné'}</div>
             <div className="flex items-center justify-between gap-3">
-              <span className="font-bold text-or-dark">{sector}</span>
-              <button type="button" onClick={() => setStep('secteur')} className="text-xs font-semibold text-or hover:underline">Changer</button>
+              <span className="font-bold text-or-dark">{isBureau ? `Bureau Electro Concept OI · ${officePromo?.name}` : sector}</span>
+              <button type="button" onClick={() => setStep(previousStepFromRdv(isBureau ? 'bureau' : 'domicile'))} className="text-xs font-semibold text-or hover:underline">Changer</button>
             </div>
+            {isBureau && officePromo?.officeAddress && <div className="text-xs text-or-dark mt-1">{officePromo.officeAddress}</div>}
           </div>
           <DateOnlyInput label="Date du RDV commercial" value={rdvDate} onChange={(date) => { setRdvDate(date); setRdvAt('') }} />
           <InlineRdvAgenda
@@ -1496,16 +1524,16 @@ function NotesTab({
             onSelect={(time) => setRdvAt(`${rdvDate}T${time}`)}
           />
           <p className="text-xs text-muted">
-            {ghlConfig?.configured
+            {(isBureau && bureauSlotHint(ghlTimeSlots.length, Boolean(rdvDate) && !ghlSlotsLoading)) || (ghlConfig?.configured
               ? ghlSlotsLoading
                 ? 'Chargement des créneaux libres GHL…'
                 : rdvDate && commercialTimeSlots.length === 0
                   ? 'Aucun créneau libre GHL sur cette date. Choisis une autre date.'
                   : 'Mini agenda synchronisé avec GHL en temps réel.'
-              : 'Mode local : ajoute la clé GHL pour charger les vrais créneaux libres.'}
+              : 'Mode local : ajoute la clé GHL pour charger les vrais créneaux libres.')}
           </p>
           <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setStep('secteur')} className="rounded-xl border border-line bg-white/70 py-2 text-sm font-semibold hover:bg-white">Retour</button>
+            <button type="button" onClick={() => setStep(previousStepFromRdv(isBureau ? 'bureau' : 'domicile'))} className="rounded-xl border border-line bg-white/70 py-2 text-sm font-semibold hover:bg-white">Retour</button>
             <button onClick={() => setStep('confirmation')} disabled={!rdvAt} className="btn-primary rounded-xl py-2 text-sm disabled:opacity-50">Next · formulaire lead</button>
           </div>
         </div>
@@ -1532,7 +1560,7 @@ function NotesTab({
             <Field label="EMAIL" value={(form.email || lead.email) ?? '—'} />
             <Field label="TÉLÉPHONE" value={(form.phone || lead.phone) ?? '—'} />
             <Field label="NOTES D’APPEL ENVOYÉES" value={noteFinale || '—'} />
-            <Field label="SECTEUR" value={sector || '—'} />
+            <Field label={isBureau ? 'LIEU' : 'SECTEUR'} value={isBureau ? `RDV au bureau${officePromo?.officeAddress ? ` — ${officePromo.officeAddress}` : ''}` : sector || '—'} />
             <Field label="RDV" value={rdvAt ? formatDate(rdvAtToReunionIso(rdvAt)) : '—'} />
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -1688,13 +1716,16 @@ function formatRdvTransferNote({
   sector,
   eligibilitySummary,
   commentaire,
+  bureau,
 }: {
   sector: string
   eligibilitySummary: string
   commentaire: string
+  bureau?: { address?: string }
 }): string {
   const eligibility = eligibilitySummary.replace(/^Notes d’éligibilité setter\n?/, '').trim()
   return [
+    bureau ? `RDV BUREAU${bureau.address ? ` — ${bureau.address}` : ''}` : null,
     `RDV ECOI${sector ? ` — ${sector}` : ''}`,
     commentaire.trim() ? `Commentaire setter :\n${commentaire.trim()}` : null,
     eligibility ? `Éligibilité :\n${eligibility}` : null,
