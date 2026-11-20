@@ -375,7 +375,12 @@ export const createLeadFromWebhook = internalMutation({
           summary: `Prospect ${leadLabel(existing)} a refait une simulation (re-soumission)${patch.status ? " — repassé « À rappeler »" : ""}`,
           details: { before: { status: existing.status }, after: { status: patch.status ?? existing.status } },
         });
-        await applyTagsToLead(ctx, existing._id, args.tags ?? [], now);
+        try {
+          await applyTagsToLead(ctx, existing._id, args.tags ?? [], now);
+        } catch (err) {
+          // Le rattachement à une promo ne doit jamais empêcher la re-soumission.
+          console.warn(`applyTagsToLead failed pour le lead ${existing._id}`, err);
+        }
         return { leadId: existing._id, duplicate: true };
       }
     }
@@ -401,7 +406,12 @@ export const createLeadFromWebhook = internalMutation({
         details: { channel, canalAcquisition: args.data.canalAcquisition ?? null, utmSource: args.data.utmSource ?? null, campaign: args.data.campaign ?? null },
       });
     }
-    await applyTagsToLead(ctx, leadId, args.tags ?? [], now);
+    try {
+      await applyTagsToLead(ctx, leadId, args.tags ?? [], now);
+    } catch (err) {
+      // Le rattachement à une promo ne doit jamais empêcher la création du lead.
+      console.warn(`applyTagsToLead failed pour le lead ${leadId}`, err);
+    }
     return { leadId, duplicate: false };
   },
 });
