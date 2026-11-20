@@ -58,4 +58,54 @@ describe("RDV bureau", () => {
       delete process.env.GHL_LOCATION_ID;
     }
   });
+
+  it("persistGhlEvents : sector Bureau -> agence, secteur Nord -> domicile", async () => {
+    const t = makeT();
+    const iso = new Date(Date.now() + 5 * 86_400_000).toISOString();
+    const r = await t.mutation(internal.ghlCalendar.persistGhlEvents, {
+      events: [
+        { id: "evB", calendarId: "CAL_BUREAU", startTime: iso, contactId: "cB", status: "confirmed", sector: "Bureau", contactName: "Ana Bureau" },
+        { id: "evN", calendarId: "CAL_NORD", startTime: iso, contactId: "cN", status: "confirmed", sector: "Nord", contactName: "Luc Nord" },
+      ] as never,
+      now: Date.now(),
+    });
+    expect(r.created).toBe(2);
+    const rdvs = await t.run((ctx) => ctx.db.query("rdv").collect());
+    expect(rdvs.find((x) => x.externalId === "evB")?.locationType).toBe("agence");
+    expect(rdvs.find((x) => x.externalId === "evN")?.locationType).toBe("domicile");
+  });
+
+  it("calendrier bureau en erreur 500 : les événements des secteurs reviennent quand même", async () => {
+    process.env.GHL_PRIVATE_INTEGRATION_TOKEN = "x";
+    process.env.GHL_LOCATION_ID = "loc";
+    process.env.GHL_SECTOR_CALENDARS = JSON.stringify({ nord: "CAL_NORD" });
+    const now = Date.now();
+    const fetchMock = vi.fn(async (url: string) => {
+      const u = new URL(url);
+      if (u.pathname.startsWith("/contacts/")) return new Response("{}", { status: 404 });
+      if (u.searchParams.get("calendarId") === "CAL_BUREAU") return new Response('{"message":"boom"}', { status: 500 });
+      return new Response(JSON.stringify({ events: [{
+        id: "evN", calendarId: "CAL_NORD", startTime: new Date(now + 86_400_000).toISOString(),
+        endTime: new Date(now + 90_000_000).toISOString(), appointmentStatus: "confirmed",
+      }] }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const t = makeT();
+      await seed(t, now);
+      const setter = await insertUser(t, { role: "setter", email: "s2@x.fr" });
+      const r = await asUser(t, setter).action(api.ghlCalendar.syncEvents, { from: now, to: now + 3 * 86_400_000 });
+      expect(r.configured).toBe(true);
+      expect(r.events.map((e) => e.id)).toEqual(["evN"]);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("CAL_BUREAU"));
+    } finally {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+      delete process.env.GHL_PRIVATE_INTEGRATION_TOKEN;
+      delete process.env.GHL_LOCATION_ID;
+      delete process.env.GHL_SECTOR_CALENDARS;
+    }
+  });
 });

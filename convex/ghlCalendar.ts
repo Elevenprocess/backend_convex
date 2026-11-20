@@ -18,7 +18,7 @@ import {
   normalizeSlots, splitContactName,
 } from "./model/ghl/calendarNormalize";
 import {
-  calendarIdForSector, calendarsForEvents, isSectorLike, parseSectorCalendars,
+  calendarIdForSector, calendarsForEvents, isSectorLike, OFFICE_SECTOR, parseSectorCalendars,
   publicSectors, sectorFromCalendarName,
 } from "./model/ghl/sectorConfig";
 import {
@@ -238,7 +238,7 @@ export const persistGhlEvents = internalMutation({
         leadId,
         ...(event.commercialId !== undefined ? { commercialId: event.commercialId } : {}),
         scheduledAt,
-        locationType: event.sector === "Bureau" ? "agence" : "domicile",
+        locationType: event.sector === OFFICE_SECTOR ? "agence" : "domicile",
         status,
         notes: buildSyncedRdvNotes(event as GhlCalendarEvent),
       });
@@ -337,23 +337,34 @@ async function loadEventsImpl(
   const officeCalendars = dto.calendarId || dto.sector
     ? []
     : (await ctx.runQuery(internal.promotions.officeCalendars, { now: Date.now() }))
-        .map((c) => ({ sector: "Bureau", calendarId: c.calendarId, label: "Bureau" }));
+        .map((c) => ({ sector: OFFICE_SECTOR, calendarId: c.calendarId, label: OFFICE_SECTOR }));
   const calendars = [...sectorCalendars, ...officeCalendars.filter((o) => !sectorCalendars.some((s) => s.calendarId === o.calendarId))];
   if (calendars.length === 0) return { configured: true, events: [] };
 
   const events: GhlCalendarEvent[] = [];
   for (const calendar of calendars) {
-    for (const range of splitDateRange(dto.fromMs, dto.toMs)) {
-      const raw = await ghlRequest("/calendars/events", {
-        query: {
-          locationId: requireGhlLocationId(),
-          calendarId: calendar.calendarId,
-          startTime: range.fromMs,
-          endTime: range.toMs,
-        },
-      });
-      events.push(...normalizeEvents(raw, calendar.calendarId, calendar.sector));
+    const isOffice = calendar.sector === OFFICE_SECTOR;
+    const calendarEvents: GhlCalendarEvent[] = [];
+    try {
+      for (const range of splitDateRange(dto.fromMs, dto.toMs)) {
+        const raw = await ghlRequest("/calendars/events", {
+          query: {
+            locationId: requireGhlLocationId(),
+            calendarId: calendar.calendarId,
+            startTime: range.fromMs,
+            endTime: range.toMs,
+          },
+        });
+        calendarEvents.push(...normalizeEvents(raw, calendar.calendarId, calendar.sector));
+      }
+    } catch (err) {
+      // Un calendrier bureau en panne (id faux, supprimé…) ne doit jamais
+      // bloquer l'agenda ni la synchro des secteurs ; les secteurs remontent.
+      if (!isOffice) throw err;
+      console.warn(`Calendrier bureau ${calendar.calendarId} ignoré : ${err instanceof Error ? err.message : String(err)}`);
+      continue;
     }
+    events.push(...calendarEvents);
   }
 
   const byId = new Map<string, GhlCalendarEvent>();
