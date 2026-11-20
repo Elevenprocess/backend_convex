@@ -17,7 +17,7 @@ export function PromotionBanner({ promo, source, onSource, showSourceFilter = tr
 }) {
   const [showPitch, setShowPitch] = useState(false)
   return (
-    <div className="mx-4 sm:mx-8 mt-4 rounded-[18px] border border-or/30 bg-or-tint p-4 space-y-2">
+    <div className="mx-4 sm:mx-8 mt-4 w-auto lg:w-1/2 lg:max-w-[640px] rounded-[18px] border border-or/30 bg-or-tint p-4 space-y-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <div className="text-[10px] font-bold tracking-widest uppercase text-or-dark">Promotion en cours</div>

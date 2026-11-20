@@ -32,10 +32,12 @@ export function PromotionsAdmin({ leads, onOpenLeads }: { leads: LeadResponse[];
         return (
           <section key={g.key} className="space-y-2">
             <div className="text-[10px] font-bold tracking-widest uppercase text-faint">{g.label}</div>
-            {rows.map((p) => (
-              <PromotionCard key={p._id} promo={p} leadCount={promotionLeads(leads, p._id, 'all').length}
-                onEdit={() => setEditing(p)} onOpenLeads={() => onOpenLeads(p)} />
-            ))}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              {rows.map((p) => (
+                <PromotionCard key={p._id} promo={p} leadCount={promotionLeads(leads, p._id, 'all').length}
+                  onEdit={() => setEditing(p)} onOpenLeads={() => onOpenLeads(p)} />
+              ))}
+            </div>
           </section>
         )
       })}
