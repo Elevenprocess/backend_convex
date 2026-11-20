@@ -70,7 +70,6 @@
 - `frontend/src/components/promotions/PromotionsAdmin.tsx` : onglet admin.
 - `frontend/src/components/promotions/PromotionsAdmin.test.tsx`
 - `frontend/src/components/RdvLocationBadge.tsx`
-- `frontend/src/components/SplitPanel.bureau.test.tsx`
 
 **Front (modifiés)**
 - `frontend/src/lib/types.ts`, `frontend/src/lib/convexApi.ts`, `frontend/src/lib/convexMappers.ts` : champs promo sur le lead.
@@ -2674,15 +2673,9 @@ Dans le `<p className="text-xs text-muted">` sous l'agenda, en mode bureau, affi
 
 9. `formatRdvTransferNote` (l.1687) : ajouter un paramètre `bureau?: { address?: string }`. S'il est fourni, la note commence par `RDV BUREAU${address ? ` — ${address}` : ''}` sur la première ligne. À l'appel (chercher `rdvTransferNote =`), passer `bureau: isBureau ? { address: officePromo?.officeAddress } : undefined`.
 
-- [ ] **Step 5: Test de rendu de la qualification**
+- [ ] **Step 5: Couverture du rendu**
 
-```tsx
-// frontend/src/components/SplitPanel.bureau.test.tsx
-import { describe, expect, it, vi } from 'vitest'
-import { StatusChoice } from './SplitPanel'
-```
-
-Note : si `NotesTab` n'est pas exporté et que le monter demande trop de mocks (Convex, GHL), s'en tenir aux tests purs du Step 1. Ajouter alors un test manuel au Step 7 de la Task 12. **Ne pas** exporter de composants internes uniquement pour le test.
+`NotesTab` n'est pas exporté, et le monter demande de simuler Convex et GHL. La logique de parcours est donc couverte par les tests purs du Step 1 (`qualification.test.ts`). L'affichage des deux choix est vérifié à la main au Step 7 de la Task 12 (point 4). **Ne pas** exporter de composants internes uniquement pour un test.
 
 - [ ] **Step 6: Run tests + typecheck**
 
