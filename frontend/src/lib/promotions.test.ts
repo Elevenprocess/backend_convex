@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  activePromotionIds, formatPromotionRange, isInActivePromotion, officePromotion,
+  activePromotionIds, activePromotionLeads, formatPromotionRange, isInActivePromotion, officePromotion,
   promotionLeads, withoutActivePromotionLeads, type ActivePromotion,
 } from './promotions'
 
@@ -26,6 +26,13 @@ describe('promotions helpers', () => {
     expect(promotionLeads(leads, 'p1', 'all').map((l) => l.id)).toEqual(['a', 'b'])
     expect(promotionLeads(leads, 'p1', 'tag').map((l) => l.id)).toEqual(['a'])
     expect(promotionLeads(leads, 'p1', 'statut').map((l) => l.id)).toEqual(['b'])
+  })
+  it('onglet Promotion : leads de toutes les promos en cours', () => {
+    const more = [...leads, { id: 'e', promotionId: 'p2', promotionSource: 'tag' as const }]
+    const ids = activePromotionIds([promo, { ...promo, _id: 'p2' }])
+    expect(activePromotionLeads(more, ids, 'all').map((l) => l.id)).toEqual(['a', 'b', 'e'])
+    expect(activePromotionLeads(more, ids, 'tag').map((l) => l.id)).toEqual(['a', 'e'])
+    expect(activePromotionLeads(more, ids, 'statut').map((l) => l.id)).toEqual(['b'])
   })
   it('dates en heure de la Réunion', () => {
     expect(formatPromotionRange(promo.startAt, promo.endAt)).toBe('du 23 au 29 nov.')

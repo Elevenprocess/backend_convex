@@ -18,4 +18,8 @@ describe('PromotionBanner', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Anciens' }))
     expect(onSource).toHaveBeenCalledWith('statut')
   })
+  it('showSourceFilter=false masque le sélecteur', () => {
+    render(<PromotionBanner promo={promo} source="all" onSource={vi.fn()} showSourceFilter={false} />)
+    expect(screen.queryByRole('button', { name: 'Anciens' })).not.toBeInTheDocument()
+  })
 })

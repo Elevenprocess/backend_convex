@@ -13,7 +13,7 @@ import { useLeadSidebar } from '../../lib/leadSidebar'
 import { emitLeadDeselect, emitLeadSelect, useLeadLocks, type LeadLockInfo } from '../../lib/realtime'
 import { normalizeSearchText, phoneMatches, phoneSearchVariants } from '../../lib/searchText'
 import { useActivePromotions } from '../../lib/promotionsApi'
-import { activePromotionIds, promotionLeads, withoutActivePromotionLeads } from '../../lib/promotions'
+import { activePromotionIds, activePromotionLeads, withoutActivePromotionLeads } from '../../lib/promotions'
 import { PromotionBanner, type PromotionSourceFilter } from '../../components/promotions/PromotionBanner'
 import { DossierCard } from '../../components/suivi/DossierCard'
 import { ManualLeadModal } from '../../components/leads/ManualLeadModal'
@@ -263,17 +263,17 @@ function LeadsSetter() {
   // (retour automatique dans les onglets habituels à la fin de la promo).
   const activePromos = useActivePromotions()
   const activePromoIds = useMemo(() => activePromotionIds(activePromos), [activePromos])
-  const currentPromo = activePromos[0]
+  const hasPromo = activePromos.length > 0
   const [promoSource, setPromoSource] = useState<PromotionSourceFilter>('all')
   const promoLeads = useMemo(
-    () => (currentPromo ? promotionLeads(mine, currentPromo._id, promoSource) : []),
-    [mine, currentPromo, promoSource],
+    () => activePromotionLeads(mine, activePromoIds, promoSource),
+    [mine, activePromoIds, promoSource],
   )
   const categoryLeads = useMemo(() => withoutActivePromotionLeads(mine, activePromoIds), [mine, activePromoIds])
   // Si la promo se termine pendant qu'on est sur l'onglet, on retombe sur « Nouveaux ».
   useEffect(() => {
-    if (filter === 'promotion' && !currentPromo) setFilter('nouveau')
-  }, [filter, currentPromo])
+    if (filter === 'promotion' && !hasPromo) setFilter('nouveau')
+  }, [filter, hasPromo])
 
   // Leads "à rappeler" dont l'heure de rappel tombe dans les 3 prochaines minutes
   // (futur proche uniquement ; les rappels déjà dépassés ne déclenchent pas).
@@ -322,14 +322,14 @@ function LeadsSetter() {
     qualifie: categoryLeads.filter(isQualifiedLeadStatus).length,
     perdu: categoryLeads.filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie').length,
     relanceLt: categoryLeads.filter(isLongTermRelanceLead).length,
-    promotion: currentPromo ? promotionLeads(mine, currentPromo._id, 'all').length : 0,
-  }), [categoryLeads, currentPromo, mine])
+    promotion: activePromotionLeads(mine, activePromoIds, 'all').length,
+  }), [categoryLeads, activePromoIds, mine])
 
   const statusFilters = useMemo(
-    () => currentPromo
+    () => hasPromo
       ? [{ key: 'promotion' as const, label: 'Promotion', icon: 'tag' as const, countKey: 'promotion' as const }, ...SETTER_STATUS_FILTERS]
       : SETTER_STATUS_FILTERS,
-    [currentPromo],
+    [hasPromo],
   )
 
   const missingCounts = useMemo(() => {
@@ -405,9 +405,9 @@ function LeadsSetter() {
         />
 
         <div className="flex-grow flex flex-col min-w-0">
-          {filter === 'promotion' && currentPromo && (
-            <PromotionBanner promo={currentPromo} source={promoSource} onSource={setPromoSource} />
-          )}
+          {filter === 'promotion' && activePromos.map((p, i) => (
+            <PromotionBanner key={p._id} promo={p} source={promoSource} onSource={setPromoSource} showSourceFilter={i === 0} />
+          ))}
           <div className="px-4 sm:px-8 pt-4 flex items-center gap-3 flex-shrink-0 flex-wrap">
             <div className="relative flex-grow max-w-sm min-w-[200px]">
               <Icon name="search" size={16} className="absolute left-3 top-2.5 text-faint" />
@@ -1195,7 +1195,7 @@ function renderSetterCell(
               )}
               <ResubmittedBadge lead={lead} />
               {lead.promotionId && !activePromoIds?.has(lead.promotionId) && (
-                <span className="ml-1 rounded-full bg-or-tint px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-or-dark" title="Lead d'une promotion terminée">Promo</span>
+                <span className="ml-1 rounded-full bg-or-tint px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-or-dark" title="Lead rattaché à une promotion (pas en cours)">Promo</span>
               )}
               <RetourSettersBadge lead={lead} />
             </div>

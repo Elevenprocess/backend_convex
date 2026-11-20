@@ -9,10 +9,11 @@ const SOURCES: { key: PromotionSourceFilter; label: string }[] = [
   { key: 'statut', label: 'Anciens' },
 ]
 
-export function PromotionBanner({ promo, source, onSource }: {
+export function PromotionBanner({ promo, source, onSource, showSourceFilter = true }: {
   promo: ActivePromotion
   source: PromotionSourceFilter
   onSource: (s: PromotionSourceFilter) => void
+  showSourceFilter?: boolean
 }) {
   const [showPitch, setShowPitch] = useState(false)
   return (
@@ -23,7 +24,7 @@ export function PromotionBanner({ promo, source, onSource }: {
           <div className="font-black text-lg text-text">{promo.name}</div>
           <div className="text-xs text-muted">{formatPromotionRange(promo.startAt, promo.endAt)}</div>
         </div>
-        <div className="flex gap-1">
+        {showSourceFilter && <div className="flex gap-1">
           {SOURCES.map((s) => (
             <button
               key={s.key}
@@ -34,7 +35,7 @@ export function PromotionBanner({ promo, source, onSource }: {
               {s.label}
             </button>
           ))}
-        </div>
+        </div>}
       </div>
       {promo.offer && <p className="text-sm font-semibold text-text">{promo.offer}</p>}
       {promo.officeCalendarId && (

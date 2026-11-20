@@ -32,6 +32,11 @@ export function promotionLeads<T extends PromoLead>(leads: T[], promotionId: str
   return leads.filter((l) => l.promotionId === promotionId && (source === 'all' || l.promotionSource === source))
 }
 
+/** Leads de TOUTES les promos en cours, filtrés par source (onglet Promotion). */
+export function activePromotionLeads<T extends PromoLead>(leads: T[], ids: Set<string>, source: 'all' | 'tag' | 'statut'): T[] {
+  return leads.filter((l) => isInActivePromotion(l, ids) && (source === 'all' || l.promotionSource === source))
+}
+
 export function officePromotion(promos: ActivePromotion[]): ActivePromotion | undefined {
   return promos.find((p) => Boolean(p.officeCalendarId))
 }
