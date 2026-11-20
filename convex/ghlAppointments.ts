@@ -18,7 +18,7 @@
 import { v } from "convex/values";
 import { action, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { Doc } from "./_generated/dataModel";
+import { Doc, Id } from "./_generated/dataModel";
 import { ghlRequest, isGhlConfigured, requireGhlLocationId } from "./ghlClient";
 import { calendarIdForSector, parseSectorCalendars } from "./model/ghl/sectorConfig";
 import { buildGhlProspectRemark } from "./model/ghl/prospectRemark";
@@ -156,6 +156,7 @@ export const finalizeAppointment = internalMutation({
     appointmentId: v.union(v.string(), v.null()),
     scheduledAt: v.number(),
     locationType: v.optional(rdvLocationValidator),
+    promotionId: v.optional(v.id("promotions")),
     notes: v.optional(v.string()),
     ...contactFieldsValidator,
   },
@@ -179,6 +180,8 @@ export const finalizeAppointment = internalMutation({
       // RDV ouvert déjà présent (ex. re-book) : on le met à jour plutôt que doubler.
       await ctx.db.patch(open._id, {
         scheduledAt: args.scheduledAt,
+        ...(args.locationType ? { locationType: args.locationType } : {}),
+        ...(args.promotionId ? { promotionId: args.promotionId } : {}),
         ...(args.notes !== undefined ? { notes: args.notes } : {}),
         ...(args.appointmentId ? { externalId: args.appointmentId, ghlEventId: args.appointmentId } : {}),
       });
@@ -190,6 +193,7 @@ export const finalizeAppointment = internalMutation({
         locationType: args.locationType ?? "domicile",
         status: "planifie",
         createdAt: Date.now(),
+        ...(args.promotionId ? { promotionId: args.promotionId } : {}),
         ...(args.notes !== undefined ? { notes: args.notes } : {}),
         ...(args.appointmentId
           ? { externalId: args.appointmentId, ghlEventId: args.appointmentId }
@@ -247,6 +251,14 @@ export const createAppointment = action({
     await ctx.runQuery(internal.ghlAppointments.assertCanBook, {});
     if (!isGhlConfigured()) throw new Error("GHL non configuré côté serveur.");
 
+    // RDV au bureau : uniquement sur le calendrier bureau d'une promo en cours
+    // (jamais un calendrier arbitraire envoyé par le navigateur).
+    let office: { promotionId: Id<"promotions">; officeAddress?: string } | null = null;
+    if (args.locationType === "agence") {
+      if (!args.calendarId) throw new Error("Calendrier bureau manquant.");
+      office = await ctx.runQuery(internal.promotions.officeCalendarForBooking, { calendarId: args.calendarId, now: Date.now() });
+      if (!office) throw new Error("Ce calendrier bureau n'est rattaché à aucune promotion en cours.");
+    }
     const calendarId =
       args.calendarId || calendarIdForSector(parseSectorCalendars(process.env.GHL_SECTOR_CALENDARS), args.sector);
     if (!calendarId) throw new Error(`Aucun calendrier GHL configuré pour le secteur ${args.sector}.`);
@@ -317,7 +329,8 @@ export const createAppointment = action({
         contactId,
         startTime: new Date(args.scheduledAt).toISOString(),
         appointmentStatus: "confirmed",
-        title: `RDV ECOI ${args.sector}${name ? ` — ${name}` : ""}${reachInfo ? ` — ${reachInfo}` : ""}`,
+        title: `${office ? "RDV BUREAU ECOI" : `RDV ECOI ${args.sector}`}${name ? ` — ${name}` : ""}${reachInfo ? ` — ${reachInfo}` : ""}`,
+        ...(office?.officeAddress ? { address: office.officeAddress } : {}),
         notes: appointmentNotes,
       },
     })) as Record<string, unknown>;
@@ -334,6 +347,7 @@ export const createAppointment = action({
       appointmentId,
       scheduledAt: args.scheduledAt,
       locationType: args.locationType,
+      ...(office ? { promotionId: office.promotionId } : {}),
       notes: appointmentNotes ?? undefined,
       ...identity,
     });

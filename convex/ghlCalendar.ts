@@ -238,7 +238,7 @@ export const persistGhlEvents = internalMutation({
         leadId,
         ...(event.commercialId !== undefined ? { commercialId: event.commercialId } : {}),
         scheduledAt,
-        locationType: "domicile",
+        locationType: event.sector === "Bureau" ? "agence" : "domicile",
         status,
         notes: buildSyncedRdvNotes(event as GhlCalendarEvent),
       });
@@ -331,7 +331,14 @@ async function loadEventsImpl(
   dto: { fromMs: number; toMs: number; sector?: string; calendarId?: string },
 ): Promise<{ configured: boolean; events: GhlCalendarEvent[] }> {
   if (!isGhlConfigured()) return { configured: false, events: [] };
-  const calendars = calendarsForEvents(sectorsFromEnv(), dto);
+  const sectorCalendars = calendarsForEvents(sectorsFromEnv(), dto);
+  // Calendriers bureau des promotions : synchronisés aussi (commercial attribué
+  // par GHL parmi les membres du calendrier), sauf requête ciblée.
+  const officeCalendars = dto.calendarId || dto.sector
+    ? []
+    : (await ctx.runQuery(internal.promotions.officeCalendars, { now: Date.now() }))
+        .map((c) => ({ sector: "Bureau", calendarId: c.calendarId, label: "Bureau" }));
+  const calendars = [...sectorCalendars, ...officeCalendars.filter((o) => !sectorCalendars.some((s) => s.calendarId === o.calendarId))];
   if (calendars.length === 0) return { configured: true, events: [] };
 
   const events: GhlCalendarEvent[] = [];

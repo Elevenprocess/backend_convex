@@ -175,6 +175,26 @@ export const active = query({
   },
 });
 
+export const officeCalendarForBooking = internalQuery({
+  args: { calendarId: v.string(), now: v.number() },
+  handler: async (ctx, { calendarId, now }) => {
+    const rows = await ctx.db.query("promotions").withIndex("by_endAt", (q) => q.gte("endAt", now)).collect();
+    const promo = rows.find((p) => p.officeCalendarId === calendarId && promotionStatus(p, now) === "en_cours");
+    return promo ? { promotionId: promo._id, officeAddress: promo.officeAddress } : null;
+  },
+});
+
+/** Calendriers bureau à synchroniser (promos pas finies depuis plus de 3 jours). */
+export const officeCalendars = internalQuery({
+  args: { now: v.number() },
+  handler: async (ctx, { now }) => {
+    const rows = await ctx.db.query("promotions").withIndex("by_endAt", (q) => q.gte("endAt", now - 3 * 86_400_000)).collect();
+    return rows
+      .filter((p) => !p.archived && p.officeCalendarId)
+      .map((p) => ({ calendarId: p.officeCalendarId as string, promotionId: p._id }));
+  },
+});
+
 export const applyLeadTags = internalMutation({
   args: { leadId: v.id("leads"), tags: v.array(v.string()), at: v.number() },
   handler: async (ctx, args) => {
