@@ -12,6 +12,7 @@ import { applyTagsToLead } from "./model/promotionAttach";
 import { findLeadByGhlContact } from "./webhooks";
 import { OPEN_RDV_STATUSES } from "./rdv";
 import { leadStatusValidator } from "./model/enums";
+import { ANSWERED_RESULTS, QUALIFIED_STATUSES } from "./model/funnelMath";
 import {
   legacyRejectReason, normalizeTag, parseGhlTags, promotionConflict, promotionStatus, reunionDayEndMs, reunionDayStartMs,
   type PromotionLike, type PromotionStatus,
@@ -388,5 +389,47 @@ export const attachLegacy = action({
       }
     }
     return { scanned, attached, skipped };
+  },
+});
+
+// ─── Chiffres d'une promotion ────────────────────────────────────
+// Mêmes définitions qu'analytics.ts (model/funnelMath.ts) : « joint » = au moins
+// un appel au résultat ANSWERED_RESULTS, « qualifié » = QUALIFIED_STATUSES,
+// « signé » = statut signe. RDV non supprimés, comptés par type de lieu.
+type StatBlock = {
+  leads: number; joints: number; rdvDomicile: number; rdvBureau: number; qualifies: number; signes: number;
+};
+const emptyBlock = (): StatBlock => ({ leads: 0, joints: 0, rdvDomicile: 0, rdvBureau: 0, qualifies: 0, signes: 0 });
+
+export const stats = query({
+  args: { promotionId: v.id("promotions") },
+  handler: async (ctx, { promotionId }) => {
+    await requireRole(ctx, ["admin"]);
+    const nouveaux = emptyBlock();
+    const anciens = emptyBlock();
+    const leads = await ctx.db.query("leads").withIndex("by_promotion", (q) => q.eq("promotionId", promotionId)).collect();
+    const inPromo = new Set<string>();
+    for (const lead of leads) {
+      if (lead.deletedAt !== undefined) continue;
+      inPromo.add(lead._id);
+      const block = lead.promotionSource === "statut" ? anciens : nouveaux;
+      block.leads++;
+      if (QUALIFIED_STATUSES.has(lead.status)) block.qualifies++;
+      if (lead.status === "signe") block.signes++;
+      const calls = await ctx.db.query("callLogs").withIndex("by_lead_calledAt", (q) => q.eq("leadId", lead._id)).collect();
+      if (calls.some((c) => ANSWERED_RESULTS.has(c.result))) block.joints++;
+      const rdvs = await ctx.db.query("rdv").withIndex("by_lead", (q) => q.eq("leadId", lead._id)).collect();
+      for (const r of rdvs) {
+        if (r.deletedAt !== undefined) continue;
+        if (r.locationType === "agence") block.rdvBureau++;
+        else block.rdvDomicile++;
+      }
+    }
+    // RDV bureau pris pendant la promo sur un lead qui n'est pas rattaché à la promo.
+    const promoRdvs = await ctx.db.query("rdv").withIndex("by_promotion", (q) => q.eq("promotionId", promotionId)).collect();
+    const rdvBureauHorsPromo = promoRdvs.filter(
+      (r) => r.deletedAt === undefined && r.locationType === "agence" && !inPromo.has(r.leadId),
+    ).length;
+    return { nouveaux, anciens, rdvBureauHorsPromo };
   },
 });
