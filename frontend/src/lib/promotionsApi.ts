@@ -41,8 +41,9 @@ export function useActivePromotionsState(): ActivePromotion[] | undefined {
   const now = useSessionNow()
   return useQuery(refs.active, { now })
 }
+const EMPTY_ACTIVE: ActivePromotion[] = []
 export function useActivePromotions(): ActivePromotion[] {
-  return useActivePromotionsState() ?? []
+  return useActivePromotionsState() ?? EMPTY_ACTIVE
 }
 export function usePromotionsList(): PromotionRow[] | undefined {
   const now = useSessionNow()

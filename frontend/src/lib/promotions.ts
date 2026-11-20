@@ -28,6 +28,13 @@ export function withoutActivePromotionLeads<T extends PromoLead>(leads: T[], ids
   return leads.filter((l) => !isInActivePromotion(l, ids))
 }
 
+/** Retire de la sélection les ids qui ne sont plus dans `leads` ; renvoie la MÊME référence si rien ne change (évite une boucle de rendu). */
+export function pruneSelectedIds(current: string[], leads: { id: string }[]): string[] {
+  const existing = new Set(leads.map((l) => l.id))
+  const next = current.filter((id) => existing.has(id))
+  return next.length === current.length ? current : next
+}
+
 export function promotionLeads<T extends PromoLead>(leads: T[], promotionId: string, source: 'all' | 'tag' | 'statut'): T[] {
   return leads.filter((l) => l.promotionId === promotionId && (source === 'all' || l.promotionSource === source))
 }

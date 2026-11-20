@@ -13,7 +13,7 @@ import { useLeadSidebar } from '../../lib/leadSidebar'
 import { emitLeadDeselect, emitLeadSelect, useLeadLocks, type LeadLockInfo } from '../../lib/realtime'
 import { normalizeSearchText, phoneMatches, phoneSearchVariants } from '../../lib/searchText'
 import { useActivePromotions } from '../../lib/promotionsApi'
-import { activePromotionIds, activePromotionLeads, promotionLeads, withoutActivePromotionLeads } from '../../lib/promotions'
+import { activePromotionIds, activePromotionLeads, promotionLeads, pruneSelectedIds, withoutActivePromotionLeads } from '../../lib/promotions'
 import { PromotionsAdmin } from '../../components/promotions/PromotionsAdmin'
 import { PromotionBanner, type PromotionSourceFilter } from '../../components/promotions/PromotionBanner'
 import { DossierCard } from '../../components/suivi/DossierCard'
@@ -530,6 +530,8 @@ function LeadsSetter() {
 }
 
 // ----- F6 Admin -----
+const EMPTY_LEADS: LeadResponse[] = []
+
 function LeadsAdmin() {
   const exportCsv = (rows: LeadResponse[]) => {
     const header = ['nom', 'telephone', 'email', 'ville', 'statut', 'source', 'createdAt']
@@ -584,7 +586,7 @@ function LeadsAdmin() {
   const loadMore = baseLeadsState.loadMore
   const { data: leadStats } = useLeadStats()
   const { data: users = [] } = useUsers()
-  const allLeads = leadsData ?? []
+  const allLeads = leadsData ?? EMPTY_LEADS
   const [adminView, setAdminView] = useState<'leads' | 'promotions'>('leads')
   const [promoLeadsOf, setPromoLeadsOf] = useState<{ id: string; name: string } | null>(null)
   const activePromos = useActivePromotions()
@@ -592,9 +594,12 @@ function LeadsAdmin() {
   // Pendant une promo en cours, ses leads ne sont visibles que dans l'onglet
   // Promotion (même règle que côté setter) ; « Voir les leads » d'une promo
   // affiche exactement ceux-là ; la recherche reste globale.
-  const leads = promoLeadsOf
-    ? promotionLeads(allLeads, promoLeadsOf.id, 'all')
-    : query.trim() ? allLeads : withoutActivePromotionLeads(allLeads, activePromoIds)
+  const leads = useMemo(
+    () => promoLeadsOf
+      ? promotionLeads(allLeads, promoLeadsOf.id, 'all')
+      : query.trim() ? allLeads : withoutActivePromotionLeads(allLeads, activePromoIds),
+    [promoLeadsOf, allLeads, query, activePromoIds],
+  )
 
   const setters = useMemo(() => (users ?? []).filter((u) => u.role === 'setter' && u.active), [users])
   const commerciaux = useMemo(() => (users ?? []).filter((u) => u.role === 'commercial' && u.active), [users])
@@ -662,8 +667,7 @@ function LeadsAdmin() {
   useScrollSelectedLeadIntoView(virtualizer, selectedRowIndex)
 
   useEffect(() => {
-    const existingIds = new Set(leads.map((lead) => lead.id))
-    setSelectedLeadIds((current) => current.filter((id) => existingIds.has(id)))
+    setSelectedLeadIds((current) => pruneSelectedIds(current, leads))
   }, [leads])
 
   const toggleLeadSelection = (leadId: string, checked: boolean) => {
