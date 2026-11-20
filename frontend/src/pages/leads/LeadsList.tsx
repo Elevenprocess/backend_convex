@@ -13,7 +13,8 @@ import { useLeadSidebar } from '../../lib/leadSidebar'
 import { emitLeadDeselect, emitLeadSelect, useLeadLocks, type LeadLockInfo } from '../../lib/realtime'
 import { normalizeSearchText, phoneMatches, phoneSearchVariants } from '../../lib/searchText'
 import { useActivePromotions } from '../../lib/promotionsApi'
-import { activePromotionIds, activePromotionLeads, withoutActivePromotionLeads } from '../../lib/promotions'
+import { activePromotionIds, activePromotionLeads, promotionLeads, withoutActivePromotionLeads } from '../../lib/promotions'
+import { PromotionsAdmin } from '../../components/promotions/PromotionsAdmin'
 import { PromotionBanner, type PromotionSourceFilter } from '../../components/promotions/PromotionBanner'
 import { DossierCard } from '../../components/suivi/DossierCard'
 import { ManualLeadModal } from '../../components/leads/ManualLeadModal'
@@ -583,7 +584,17 @@ function LeadsAdmin() {
   const loadMore = baseLeadsState.loadMore
   const { data: leadStats } = useLeadStats()
   const { data: users = [] } = useUsers()
-  const leads = leadsData ?? []
+  const allLeads = leadsData ?? []
+  const [adminView, setAdminView] = useState<'leads' | 'promotions'>('leads')
+  const [promoLeadsOf, setPromoLeadsOf] = useState<{ id: string; name: string } | null>(null)
+  const activePromos = useActivePromotions()
+  const activePromoIds = useMemo(() => activePromotionIds(activePromos), [activePromos])
+  // Pendant une promo en cours, ses leads ne sont visibles que dans l'onglet
+  // Promotion (même règle que côté setter) ; « Voir les leads » d'une promo
+  // affiche exactement ceux-là ; la recherche reste globale.
+  const leads = promoLeadsOf
+    ? promotionLeads(allLeads, promoLeadsOf.id, 'all')
+    : query.trim() ? allLeads : withoutActivePromotionLeads(allLeads, activePromoIds)
 
   const setters = useMemo(() => (users ?? []).filter((u) => u.role === 'setter' && u.active), [users])
   const commerciaux = useMemo(() => (users ?? []).filter((u) => u.role === 'commercial' && u.active), [users])
@@ -716,6 +727,15 @@ function LeadsAdmin() {
         eyebrow="LEADS / ADMIN — TOUTE L'ÉQUIPE"
         title="Tous les leads"
       />
+      <div className="px-4 sm:px-8 pt-3 flex gap-2">
+        <button type="button" onClick={() => { setAdminView('leads'); setPromoLeadsOf(null) }} className={`pill-tab ${adminView === 'leads' && !promoLeadsOf ? '!bg-text !text-white' : 'bg-white border border-line text-muted'}`}>Leads</button>
+        <button type="button" onClick={() => setAdminView('promotions')} className={`pill-tab ${adminView === 'promotions' ? '!bg-text !text-white' : 'bg-white border border-line text-muted'}`}>Promotion</button>
+        {promoLeadsOf && <span className="pill-tab bg-or-tint text-or-dark">Leads de « {promoLeadsOf.name} »</span>}
+      </div>
+      {adminView === 'promotions' && (
+        <PromotionsAdmin leads={allLeads} onOpenLeads={(p) => { setPromoLeadsOf({ id: p._id, name: p.name }); setAdminView('leads') }} />
+      )}
+      {adminView === 'leads' && (
       <div className="flex flex-grow overflow-hidden">
         <AdminLeadsRail
           leads={leads}
@@ -864,6 +884,7 @@ function LeadsAdmin() {
       </main>
         </div>
       </div>
+      )}
       <CommentModal data={openComment} onClose={() => setOpenComment(null)} />
     </AppShell>
   )

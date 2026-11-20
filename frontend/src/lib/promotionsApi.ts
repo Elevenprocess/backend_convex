@@ -61,3 +61,10 @@ export const updatePromotion = (id: string, input: PromotionInput) => client().m
 export const archivePromotion = (id: string) => client().mutation(refs.archive, { id })
 export const attachLegacy = (promotionId: string) => client().action(refs.attachLegacy, { promotionId })
 export const backfillPromotion = (promotionId: string) => client().action(refs.backfill, { promotionId })
+
+// Calendriers GHL (admin). L'action renvoie la réponse brute de GHL : { calendars: [{ id, name, ... }] }.
+const listCalendarsRef = makeFunctionReference<'action', { groupId?: string }, { calendars?: { id: string; name?: string }[] }>('ghlCalendar:listCalendars')
+export async function listGhlCalendars(): Promise<{ id: string; name: string }[]> {
+  const raw = await client().action(listCalendarsRef, {})
+  return (raw?.calendars ?? []).map((c) => ({ id: c.id, name: c.name ?? c.id }))
+}
