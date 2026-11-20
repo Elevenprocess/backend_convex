@@ -22,6 +22,7 @@ import { leadDetailPath } from '../lib/leadPaths'
 import { sectorFromCity } from '../lib/sector'
 import { useActivePromotionsState } from '../lib/promotionsApi'
 import { officePromotion } from '../lib/promotions'
+import { RdvLocationBadge, rdvLocationLabel } from './RdvLocationBadge'
 import { bureauSlotHint, formatRdvTransferNote, nextStepAfterQualification, previousStepFromRdv, type RdvMode } from './promotions/qualification'
 
 type Tab = { id: string; label: string; icon?: IconName }
@@ -640,6 +641,7 @@ function RdvInfoCard({ rdv, lead, ghlEvent, commercialName, onUpdated }: { rdv: 
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
           <span className="text-[11px] font-bold uppercase tracking-widest text-or">RDV {rdv.status}</span>
+          <RdvLocationBadge location={rdv.locationType} />
           <div className="text-sm font-semibold text-text mt-1">{formatRdvDate(rdv.scheduledAt)}</div>
         </div>
         <div className="flex items-center gap-2">
@@ -658,7 +660,7 @@ function RdvInfoCard({ rdv, lead, ghlEvent, commercialName, onUpdated }: { rdv: 
         <MiniInfo label="Date" value={formatRdvDay(rdv.scheduledAt)} />
         <MiniInfo label="Heure" value={formatRdvTime(rdv.scheduledAt)} />
         <MiniInfo label="Commercial assigné" value={commercialName ?? 'Non attribué'} wide />
-        <MiniInfo label="Type" value={rdv.locationType} />
+        <MiniInfo label="Type" value={rdvLocationLabel(rdv.locationType)} />
         {ghlEvent?.sector && <MiniInfo label="Secteur GHL" value={ghlEvent.sector} />}
       </div>
       {rdv.result && <div className="text-xs text-text mt-3">Résultat : <span className="font-semibold">{rdv.result}</span></div>}
