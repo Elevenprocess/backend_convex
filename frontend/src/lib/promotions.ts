@@ -68,3 +68,47 @@ export function formatPromotionRange(startAt: number, endAt: number): string {
 export function reunionDayInput(ms: number): string {
   return new Date(ms + REUNION_OFFSET_MS).toISOString().slice(0, 10)
 }
+
+/** URL du lien webhook d'une promo, à coller dans une action Webhook GHL. */
+export function promotionWebhookUrl(convexUrl: string | undefined, key: string | undefined): string | null {
+  if (!convexUrl || !key) return null
+  const site = convexUrl.replace(/\/+$/, '').replace(/\.convex\.cloud$/, '.convex.site')
+  return `${site}/webhooks/ghl/promotion/${key}`
+}
+
+/**
+ * Jours de RDV au bureau proposés au setter : vendredis et samedis (heure de
+ * la Réunion) entre aujourd'hui et la fin de la promo. Vide quand la promo est
+ * finie : le calendrier bureau n'est plus proposé.
+ */
+export function bureauDays(startAt: number, endAt: number, now: number): string[] {
+  const days: string[] = []
+  const DAY = 86_400_000
+  const first = Math.max(startAt, now)
+  // Minuit Réunion du premier jour.
+  let t = Math.floor((first + REUNION_OFFSET_MS) / DAY) * DAY - REUNION_OFFSET_MS
+  for (; t <= endAt && days.length < 60; t += DAY) {
+    const d = new Date(t + REUNION_OFFSET_MS)
+    const wd = d.getUTCDay()
+    if (wd === 5 || wd === 6) days.push(d.toISOString().slice(0, 10))
+  }
+  return days
+}
+
+const WEEKDAYS = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.']
+/** "2026-11-27" → "ven. 27 nov." */
+export function formatBureauDay(day: string): string {
+  const d = new Date(`${day}T00:00:00Z`)
+  return `${WEEKDAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`
+}
+
+export type LeadKpis = { total: number; directGhl: number; qualifies: number; perdus: number }
+/** Chiffres d'en-tête calculés sur une liste de leads (ex. leads d'une promo). */
+export function leadKpis(leads: { status: string; source?: string }[]): LeadKpis {
+  return {
+    total: leads.length,
+    directGhl: leads.filter((l) => l.source === 'ghl').length,
+    qualifies: leads.filter((l) => ['qualifie', 'rdv_pris', 'rdv_honore', 'signe'].includes(l.status)).length,
+    perdus: leads.filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie').length,
+  }
+}

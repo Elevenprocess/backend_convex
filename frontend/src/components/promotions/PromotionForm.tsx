@@ -28,7 +28,6 @@ export function validatePromotionForm(v: PromotionFormValues): string | null {
   if (!v.name.trim()) return 'Le nom de la promotion est obligatoire.'
   if (!v.startDay || !v.endDay) return 'Choisis une date de début et une date de fin.'
   if (v.endDay < v.startDay) return 'La date de fin doit être après la date de début.'
-  if (!v.tag.trim() && v.legacyStatuses.length === 0) return 'Indique un tag ou au moins un statut d’anciens leads.'
   return null
 }
 
@@ -102,9 +101,9 @@ export function PromotionForm({ initial, onClose, onSaved }: { initial?: Promoti
         </section>
 
         <section className="space-y-2">
-          <div className="text-[10px] font-bold tracking-widest uppercase text-faint">Nouveaux leads (tag GHL)</div>
-          <input className={field} placeholder="Tag GHL (ex. black friday)" value={values.tag} onChange={(e) => set('tag', e.target.value)} />
-          <p className="text-xs text-muted">Le tag doit être posé par un workflow GHL. Ajoutez ensuite une action Webhook vers /webhooks/ghl/tags.</p>
+          <div className="text-[10px] font-bold tracking-widest uppercase text-faint">Nouveaux leads</div>
+          <p className="text-xs text-muted">Après l’enregistrement, la carte de la promotion affiche un lien webhook à copier dans une action Webhook d’un workflow GHL : les contacts envoyés arrivent tout seuls dans l’onglet Promotion.</p>
+          <input className={field} placeholder="Tag GHL (facultatif, ex. black friday)" value={values.tag} onChange={(e) => set('tag', e.target.value)} />
         </section>
 
         <section className="space-y-2">

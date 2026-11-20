@@ -21,7 +21,7 @@ import { useAuth } from '../lib/auth'
 import { leadDetailPath } from '../lib/leadPaths'
 import { sectorFromCity } from '../lib/sector'
 import { useActivePromotionsState } from '../lib/promotionsApi'
-import { officePromotion } from '../lib/promotions'
+import { bureauDays, formatBureauDay, officePromotion } from '../lib/promotions'
 import { RdvLocationBadge, rdvLocationLabel } from './RdvLocationBadge'
 import { bureauSlotHint, formatRdvTransferNote, nextStepAfterQualification, previousStepFromRdv, type RdvMode } from './promotions/qualification'
 
@@ -969,7 +969,13 @@ function NotesTab({
   const [callbackAt, setCallbackAt] = useState('')
   const [sector, setSector] = useState<'Nord' | 'Sud' | 'Est' | 'Ouest' | ''>('')
   const activePromosState = useActivePromotionsState()
-  const officePromo = officePromotion(activePromosState ?? [])
+  const activeOfficePromo = officePromotion(activePromosState ?? [])
+  // Vendredis/samedis restants de la promo ; plus aucun jour = plus de RDV bureau.
+  const officeDays = useMemo(
+    () => (activeOfficePromo ? bureauDays(activeOfficePromo.startAt, activeOfficePromo.endAt, Date.now()) : []),
+    [activeOfficePromo],
+  )
+  const officePromo = officeDays.length > 0 ? activeOfficePromo : undefined
   const [rdvMode, setRdvMode] = useState<RdvMode>('domicile')
   // Promo archivée/terminée pendant la saisie : on repasse en domicile.
   // On attend la fin du chargement pour ne pas écraser un mode bureau restauré du brouillon.
@@ -977,6 +983,10 @@ function NotesTab({
   const isBureau = rdvMode === 'bureau' && Boolean(officePromo)
   const [rdvDate, setRdvDate] = useState(todayInputValue())
   const [rdvAt, setRdvAt] = useState('')
+  // Mode bureau : la date est forcément un vendredi/samedi de la promo.
+  useEffect(() => {
+    if (isBureau && officeDays.length > 0 && !officeDays.includes(rdvDate)) { setRdvDate(officeDays[0]); setRdvAt('') }
+  }, [isBureau, officeDays, rdvDate])
   const [form, setForm] = useState<LeadNotesForm>(() => leadToNotesForm(lead))
   // Snapshot des champs lead sur lesquels le formulaire est aligné. Sert à fusionner
   // les modifs venues d'ailleurs (onglet Infos) sans écraser ce que le setter a déjà
@@ -1519,7 +1529,25 @@ function NotesTab({
             </div>
             {isBureau && officePromo?.officeAddress && <div className="text-xs text-or-dark mt-1">{officePromo.officeAddress}</div>}
           </div>
-          <DateOnlyInput label="Date du RDV commercial" value={rdvDate} onChange={(date) => { setRdvDate(date); setRdvAt('') }} />
+          {isBureau ? (
+            <div>
+              <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-1">Jour du RDV au bureau</div>
+              <div className="flex flex-wrap gap-2">
+                {officeDays.map((day) => (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => { setRdvDate(day); setRdvAt('') }}
+                    className={`pill-tab text-xs ${rdvDate === day ? '!bg-text !text-white' : 'bg-white border border-line text-muted'}`}
+                  >
+                    {formatBureauDay(day)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <DateOnlyInput label="Date du RDV commercial" value={rdvDate} onChange={(date) => { setRdvDate(date); setRdvAt('') }} />
+          )}
           <InlineRdvAgenda
             selectedAt={rdvAt}
             rdvs={agendaRdvs ?? []}

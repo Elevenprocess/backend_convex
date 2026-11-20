@@ -285,6 +285,62 @@ http.route({
 });
 
 /**
+ * Lien webhook propre à une promo (copié depuis l'onglet Promotion et collé
+ * dans une action Webhook d'un workflow GHL). La clé secrète est dans l'URL :
+ * aucun en-tête à configurer côté GHL. Crée le lead s'il n'existe pas (même
+ * logique que contact.created) puis le rattache à la promo si elle est en cours.
+ */
+http.route({
+  pathPrefix: "/webhooks/ghl/promotion/",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    const key = new URL(req.url).pathname.split("/").filter(Boolean).pop() ?? "";
+    const now = Date.now();
+    const promo = await ctx.runQuery(internal.promotions.byWebhookKey, { key, now });
+    if (!promo) return json({ message: "Lien de promotion inconnu" }, 404);
+
+    let payload: Record<string, unknown>;
+    try {
+      payload = (await req.json()) as Record<string, unknown>;
+    } catch {
+      return json({ message: "Body JSON invalide" }, 400);
+    }
+    const eventId = await ctx.runMutation(internal.webhooks.recordEvent, {
+      provider: "ghl",
+      eventType: "promotion.webhook",
+      payload: JSON.stringify({ promotionId: promo.promotionId, ...payload }),
+      ...(clientIp(req) !== undefined ? { ipAddress: clientIp(req) } : {}),
+    });
+    if (promo.status !== "en_cours") {
+      await ctx.runMutation(internal.webhooks.markProcessed, { eventId });
+      return json({ ok: true, eventId, skipped: true, reason: `promotion ${promo.status}` });
+    }
+    try {
+      const mapped = mapGhlLeadPayload(payload);
+      if (mapped.externalId === undefined && !mapped.data.phone && !mapped.data.email) {
+        throw new Error("contact_id, téléphone ou email requis");
+      }
+      const created = await ctx.runMutation(internal.webhooks.createLeadFromWebhook, {
+        ...(mapped.externalId !== undefined ? { externalId: mapped.externalId } : {}),
+        data: mapped.data,
+        signals: mapped.signals,
+        tags: mapped.tags,
+        now,
+      });
+      const r = await ctx.runMutation(internal.promotions.attachFromWebhook, {
+        promotionId: promo.promotionId, leadId: created.leadId, at: now,
+      });
+      await ctx.runMutation(internal.webhooks.markProcessed, { eventId });
+      return json({ ok: true, eventId, leadId: created.leadId, duplicate: created.duplicate, ...r });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erreur inconnue";
+      await ctx.runMutation(internal.webhooks.markFailed, { eventId, error: message });
+      return json({ message }, 500);
+    }
+  }),
+});
+
+/**
  * Webhook GHL "envoi du lien débrief" (workflow → action Webhook au moment où
  * GHL décide que le commercial doit débriefer, p.ex. fin de rendez-vous).
  * Le backend résout le RDV, signe le lien magique PERMANENT (token sans

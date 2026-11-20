@@ -13,7 +13,7 @@ import { useLeadSidebar } from '../../lib/leadSidebar'
 import { emitLeadDeselect, emitLeadSelect, useLeadLocks, type LeadLockInfo } from '../../lib/realtime'
 import { normalizeSearchText, phoneMatches, phoneSearchVariants } from '../../lib/searchText'
 import { useActivePromotions } from '../../lib/promotionsApi'
-import { activePromotionIds, activePromotionLeads, promotionLeads, pruneSelectedIds, withoutActivePromotionLeads } from '../../lib/promotions'
+import { leadKpis, activePromotionIds, activePromotionLeads, promotionLeads, pruneSelectedIds, withoutActivePromotionLeads } from '../../lib/promotions'
 import { PromotionsAdmin } from '../../components/promotions/PromotionsAdmin'
 import { PromotionBanner, type PromotionSourceFilter } from '../../components/promotions/PromotionBanner'
 import { DossierCard } from '../../components/suivi/DossierCard'
@@ -624,7 +624,17 @@ function LeadsAdmin() {
     return list
   }, [leads, leadFilters, callbackSort])
 
+  // Vue d'une promo (onglet Promotion ou « Voir les leads ») : les chiffres
+  // d'en-tête ne comptent QUE les leads de la promo.
+  const promoScopeLeads = useMemo(
+    () => promoLeadsOf ? leads : adminView === 'promotions' ? activePromotionLeads(allLeads, activePromoIds, 'all') : null,
+    [promoLeadsOf, adminView, leads, allLeads, activePromoIds],
+  )
   const stats = useMemo(() => {
+    if (promoScopeLeads) {
+      const k = leadKpis(promoScopeLeads)
+      return { total: k.total, imported: k.total, directGhl: k.directGhl, qualifies: k.qualifies, waiting: 0, perdus: k.perdus }
+    }
     const byStatus = leadStats?.byStatus
     if (leadStats && byStatus) {
       return {
@@ -646,11 +656,11 @@ function LeadsAdmin() {
       waiting: (leads ?? []).filter((l) => l.status === 'nouveau' || l.status === 'a_rappeler' || l.status === 'relance').length,
       perdus: (leads ?? []).filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie').length,
     }
-  }, [leadStats, leads])
+  }, [leadStats, leads, promoScopeLeads])
   // Tant que les compteurs autoritatifs (leads:stats) ne sont pas arrivés, on
   // affiche un skeleton plutôt que des 0 (le fallback ne verrait que la fenêtre
   // chargée, ce qui donnait « 0 partout » avant l'arrivée des vrais chiffres).
-  const statsLoading = !leadStats
+  const statsLoading = !promoScopeLeads && !leadStats
   const selectedFilteredIds = useMemo(() => {
     const visibleIds = new Set(filtered.map((lead) => lead.id))
     return selectedLeadIds.filter((id) => visibleIds.has(id))
@@ -725,6 +735,15 @@ function LeadsAdmin() {
     }
   }
 
+  const kpiCards = (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3 flex-shrink-0">
+      <StatCard label={promoScopeLeads ? 'LEADS DE LA PROMO' : 'TOTAL IMPORTÉ'} value={stats.total.toLocaleString('fr-FR')} loading={statsLoading} />
+      <StatCard label={promoScopeLeads ? 'VENUS DE GHL' : 'IMPORT DIRECT GHL'} value={stats.directGhl.toLocaleString('fr-FR')} loading={statsLoading} />
+      <StatCard label="QUALIFIÉS" value={stats.qualifies.toLocaleString('fr-FR')} loading={statsLoading} />
+      <StatCard label="NON QUALIFIÉS" value={stats.perdus.toLocaleString('fr-FR')} loading={statsLoading} />
+    </div>
+  )
+
   return (
     <AppShell>
       <Topbar
@@ -736,6 +755,9 @@ function LeadsAdmin() {
         <button type="button" onClick={() => setAdminView('promotions')} className={`pill-tab ${adminView === 'promotions' ? '!bg-text !text-white' : 'bg-white border border-line text-muted'}`}>Promotion</button>
         {promoLeadsOf && <span className="pill-tab bg-or-tint text-or-dark">Leads de « {promoLeadsOf.name} »</span>}
       </div>
+      {adminView === 'promotions' && (
+        <div className="px-4 sm:px-8 pt-4">{kpiCards}</div>
+      )}
       {adminView === 'promotions' && (
         <PromotionsAdmin leads={allLeads} onOpenLeads={(p) => { setPromoLeadsOf({ id: p._id, name: p.name }); setAdminView('leads') }} />
       )}
@@ -794,12 +816,7 @@ function LeadsAdmin() {
           </div>
 
       <main className="p-4 sm:p-8 pt-3 flex-grow flex flex-col min-h-0 overflow-hidden">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3 flex-shrink-0">
-          <StatCard label="TOTAL IMPORTÉ" value={stats.total.toLocaleString('fr-FR')} loading={statsLoading} />
-          <StatCard label="IMPORT DIRECT GHL" value={stats.directGhl.toLocaleString('fr-FR')} loading={statsLoading} />
-          <StatCard label="QUALIFIÉS" value={stats.qualifies.toLocaleString('fr-FR')} loading={statsLoading} />
-          <StatCard label="NON QUALIFIÉS" value={stats.perdus.toLocaleString('fr-FR')} loading={statsLoading} />
-        </div>
+        {kpiCards}
 
         {loading && leads.length === 0 ? (
           <LoadingBlock label="Chargement des prospects…" />

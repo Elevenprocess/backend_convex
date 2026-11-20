@@ -22,13 +22,15 @@ describe("promotions CRUD", () => {
     expect(row?.startAt).toBe(reunionDayStartMs("2026-11-23"));
   });
 
-  it("refus : nom vide, fin avant début, ni tag ni statut", async () => {
+  it("refus : nom vide, fin avant début ; sans tag ni statut = lien webhook seul", async () => {
     const t = makeT();
     const admin = await insertUser(t, { role: "admin" });
     const as = asUser(t, admin);
     await expect(as.mutation(api.promotions.create, { ...BASE, name: " " })).rejects.toThrow(/nom/i);
     await expect(as.mutation(api.promotions.create, { ...BASE, startDay: "2026-11-30" })).rejects.toThrow(/fin/i);
-    await expect(as.mutation(api.promotions.create, { ...BASE, tag: undefined })).rejects.toThrow(/tag ou au moins un statut/i);
+    const id = await as.mutation(api.promotions.create, { ...BASE, tag: undefined });
+    const promo = await t.run((ctx) => ctx.db.get(id));
+    expect(promo?.webhookKey).toMatch(/^[0-9a-f]{32}$/);
   });
 
   it("refus : même tag sur dates qui se chevauchent, et deux calendriers bureau", async () => {

@@ -1,9 +1,9 @@
 // frontend/src/components/promotions/PromotionsAdmin.tsx
 import { useState } from 'react'
 import type { LeadResponse } from '../../lib/types'
-import { formatPromotionRange, promotionLeads } from '../../lib/promotions'
+import { formatPromotionRange, promotionLeads, promotionWebhookUrl } from '../../lib/promotions'
 import {
-  archivePromotion, attachLegacy, backfillPromotion, useLegacyPreview, usePromotionStats, usePromotionsList,
+  archivePromotion, attachLegacy, backfillPromotion, ensurePromotionWebhook, useLegacyPreview, usePromotionStats, usePromotionsList,
   type PromotionRow, type StatBlock,
 } from '../../lib/promotionsApi'
 import { PromotionForm, LEGACY_STATUS_OPTIONS } from './PromotionForm'
@@ -44,6 +44,46 @@ export function PromotionsAdmin({ leads, onOpenLeads }: { leads: LeadResponse[];
       {editing && (
         <PromotionForm initial={editing === 'new' ? undefined : editing} onClose={() => setEditing(null)} onSaved={() => setEditing(null)} />
       )}
+    </div>
+  )
+}
+
+/** Lien webhook de la promo + bouton Copier (à coller dans GHL). */
+export function PromotionWebhookBox({ promo }: { promo: PromotionRow }) {
+  const [copied, setCopied] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const url = promotionWebhookUrl(import.meta.env.VITE_CONVEX_URL as string | undefined, promo.webhookKey)
+  async function copy() {
+    if (!url) return
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setError('Copie impossible : sélectionne le lien et copie-le à la main.')
+    }
+  }
+  async function create() {
+    setCreating(true); setError(null)
+    try { await ensurePromotionWebhook(promo._id) } catch (e) { setError(humanizeError(e, 'Création du lien impossible')) } finally { setCreating(false) }
+  }
+  return (
+    <div className="rounded-[14px] border border-line bg-white p-3 space-y-1.5">
+      <div className="text-[10px] font-bold tracking-widest uppercase text-faint">Webhook GHL</div>
+      {url ? (
+        <>
+          <div className="flex items-center gap-2">
+            <input readOnly value={url} onFocus={(e) => e.currentTarget.select()} aria-label="Lien webhook de la promotion"
+              className="min-w-0 flex-grow rounded-[10px] border border-line bg-white/70 px-2 py-1.5 font-mono text-[11px] text-text" />
+            <button type="button" onClick={copy} className="btn-primary shrink-0 rounded-[10px] px-3 py-1.5 text-xs">{copied ? 'Copié ✓' : 'Copier'}</button>
+          </div>
+          <p className="text-[11px] text-muted">Dans le workflow GHL : action « Webhook », méthode POST, colle ce lien. Les contacts envoyés arrivent tout seuls ici pendant la promo.</p>
+        </>
+      ) : (
+        <button type="button" onClick={create} disabled={creating} className="pill-tab text-xs bg-white border border-line">{creating ? 'Création…' : 'Créer le lien webhook'}</button>
+      )}
+      {error && <p className="text-[11px] text-rouille">{error}</p>}
     </div>
   )
 }
@@ -89,6 +129,7 @@ function PromotionCard({ promo, leadCount, onEdit, onOpenLeads }: { promo: Promo
           {stats.rdvBureauHorsPromo > 0 && <div className="text-xs text-text">+ {stats.rdvBureauHorsPromo} RDV bureau pris par des leads hors promo</div>}
         </div>
       )}
+      {promo.status !== 'terminee' && !promo.archived && <PromotionWebhookBox promo={promo} />}
       {preview && (
         <div className="text-xs text-muted">Anciens leads à rattacher : <span className="font-bold text-text">{preview.eligible}</span>{preview.skipped ? ` (${preview.skipped} ignorés : RDV à venir, signés ou déjà dans une promo)` : ''}</div>
       )}

@@ -354,11 +354,14 @@ export default defineSchema({
     legacyArrivedFrom: v.optional(v.number()),
     legacyArrivedTo: v.optional(v.number()),
     archived: v.boolean(),
+    // Clé secrète du lien webhook propre à la promo (/webhooks/ghl/promotion/<clé>).
+    webhookKey: v.optional(v.string()),
     createdBy: v.id("users"),
     createdAt: v.number(),
   })
     .index("by_endAt", ["endAt"])
-    .index("by_tagKey", ["tagKey"]),
+    .index("by_tagKey", ["tagKey"])
+    .index("by_webhookKey", ["webhookKey"]),
 
   // Dépense publicitaire quotidienne (portage ad_spend_daily NestJS) : une ligne
   // par jour × canal × campagne/adset/annonce, alimentée par la sync Windsor.ai

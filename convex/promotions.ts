@@ -7,7 +7,7 @@ import { internal } from "./_generated/api";
 import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireRole, requireUser } from "./model/access";
-import { logActivity } from "./model/activity";
+import { leadLabel, logActivity, logSystemActivity } from "./model/activity";
 import { applyTagsToLead } from "./model/promotionAttach";
 import { findLeadByGhlContact } from "./webhooks";
 import { OPEN_RDV_STATUSES } from "./rdv";
@@ -57,9 +57,7 @@ function toFields(args: PromotionInputArgs) {
   if (endAt <= startAt) throw new Error("La date de fin doit être après la date de début.");
   const tag = clean(args.tag);
   const legacyStatuses = args.legacyStatuses && args.legacyStatuses.length > 0 ? args.legacyStatuses : undefined;
-  if (!tag && !legacyStatuses) {
-    throw new Error("Indique un tag ou au moins un statut d'anciens leads.");
-  }
+  // Ni tag ni statut : la promo reçoit ses leads par son lien webhook.
   return {
     name,
     tag,
@@ -74,6 +72,11 @@ function toFields(args: PromotionInputArgs) {
     legacyArrivedFrom: args.legacyArrivedFromDay ? reunionDayStartMs(args.legacyArrivedFromDay) : undefined,
     legacyArrivedTo: args.legacyArrivedToDay ? reunionDayEndMs(args.legacyArrivedToDay) : undefined,
   };
+}
+
+/** Clé aléatoire non devinable du lien webhook d'une promo. */
+export function newWebhookKey(): string {
+  return crypto.randomUUID().replace(/-/g, "");
 }
 
 function asLike(
@@ -96,7 +99,7 @@ export const create = mutation({
     if (conflict) throw new Error(conflict);
     const id = await ctx.db.insert(
       "promotions",
-      stripUndefined({ ...fields, archived: false, createdBy: user._id, createdAt: Date.now() }),
+      stripUndefined({ ...fields, archived: false, webhookKey: newWebhookKey(), createdBy: user._id, createdAt: Date.now() }),
     );
     await logActivity(ctx, {
       action: "promotion.created", entityType: "promotion", entityId: id, subject: fields.name,
@@ -123,7 +126,10 @@ export const update = mutation({
     // replace : les champs vidés dans le formulaire doivent disparaître.
     await ctx.db.replace(
       id,
-      stripUndefined({ ...fields, archived: existing.archived, createdBy: existing.createdBy, createdAt: existing.createdAt }),
+      stripUndefined({
+        ...fields, archived: existing.archived, webhookKey: existing.webhookKey ?? newWebhookKey(),
+        createdBy: existing.createdBy, createdAt: existing.createdAt,
+      }),
     );
     await logActivity(ctx, {
       action: "promotion.updated", entityType: "promotion", entityId: id, subject: fields.name,
@@ -145,6 +151,20 @@ export const archive = mutation({
       summary: `a archivé la promotion « ${existing.name} »`,
     });
     return null;
+  },
+});
+
+/** Donne un lien webhook à une promo qui n'en a pas (promos créées avant le lien). */
+export const ensureWebhookKey = mutation({
+  args: { id: v.id("promotions") },
+  handler: async (ctx, { id }) => {
+    await requireRole(ctx, ["admin"]);
+    const existing = await ctx.db.get(id);
+    if (!existing) throw new Error("Promotion introuvable.");
+    if (existing.webhookKey) return existing.webhookKey;
+    const webhookKey = newWebhookKey();
+    await ctx.db.patch(id, { webhookKey });
+    return webhookKey;
   },
 });
 
@@ -432,5 +452,44 @@ export const stats = query({
       (r) => r.deletedAt === undefined && r.locationType === "agence" && !inPromo.has(r.leadId),
     ).length;
     return { nouveaux, anciens, rdvBureauHorsPromo };
+  },
+});
+
+/**
+ * Route /webhooks/ghl/promotion/<clé> : retrouve la promo par sa clé de lien.
+ * null = clé inconnue (la route répond 404 sans rien créer).
+ */
+export const byWebhookKey = internalQuery({
+  args: { key: v.string(), now: v.number() },
+  handler: async (ctx, { key, now }) => {
+    if (!key) return null;
+    const promo = await ctx.db.query("promotions").withIndex("by_webhookKey", (q) => q.eq("webhookKey", key)).unique();
+    if (!promo) return null;
+    return { promotionId: promo._id, name: promo.name, status: promotionStatus(promo, now) };
+  },
+});
+
+/**
+ * Rattache un lead à la promo du lien webhook (seulement si elle est en cours
+ * et si le lead n'est pas déjà dans une promo). Compté comme « nouveau » lead
+ * de promo (promotionSource « tag »), comme un rattachement par tag GHL.
+ */
+export const attachFromWebhook = internalMutation({
+  args: { promotionId: v.id("promotions"), leadId: v.id("leads"), at: v.number() },
+  handler: async (ctx, { promotionId, leadId, at }) => {
+    const promo = await ctx.db.get(promotionId);
+    if (!promo || promotionStatus(promo, at) !== "en_cours") return { attached: false, reason: "promo_inactive" as const };
+    const lead = await ctx.db.get(leadId);
+    if (!lead || lead.deletedAt !== undefined) return { attached: false, reason: "lead_introuvable" as const };
+    if (lead.promotionId === promotionId) return { attached: true, reason: "deja_rattache" as const };
+    if (lead.promotionId !== undefined) return { attached: false, reason: "autre_promo" as const };
+    await ctx.db.patch(leadId, { promotionId, promotionJoinedAt: at, promotionSource: "tag" });
+    await logSystemActivity(ctx, {
+      source: "GHL", action: "lead.promotion.joined", entityType: "lead", entityId: leadId, leadId,
+      subject: leadLabel(lead),
+      summary: `${leadLabel(lead)} rattaché à la promotion « ${promo.name} » (lien webhook GHL)`,
+      details: { promotionId },
+    });
+    return { attached: true, reason: "rattache" as const };
   },
 });

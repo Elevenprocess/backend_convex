@@ -13,6 +13,7 @@ export type PromotionRow = ActivePromotion & {
   legacyArrivedFrom?: number
   legacyArrivedTo?: number
   archived: boolean
+  webhookKey?: string
   status: PromotionStatus
 }
 export type PromotionInput = {
@@ -32,6 +33,7 @@ const refs = {
   create: makeFunctionReference<'mutation', PromotionInput, string>('promotions:create'),
   update: makeFunctionReference<'mutation', PromotionInput & { id: string }, null>('promotions:update'),
   archive: makeFunctionReference<'mutation', { id: string }, null>('promotions:archive'),
+  ensureWebhookKey: makeFunctionReference<'mutation', { id: string }, string>('promotions:ensureWebhookKey'),
   attachLegacy: makeFunctionReference<'action', { promotionId: string }, { scanned: number; attached: number; skipped: number }>('promotions:attachLegacy'),
   backfill: makeFunctionReference<'action', { promotionId: string }, { scanned: number; attached: number }>('promotions:backfill'),
 }
@@ -64,6 +66,7 @@ function client() {
 export const createPromotion = (input: PromotionInput) => client().mutation(refs.create, input)
 export const updatePromotion = (id: string, input: PromotionInput) => client().mutation(refs.update, { id, ...input })
 export const archivePromotion = (id: string) => client().mutation(refs.archive, { id })
+export const ensurePromotionWebhook = (id: string) => client().mutation(refs.ensureWebhookKey, { id })
 export const attachLegacy = (promotionId: string) => client().action(refs.attachLegacy, { promotionId })
 export const backfillPromotion = (promotionId: string) => client().action(refs.backfill, { promotionId })
 
