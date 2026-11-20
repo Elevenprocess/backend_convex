@@ -20,9 +20,9 @@ import { useCallLogs, useRdvList, useStartCall, createCallLog, createRdv, update
 import { useAuth } from '../lib/auth'
 import { leadDetailPath } from '../lib/leadPaths'
 import { sectorFromCity } from '../lib/sector'
-import { useActivePromotions } from '../lib/promotionsApi'
+import { useActivePromotionsState } from '../lib/promotionsApi'
 import { officePromotion } from '../lib/promotions'
-import { bureauSlotHint, nextStepAfterQualification, previousStepFromRdv, type RdvMode } from './promotions/qualification'
+import { bureauSlotHint, formatRdvTransferNote, nextStepAfterQualification, previousStepFromRdv, type RdvMode } from './promotions/qualification'
 
 type Tab = { id: string; label: string; icon?: IconName }
 
@@ -966,11 +966,12 @@ function NotesTab({
   const [commentaire, setCommentaire] = useState('')
   const [callbackAt, setCallbackAt] = useState('')
   const [sector, setSector] = useState<'Nord' | 'Sud' | 'Est' | 'Ouest' | ''>('')
-  const activePromos = useActivePromotions()
-  const officePromo = officePromotion(activePromos)
+  const activePromosState = useActivePromotionsState()
+  const officePromo = officePromotion(activePromosState ?? [])
   const [rdvMode, setRdvMode] = useState<RdvMode>('domicile')
   // Promo archivée/terminée pendant la saisie : on repasse en domicile.
-  useEffect(() => { if (!officePromo && rdvMode === 'bureau') setRdvMode('domicile') }, [officePromo, rdvMode])
+  // On attend la fin du chargement pour ne pas écraser un mode bureau restauré du brouillon.
+  useEffect(() => { if (activePromosState && !officePromo && rdvMode === 'bureau') setRdvMode('domicile') }, [activePromosState, officePromo, rdvMode])
   const isBureau = rdvMode === 'bureau' && Boolean(officePromo)
   const [rdvDate, setRdvDate] = useState(todayInputValue())
   const [rdvAt, setRdvAt] = useState('')
@@ -1039,6 +1040,7 @@ function NotesTab({
           commentaire: string
           callbackAt: string
           sector: '' | 'Nord' | 'Sud' | 'Est' | 'Ouest'
+          rdvMode: RdvMode
           rdvDate: string
           rdvAt: string
           form: typeof defaultForm
@@ -1050,6 +1052,7 @@ function NotesTab({
         setCommentaire(parsed.commentaire ?? '')
         setCallbackAt(parsed.callbackAt ?? '')
         setSector(parsed.sector ?? '')
+        setRdvMode(parsed.rdvMode === 'bureau' ? 'bureau' : 'domicile')
         setRdvDate(parsed.rdvDate ?? todayInputValue())
         setRdvAt(parsed.rdvAt ?? '')
         // Fusion à la restauration : on privilégie la valeur FRAÎCHE du lead (modif
@@ -1077,6 +1080,7 @@ function NotesTab({
     setCommentaire('')
     setCallbackAt('')
     setSector('')
+    setRdvMode('domicile')
     setRdvDate(todayInputValue())
     setRdvAt('')
     setForm(defaultForm)
@@ -1114,14 +1118,14 @@ function NotesTab({
     if (step === 'done') return // workflow terminé, on ne persiste plus
     try {
       localStorage.setItem(notesTabStorageKey(lead.id), JSON.stringify({
-        setterStatus, step, eligibilityNotes, commentaire, callbackAt, sector, rdvDate, rdvAt, form,
+        setterStatus, step, eligibilityNotes, commentaire, callbackAt, sector, rdvMode, rdvDate, rdvAt, form,
         // Snapshot des valeurs lead sur lesquelles `form` était aligné : permet, à la
         // restauration (remount après passage par l'onglet Infos), de distinguer un
         // champ édité par le setter ici d'un champ resté à la valeur du lead.
         leadSnapshot: leadSnapshotRef.current,
       }))
     } catch {}
-  }, [lead.id, setterStatus, step, eligibilityNotes, commentaire, callbackAt, sector, rdvDate, rdvAt, form])
+  }, [lead.id, setterStatus, step, eligibilityNotes, commentaire, callbackAt, sector, rdvMode, rdvDate, rdvAt, form])
 
   // Workflow validé : on nettoie le brouillon pour que la prochaine visite reparte propre.
   useEffect(() => {
@@ -1133,7 +1137,7 @@ function NotesTab({
   const eligibilitySummary = formatEligibilityNotes(eligibilityNotes)
   const noteFinale = [eligibilitySummary, commentaire.trim()].filter(Boolean).join('\n\n') || null
   const rdvTransferNote = formatRdvTransferNote({
-    sector,
+    sector: isBureau ? '' : sector,
     eligibilitySummary,
     commentaire,
     bureau: isBureau ? { address: officePromo?.officeAddress } : undefined,
@@ -1235,7 +1239,7 @@ function NotesTab({
       ])
       refetchAgenda()
       refetchGhlSlots()
-      setSuccess(isBureau ? 'RDV au bureau créé dans GHL.' : ghlConfig?.configured ? 'RDV créé dans GHL, agenda actualisé.' : 'RDV créé en local. Agenda actualisé.')
+      setSuccess(isBureau ? (ghlConfig?.configured ? 'RDV au bureau créé dans GHL.' : 'RDV au bureau créé en local. Agenda actualisé.') : ghlConfig?.configured ? 'RDV créé dans GHL, agenda actualisé.' : 'RDV créé en local. Agenda actualisé.')
       setStep('done')
       onSaved?.()
     } catch (e) {
@@ -1710,26 +1714,6 @@ function ChoicePill({ active, onClick, children }: { active: boolean; onClick: (
       {children}
     </button>
   )
-}
-
-function formatRdvTransferNote({
-  sector,
-  eligibilitySummary,
-  commentaire,
-  bureau,
-}: {
-  sector: string
-  eligibilitySummary: string
-  commentaire: string
-  bureau?: { address?: string }
-}): string {
-  const eligibility = eligibilitySummary.replace(/^Notes d’éligibilité setter\n?/, '').trim()
-  return [
-    bureau ? `RDV BUREAU${bureau.address ? ` — ${bureau.address}` : ''}` : null,
-    `RDV ECOI${sector ? ` — ${sector}` : ''}`,
-    commentaire.trim() ? `Commentaire setter :\n${commentaire.trim()}` : null,
-    eligibility ? `Éligibilité :\n${eligibility}` : null,
-  ].filter(Boolean).join('\n')
 }
 
 function formatEligibilityNotes(notes: EligibilityNotes): string {

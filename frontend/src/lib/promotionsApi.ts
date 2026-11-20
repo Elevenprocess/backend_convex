@@ -36,9 +36,13 @@ const refs = {
   backfill: makeFunctionReference<'action', { promotionId: string }, { scanned: number; attached: number }>('promotions:backfill'),
 }
 
-export function useActivePromotions(): ActivePromotion[] {
+/** `undefined` tant que la requête charge (à distinguer de « aucune promo »). */
+export function useActivePromotionsState(): ActivePromotion[] | undefined {
   const now = useSessionNow()
-  return useQuery(refs.active, { now }) ?? []
+  return useQuery(refs.active, { now })
+}
+export function useActivePromotions(): ActivePromotion[] {
+  return useActivePromotionsState() ?? []
 }
 export function usePromotionsList(): PromotionRow[] | undefined {
   const now = useSessionNow()
