@@ -572,3 +572,24 @@ export const statusByGhlContacts = internalQuery({
     return { total: args.contactIds.length, unknownInVelora: unknown, byStatus, rappel };
   },
 });
+
+// Supprime un lead d’essai créé par le lien webhook d’une promo (démonstration
+// du créneau d’arrivée) avec ses lignes de journal. Refuse tout lead qui n’est
+// pas clairement un essai : nom « (à supprimer) » ET contact GHL « ESSAI… ».
+export const purgePromoTestLead = internalMutation({
+  args: { leadId: v.id("leads") },
+  handler: async (ctx, { leadId }) => {
+    const lead = await ctx.db.get(leadId);
+    if (!lead || !(lead.lastName ?? "").includes("(à supprimer)") || !(lead.externalId ?? "").startsWith("ESSAI")) {
+      throw new Error("Refus : ce lead n’est pas un lead d’essai.");
+    }
+    for (const table of ["rdv", "clients"] as const) {
+      const linked = await ctx.db.query(table).withIndex("by_lead", (q) => q.eq("leadId", leadId)).first();
+      if (linked) throw new Error(`Refus : ce lead a déjà des données (${table}).`);
+    }
+    const logs = await ctx.db.query("activityLog").withIndex("by_lead_at", (q) => q.eq("leadId", leadId)).collect();
+    for (const row of logs) await ctx.db.delete(row._id);
+    await ctx.db.delete(leadId);
+    return { deleted: logs.length + 1 };
+  },
+});
