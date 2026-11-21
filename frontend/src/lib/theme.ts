@@ -29,6 +29,8 @@ function applyTheme(resolved: ResolvedTheme): void {
   if (typeof document === 'undefined') return
   document.documentElement.dataset.theme = resolved
   document.documentElement.style.colorScheme = resolved
+  // Fond posé par le script de index.html avant le chargement : le CSS prend le relais.
+  document.documentElement.style.backgroundColor = ''
 }
 
 type ThemeState = {

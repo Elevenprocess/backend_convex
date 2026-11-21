@@ -2,6 +2,20 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
+    <!-- Thème appliqué avant le chargement de l'appli : sans ça, la page s'affiche
+         en clair (zones blanches) pendant le chargement, puis bascule en sombre. -->
+    <script>
+      (function () {
+        try {
+          var m = localStorage.getItem('ecoi.theme');
+          var dark = m === 'dark' || (m !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var r = document.documentElement;
+          r.dataset.theme = dark ? 'dark' : 'light';
+          r.style.colorScheme = dark ? 'dark' : 'light';
+          r.style.backgroundColor = dark ? '#060F0B' : '#F1F6F0';
+        } catch (e) {}
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/velora-logo.svg" />
     <link rel="alternate icon" type="image/png" href="/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

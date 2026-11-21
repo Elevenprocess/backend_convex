@@ -6769,6 +6769,10 @@ button.fin-kpi:focus-visible { outline: 2px solid var(--color-or); outline-offse
   background: linear-gradient(90deg, #efefef 0%, #f8f8f8 50%, #efefef 100%);
   background-size: 200% 100%; animation: v-reflet 1.2s linear infinite;
 }
+[data-theme="dark"] .v-skel {
+  background: linear-gradient(90deg, rgba(220, 232, 222, 0.06) 0%, rgba(220, 232, 222, 0.12) 50%, rgba(220, 232, 222, 0.06) 100%);
+  background-size: 200% 100%;
+}
 @keyframes v-reflet { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 .route-fallback {
   display: flex; flex-direction: column; gap: 14px; width: min(920px, 100%);
