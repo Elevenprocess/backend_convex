@@ -3105,6 +3105,10 @@ body {
 [data-theme="dark"] .profile-menu-head { background: rgba(18, 18, 18, 0.86); border-color: var(--color-line); backdrop-filter: blur(140px) saturate(90%) contrast(118%); -webkit-backdrop-filter: blur(140px) saturate(90%) contrast(118%); }
 [data-theme="dark"] .btn-secondary { background: rgba(10, 17, 22, 0.48); border-color: var(--color-line); color: var(--color-text); }
 [data-theme="dark"] .pill-tab.active { background: rgba(228, 238, 243, 0.16); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12); }
+/* Pastille choisie (« !bg-text !text-white ») : en sombre le fond --color-text est clair,
+   le texte blanc devenait illisible → texte foncé (même règle que .overview-air-header). */
+[data-theme="dark"] .\!bg-text.\!text-white { color: #08110C !important; }
+[data-theme="dark"] .\!bg-text.\!text-white .hover\:bg-black\/10:hover { background-color: rgba(8, 17, 12, 0.14) !important; }
 [data-theme="dark"] .clipboard-toast { background: rgba(8, 14, 18, 0.64); border-color: var(--color-line); box-shadow: 0 18px 46px rgba(0, 0, 0, 0.34); }
 
 [data-theme="dark"] .bg-white,

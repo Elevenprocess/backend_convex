@@ -587,18 +587,21 @@ function LeadsAdmin() {
   const { data: leadStats } = useLeadStats()
   const { data: users = [] } = useUsers()
   const allLeads = leadsData ?? EMPTY_LEADS
-  const [adminView, setAdminView] = useState<'leads' | 'promotions'>('leads')
+  // Onglets façon navigateur : « Leads », « Promotion », puis un onglet par promo
+  // ouverte via « Voir les leads » (reste ouvert jusqu'à la croix).
+  const [adminView, setAdminView] = useState<'leads' | 'promotions' | 'promoLeads'>('leads')
   const [promoLeadsOf, setPromoLeadsOf] = useState<{ id: string; name: string } | null>(null)
+  const promoScope = adminView === 'promoLeads' ? promoLeadsOf : null
   const activePromos = useActivePromotions()
   const activePromoIds = useMemo(() => activePromotionIds(activePromos), [activePromos])
   // Pendant une promo en cours, ses leads ne sont visibles que dans l'onglet
   // Promotion (même règle que côté setter) ; « Voir les leads » d'une promo
   // affiche exactement ceux-là ; la recherche reste globale.
   const leads = useMemo(
-    () => promoLeadsOf
-      ? promotionLeads(allLeads, promoLeadsOf.id, 'all')
+    () => promoScope
+      ? promotionLeads(allLeads, promoScope.id, 'all')
       : query.trim() ? allLeads : withoutActivePromotionLeads(allLeads, activePromoIds),
-    [promoLeadsOf, allLeads, query, activePromoIds],
+    [promoScope, allLeads, query, activePromoIds],
   )
 
   const setters = useMemo(() => (users ?? []).filter((u) => u.role === 'setter' && u.active), [users])
@@ -627,8 +630,8 @@ function LeadsAdmin() {
   // Vue d'une promo (onglet Promotion ou « Voir les leads ») : les chiffres
   // d'en-tête ne comptent QUE les leads de la promo.
   const promoScopeLeads = useMemo(
-    () => promoLeadsOf ? leads : adminView === 'promotions' ? activePromotionLeads(allLeads, activePromoIds, 'all') : null,
-    [promoLeadsOf, adminView, leads, allLeads, activePromoIds],
+    () => promoScope ? leads : adminView === 'promotions' ? activePromotionLeads(allLeads, activePromoIds, 'all') : null,
+    [promoScope, adminView, leads, allLeads, activePromoIds],
   )
   const stats = useMemo(() => {
     if (promoScopeLeads) {
@@ -751,17 +754,24 @@ function LeadsAdmin() {
         title="Tous les leads"
       />
       <div className="px-4 sm:px-8 pt-3 flex gap-2">
-        <button type="button" onClick={() => { setAdminView('leads'); setPromoLeadsOf(null) }} className={`pill-tab ${adminView === 'leads' && !promoLeadsOf ? '!bg-text !text-white' : 'bg-white border border-line text-muted'}`}>Leads</button>
+        <button type="button" onClick={() => setAdminView('leads')} className={`pill-tab ${adminView === 'leads' ? '!bg-text !text-white' : 'bg-white border border-line text-muted'}`}>Leads</button>
         <button type="button" onClick={() => setAdminView('promotions')} className={`pill-tab ${adminView === 'promotions' ? '!bg-text !text-white' : 'bg-white border border-line text-muted'}`}>Promotion</button>
-        {promoLeadsOf && <span className="pill-tab bg-or-tint text-or-dark">Leads de « {promoLeadsOf.name} »</span>}
+        {promoLeadsOf && (
+          <span className={`pill-tab inline-flex items-center gap-1.5 !pr-1.5 ${adminView === 'promoLeads' ? '!bg-text !text-white' : 'bg-or-tint border border-or/30 text-or-dark'}`}>
+            <button type="button" onClick={() => setAdminView('promoLeads')} className="font-semibold">Leads de « {promoLeadsOf.name} »</button>
+            <button type="button" aria-label={`Fermer l'onglet ${promoLeadsOf.name}`}
+              onClick={() => { setPromoLeadsOf(null); if (adminView === 'promoLeads') setAdminView('promotions') }}
+              className="flex h-4 w-4 items-center justify-center rounded-full text-[13px] leading-none opacity-70 hover:opacity-100 hover:bg-black/10">×</button>
+          </span>
+        )}
       </div>
       {adminView === 'promotions' && (
         <div className="px-4 sm:px-8 pt-4">{kpiCards}</div>
       )}
       {adminView === 'promotions' && (
-        <PromotionsAdmin leads={allLeads} onOpenLeads={(p) => { setPromoLeadsOf({ id: p._id, name: p.name }); setAdminView('leads') }} />
+        <PromotionsAdmin leads={allLeads} onOpenLeads={(p) => { setPromoLeadsOf({ id: p._id, name: p.name }); setAdminView('promoLeads') }} />
       )}
-      {adminView === 'leads' && (
+      {adminView !== 'promotions' && (
       <div className="flex flex-grow overflow-hidden">
         <AdminLeadsRail
           leads={leads}
