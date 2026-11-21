@@ -83,3 +83,16 @@ describe("promotions CRUD", () => {
     expect(logs.map((l) => l.action)).toEqual(expect.arrayContaining(["promotion.created", "promotion.updated"]));
   });
 });
+
+describe("promotions : site de réservation du créneau", () => {
+  it("lien https enregistré et rendu aux setters ; lien non https refusé", async () => {
+    const t = makeT();
+    const admin = await insertUser(t, { role: "admin" });
+    const as = asUser(t, admin);
+    await expect(as.mutation(api.promotions.create, { ...BASE, slotBookingUrl: "http://exemple.re" })).rejects.toThrow(/https/);
+    const id = await as.mutation(api.promotions.create, { ...BASE, slotBookingUrl: " https://invitation.exemple.re/ " });
+    expect((await t.run((ctx) => ctx.db.get(id)))?.slotBookingUrl).toBe("https://invitation.exemple.re/");
+    const active = await as.query(api.promotions.active, { now: reunionDayStartMs("2026-11-24") });
+    expect(active[0]?.slotBookingUrl).toBe("https://invitation.exemple.re/");
+  });
+});

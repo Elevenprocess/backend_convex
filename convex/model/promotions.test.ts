@@ -1,7 +1,7 @@
 // convex/model/promotions.test.ts
 import { describe, expect, it } from "vitest";
 import {
-  isLegacyEligible, legacyRejectReason, matchPromotion, normalizeTag, parseGhlTags,
+  isLegacyEligible, legacyRejectReason, matchPromotion, normalizeTag, parseGhlTags, parsePromotionSlot, formatPromotionSlot,
   promotionConflict, promotionStatus, reunionDayEndMs, reunionDayStartMs,
   type PromotionLike,
 } from "./promotions";
@@ -100,5 +100,23 @@ describe("éligibilité des anciens leads", () => {
     expect(legacyRejectReason({ ...base, promotionId: "x" }, p)).toBe("deja_promo");
     expect(legacyRejectReason({ ...base, hasUpcomingRdv: true }, p)).toBe("rdv_a_venir");
     expect(legacyRejectReason({ ...base, status: "signe" }, { ...p, legacyStatuses: ["signe"] })).toBe("signe");
+  });
+});
+
+describe("parsePromotionSlot / formatPromotionSlot", () => {
+  it("lit jour, heure (nombre ou texte) et billet", () => {
+    expect(parsePromotionSlot({ creneau_jour: "2026-11-27", creneau_heure: 14, billet: " BF-0012 " })).toEqual({ day: "2026-11-27", hour: 14, ticket: "BF-0012" });
+    expect(parsePromotionSlot({ creneau_jour: "2026-11-29", creneau_heure: "9" })).toEqual({ day: "2026-11-29", hour: 9 });
+  });
+  it("null si absent ou invalide", () => {
+    expect(parsePromotionSlot({})).toBeNull();
+    expect(parsePromotionSlot({ creneau_jour: "2026-11-27" })).toBeNull();
+    expect(parsePromotionSlot({ creneau_jour: "27/11/2026", creneau_heure: 14 })).toBeNull();
+    expect(parsePromotionSlot({ creneau_jour: "2026-11-27", creneau_heure: 24 })).toBeNull();
+    expect(parsePromotionSlot({ creneau_jour: "2026-11-27", creneau_heure: 8.5 })).toBeNull();
+  });
+  it("phrase lisible par le setter", () => {
+    expect(formatPromotionSlot("2026-11-27", 14, "BF-0012")).toBe("vendredi 27, 14 h, billet BF-0012");
+    expect(formatPromotionSlot("2026-11-29", 9)).toBe("dimanche 29, 9 h");
   });
 });

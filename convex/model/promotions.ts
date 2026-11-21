@@ -115,3 +115,26 @@ export function isLegacyEligible(
 ): boolean {
   return legacyRejectReason(lead, promo) === null;
 }
+
+export type PromotionSlot = { day: string; hour: number; ticket?: string };
+/**
+ * Créneau d’arrivée envoyé par le site d’inscription de la promo sur le lien
+ * webhook (creneau_jour "YYYY-MM-DD", creneau_heure 0-23, billet). null si
+ * absent ou invalide : le webhook se comporte alors comme avant.
+ */
+export function parsePromotionSlot(p: Record<string, unknown>): PromotionSlot | null {
+  const day = typeof p.creneau_jour === "string" ? p.creneau_jour.trim() : "";
+  const rawHour = p.creneau_heure;
+  const hour = typeof rawHour === "number" ? rawHour
+    : typeof rawHour === "string" && rawHour.trim() !== "" ? Number(rawHour) : NaN;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(Date.parse(`${day}T00:00:00Z`))) return null;
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23) return null;
+  const ticket = typeof p.billet === "string" && p.billet.trim() !== "" ? p.billet.trim().slice(0, 40) : undefined;
+  return { day, hour, ...(ticket !== undefined ? { ticket } : {}) };
+}
+const SLOT_WEEKDAYS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+/** "2026-11-27", 14, "BF-0012" → "vendredi 27, 14 h, billet BF-0012" */
+export function formatPromotionSlot(day: string, hour: number, ticket?: string): string {
+  const d = new Date(`${day}T00:00:00Z`);
+  return `${SLOT_WEEKDAYS[d.getUTCDay()]} ${d.getUTCDate()}, ${hour} h${ticket ? `, billet ${ticket}` : ""}`;
+}

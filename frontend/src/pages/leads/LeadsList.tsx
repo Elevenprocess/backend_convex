@@ -15,6 +15,7 @@ import { normalizeSearchText, phoneMatches, phoneSearchVariants } from '../../li
 import { useActivePromotions } from '../../lib/promotionsApi'
 import { leadKpis, activePromotionIds, activePromotionLeads, promotionLeads, pruneSelectedIds, withoutActivePromotionLeads } from '../../lib/promotions'
 import { PromotionsAdmin } from '../../components/promotions/PromotionsAdmin'
+import { PromotionSlot } from '../../components/promotions/PromotionSlot'
 import { PromotionBanner, type PromotionSourceFilter } from '../../components/promotions/PromotionBanner'
 import { DossierCard } from '../../components/suivi/DossierCard'
 import { ManualLeadModal } from '../../components/leads/ManualLeadModal'
@@ -1249,6 +1250,7 @@ function renderSetterCell(
               {lead.promotionId && !activePromoIds?.has(lead.promotionId) && (
                 <span className="ml-1 rounded-full bg-or-tint px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-or-dark" title="Lead rattaché à une promotion (pas en cours)">Promo</span>
               )}
+              <PromotionSlot lead={lead} compact />
               <RetourSettersBadge lead={lead} />
             </div>
           </div>

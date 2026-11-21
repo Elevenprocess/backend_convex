@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   activePromotionIds, activePromotionLeads, formatPromotionRange, isInActivePromotion, officePromotion,
   promotionLeads, withoutActivePromotionLeads, type ActivePromotion,
-  bureauDays, formatBureauDay, leadKpis, promotionWebhookUrl,
+  bureauDays, formatBureauDay, leadKpis, promotionWebhookUrl, formatPromotionSlot, slotBookingLink, leadSlotView,
 } from './promotions'
 
 const promo: ActivePromotion = { _id: 'p1', name: 'Black Friday', startAt: Date.parse('2026-11-22T20:00:00Z'), endAt: Date.parse('2026-11-29T19:59:59.999Z') }
@@ -75,5 +75,30 @@ describe('leadKpis', () => {
     expect(leadKpis([
       { status: 'nouveau', source: 'ghl' }, { status: 'rdv_pris', source: 'ghl' }, { status: 'perdu', source: 'manual' },
     ])).toEqual({ total: 3, directGhl: 2, qualifies: 1, perdus: 1 })
+  })
+})
+
+describe('créneau d’arrivée d’une promo', () => {
+  const bf: ActivePromotion = { _id: 'p1', name: 'BF', startAt: 0, endAt: 1, slotBookingUrl: 'https://invitation.exemple.re/' }
+  it('formatPromotionSlot', () => {
+    expect(formatPromotionSlot('2026-11-27', 14, 'BF-0012')).toBe('vendredi 27, 14 h, billet BF-0012')
+    expect(formatPromotionSlot('2026-11-29', 9, null)).toBe('dimanche 29, 9 h')
+  })
+  it('slotBookingLink : contact GHL + marque setter ; lien non https refusé', () => {
+    expect(slotBookingLink('https://invitation.exemple.re/', 'abc123')).toBe('https://invitation.exemple.re/?c=abc123&setter=1')
+    expect(slotBookingLink('https://invitation.exemple.re/', null)).toBe('https://invitation.exemple.re/?setter=1')
+    expect(slotBookingLink('javascript:alert(1)', 'abc')).toBeNull()
+    expect(slotBookingLink('pas un lien', 'abc')).toBeNull()
+  })
+  it('leadSlotView : créneau pris, pas encore, ou rien', () => {
+    expect(leadSlotView({ promotionId: 'p1', externalId: 'c1', promotionSlotDay: '2026-11-27', promotionSlotHour: 14, promotionTicket: 'BF-0012' }, [bf]))
+      .toEqual({ hasSlot: true, label: 'Créneau : vendredi 27, 14 h, billet BF-0012', link: 'https://invitation.exemple.re/?c=c1&setter=1' })
+    expect(leadSlotView({ promotionId: 'p1', externalId: 'c1' }, [bf]))
+      .toEqual({ hasSlot: false, label: 'Pas encore de créneau', link: 'https://invitation.exemple.re/?c=c1&setter=1' })
+    // Promo sans site de réservation, ou lead hors promo : rien.
+    expect(leadSlotView({ promotionId: 'p1' }, [{ ...bf, slotBookingUrl: undefined }])).toBeNull()
+    expect(leadSlotView({ promotionId: null }, [bf])).toBeNull()
+    // Créneau à 0 h : bien un créneau.
+    expect(leadSlotView({ promotionId: 'p1', promotionSlotDay: '2026-11-27', promotionSlotHour: 0 }, [bf])?.hasSlot).toBe(true)
   })
 })

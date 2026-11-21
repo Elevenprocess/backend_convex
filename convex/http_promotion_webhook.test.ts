@@ -72,4 +72,50 @@ describe("POST /webhooks/ghl/promotion/<clé>", () => {
     const events = await t.run((ctx) => ctx.db.query("webhookEvents").collect());
     expect(events[0]?.status).toBe("failed");
   });
+
+  it("créneau sur un lead connu : rangé sur la fiche, sans re-soumission ni changement de statut", async () => {
+    const now = Date.now();
+    const { t, promoId } = await setup({ startAt: now - 3_600_000, endAt: now + 3_600_000 });
+    const leadId = await t.run((ctx) => ctx.db.insert("leads", { source: "ghl", status: "perdu", externalId: "c5", createdAt: now }));
+    const res = await post(t, { contact_id: "c5", creneau_jour: "2026-11-27", creneau_heure: 14, billet: "BF-0012" });
+    expect(await res.json()).toMatchObject({ ok: true, slot: true, attached: true, duplicate: true });
+    const lead = await t.run((ctx) => ctx.db.get(leadId));
+    expect(lead).toMatchObject({
+      promotionId: promoId, promotionSlotDay: "2026-11-27", promotionSlotHour: 14, promotionTicket: "BF-0012", status: "perdu",
+    });
+    expect(lead?.resubmittedAt).toBeUndefined();
+    const logs = await t.run((ctx) => ctx.db.query("activityLog").collect());
+    expect(logs.find((l) => l.action === "lead.promotion.slot")?.summary).toContain("vendredi 27, 14 h, billet BF-0012");
+    expect(logs.some((l) => l.action === "lead.resubmitted")).toBe(false);
+  });
+
+  it("changement de créneau : la fiche suit, le billet reste", async () => {
+    const now = Date.now();
+    const { t } = await setup({ startAt: now - 3_600_000, endAt: now + 3_600_000 });
+    const leadId = await t.run((ctx) => ctx.db.insert("leads", { source: "ghl", status: "nouveau", externalId: "c6", createdAt: now }));
+    await post(t, { contact_id: "c6", creneau_jour: "2026-11-27", creneau_heure: 14, billet: "BF-0003" });
+    await post(t, { contact_id: "c6", creneau_jour: "2026-11-29", creneau_heure: "9" });
+    expect(await t.run((ctx) => ctx.db.get(leadId))).toMatchObject({
+      promotionSlotDay: "2026-11-29", promotionSlotHour: 9, promotionTicket: "BF-0003",
+    });
+  });
+
+  it("créneau sur un contact inconnu : lead créé, rattaché, créneau rangé", async () => {
+    const now = Date.now();
+    const { t, promoId } = await setup({ startAt: now - 3_600_000, endAt: now + 3_600_000 });
+    const res = await post(t, { contact_id: "c7", first_name: "Zoé", phone: "+262692000007", creneau_jour: "2026-11-28", creneau_heure: 8, billet: "BF-0001" });
+    expect(await res.json()).toMatchObject({ ok: true, slot: true, duplicate: false });
+    const leads = await t.run((ctx) => ctx.db.query("leads").collect());
+    expect(leads).toHaveLength(1);
+    expect(leads[0]).toMatchObject({ promotionId: promoId, promotionSlotDay: "2026-11-28", promotionSlotHour: 8, promotionTicket: "BF-0001" });
+  });
+
+  it("créneau invalide : ignoré, le webhook se comporte comme avant", async () => {
+    const now = Date.now();
+    const { t } = await setup({ startAt: now - 3_600_000, endAt: now + 3_600_000 });
+    const leadId = await t.run((ctx) => ctx.db.insert("leads", { source: "ghl", status: "nouveau", externalId: "c8", createdAt: now }));
+    const res = await post(t, { contact_id: "c8", creneau_jour: "demain", creneau_heure: 30 });
+    expect(await res.json()).toMatchObject({ ok: true, duplicate: true });
+    expect((await t.run((ctx) => ctx.db.get(leadId)))?.promotionSlotDay).toBeUndefined();
+  });
 });

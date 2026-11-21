@@ -53,6 +53,9 @@ export type ConvexLeadDoc = {
   resubmittedAt?: number
   promotionId?: string
   promotionSource?: 'tag' | 'statut'
+  promotionSlotDay?: string
+  promotionSlotHour?: number
+  promotionTicket?: string
   // Renvoi par les commerciaux (étape GHL « (BIS) Retour aux Setters 🔙 ») :
   // date + étape/statut d'origine, pour l'historique côté setters.
   retourSetters?: { at: number; fromStage?: string; fromStatus?: string }

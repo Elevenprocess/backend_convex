@@ -15,13 +15,13 @@ export const LEGACY_STATUS_OPTIONS: { key: string; label: string }[] = [
 
 export type PromotionFormValues = {
   name: string; tag: string; startDay: string; endDay: string; offer: string; pitch: string
-  officeCalendarId: string; officeAddress: string; legacyStatuses: string[]
+  officeCalendarId: string; officeAddress: string; slotBookingUrl: string; legacyStatuses: string[]
   legacyArrivedFromDay: string; legacyArrivedToDay: string
 }
 
 export const EMPTY_PROMOTION_FORM: PromotionFormValues = {
   name: '', tag: '', startDay: '', endDay: '', offer: '', pitch: '',
-  officeCalendarId: '', officeAddress: '', legacyStatuses: [], legacyArrivedFromDay: '', legacyArrivedToDay: '',
+  officeCalendarId: '', officeAddress: '', slotBookingUrl: '', legacyStatuses: [], legacyArrivedFromDay: '', legacyArrivedToDay: '',
 }
 
 export function validatePromotionForm(v: PromotionFormValues): string | null {
@@ -36,6 +36,7 @@ function toInput(v: PromotionFormValues): PromotionInput {
   return {
     name: v.name.trim(), tag: opt(v.tag), startDay: v.startDay, endDay: v.endDay,
     offer: opt(v.offer), pitch: opt(v.pitch), officeCalendarId: opt(v.officeCalendarId), officeAddress: opt(v.officeAddress),
+    slotBookingUrl: opt(v.slotBookingUrl),
     legacyStatuses: v.legacyStatuses.length ? v.legacyStatuses : undefined,
     legacyArrivedFromDay: opt(v.legacyArrivedFromDay), legacyArrivedToDay: opt(v.legacyArrivedToDay),
   }
@@ -45,6 +46,7 @@ function fromRow(p: PromotionRow): PromotionFormValues {
   return {
     name: p.name, tag: p.tag ?? '', startDay: reunionDayInput(p.startAt), endDay: reunionDayInput(p.endAt),
     offer: p.offer ?? '', pitch: p.pitch ?? '', officeCalendarId: p.officeCalendarId ?? '', officeAddress: p.officeAddress ?? '',
+    slotBookingUrl: p.slotBookingUrl ?? '',
     legacyStatuses: p.legacyStatuses ?? [],
     legacyArrivedFromDay: p.legacyArrivedFrom ? reunionDayInput(p.legacyArrivedFrom) : '',
     legacyArrivedToDay: p.legacyArrivedTo ? reunionDayInput(p.legacyArrivedTo) : '',
@@ -134,6 +136,12 @@ export function PromotionForm({ initial, onClose, onSaved }: { initial?: Promoti
             {calendars.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           <input className={field} placeholder="Adresse du bureau" value={values.officeAddress} onChange={(e) => set('officeAddress', e.target.value)} />
+        </section>
+
+        <section className="space-y-2">
+          <div className="text-[10px] font-bold tracking-widest uppercase text-faint">Créneau d’arrivée</div>
+          <p className="text-xs text-muted">Si les invités choisissent leur heure sur un site d’inscription, colle son adresse : chaque fiche affiche le créneau pris et un bouton « Choisir son créneau » pour le setter.</p>
+          <input className={field} placeholder="Site d’inscription (facultatif, ex. https://invitation.exemple.re/)" value={values.slotBookingUrl} onChange={(e) => set('slotBookingUrl', e.target.value)} />
         </section>
 
         {error && <div className="rounded-[14px] border border-rouille/40 bg-rouille-tint px-3 py-2 text-sm">{error}</div>}

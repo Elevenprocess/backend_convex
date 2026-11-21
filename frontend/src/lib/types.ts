@@ -108,6 +108,10 @@ export type LeadResponse = {
   promotionId?: string | null
   /** Origine du rattachement : tag GHL (nouveaux) ou ciblage par statut (anciens). */
   promotionSource?: 'tag' | 'statut' | null
+  /** Créneau d’arrivée choisi sur le site d’inscription de la promo (jour "YYYY-MM-DD", heure, billet). */
+  promotionSlotDay?: string | null
+  promotionSlotHour?: number | null
+  promotionTicket?: string | null
   // Lead renvoyé aux setters par les commerciaux depuis GHL (étape « (BIS)
   // Retour aux Setters ») : date ISO + étape/statut d'où il vient.
   retourSetters?: { at: string; fromStage: string | null; fromStatus: LeadStatus | null } | null

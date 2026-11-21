@@ -3,7 +3,7 @@ import { httpAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { auth } from "./auth";
 import { mapGhlLeadPayload } from "./model/ghl/leadWebhook";
-import { parseGhlTags } from "./model/promotions";
+import { parseGhlTags, parsePromotionSlot } from "./model/promotions";
 import {
   GhlOpportunityWebhookValidationError,
   normalizeOpportunityWebhook,
@@ -320,6 +320,21 @@ http.route({
       if (mapped.externalId === undefined && !mapped.data.phone && !mapped.data.email) {
         throw new Error("contact_id, téléphone ou email requis");
       }
+      // Créneau d’arrivée (site d’inscription de la promo) : sur un lead déjà
+      // connu on range seulement le créneau, sans marquer de re-soumission.
+      const slot = parsePromotionSlot(payload);
+      if (slot && mapped.externalId !== undefined) {
+        const known = await ctx.runMutation(internal.promotions.setSlotFromWebhook, {
+          externalId: mapped.externalId, ...slot, at: now,
+        });
+        if (known.leadId) {
+          const r = await ctx.runMutation(internal.promotions.attachFromWebhook, {
+            promotionId: promo.promotionId, leadId: known.leadId, at: now,
+          });
+          await ctx.runMutation(internal.webhooks.markProcessed, { eventId });
+          return json({ ok: true, eventId, leadId: known.leadId, duplicate: true, slot: true, ...r });
+        }
+      }
       const created = await ctx.runMutation(internal.webhooks.createLeadFromWebhook, {
         ...(mapped.externalId !== undefined ? { externalId: mapped.externalId } : {}),
         data: mapped.data,
@@ -330,8 +345,9 @@ http.route({
       const r = await ctx.runMutation(internal.promotions.attachFromWebhook, {
         promotionId: promo.promotionId, leadId: created.leadId, at: now,
       });
+      if (slot) await ctx.runMutation(internal.promotions.setSlotFromWebhook, { leadId: created.leadId, ...slot, at: now });
       await ctx.runMutation(internal.webhooks.markProcessed, { eventId });
-      return json({ ok: true, eventId, leadId: created.leadId, duplicate: created.duplicate, ...r });
+      return json({ ok: true, eventId, leadId: created.leadId, duplicate: created.duplicate, ...(slot ? { slot: true } : {}), ...r });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erreur inconnue";
       await ctx.runMutation(internal.webhooks.markFailed, { eventId, error: message });

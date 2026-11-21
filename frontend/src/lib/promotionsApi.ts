@@ -18,7 +18,7 @@ export type PromotionRow = ActivePromotion & {
 }
 export type PromotionInput = {
   name: string; tag?: string; startDay: string; endDay: string; offer?: string; pitch?: string
-  officeCalendarId?: string; officeAddress?: string; legacyStatuses?: string[]
+  officeCalendarId?: string; officeAddress?: string; slotBookingUrl?: string; legacyStatuses?: string[]
   legacyArrivedFromDay?: string; legacyArrivedToDay?: string
 }
 export type StatBlock = { leads: number; joints: number; rdvDomicile: number; rdvBureau: number; qualifies: number; signes: number }

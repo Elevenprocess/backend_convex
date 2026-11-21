@@ -11,6 +11,8 @@ export type ActivePromotion = {
   pitch?: string
   officeCalendarId?: string
   officeAddress?: string
+  /** Site où l’invité choisit son créneau d’arrivée. */
+  slotBookingUrl?: string
 }
 
 type PromoLead = { promotionId?: string | null; promotionSource?: 'tag' | 'statut' | null }
@@ -111,4 +113,50 @@ export function leadKpis(leads: { status: string; source?: string }[]): LeadKpis
     qualifies: leads.filter((l) => ['qualifie', 'rdv_pris', 'rdv_honore', 'signe'].includes(l.status)).length,
     perdus: leads.filter((l) => l.status === 'perdu' || l.status === 'pas_qualifie').length,
   }
+}
+
+const WEEKDAYS_LONG = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi']
+/** "2026-11-27", 14, "BF-0012" → "vendredi 27, 14 h, billet BF-0012" */
+export function formatPromotionSlot(day: string, hour: number, ticket?: string | null): string {
+  const d = new Date(`${day}T00:00:00Z`)
+  return `${WEEKDAYS_LONG[d.getUTCDay()]} ${d.getUTCDate()}, ${hour} h${ticket ? `, billet ${ticket}` : ''}`
+}
+
+/**
+ * Lien du site d’inscription ouvert par le setter pour choisir le créneau à la
+ * place du lead : ?c=<contact GHL> (le site reconnaît la personne) et setter=1
+ * (le site ne déclenche pas le pixel de pub). null si le lien de la promo est invalide.
+ */
+export function slotBookingLink(baseUrl: string, externalId: string | null | undefined): string | null {
+  try {
+    const u = new URL(baseUrl)
+    if (u.protocol !== 'https:') return null
+    if (externalId) u.searchParams.set('c', externalId)
+    u.searchParams.set('setter', '1')
+    return u.toString()
+  } catch {
+    return null
+  }
+}
+
+type SlotLead = PromoLead & {
+  externalId?: string | null
+  promotionSlotDay?: string | null
+  promotionSlotHour?: number | null
+  promotionTicket?: string | null
+}
+export type LeadSlotView = { hasSlot: boolean; label: string; link: string | null }
+/**
+ * Ce que le setter voit pour le créneau d’un lead : le créneau pris, ou « Pas
+ * encore de créneau » si sa promo en cours a un site de réservation. null =
+ * rien à afficher (lead hors promo, ou promo sans site de réservation).
+ */
+export function leadSlotView(lead: SlotLead, promos: ActivePromotion[]): LeadSlotView | null {
+  const promo = lead.promotionId ? promos.find((p) => p._id === lead.promotionId) : undefined
+  const link = promo?.slotBookingUrl ? slotBookingLink(promo.slotBookingUrl, lead.externalId) : null
+  if (lead.promotionSlotDay && lead.promotionSlotHour !== null && lead.promotionSlotHour !== undefined) {
+    return { hasSlot: true, label: `Créneau : ${formatPromotionSlot(lead.promotionSlotDay, lead.promotionSlotHour, lead.promotionTicket)}`, link }
+  }
+  if (!promo?.slotBookingUrl) return null
+  return { hasSlot: false, label: 'Pas encore de créneau', link }
 }

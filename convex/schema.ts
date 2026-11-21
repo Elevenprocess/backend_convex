@@ -124,6 +124,11 @@ export default defineSchema({
     promotionId: v.optional(v.id("promotions")),
     promotionJoinedAt: v.optional(v.number()),
     promotionSource: v.optional(v.union(v.literal("tag"), v.literal("statut"))),
+    // Créneau d’arrivée choisi sur le site d’inscription de la promo (jour
+    // "YYYY-MM-DD", heure 0-23, numéro de billet), reçu par le lien webhook.
+    promotionSlotDay: v.optional(v.string()),
+    promotionSlotHour: v.optional(v.number()),
+    promotionTicket: v.optional(v.string()),
     // Renvoi par les commerciaux (étape GHL « (BIS) Retour aux Setters 🔙 ») :
     // le lead repasse en relance court terme (pas_de_reponse) ; on garde d'où
     // il vient (étape/statut GHL précédents) pour l'historique côté setters.
@@ -350,6 +355,8 @@ export default defineSchema({
     pitch: v.optional(v.string()),
     officeCalendarId: v.optional(v.string()),
     officeAddress: v.optional(v.string()),
+    // Site où l’invité choisit son créneau d’arrivée (bouton « Choisir son créneau » du setter).
+    slotBookingUrl: v.optional(v.string()),
     legacyStatuses: v.optional(v.array(leadStatusValidator)),
     legacyArrivedFrom: v.optional(v.number()),
     legacyArrivedTo: v.optional(v.number()),

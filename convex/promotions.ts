@@ -14,7 +14,7 @@ import { OPEN_RDV_STATUSES } from "./rdv";
 import { leadStatusValidator } from "./model/enums";
 import { ANSWERED_RESULTS, CALLBACK_RESULTS, QUALIFIED_STATUSES } from "./model/funnelMath";
 import {
-  legacyRejectReason, normalizeTag, parseGhlTags, promotionConflict, promotionStatus, reunionDayEndMs, reunionDayStartMs,
+  formatPromotionSlot, legacyRejectReason, normalizeTag, parseGhlTags, promotionConflict, promotionStatus, reunionDayEndMs, reunionDayStartMs,
   type PromotionLike, type PromotionStatus,
 } from "./model/promotions";
 
@@ -27,6 +27,7 @@ const promotionInput = {
   pitch: v.optional(v.string()),
   officeCalendarId: v.optional(v.string()),
   officeAddress: v.optional(v.string()),
+  slotBookingUrl: v.optional(v.string()),
   legacyStatuses: v.optional(v.array(leadStatusValidator)),
   legacyArrivedFromDay: v.optional(v.string()),
   legacyArrivedToDay: v.optional(v.string()),
@@ -34,7 +35,7 @@ const promotionInput = {
 
 type PromotionInputArgs = {
   name: string; tag?: string; startDay: string; endDay: string; offer?: string; pitch?: string;
-  officeCalendarId?: string; officeAddress?: string; legacyStatuses?: Doc<"leads">["status"][];
+  officeCalendarId?: string; officeAddress?: string; slotBookingUrl?: string; legacyStatuses?: Doc<"leads">["status"][];
   legacyArrivedFromDay?: string; legacyArrivedToDay?: string;
 };
 
@@ -56,6 +57,10 @@ function toFields(args: PromotionInputArgs) {
   const endAt = reunionDayEndMs(args.endDay);
   if (endAt <= startAt) throw new Error("La date de fin doit être après la date de début.");
   const tag = clean(args.tag);
+  const slotBookingUrl = clean(args.slotBookingUrl);
+  if (slotBookingUrl && !/^https:\/\/\S+$/.test(slotBookingUrl)) {
+    throw new Error("Le lien du site de réservation doit commencer par https://");
+  }
   const legacyStatuses = args.legacyStatuses && args.legacyStatuses.length > 0 ? args.legacyStatuses : undefined;
   // Ni tag ni statut : la promo reçoit ses leads par son lien webhook.
   return {
@@ -68,6 +73,7 @@ function toFields(args: PromotionInputArgs) {
     pitch: clean(args.pitch),
     officeCalendarId: clean(args.officeCalendarId),
     officeAddress: clean(args.officeAddress),
+    slotBookingUrl,
     legacyStatuses,
     legacyArrivedFrom: args.legacyArrivedFromDay ? reunionDayStartMs(args.legacyArrivedFromDay) : undefined,
     legacyArrivedTo: args.legacyArrivedToDay ? reunionDayEndMs(args.legacyArrivedToDay) : undefined,
@@ -192,6 +198,7 @@ export const active = query({
       .map((p) => ({
         _id: p._id, name: p.name, startAt: p.startAt, endAt: p.endAt,
         offer: p.offer, pitch: p.pitch, officeCalendarId: p.officeCalendarId, officeAddress: p.officeAddress,
+        slotBookingUrl: p.slotBookingUrl,
       }));
   },
 });
@@ -491,5 +498,36 @@ export const attachFromWebhook = internalMutation({
       details: { promotionId },
     });
     return { attached: true, reason: "rattache" as const };
+  },
+});
+
+/**
+ * Range sur le lead le créneau d’arrivée reçu du site d’inscription (lien
+ * webhook de la promo). Lead retrouvé par son contact GHL ou par son id.
+ * leadId null = lead inconnu (la route le crée puis rappelle avec son id).
+ * Ne marque PAS de re-soumission : choisir son heure n’est pas une nouvelle demande.
+ */
+export const setSlotFromWebhook = internalMutation({
+  args: {
+    externalId: v.optional(v.string()), leadId: v.optional(v.id("leads")),
+    day: v.string(), hour: v.number(), ticket: v.optional(v.string()), at: v.number(),
+  },
+  handler: async (ctx, { externalId, leadId, day, hour, ticket, at }) => {
+    const lead = leadId !== undefined ? await ctx.db.get(leadId)
+      : externalId !== undefined ? await findLeadByGhlContact(ctx, externalId) : null;
+    if (!lead || lead.deletedAt !== undefined) return { leadId: null, changed: false };
+    const nextTicket = ticket ?? lead.promotionTicket;
+    if (lead.promotionSlotDay === day && lead.promotionSlotHour === hour && lead.promotionTicket === nextTicket) {
+      return { leadId: lead._id, changed: false };
+    }
+    const moved = lead.promotionSlotDay !== undefined;
+    await ctx.db.patch(lead._id, stripUndefined({ promotionSlotDay: day, promotionSlotHour: hour, promotionTicket: nextTicket }));
+    await logSystemActivity(ctx, {
+      at, source: "GHL", action: "lead.promotion.slot", entityType: "lead", entityId: lead._id, leadId: lead._id,
+      subject: leadLabel(lead),
+      summary: `${leadLabel(lead)} ${moved ? "a changé de créneau" : "a son créneau"} : ${formatPromotionSlot(day, hour, nextTicket)}`,
+      details: { day, hour, ticket: nextTicket ?? null },
+    });
+    return { leadId: lead._id, changed: true };
   },
 });

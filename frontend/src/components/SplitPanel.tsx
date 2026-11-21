@@ -21,6 +21,7 @@ import { useAuth } from '../lib/auth'
 import { leadDetailPath } from '../lib/leadPaths'
 import { sectorFromCity } from '../lib/sector'
 import { useActivePromotionsState } from '../lib/promotionsApi'
+import { PromotionSlot } from './promotions/PromotionSlot'
 import { bureauDays, formatBureauDay, officePromotion } from '../lib/promotions'
 import { RdvLocationBadge, rdvLocationLabel } from './RdvLocationBadge'
 import { bureauSlotHint, formatRdvTransferNote, nextStepAfterQualification, previousStepFromRdv, type RdvMode } from './promotions/qualification'
@@ -129,6 +130,7 @@ export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, chi
               </span>
             )}
           </div>
+          <PromotionSlot lead={lead} />
         </div>
         {addressLines.length > 0 && (
           <div className="flex min-w-0 max-w-[45%] items-start justify-end gap-1 text-right">
