@@ -18,19 +18,13 @@ describe('validatePromotionForm', () => {
 
 describe('PromotionWebhookBox', () => {
   const promo = { _id: 'p1', name: 'BF', startAt: 0, endAt: 1, archived: false, status: 'en_cours', webhookKey: 'abc123' } as PromotionRow
-  it('affiche le lien et le copie', async () => {
+  it('copie le lien webhook de la promo', async () => {
     vi.stubEnv('VITE_CONVEX_URL', 'https://x.convex.cloud')
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.assign(navigator, { clipboard: { writeText } })
     render(<PromotionWebhookBox promo={promo} />)
-    const input = screen.getByLabelText('Lien webhook de la promotion') as HTMLInputElement
-    expect(input.value).toMatch(/\/webhooks\/ghl\/promotion\/abc123$/)
-    fireEvent.click(screen.getByText('Copier'))
-    await screen.findByText('Copié ✓')
-    expect(writeText).toHaveBeenCalledWith(input.value)
-  })
-  it('propose de créer le lien quand la promo n’en a pas', () => {
-    render(<PromotionWebhookBox promo={{ ...promo, webhookKey: undefined }} />)
-    expect(screen.getByText('Créer le lien webhook')).toBeTruthy()
+    fireEvent.click(screen.getByText('Copier le webhook'))
+    await screen.findByText('Webhook copié ✓')
+    expect(writeText).toHaveBeenCalledWith('https://x.convex.site/webhooks/ghl/promotion/abc123')
   })
 })

@@ -48,43 +48,38 @@ export function PromotionsAdmin({ leads, onOpenLeads }: { leads: LeadResponse[];
   )
 }
 
-/** Lien webhook de la promo + bouton Copier (à coller dans GHL). */
+/** Bouton « Copier le webhook » de la promo (lien à coller dans GHL). Crée le lien s'il manque. */
 export function PromotionWebhookBox({ promo }: { promo: PromotionRow }) {
   const [copied, setCopied] = useState(false)
-  const [creating, setCreating] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const url = promotionWebhookUrl(import.meta.env.VITE_CONVEX_URL as string | undefined, promo.webhookKey)
+  const convexUrl = import.meta.env.VITE_CONVEX_URL as string | undefined
   async function copy() {
-    if (!url) return
+    setBusy(true); setError(null)
     try {
-      await navigator.clipboard.writeText(url)
+      const key = promo.webhookKey ?? await ensurePromotionWebhook(promo._id)
+      const url = promotionWebhookUrl(convexUrl, key)
+      if (!url) throw new Error('Lien indisponible')
+      try {
+        await navigator.clipboard.writeText(url)
+      } catch {
+        window.prompt('Copie ce lien dans GHL :', url)
+      }
       setCopied(true)
       window.setTimeout(() => setCopied(false), 2000)
-    } catch {
-      setError('Copie impossible : sélectionne le lien et copie-le à la main.')
-    }
-  }
-  async function create() {
-    setCreating(true); setError(null)
-    try { await ensurePromotionWebhook(promo._id) } catch (e) { setError(humanizeError(e, 'Création du lien impossible')) } finally { setCreating(false) }
+    } catch (e) {
+      setError(humanizeError(e, 'Lien webhook impossible'))
+    } finally { setBusy(false) }
   }
   return (
-    <div className="rounded-[14px] border border-line bg-white p-3 space-y-1.5">
-      <div className="text-[10px] font-bold tracking-widest uppercase text-faint">Webhook GHL</div>
-      {url ? (
-        <>
-          <div className="flex items-center gap-2">
-            <input readOnly value={url} onFocus={(e) => e.currentTarget.select()} aria-label="Lien webhook de la promotion"
-              className="min-w-0 flex-grow rounded-[10px] border border-line bg-white/70 px-2 py-1.5 font-mono text-[11px] text-text" />
-            <button type="button" onClick={copy} className="btn-primary shrink-0 rounded-[10px] px-3 py-1.5 text-xs">{copied ? 'Copié ✓' : 'Copier'}</button>
-          </div>
-          <p className="text-[11px] text-muted">Dans le workflow GHL : action « Webhook », méthode POST, colle ce lien. Les contacts envoyés arrivent tout seuls ici pendant la promo.</p>
-        </>
-      ) : (
-        <button type="button" onClick={create} disabled={creating} className="pill-tab text-xs bg-white border border-line">{creating ? 'Création…' : 'Créer le lien webhook'}</button>
-      )}
-      {error && <p className="text-[11px] text-rouille">{error}</p>}
-    </div>
+    <span className="inline-flex items-center gap-2">
+      <button type="button" onClick={copy} disabled={busy}
+        title="Dans le workflow GHL : action « Webhook », méthode POST, colle ce lien. Les contacts envoyés arrivent tout seuls dans la promo."
+        className="btn-primary rounded-[10px] px-2.5 py-1 text-[11px]">
+        {copied ? 'Webhook copié ✓' : busy ? 'Préparation…' : 'Copier le webhook'}
+      </button>
+      {error && <span className="text-[11px] text-rouille">{error}</span>}
+    </span>
   )
 }
 
@@ -113,12 +108,13 @@ function PromotionCard({ promo, leadCount, onEdit, onOpenLeads }: { promo: Promo
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <div className="font-bold text-text">{promo.name}</div>
-          <div className="text-xs text-muted">
-            {formatPromotionRange(promo.startAt, promo.endAt)}
-            {promo.tag ? ` · tag « ${promo.tag} »` : ''}
-            {statusLabels ? ` · anciens : ${statusLabels}` : ''}
-            {promo.officeCalendarId ? ' · RDV bureau' : ''}
-          </div>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+            <span>
+              {formatPromotionRange(promo.startAt, promo.endAt)}
+              {statusLabels ? ` · anciens : ${statusLabels}` : ''}
+              {promo.officeCalendarId ? ' · RDV bureau' : ''}
+            </span>
+                </div>
         </div>
         <button type="button" onClick={onOpenLeads} className="text-xs font-semibold text-or hover:underline">Voir les {leadCount} leads</button>
       </div>
@@ -129,7 +125,6 @@ function PromotionCard({ promo, leadCount, onEdit, onOpenLeads }: { promo: Promo
           {stats.rdvBureauHorsPromo > 0 && <div className="text-xs text-text">+ {stats.rdvBureauHorsPromo} RDV bureau pris par des leads hors promo</div>}
         </div>
       )}
-      {promo.status !== 'terminee' && !promo.archived && <PromotionWebhookBox promo={promo} />}
       {preview && (
         <div className="text-xs text-muted">Anciens leads à rattacher : <span className="font-bold text-text">{preview.eligible}</span>{preview.skipped ? ` (${preview.skipped} ignorés : RDV à venir, signés ou déjà dans une promo)` : ''}</div>
       )}
