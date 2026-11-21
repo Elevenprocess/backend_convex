@@ -114,7 +114,8 @@ function PromotionCard({ promo, leadCount, onEdit, onOpenLeads }: { promo: Promo
               {statusLabels ? ` · anciens : ${statusLabels}` : ''}
               {promo.officeCalendarId ? ' · RDV bureau' : ''}
             </span>
-                </div>
+            {promo.status !== 'terminee' && !promo.archived && <PromotionWebhookBox promo={promo} />}
+          </div>
         </div>
         <button type="button" onClick={onOpenLeads} className="text-xs font-semibold text-or hover:underline">Voir les {leadCount} leads</button>
       </div>
