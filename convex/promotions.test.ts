@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { makeT } from "./test.kit";
 import { asUser, insertUser } from "./test.helpers";
 import { reunionDayStartMs } from "./model/promotions";
@@ -94,5 +94,11 @@ describe("promotions : site de réservation du créneau", () => {
     expect((await t.run((ctx) => ctx.db.get(id)))?.slotBookingUrl).toBe("https://invitation.exemple.re/");
     const active = await as.query(api.promotions.active, { now: reunionDayStartMs("2026-11-24") });
     expect(active[0]?.slotBookingUrl).toBe("https://invitation.exemple.re/");
+    // Réglage en ligne de commande : même contrôle, et vide = retiré.
+    await expect(t.mutation(internal.promotions.setSlotBookingUrl, { id, url: "ftp://x" })).rejects.toThrow(/https/);
+    await t.mutation(internal.promotions.setSlotBookingUrl, { id, url: "https://autre.exemple.re/" });
+    expect((await t.run((ctx) => ctx.db.get(id)))?.slotBookingUrl).toBe("https://autre.exemple.re/");
+    await t.mutation(internal.promotions.setSlotBookingUrl, { id });
+    expect((await t.run((ctx) => ctx.db.get(id)))?.slotBookingUrl).toBeUndefined();
   });
 });

@@ -44,6 +44,13 @@ const clean = (s: string | undefined) => {
   return t === "" ? undefined : t;
 };
 
+/** Adresse du site de réservation : vide = aucune, sinon https obligatoire. */
+function cleanBookingUrl(raw: string | undefined): string | undefined {
+  const url = clean(raw);
+  if (url && !/^https:\/\/\S+$/.test(url)) throw new Error("Le lien du site de réservation doit commencer par https://");
+  return url;
+}
+
 /** Retire les clés dont la valeur est undefined (Convex refuse undefined dans un document). */
 function stripUndefined<T extends Record<string, unknown>>(o: T): T {
   return Object.fromEntries(Object.entries(o).filter(([, val]) => val !== undefined)) as T;
@@ -57,10 +64,7 @@ function toFields(args: PromotionInputArgs) {
   const endAt = reunionDayEndMs(args.endDay);
   if (endAt <= startAt) throw new Error("La date de fin doit être après la date de début.");
   const tag = clean(args.tag);
-  const slotBookingUrl = clean(args.slotBookingUrl);
-  if (slotBookingUrl && !/^https:\/\/\S+$/.test(slotBookingUrl)) {
-    throw new Error("Le lien du site de réservation doit commencer par https://");
-  }
+  const slotBookingUrl = cleanBookingUrl(args.slotBookingUrl);
   const legacyStatuses = args.legacyStatuses && args.legacyStatuses.length > 0 ? args.legacyStatuses : undefined;
   // Ni tag ni statut : la promo reçoit ses leads par son lien webhook.
   return {
@@ -529,5 +533,17 @@ export const setSlotFromWebhook = internalMutation({
       details: { day, hour, ticket: nextTicket ?? null },
     });
     return { leadId: lead._id, changed: true };
+  },
+});
+
+/** Règle (ou vide) le site de réservation d’une promo sans passer par le formulaire admin (`npx convex run`). */
+export const setSlotBookingUrl = internalMutation({
+  args: { id: v.id("promotions"), url: v.optional(v.string()) },
+  handler: async (ctx, { id, url }) => {
+    const promo = await ctx.db.get(id);
+    if (!promo) throw new Error("Promotion introuvable.");
+    const slotBookingUrl = cleanBookingUrl(url);
+    await ctx.db.patch(id, { slotBookingUrl });
+    return { name: promo.name, slotBookingUrl: slotBookingUrl ?? null };
   },
 });
