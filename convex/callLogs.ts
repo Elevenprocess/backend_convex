@@ -26,9 +26,11 @@ const CALL_RESULT_TO_LEAD_STATUS: Partial<Record<CallResult, LeadStatus>> = {
   rdv_pris: "qualifie",
 };
 
-// Un prospect déjà qualifié (ou plus loin) ne peut plus recevoir d'appel
-// « pas de réponse » : sinon le dernier appelant récupérait le crédit de la
-// qualification posée par un autre setter (cas Kuvan Gee, 10/11).
+// Un prospect déjà qualifié (ou plus loin) ne peut plus recevoir AUCUN appel :
+// l'appel de qualification (envoyé à GHL) est le dernier du lead, et la
+// qualification reste au setter qui l'a faite (cas Kuvan Gee 10/11, Eric/Ony
+// 23/11). Il redevient appelable seulement s'il revient aux setters (RDV
+// reporté sans date → « À rappeler », etc.).
 export const QUALIFIED_LOCKED_STATUSES: ReadonlySet<LeadStatus> = new Set([
   "qualifie", "rdv_pris", "rdv_honore", "signature_en_cours", "signe",
 ]);
@@ -76,8 +78,8 @@ export const logCall = mutation({
     const user = await requireLeadWriteRole(ctx);
     const lead = await ctx.db.get(args.leadId);
     if (!lead) throw new Error("Lead introuvable");
-    if (QUALIFIED_LOCKED_STATUSES.has(lead.status) && NO_ANSWER_CALL_RESULTS.has(args.result)) {
-      throw new Error("Ce prospect est déjà qualifié : impossible d'enregistrer un appel « pas de réponse ».");
+    if (QUALIFIED_LOCKED_STATUSES.has(lead.status)) {
+      throw new Error("Ce prospect est déjà qualifié : sa qualification est le dernier appel, impossible d'en enregistrer un autre.");
     }
     const calledAt = Date.now();
     const id = await ctx.db.insert("callLogs", {

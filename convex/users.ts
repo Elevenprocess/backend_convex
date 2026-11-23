@@ -241,7 +241,10 @@ export const toggleActive = mutation({
 export const heartbeat = mutation({
   args: {},
   handler: async (ctx) => {
-    const user = await requireUser(ctx);
+    // Présence de la personne RÉELLEMENT connectée (même en mode Explorer,
+    // qui est en lecture seule) : on ne marque jamais le profil exploré en ligne.
+    const user = await getRealUser(ctx);
+    if (!user) throw new Error("Non authentifié");
     const existing = await ctx.db
       .query("userPresence")
       .withIndex("by_user", (q) => q.eq("userId", user._id))

@@ -44,7 +44,7 @@ test("commercial_lead → commercial : lecture OK, mutation bloquée (lecture se
 
   // Une mutation quelconque passant par requireUser doit être refusée.
   await expect(
-    asUser(t, leadId).mutation(api.users.heartbeat, {}),
+    asUser(t, leadId).mutation(api.leads.create, { firstName: "X" }),
   ).rejects.toThrow(/Lecture seule/);
 
   // clearViewAs reste possible (il agit sur le user réel, pas l'overlay).
@@ -61,4 +61,26 @@ test("cible supprimée → overlay ignoré, on retombe sur le user réel", async
   await t.run(async (ctx) => ctx.db.patch(comId, { deletedAt: Date.now() }));
   const me = await asUser(t, adminId).query(api.users.me, {});
   expect(me?.name).toBe("Admin");
+});
+
+test("admin en mode Explorer : lecture seule, rien n'est enregistré au nom du setter exploré", async () => {
+  const t = makeT();
+  const adminId = await insertUser(t, { name: "Admin", role: "admin" });
+  const onyId = await insertUser(t, { name: "Ony", role: "setter" });
+  const leadId = await asUser(t, onyId).mutation(api.leads.create, { firstName: "Test" });
+  await asUser(t, adminId).mutation(api.users.setViewAs, { userId: onyId });
+
+  await expect(
+    asUser(t, adminId).mutation(api.callLogs.logCall, { leadId, result: "joint" }),
+  ).rejects.toThrow(/Lecture seule/);
+  const logs = await t.run((ctx) => ctx.db.query("callLogs").collect());
+  expect(logs).toHaveLength(0);
+
+  // La présence reste celle de l'admin, jamais celle d'Ony.
+  await asUser(t, adminId).mutation(api.users.heartbeat, {});
+  const presence = await t.run((ctx) => ctx.db.query("userPresence").collect());
+  expect(presence.map((p) => p.userId)).toEqual([adminId]);
+
+  await asUser(t, adminId).mutation(api.users.clearViewAs, {});
+  await asUser(t, adminId).mutation(api.callLogs.logCall, { leadId, result: "joint" });
 });

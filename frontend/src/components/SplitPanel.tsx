@@ -1223,7 +1223,7 @@ function NotesTab({
         city,
         postalCode,
       } as const
-      const rdvPromise = ghlConfig?.configured
+      const startRdv = () => ghlConfig?.configured
         ? createGhlAppointment({
           leadId: lead.id,
           sector: isBureau ? 'Bureau' : sector,
@@ -1246,10 +1246,12 @@ function NotesTab({
           locationType: isBureau ? 'agence' : 'domicile',
           notes: rdvTransferNote,
         })
+      // L'appel de qualification passe EN PREMIER : une fois le lead
+      // « qualifié », le serveur refuse tout nouvel appel (c'est le dernier).
+      await createCallLog({ leadId: lead.id, result: 'joint', notes: noteFinale || null })
       await Promise.all([
         updateLead(lead.id, leadPatch),
-        rdvPromise,
-        createCallLog({ leadId: lead.id, result: 'joint', notes: noteFinale || null }),
+        startRdv(),
       ])
       refetchAgenda()
       refetchGhlSlots()

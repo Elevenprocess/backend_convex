@@ -44,11 +44,11 @@ export function impersonationAllowed(realRole: Role, targetRole: Role): boolean 
   )
 }
 
-export function impersonationIsReadOnly(realRole: Role, targetRole: Role): boolean {
-  return (
-    (realRole === 'commercial_lead' && targetRole === 'commercial') ||
-    (realRole === 'commercial' && targetRole === 'setter')
-  )
+// Mode « Explorer un profil » toujours en lecture seule, admin compris (miroir
+// de convex/model/access.ts) : rien ne s'enregistre au nom du profil exploré.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function impersonationIsReadOnly(_realRole: Role, _targetRole: Role): boolean {
+  return true
 }
 
 type AuthState = {
@@ -247,8 +247,7 @@ export function useRealUser(): UserResponse | null {
 }
 
 // True si l'utilisateur est en mode "impersonation lecture seule"
-// (commercial_lead → commercial, ou commercial → setter). En admin, viewAs
-// n'importe quel rôle reste en ÉCRITURE.
+// — désormais toujours le cas, admin compris.
 export function useIsReadOnlyImpersonation(): boolean {
   return useAuth((s) => {
     const real = s.realUser

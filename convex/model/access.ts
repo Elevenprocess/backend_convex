@@ -40,8 +40,9 @@ export async function getRealUser(ctx: Ctx): Promise<Doc<"users"> | null> {
 }
 
 // Règles d'impersonation — miroir du frontend (lib/auth.ts) :
-//   admin → n'importe qui (écriture) ; commercial_lead → commercial (lecture
-//   seule) ; commercial → setter (lecture seule).
+//   admin → n'importe qui ; commercial_lead → commercial ; commercial → setter.
+//   TOUJOURS en lecture seule (Mario 23/11) : sinon une action faite en
+//   explorant un setter (qualification, appel…) était enregistrée à son nom.
 export function impersonationAllowed(realRole: Role, targetRole: Role): boolean {
   return (
     realRole === "admin" ||
@@ -50,8 +51,8 @@ export function impersonationAllowed(realRole: Role, targetRole: Role): boolean 
   );
 }
 
-function impersonationIsReadOnly(realRole: Role, targetRole: Role): boolean {
-  return realRole !== "admin";
+function impersonationIsReadOnly(): boolean {
+  return true;
 }
 
 // Résout l'overlay d'un user réel : la cible si elle est valide et autorisée,
@@ -73,7 +74,7 @@ export async function getCurrentUser(ctx: Ctx): Promise<Doc<"users"> | null> {
   const overlay = await resolveViewAs(ctx, real);
   if (!overlay) return real;
   const isMutation = typeof (ctx as MutationCtx).db.insert === "function";
-  if (isMutation && impersonationIsReadOnly(roleOf(real), roleOf(overlay))) {
+  if (isMutation && impersonationIsReadOnly()) {
     throw new Error("Lecture seule : quittez le mode « Explorer un profil » pour modifier des données");
   }
   return overlay;

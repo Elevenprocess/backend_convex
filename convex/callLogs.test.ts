@@ -58,7 +58,7 @@ test("logCall() refuse un appel « pas de réponse » sur un lead terminal (sign
   expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("signe");
 });
 
-test("logCall() : une fois qualifié, plus d'appel « pas de réponse » et le crédit reste au qualifieur", async () => {
+test("logCall() : une fois qualifié, plus AUCUN appel et le crédit reste au qualifieur", async () => {
   const t = makeT();
   const nirvana = await insertUser(t, { role: "setter", email: "nirvana@ecoi.fr" });
   const ony = await insertUser(t, { role: "setter", email: "ony@ecoi.fr" });
@@ -69,7 +69,7 @@ test("logCall() : une fois qualifié, plus d'appel « pas de réponse » et le c
   await asUser(t, nirvana).mutation(api.callLogs.logCall, { leadId, result: "joint" });
   expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("qualifie");
 
-  for (const result of ["non_joint", "messagerie", "injoignable"] as const) {
+  for (const result of ["non_joint", "messagerie", "injoignable", "joint", "rappel_planifie", "refus"] as const) {
     await expect(
       asUser(t, ony).mutation(api.callLogs.logCall, { leadId, result }),
     ).rejects.toThrow(/déjà qualifié/);
@@ -125,11 +125,11 @@ test("logCall() attribue lead.setterId au premier setter qui appelle (lead GHL n
     ctx.db.insert("leads", { source: "ghl", status: "nouveau", firstName: "Ghl" }),
   );
 
-  await asUser(t, setterId).mutation(api.callLogs.logCall, { leadId, result: "joint" });
+  await asUser(t, setterId).mutation(api.callLogs.logCall, { leadId, result: "non_joint" });
   expect((await t.run((ctx) => ctx.db.get(leadId)))?.setterId).toBe(setterId);
 
   // Un second setter n'écrase pas le setter principal.
-  await asUser(t, setter2Id).mutation(api.callLogs.logCall, { leadId, result: "joint" });
+  await asUser(t, setter2Id).mutation(api.callLogs.logCall, { leadId, result: "non_joint" });
   expect((await t.run((ctx) => ctx.db.get(leadId)))?.setterId).toBe(setterId);
 });
 
@@ -137,9 +137,9 @@ test("logCall() d'un commercial ne s'approprie pas le lead (setterId intact)", a
   const t = makeT();
   const commercialId = await insertUser(t, { role: "commercial" });
   const leadId = await t.run((ctx) =>
-    ctx.db.insert("leads", { source: "ghl", status: "qualifie", firstName: "Ghl" }),
+    ctx.db.insert("leads", { source: "ghl", status: "nouveau", firstName: "Ghl" }),
   );
-  await asUser(t, commercialId).mutation(api.callLogs.logCall, { leadId, result: "joint" });
+  await asUser(t, commercialId).mutation(api.callLogs.logCall, { leadId, result: "non_joint" });
   expect((await t.run((ctx) => ctx.db.get(leadId)))?.setterId).toBeUndefined();
 });
 
