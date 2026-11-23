@@ -15,7 +15,7 @@ import {
   type UserResponse,
 } from '../lib/types'
 import { useCall, type CallState } from '../lib/call'
-import { useCallLogs, useRdvList, useStartCall, createCallLog, confirmOfficeSlot, createRdv, updateLead, updateGhlAppointment, useGhlCalendarConfig, useGhlFreeSlots, createGhlAppointment, syncLeadGhlCalendarEvents, humanizeError, type GhlCalendarEvent } from '../lib/hooks'
+import { useCallLogs, useRdvList, createCallLog, confirmOfficeSlot, createRdv, updateLead, updateGhlAppointment, useGhlCalendarConfig, useGhlFreeSlots, createGhlAppointment, syncLeadGhlCalendarEvents, humanizeError, type GhlCalendarEvent } from '../lib/hooks'
 import { sectorFromCity } from '../lib/sector'
 import { useActivePromotionsState } from '../lib/promotionsApi'
 import { PromotionSlot } from './promotions/PromotionSlot'
@@ -97,7 +97,6 @@ function fullAddressLines(lead: LeadResponse): string[] {
 export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, children, onClose, onSaved, className }: SplitPanelProps) {
   const [active, setActive] = useState(defaultTab ?? tabs[0].id)
   const callState = useCall()
-  const startCall = useStartCall()
   const isActiveCallForThisLead = callState.active && callState.leadId === lead.id
 
   const commercialName = lead.latestRdvCommercialId
@@ -141,23 +140,6 @@ export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, chi
             </div>
           </div>
         )}
-        {/* Bouton Appel : copie le numéro (Ringover manuel) et ouvre l'historique des appels. */}
-        <button
-          onClick={() => {
-            if (!lead.phone) return
-            startCall({ leadId: lead.id, leadName: fullName(lead), toNumber: lead.phone }).catch((err) => {
-              console.error('Phone copy failed', err)
-              alert(err instanceof Error ? err.message : 'Impossible de copier le numéro')
-            })
-            if (tabs.some((t) => t.id === 'appels')) setActive('appels')
-          }}
-          disabled={!lead.phone}
-          className="w-10 h-10 rounded-full bg-or text-white flex items-center justify-center shadow-sm hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-          title={lead.phone ? 'Appeler (copie le numéro) + historique des appels' : 'Pas de numéro de téléphone'}
-          aria-label="Appeler"
-        >
-          <Icon name="phone" size={14} />
-        </button>
         {onClose && (
           <button
             onClick={onClose}
