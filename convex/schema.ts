@@ -124,6 +124,9 @@ export default defineSchema({
     promotionId: v.optional(v.id("promotions")),
     promotionJoinedAt: v.optional(v.number()),
     promotionSource: v.optional(v.union(v.literal("tag"), v.literal("statut"))),
+    // Statut qu'avait le lead AVANT d'entrer dans la promo : à l'entrée, il
+    // repart de « nouveau » (page blanche, cf. model/promotionAttach.ts).
+    promotionStatusBefore: v.optional(leadStatusValidator),
     // Créneau d’arrivée choisi sur le site d’inscription de la promo (jour
     // "YYYY-MM-DD", heure 0-23, numéro de billet), reçu par le lien webhook.
     promotionSlotDay: v.optional(v.string()),

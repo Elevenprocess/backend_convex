@@ -4,7 +4,7 @@ import { makeT } from "./test.kit";
 import { asUser, insertUser } from "./test.helpers";
 
 describe("anciens leads par statut", () => {
-  it("aperçu puis rattachement : statuts ciblés, exclusions, statut inchangé, idempotent", async () => {
+  it("aperçu puis rattachement : statuts ciblés, exclusions, page blanche (statut → nouveau), idempotent", async () => {
     const t = makeT();
     const admin = await insertUser(t, { role: "admin" });
     const now = Date.now();
@@ -33,7 +33,7 @@ describe("anciens leads par statut", () => {
     expect(second.attached).toBe(0);
 
     const ok1 = await t.run((ctx) => ctx.db.get(ids.ok1));
-    expect(ok1).toMatchObject({ promotionId: promoId, promotionSource: "statut", status: "perdu" });
+    expect(ok1).toMatchObject({ promotionId: promoId, promotionSource: "statut", status: "nouveau", promotionStatusBefore: "perdu" });
     expect((await t.run((ctx) => ctx.db.get(ids.avecRdv)))?.promotionId).toBeUndefined();
     expect((await t.run((ctx) => ctx.db.get(ids.horsStatut)))?.promotionId).toBeUndefined();
     expect((await t.run((ctx) => ctx.db.get(ids.rdvPasse)))?.promotionId).toBe(promoId);

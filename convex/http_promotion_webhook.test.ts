@@ -73,7 +73,7 @@ describe("POST /webhooks/ghl/promotion/<clé>", () => {
     expect(events[0]?.status).toBe("failed");
   });
 
-  it("créneau sur un lead connu : rangé sur la fiche, sans re-soumission ni changement de statut", async () => {
+  it("créneau sur un lead connu : rangé sur la fiche, sans re-soumission, statut remis à « nouveau » (page blanche)", async () => {
     const now = Date.now();
     const { t, promoId } = await setup({ startAt: now - 3_600_000, endAt: now + 3_600_000 });
     const leadId = await t.run((ctx) => ctx.db.insert("leads", { source: "ghl", status: "perdu", externalId: "c5", createdAt: now }));
@@ -81,7 +81,7 @@ describe("POST /webhooks/ghl/promotion/<clé>", () => {
     expect(await res.json()).toMatchObject({ ok: true, slot: true, attached: true, duplicate: true });
     const lead = await t.run((ctx) => ctx.db.get(leadId));
     expect(lead).toMatchObject({
-      promotionId: promoId, promotionSlotDay: "2026-11-27", promotionSlotHour: 14, promotionTicket: "BF-0012", status: "perdu",
+      promotionId: promoId, promotionSlotDay: "2026-11-27", promotionSlotHour: 14, promotionTicket: "BF-0012", status: "nouveau", promotionStatusBefore: "perdu",
     });
     expect(lead?.resubmittedAt).toBeUndefined();
     const logs = await t.run((ctx) => ctx.db.query("activityLog").collect());

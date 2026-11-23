@@ -8,7 +8,7 @@ import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireRole, requireUser } from "./model/access";
 import { leadLabel, logActivity, logSystemActivity } from "./model/activity";
-import { applyTagsToLead } from "./model/promotionAttach";
+import { applyTagsToLead, blankSlateForPromotion } from "./model/promotionAttach";
 import { findLeadByGhlContact } from "./webhooks";
 import { OPEN_RDV_STATUSES } from "./rdv";
 import { leadStatusValidator } from "./model/enums";
@@ -377,7 +377,10 @@ export const attachLegacyBatch = internalMutation({
     for (const lead of page.page) {
       const reason = await legacyReason(ctx, lead, promo, args.now);
       if (reason === null) {
-        await ctx.db.patch(lead._id, { promotionId: promo._id, promotionJoinedAt: args.now, promotionSource: "statut" });
+        await ctx.db.patch(lead._id, {
+          promotionId: promo._id, promotionJoinedAt: args.now, promotionSource: "statut",
+          ...(await blankSlateForPromotion(ctx, lead, args.now, promo.name)),
+        });
         attached++;
       } else if (reason !== "statut" && reason !== "periode") {
         skipped++;
@@ -494,7 +497,10 @@ export const attachFromWebhook = internalMutation({
     if (!lead || lead.deletedAt !== undefined) return { attached: false, reason: "lead_introuvable" as const };
     if (lead.promotionId === promotionId) return { attached: true, reason: "deja_rattache" as const };
     if (lead.promotionId !== undefined) return { attached: false, reason: "autre_promo" as const };
-    await ctx.db.patch(leadId, { promotionId, promotionJoinedAt: at, promotionSource: "tag" });
+    await ctx.db.patch(leadId, {
+      promotionId, promotionJoinedAt: at, promotionSource: "tag",
+      ...(await blankSlateForPromotion(ctx, lead, at, promo.name)),
+    });
     await logSystemActivity(ctx, {
       source: "GHL", action: "lead.promotion.joined", entityType: "lead", entityId: leadId, leadId,
       subject: leadLabel(lead),
@@ -545,5 +551,45 @@ export const setSlotBookingUrl = internalMutation({
     const slotBookingUrl = cleanBookingUrl(url);
     await ctx.db.patch(id, { slotBookingUrl });
     return { name: promo.name, slotBookingUrl: slotBookingUrl ?? null };
+  },
+});
+
+/**
+ * Rattrapage ponctuel (23/11) : remet en « page blanche » les leads DÉJÀ
+ * rattachés à une promo avant la règle (cf. blankSlateForPromotion). Ne touche
+ * pas un lead déjà retravaillé dans la promo (appel depuis son entrée) ni un
+ * lead déjà remis à zéro. `npx convex run promotions:blankSlateExisting '{"promotionId":"…","dryRun":true}'`
+ */
+export const blankSlateExisting = internalMutation({
+  args: { promotionId: v.id("promotions"), dryRun: v.boolean() },
+  handler: async (ctx, { promotionId, dryRun }) => {
+    const promo = await ctx.db.get(promotionId);
+    if (!promo) throw new Error("Promotion introuvable.");
+    const leads = await ctx.db.query("leads").withIndex("by_promotion", (q) => q.eq("promotionId", promotionId)).collect();
+    const byStatus: Record<string, number> = {};
+    let reset = 0, workedInPromo = 0, kept = 0;
+    for (const lead of leads) {
+      if (lead.deletedAt !== undefined || lead.promotionStatusBefore !== undefined || lead.status === "nouveau") continue;
+      const joinedAt = lead.promotionJoinedAt ?? promo.startAt;
+      const recentCall = await ctx.db
+        .query("callLogs")
+        .withIndex("by_lead_calledAt", (q) => q.eq("leadId", lead._id).gte("calledAt", joinedAt))
+        .first();
+      if (recentCall) { workedInPromo++; continue; }
+      if (dryRun) {
+        // Mêmes exceptions que blankSlateForPromotion, sans rien écrire.
+        const keep = ["signature_en_cours", "signe"].includes(lead.status);
+        if (keep) { kept++; continue; }
+        byStatus[lead.status] = (byStatus[lead.status] ?? 0) + 1;
+        reset++;
+        continue;
+      }
+      const patch = await blankSlateForPromotion(ctx, lead, Date.now(), promo.name);
+      if (Object.keys(patch).length === 0) { kept++; continue; }
+      await ctx.db.patch(lead._id, patch);
+      byStatus[lead.status] = (byStatus[lead.status] ?? 0) + 1;
+      reset++;
+    }
+    return { promo: promo.name, total: leads.length, reset, byStatus, workedInPromo, kept, dryRun };
   },
 });
