@@ -16,15 +16,16 @@ import {
   type UserResponse,
 } from '../lib/types'
 import { useCall, type CallState } from '../lib/call'
-import { useCallLogs, useRdvList, useStartCall, createCallLog, createRdv, updateLead, updateGhlAppointment, useGhlCalendarConfig, useGhlFreeSlots, createGhlAppointment, syncLeadGhlCalendarEvents, humanizeError, type GhlCalendarEvent } from '../lib/hooks'
+import { useCallLogs, useRdvList, useStartCall, createCallLog, confirmOfficeSlot, createRdv, updateLead, updateGhlAppointment, useGhlCalendarConfig, useGhlFreeSlots, createGhlAppointment, syncLeadGhlCalendarEvents, humanizeError, type GhlCalendarEvent } from '../lib/hooks'
 import { useAuth } from '../lib/auth'
 import { leadDetailPath } from '../lib/leadPaths'
 import { sectorFromCity } from '../lib/sector'
 import { useActivePromotionsState } from '../lib/promotionsApi'
 import { PromotionSlot } from './promotions/PromotionSlot'
-import { bureauDays, formatBureauDay, officePromotion } from '../lib/promotions'
+import { formatBureauDay } from '../lib/promotions'
+import { ghlSlotTexts, officeSlotDays, officeSlotHours } from '../lib/promotionSlots'
 import { RdvLocationBadge, rdvLocationLabel } from './RdvLocationBadge'
-import { bureauSlotHint, formatRdvTransferNote, nextStepAfterQualification, previousStepFromRdv, type RdvMode } from './promotions/qualification'
+import { formatRdvTransferNote, nextStepAfterQualification, previousStepFromRdv, type RdvMode } from './promotions/qualification'
 
 type Tab = { id: string; label: string; icon?: IconName }
 
@@ -971,13 +972,17 @@ function NotesTab({
   const [callbackAt, setCallbackAt] = useState('')
   const [sector, setSector] = useState<'Nord' | 'Sud' | 'Est' | 'Ouest' | ''>('')
   const activePromosState = useActivePromotionsState()
-  const activeOfficePromo = officePromotion(activePromosState ?? [])
-  // Vendredis/samedis restants de la promo ; plus aucun jour = plus de RDV bureau.
+  // RDV au bureau : seulement pour un lead de la promo en cours qui a des
+  // créneaux bureau (vendredi/samedi 8 h-18 h, dimanche 9 h-13 h). Plus aucun
+  // jour restant = plus de RDV bureau.
+  const leadOfficePromo = (activePromosState ?? []).find((p) => p._id === lead.promotionId && p.officeSlots)
+  const [officeNow] = useState(() => Date.now())
   const officeDays = useMemo(
-    () => (activeOfficePromo ? bureauDays(activeOfficePromo.startAt, activeOfficePromo.endAt, Date.now()) : []),
-    [activeOfficePromo],
+    () => (leadOfficePromo ? officeSlotDays(leadOfficePromo.startAt, leadOfficePromo.endAt, officeNow) : []),
+    [leadOfficePromo, officeNow],
   )
-  const officePromo = officeDays.length > 0 ? activeOfficePromo : undefined
+  const officePromo = officeDays.length > 0 ? leadOfficePromo : undefined
+  const [ghlRetry, setGhlRetry] = useState<{ day: string; hour: number } | null>(null)
   const [rdvMode, setRdvMode] = useState<RdvMode>('domicile')
   // Promo archivée/terminée pendant la saisie : on repasse en domicile.
   // On attend la fin du chargement pour ne pas écraser un mode bureau restauré du brouillon.
@@ -985,10 +990,17 @@ function NotesTab({
   const isBureau = rdvMode === 'bureau' && Boolean(officePromo)
   const [rdvDate, setRdvDate] = useState(todayInputValue())
   const [rdvAt, setRdvAt] = useState('')
-  // Mode bureau : la date est forcément un vendredi/samedi de la promo.
+  // Mode bureau : la date est forcément un vendredi/samedi/dimanche de la promo ;
+  // on part du créneau déjà choisi par le prospect sur le site s'il est encore possible.
   useEffect(() => {
-    if (isBureau && officeDays.length > 0 && !officeDays.includes(rdvDate)) { setRdvDate(officeDays[0]); setRdvAt('') }
-  }, [isBureau, officeDays, rdvDate])
+    if (!isBureau || officeDays.length === 0 || officeDays.includes(rdvDate)) return
+    const own = lead.promotionSlotDay && officeDays.includes(lead.promotionSlotDay) ? lead.promotionSlotDay : null
+    const day = own ?? officeDays[0]
+    const ownHour = own && lead.promotionSlotHour != null && officeSlotHours(day, officeNow).includes(lead.promotionSlotHour)
+      ? lead.promotionSlotHour : null
+    setRdvDate(day)
+    setRdvAt(ownHour != null ? `${day}T${String(ownHour).padStart(2, '0')}:00` : '')
+  }, [isBureau, officeDays, rdvDate, lead.promotionSlotDay, lead.promotionSlotHour, officeNow])
   const [form, setForm] = useState<LeadNotesForm>(() => leadToNotesForm(lead))
   // Snapshot des champs lead sur lesquels le formulaire est aligné. Sert à fusionner
   // les modifs venues d'ailleurs (onglet Infos) sans écraser ce que le setter a déjà
@@ -1007,12 +1019,12 @@ function NotesTab({
   } : null)
   const { data: ghlConfig } = useGhlCalendarConfig(shouldLoadCalendarData)
   const selectedSectorConfig = ghlConfig?.sectors.find((item) => normalizeSectorKey(item.sector) === normalizeSectorKey(sector))
-  const slotRange = shouldLoadCalendarData && (sector || isBureau) ? buildDayRange(rdvDate) : null
+  // RDV au bureau : pas de calendrier GHL (créneau + pipeline de la promo).
+  const loadGhlSlots = shouldLoadCalendarData && !isBureau
+  const slotRange = loadGhlSlots && sector ? buildDayRange(rdvDate) : null
   const { data: ghlSlotsData, loading: ghlSlotsLoading, refetch: refetchGhlSlots } = useGhlFreeSlots({
-    sector: shouldLoadCalendarData ? (isBureau ? 'Bureau' : sector || undefined) : undefined,
-    calendarId: shouldLoadCalendarData
-      ? (isBureau ? officePromo?.officeCalendarId : selectedSectorConfig?.calendarId) || undefined
-      : undefined,
+    sector: loadGhlSlots ? sector || undefined : undefined,
+    calendarId: loadGhlSlots ? selectedSectorConfig?.calendarId || undefined : undefined,
     from: slotRange?.from,
     to: slotRange?.to,
     timezone: 'Indian/Reunion',
@@ -1213,6 +1225,27 @@ function NotesTab({
       const postalCode = cleanField(form.postalCode)
       if (email && !isValidEmail(email)) throw new Error('Email invalide : corrige ou vide le champ email.')
       if (postalCode && postalCode.length > 20) throw new Error('Code postal trop long : 20 caractères maximum.')
+      const bureauLeadPatch = { status: 'qualifie', firstName, lastName, email, phone, addressLine, city, postalCode } as const
+      if (isBureau) {
+        // RDV au bureau : pas de calendrier. Appel de qualification (dernier
+        // appel), fiche à jour, puis créneau → Velora + champs GHL + pipeline
+        // de la promo en « Présence confirmée ».
+        const [day, time] = rdvAt.split('T')
+        const hour = Number(time?.slice(0, 2))
+        await createCallLog({ leadId: lead.id, result: 'joint', notes: noteFinale || null })
+        await updateLead(lead.id, bureauLeadPatch)
+        setStep('done')
+        onSaved?.()
+        try {
+          await confirmOfficeSlot({ leadId: lead.id, day, hour })
+          setGhlRetry(null)
+          setSuccess(`Qualifié : RDV au bureau ${ghlSlotTexts(day, hour).creneau}. Envoyé à GHL (Présence confirmée).`)
+        } catch (e) {
+          setGhlRetry({ day, hour })
+          setError(humanizeError(e, 'Envoi à GHL impossible'))
+        }
+        return
+      }
       const leadPatch = {
         status: 'qualifie',
         firstName,
@@ -1255,11 +1288,26 @@ function NotesTab({
       ])
       refetchAgenda()
       refetchGhlSlots()
-      setSuccess(isBureau ? (ghlConfig?.configured ? 'RDV au bureau créé dans GHL.' : 'RDV au bureau créé en local. Agenda actualisé.') : ghlConfig?.configured ? 'RDV créé dans GHL, agenda actualisé.' : 'RDV créé en local. Agenda actualisé.')
+      setSuccess(ghlConfig?.configured ? 'RDV créé dans GHL, agenda actualisé.' : 'RDV créé en local. Agenda actualisé.')
       setStep('done')
       onSaved?.()
     } catch (e) {
       setError(humanizeError(e, 'Validation impossible'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function retryGhl() {
+    if (!ghlRetry) return
+    setSaving(true)
+    setError(null)
+    try {
+      await confirmOfficeSlot({ leadId: lead.id, day: ghlRetry.day, hour: ghlRetry.hour })
+      setSuccess(`RDV au bureau ${ghlSlotTexts(ghlRetry.day, ghlRetry.hour).creneau} envoyé à GHL (Présence confirmée).`)
+      setGhlRetry(null)
+    } catch (e) {
+      setError(humanizeError(e, 'Envoi à GHL impossible'))
     } finally {
       setSaving(false)
     }
@@ -1292,6 +1340,11 @@ function NotesTab({
         <span className={`status-badge ${STATUS_BADGE[lead.status]}`}>{STATUS_LABEL[lead.status]}</span>
       </div>
       {error && <div className="rounded-xl border border-rouille/30 bg-rouille-tint px-3 py-2 text-sm text-rouille">{error}</div>}
+      {ghlRetry && (
+        <button type="button" disabled={saving} onClick={retryGhl} className="w-full rounded-xl border border-rouille/30 bg-white px-3 py-2 text-sm font-semibold text-rouille hover:bg-rouille-tint disabled:opacity-60">
+          Réessayer l'envoi à GHL
+        </button>
+      )}
       {success && <div className="rounded-xl border border-success/30 bg-success-tint px-3 py-2 text-sm text-success">{success}</div>}
 
       {step === 'eligibility' && (
@@ -1444,7 +1497,7 @@ function NotesTab({
                   active={setterStatus === 'qualifie' && rdvMode === 'bureau'}
                   icon="map-pin"
                   title="Qualifié – RDV au bureau"
-                  text={`${officePromo.name} · vendredi ou samedi au bureau`}
+                  text={`${officePromo.name} · vendredi, samedi ou dimanche au bureau`}
                   onClick={() => { setSetterStatus('qualifie'); setRdvMode('bureau'); setResult('joint') }}
                 />
               )}
@@ -1552,6 +1605,25 @@ function NotesTab({
           ) : (
             <DateOnlyInput label="Date du RDV commercial" value={rdvDate} onChange={(date) => { setRdvDate(date); setRdvAt('') }} />
           )}
+          {isBureau ? (
+            <div>
+              <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-1">Heure d’arrivée au bureau</div>
+              <div className="flex flex-wrap gap-2">
+                {officeSlotHours(rdvDate, officeNow).map((h) => {
+                  const value = `${rdvDate}T${String(h).padStart(2, '0')}:00`
+                  return (
+                    <button key={h} type="button" onClick={() => setRdvAt(value)}
+                      className={`pill-tab text-xs ${rdvAt === value ? '!bg-text !text-white' : 'bg-white border border-line text-muted'}`}>
+                      {h} h – {h + 1} h
+                    </button>
+                  )
+                })}
+              </div>
+              {lead.promotionSlotDay && lead.promotionSlotHour != null && (
+                <p className="mt-2 text-xs text-muted">Créneau pris par le prospect sur le site : {ghlSlotTexts(lead.promotionSlotDay, lead.promotionSlotHour).creneau}</p>
+              )}
+            </div>
+          ) : (<>
           <InlineRdvAgenda
             selectedAt={rdvAt}
             rdvs={agendaRdvs ?? []}
@@ -1562,7 +1634,7 @@ function NotesTab({
             onSelect={(time) => setRdvAt(`${rdvDate}T${time}`)}
           />
           <p className="text-xs text-muted">
-            {(isBureau && bureauSlotHint(ghlTimeSlots.length, Boolean(rdvDate) && !ghlSlotsLoading)) || (ghlConfig?.configured
+            {(ghlConfig?.configured
               ? ghlSlotsLoading
                 ? 'Chargement des créneaux libres GHL…'
                 : rdvDate && commercialTimeSlots.length === 0
@@ -1570,6 +1642,7 @@ function NotesTab({
                   : 'Mini agenda synchronisé avec GHL en temps réel.'
               : 'Mode local : ajoute la clé GHL pour charger les vrais créneaux libres.')}
           </p>
+          </>)}
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setStep(previousStepFromRdv(isBureau ? 'bureau' : 'domicile'))} className="rounded-xl border border-line bg-white/70 py-2 text-sm font-semibold hover:bg-white">Retour</button>
             <button onClick={() => setStep('confirmation')} disabled={!rdvAt} className="btn-primary rounded-xl py-2 text-sm disabled:opacity-50">Next · formulaire lead</button>
@@ -1598,8 +1671,8 @@ function NotesTab({
             <Field label="EMAIL" value={(form.email || lead.email) ?? '—'} />
             <Field label="TÉLÉPHONE" value={(form.phone || lead.phone) ?? '—'} />
             <Field label="NOTES D’APPEL ENVOYÉES" value={noteFinale || '—'} />
-            <Field label={isBureau ? 'LIEU' : 'SECTEUR'} value={isBureau ? `RDV au bureau${officePromo?.officeAddress ? ` — ${officePromo.officeAddress}` : ''}` : sector || '—'} />
-            <Field label="RDV" value={rdvAt ? formatDate(rdvAtToReunionIso(rdvAt)) : '—'} />
+            <Field label={isBureau ? 'LIEU' : 'SECTEUR'} value={isBureau ? `RDV au bureau${officePromo?.officeAddress ? ` — ${officePromo.officeAddress}` : ''} · GHL : Présence confirmée` : sector || '—'} />
+            <Field label="RDV" value={rdvAt ? (isBureau ? ghlSlotTexts(rdvAt.split('T')[0], Number(rdvAt.split('T')[1]?.slice(0, 2))).creneau : formatDate(rdvAtToReunionIso(rdvAt))) : '—'} />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setStep('rdv')} className="rounded-xl border border-line bg-white/70 py-2 text-sm font-semibold hover:bg-white">Retour</button>

@@ -914,3 +914,9 @@ export const apiTokensCreate = makeFunctionReference<
 >('apiTokens:create')
 export const apiTokensUpdateScopes = makeFunctionReference<'mutation', { id: string; scopes: string[] }, { id: string; scopes: string[] }>('apiTokens:updateScopes')
 export const apiTokensRevoke = makeFunctionReference<'mutation', { id: string }, null>('apiTokens:revoke')
+
+export const promotionsConfirmOfficeSlot = makeFunctionReference<
+  'action',
+  { leadId: string; day: string; hour: number },
+  { ghl: 'ok'; created: boolean }
+>('promotions:confirmOfficeSlot')

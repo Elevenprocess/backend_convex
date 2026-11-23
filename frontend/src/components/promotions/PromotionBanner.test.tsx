@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { PromotionBanner } from './PromotionBanner'
 
-const promo = { _id: 'p1', name: 'Black Friday', startAt: Date.parse('2026-11-22T20:00:00Z'), endAt: Date.parse('2026-11-29T19:59:59.999Z'), offer: '-15 % sur les kits', pitch: 'Dire bonjour', officeCalendarId: 'cal' }
+const promo = { _id: 'p1', name: 'Black Friday', startAt: Date.parse('2026-11-22T20:00:00Z'), endAt: Date.parse('2026-11-29T19:59:59.999Z'), offer: '-15 % sur les kits', pitch: 'Dire bonjour', officeSlots: true }
 
 describe('PromotionBanner', () => {
   it('affiche nom, dates, offre, mention bureau ; argumentaire dépliable ; filtre source', () => {

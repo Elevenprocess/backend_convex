@@ -360,6 +360,17 @@ export default defineSchema({
     officeAddress: v.optional(v.string()),
     // Site où l’invité choisit son créneau d’arrivée (bouton « Choisir son créneau » du setter).
     slotBookingUrl: v.optional(v.string()),
+    // RDV au bureau choisi par le setter (vendredi/samedi/dimanche + heure) :
+    // pipeline GHL de la promo, étape « Présence confirmée » et champs contact
+    // du créneau à mettre à jour (cf. promotions.confirmOfficeSlot).
+    ghlSlotSync: v.optional(v.object({
+      pipelineId: v.string(),
+      stageId: v.string(),
+      dayFieldId: v.string(),
+      hourFieldId: v.string(),
+      labelFieldId: v.string(),
+      startFieldId: v.string(),
+    })),
     legacyStatuses: v.optional(v.array(leadStatusValidator)),
     legacyArrivedFrom: v.optional(v.number()),
     legacyArrivedTo: v.optional(v.number()),

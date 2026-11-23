@@ -35,7 +35,7 @@ export { SharedLeadsKeeper, useSharedLeads, useNotificationRdvFilters } from './
 import { fetchCache, type FetchCacheEntry } from './fetchCacheStore'
 import { persistEntry, loadAllEntries, migrateLegacyLocalStorage } from './cachePersist'
 import { convexAuthEnabled, convexClient } from './convex'
-import { callLogsLogCall, leadsCreate, leadsGet, leadsSoftDelete, leadsUpdate, rdvCreate, rdvFlagByReception, rdvGet, rdvUpdate,
+import { callLogsLogCall, promotionsConfirmOfficeSlot, leadsCreate, leadsGet, leadsSoftDelete, leadsUpdate, rdvCreate, rdvFlagByReception, rdvGet, rdvUpdate,
   ghlCalendarGetConfig, ghlCalendarListUsers, ghlCalendarMySector, ghlCalendarSyncUsers, ghlCalendarFreeSlots, ghlCalendarEventsAction,
   ghlCalendarSyncEvents, ghlCalendarSyncLeadEvents, ghlAppointmentsCreate, ghlAppointmentsUpdate, ghlAppointmentsReassign,
   usersAdminUpdate, usersRemove, usersGet } from './convexApi'
@@ -969,6 +969,12 @@ export type CreateCallLogInput = {
   contactPhone?: string | null
   contactCity?: string | null
   contactPostalCode?: string | null
+}
+
+/** RDV au bureau d'une promo : créneau → Velora + champs GHL + « Présence confirmée ». */
+export async function confirmOfficeSlot(input: { leadId: string; day: string; hour: number }): Promise<{ ghl: 'ok'; created: boolean }> {
+  if (!convexAuthEnabled || !convexClient) throw new Error('RDV au bureau disponible seulement en mode Convex.')
+  return await convexClient.action(promotionsConfirmOfficeSlot, input)
 }
 
 export async function createCallLog(input: CreateCallLogInput): Promise<CallLogResponse> {

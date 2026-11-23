@@ -6,7 +6,9 @@ import { action, internalMutation, internalQuery, mutation, query } from "./_gen
 import { internal } from "./_generated/api";
 import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireRole, requireUser } from "./model/access";
+import { requireLeadWriteRole, requireRole, requireUser } from "./model/access";
+import { ghlRequest, isGhlConfigured, requireGhlLocationId } from "./ghlClient";
+import { ghlSlotTexts, isOfficeSlot } from "./model/promotionSlots";
 import { leadLabel, logActivity, logSystemActivity } from "./model/activity";
 import { applyTagsToLead, blankSlateForPromotion } from "./model/promotionAttach";
 import { findLeadByGhlContact } from "./webhooks";
@@ -203,6 +205,7 @@ export const active = query({
         _id: p._id, name: p.name, startAt: p.startAt, endAt: p.endAt,
         offer: p.offer, pitch: p.pitch, officeCalendarId: p.officeCalendarId, officeAddress: p.officeAddress,
         slotBookingUrl: p.slotBookingUrl,
+        officeSlots: p.ghlSlotSync !== undefined,
       }));
   },
 });
@@ -591,5 +594,128 @@ export const blankSlateExisting = internalMutation({
       reset++;
     }
     return { promo: promo.name, total: leads.length, reset, byStatus, workedInPromo, kept, dryRun };
+  },
+});
+
+
+// ---- RDV au bureau choisi par le setter (vendredi/samedi/dimanche + heure) ----
+
+/** Configure (ou retire) la synchro GHL du créneau bureau d'une promo (`npx convex run`). */
+export const setGhlSlotSync = internalMutation({
+  args: {
+    id: v.id("promotions"),
+    sync: v.optional(v.object({
+      pipelineId: v.string(), stageId: v.string(),
+      dayFieldId: v.string(), hourFieldId: v.string(), labelFieldId: v.string(), startFieldId: v.string(),
+    })),
+  },
+  handler: async (ctx, { id, sync }) => {
+    const promo = await ctx.db.get(id);
+    if (!promo) throw new Error("Promotion introuvable.");
+    await ctx.db.patch(id, { ghlSlotSync: sync });
+    return { name: promo.name, ghlSlotSync: sync ?? null };
+  },
+});
+
+/**
+ * Étape 1 (Velora) : vérifie le droit d'écrire (mode Explorer = lecture seule),
+ * que le lead est dans une promo en cours avec créneaux bureau et que le
+ * créneau est valide, puis le range sur la fiche. Renvoie ce qu'il faut pour GHL.
+ */
+export const setOfficeSlotByStaff = internalMutation({
+  args: { leadId: v.id("leads"), day: v.string(), hour: v.number(), now: v.number() },
+  handler: async (ctx, { leadId, day, hour, now }) => {
+    const user = await requireLeadWriteRole(ctx);
+    const lead = await ctx.db.get(leadId);
+    if (!lead || lead.deletedAt !== undefined) throw new Error("Prospect introuvable.");
+    const promo = lead.promotionId ? await ctx.db.get(lead.promotionId) : null;
+    if (!promo || promotionStatus(promo, now) !== "en_cours" || !promo.ghlSlotSync) {
+      throw new Error("Ce prospect n'est pas dans une promotion en cours avec RDV au bureau.");
+    }
+    if (!isOfficeSlot(promo.startAt, promo.endAt, day, hour, now)) {
+      throw new Error("Créneau impossible : vendredi ou samedi de 8 h à 18 h, dimanche de 9 h à 13 h, pas dans le passé.");
+    }
+    const changed = lead.promotionSlotDay !== day || lead.promotionSlotHour !== hour;
+    if (changed) {
+      await ctx.db.patch(leadId, { promotionSlotDay: day, promotionSlotHour: hour });
+      await logActivity(ctx, {
+        action: "lead.promotion.slot", entityType: "lead", entityId: leadId, leadId,
+        subject: leadLabel(lead),
+        summary: `a fixé le RDV au bureau de ${leadLabel(lead)} : ${ghlSlotTexts(day, hour).creneau}`,
+        details: { day, hour, before: lead.promotionSlotDay ? { day: lead.promotionSlotDay, hour: lead.promotionSlotHour ?? null } : null },
+      });
+    }
+    const name = [lead.firstName, lead.lastName].filter(Boolean).join(" ").trim() || lead.phone || "Prospect";
+    return { userId: user._id, externalId: lead.externalId ?? null, name, promoName: promo.name, sync: promo.ghlSlotSync };
+  },
+});
+
+export const logOfficeSlotGhl = internalMutation({
+  args: { leadId: v.id("leads"), ok: v.boolean(), created: v.boolean(), error: v.optional(v.string()) },
+  handler: async (ctx, { leadId, ok, created, error }) => {
+    const lead = await ctx.db.get(leadId);
+    await logActivity(ctx, {
+      action: ok ? "lead.promotion.ghl_confirmed" : "lead.promotion.ghl_failed", entityType: "lead", entityId: leadId, leadId,
+      subject: leadLabel(lead),
+      summary: ok
+        ? `a envoyé le créneau de ${leadLabel(lead)} à GHL et l'a passé en « Présence confirmée »${created ? " (opportunité créée)" : ""}`
+        : `n'a pas pu envoyer le créneau de ${leadLabel(lead)} à GHL : ${error ?? "erreur inconnue"}`,
+      details: { created, error: error ?? null },
+    });
+  },
+});
+
+type GhlOpp = { id: string; pipelineId?: string };
+
+/**
+ * Bouton final « RDV au bureau » du setter : créneau rangé dans Velora, champs
+ * du créneau mis à jour sur le contact GHL (billet inchangé), opportunité du
+ * pipeline de la promo passée en « Présence confirmée » (créée si absente).
+ * Rejouable sans risque (bouton « Réessayer l'envoi à GHL »).
+ */
+export const confirmOfficeSlot = action({
+  args: { leadId: v.id("leads"), day: v.string(), hour: v.number() },
+  handler: async (ctx, { leadId, day, hour }): Promise<{ ghl: "ok"; created: boolean }> => {
+    const info: { externalId: string | null; name: string; promoName: string; sync: NonNullable<Doc<"promotions">["ghlSlotSync"]> } =
+      await ctx.runMutation(internal.promotions.setOfficeSlotByStaff, { leadId, day, hour, now: Date.now() });
+    try {
+      if (!isGhlConfigured()) throw new Error("GHL n'est pas configuré.");
+      if (!info.externalId) throw new Error("ce prospect n'a pas de contact GHL.");
+      const t = ghlSlotTexts(day, hour);
+      const s = info.sync;
+      await ghlRequest(`/contacts/${encodeURIComponent(info.externalId)}`, {
+        method: "PUT",
+        body: { customFields: [
+          { id: s.dayFieldId, value: t.jour },
+          { id: s.hourFieldId, value: t.heure },
+          { id: s.labelFieldId, value: t.creneau },
+          { id: s.startFieldId, value: t.debut },
+        ] },
+      });
+      const locationId = requireGhlLocationId();
+      const found = (await ghlRequest("/opportunities/search", {
+        query: { location_id: locationId, contact_id: info.externalId, pipeline_id: s.pipelineId, limit: 20 },
+      })) as { opportunities?: GhlOpp[] } | null;
+      const opp = (found?.opportunities ?? []).find((o) => o.pipelineId === s.pipelineId);
+      if (opp) {
+        await ghlRequest(`/opportunities/${encodeURIComponent(opp.id)}`, {
+          method: "PUT", body: { pipelineId: s.pipelineId, pipelineStageId: s.stageId },
+        });
+      } else {
+        await ghlRequest("/opportunities/", {
+          method: "POST",
+          body: {
+            locationId, pipelineId: s.pipelineId, pipelineStageId: s.stageId,
+            contactId: info.externalId, name: `${info.name} · ${info.promoName}`, status: "open",
+          },
+        });
+      }
+      await ctx.runMutation(internal.promotions.logOfficeSlotGhl, { leadId, ok: true, created: !opp });
+      return { ghl: "ok", created: !opp };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await ctx.runMutation(internal.promotions.logOfficeSlotGhl, { leadId, ok: false, created: false, error: msg.slice(0, 300) });
+      throw new Error(`Créneau enregistré dans Velora, mais l'envoi à GHL a échoué : ${msg}`);
+    }
   },
 });

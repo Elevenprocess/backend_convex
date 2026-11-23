@@ -13,6 +13,8 @@ export type ActivePromotion = {
   officeAddress?: string
   /** Site où l’invité choisit son créneau d’arrivée. */
   slotBookingUrl?: string
+  /** Créneaux bureau (ven./sam./dim.) envoyés à GHL au bouton final du setter. */
+  officeSlots?: boolean
 }
 
 type PromoLead = { promotionId?: string | null; promotionSource?: 'tag' | 'statut' | null }
