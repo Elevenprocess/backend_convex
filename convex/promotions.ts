@@ -632,9 +632,27 @@ export const setOfficeSlotByStaff = internalMutation({
     const user = await requireLeadWriteRole(ctx);
     const lead = await ctx.db.get(leadId);
     if (!lead || lead.deletedAt !== undefined) throw new Error("Prospect introuvable.");
-    const promo = lead.promotionId ? await ctx.db.get(lead.promotionId) : null;
-    if (!promo || promotionStatus(promo, now) !== "en_cours" || !promo.ghlSlotSync) {
-      throw new Error("Ce prospect n'est pas dans une promotion en cours avec RDV au bureau.");
+    // Promo du lead si elle est en cours avec RDV bureau ; sinon (lead de
+    // l'onglet Leads, hors promo) la promo en cours qui propose le RDV bureau :
+    // le lead y est rattaché, SANS page blanche (il vient d'être qualifié).
+    const own = lead.promotionId ? await ctx.db.get(lead.promotionId) : null;
+    const ownActive = own && promotionStatus(own, now) === "en_cours" && own.ghlSlotSync ? own : null;
+    let promo = ownActive;
+    if (!promo && !(own && promotionStatus(own, now) === "en_cours")) {
+      const current = await ctx.db.query("promotions").withIndex("by_endAt", (q) => q.gte("endAt", now)).collect();
+      promo = current.find((p) => p.ghlSlotSync && promotionStatus(p, now) === "en_cours") ?? null;
+      if (promo) {
+        await ctx.db.patch(leadId, { promotionId: promo._id, promotionJoinedAt: now, promotionSource: "statut" });
+        await logActivity(ctx, {
+          action: "lead.promotion.joined", entityType: "lead", entityId: leadId, leadId,
+          subject: leadLabel(lead),
+          summary: `a rattaché ${leadLabel(lead)} à la promotion « ${promo.name} » (RDV au bureau)`,
+          details: { promotionId: promo._id },
+        });
+      }
+    }
+    if (!promo || !promo.ghlSlotSync) {
+      throw new Error("Pas de promotion en cours avec RDV au bureau pour ce prospect.");
     }
     if (!isOfficeSlot(promo.startAt, promo.endAt, day, hour, now)) {
       throw new Error("Créneau impossible : du jeudi au samedi de 8 h à 18 h, dimanche de 8 h à 13 h, pas dans le passé.");

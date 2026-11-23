@@ -132,4 +132,14 @@ describe("RDV au bureau choisi par le setter", () => {
     const sansMail = await t.run((ctx) => ctx.db.insert("leads", { source: "ghl", status: "nouveau", firstName: "Paul", promotionId }));
     expect((await as.mutation(internal.promotions.setOfficeSlotByStaff, { leadId: sansMail, day: "2026-11-26", hour: 9, now: NOW })).mail).toBeNull();
   });
+
+  it("lead hors promo (onglet Leads) : RDV au bureau possible, rattaché à la promo sans repartir de « nouveau »", async () => {
+    const { t, setter, promotionId } = await setup();
+    const outside = await t.run((ctx) => ctx.db.insert("leads", { source: "ghl", status: "qualifie", firstName: "Hors", externalId: "HORSaaaaaaaaaaaaaaaa" }));
+    const r = await asUser(t, setter).mutation(internal.promotions.setOfficeSlotByStaff, { leadId: outside, day: "2026-11-27", hour: 10, now: NOW });
+    expect(r.promoName).toBe("BF");
+    expect(await t.run((ctx) => ctx.db.get(outside))).toMatchObject({
+      promotionId, promotionSource: "statut", status: "qualifie", promotionSlotDay: "2026-11-27", promotionSlotHour: 10,
+    });
+  });
 });

@@ -952,7 +952,12 @@ function NotesTab({
   // RDV au bureau : seulement pour un lead de la promo en cours qui a des
   // créneaux bureau (vendredi/samedi 8 h-18 h, dimanche 9 h-13 h). Plus aucun
   // jour restant = plus de RDV bureau.
-  const leadOfficePromo = (activePromosState ?? []).find((p) => p._id === lead.promotionId && p.officeSlots)
+  // Lead hors promo (onglet Leads) : la promo en cours avec RDV bureau ; il y
+  // sera rattaché à la validation (côté serveur).
+  const leadInActivePromo = (activePromosState ?? []).some((p) => p._id === lead.promotionId)
+  const leadOfficePromo = leadInActivePromo
+    ? (activePromosState ?? []).find((p) => p._id === lead.promotionId && p.officeSlots)
+    : (activePromosState ?? []).find((p) => p.officeSlots)
   const [officeNow] = useState(() => Date.now())
   const officeDays = useMemo(
     () => (leadOfficePromo ? officeSlotDays(leadOfficePromo.startAt, leadOfficePromo.endAt, officeNow) : []),
