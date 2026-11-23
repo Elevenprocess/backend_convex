@@ -53,6 +53,7 @@ const SETTER_COLUMNS: ColumnChoice[] = [
   { key: 'jaugeAppels', label: 'Jauge appels (4/jour)' },
   { key: 'dernierAppel', label: 'Dernier appel (date/heure)' },
   { key: 'statut', label: 'Statut opportunité' },
+  { key: 'resimulation', label: 'Résimulation' },
   { key: 'appelDate', label: "Date/heure de l'appel (from Appels)" },
   { key: 'jauge', label: 'Jauge 11 jours' },
   { key: 'logAppel', label: 'Log appel' },
@@ -62,6 +63,7 @@ const SETTER_COLUMNS: ColumnChoice[] = [
 const ADMIN_COLUMNS: ColumnChoice[] = [
   { key: 'nom', label: 'Nom' },
   { key: 'statut', label: 'Statut opportunité' },
+  { key: 'resimulation', label: 'Résimulation' },
   { key: 'email', label: 'Email' },
   { key: 'telephone', label: 'Téléphone du Prospect' },
   { key: 'adresse', label: 'Adresse' },
@@ -103,6 +105,7 @@ const ADMIN_DEFAULT_COLUMNS: ColumnKey[] = [
   'nom',
   'telephone',
   'statut',
+  'resimulation',
   'leadGenere',
   'source',
   'adset',
@@ -1025,19 +1028,15 @@ function RetourSettersBadge({ lead }: { lead: LeadResponse }) {
   )
 }
 
-// Contact déjà connu qui a renvoyé le formulaire (re-simulation) : signal fort
-// de recontact — le webhook GHL a marqué resubmittedAt (et repassé les leads
-// perdus/sans réponse en « à rappeler »).
-function ResubmittedBadge({ lead }: { lead: LeadResponse }) {
-  if (!lead.resubmittedAt) return null
+// Contact déjà connu qui a renvoyé le formulaire (re-simulation) : le webhook
+// GHL a marqué resubmittedAt (et repassé les leads perdus/sans réponse en
+// « à rappeler »). Affiché dans sa propre colonne « Résimulation » (Oui/Non).
+function ResimulationCell({ lead }: { lead: LeadResponse }) {
+  if (!lead.resubmittedAt) return <span className="text-faint">Non</span>
   const d = new Date(lead.resubmittedAt)
-  const label = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
   return (
-    <span
-      className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.08em] text-or-dark"
-      title={`A refait une simulation le ${d.toLocaleDateString('fr-FR')} — à recontacter`}
-    >
-      <Icon name="sparkles" size={10} /> re-simulation {label}
+    <span className="font-semibold text-or-dark" title={`A refait une simulation le ${d.toLocaleDateString('fr-FR')} — à recontacter`}>
+      Oui
     </span>
   )
 }
@@ -1263,6 +1262,7 @@ function setterColumnWidth(key: ColumnKey): number {
     case 'jaugeAppels': return 160
     case 'dernierAppel': return 170
     case 'statut': return 160
+    case 'resimulation': return 130
     case 'appelDate': return 190
     case 'jauge': return 160
     case 'logAppel': return 120
@@ -1282,6 +1282,7 @@ function renderSetterHeader(key: ColumnKey, sort?: { callbackDir: CallbackSort; 
     case 'jaugeAppels': return <Th key={key} className="w-[160px]">JAUGE APPELS (4/JOUR)</Th>
     case 'dernierAppel': return <Th key={key} className="w-[170px]">DERNIER APPEL</Th>
     case 'statut': return <Th key={key} className="w-[160px]">STATUT OPPORTUNITÉ</Th>
+    case 'resimulation': return <Th key={key} className="w-[130px]">RÉSIMULATION</Th>
     case 'appelDate': return <Th key={key} className="w-[190px]">DATE/HEURE DE L'APPEL</Th>
     case 'jauge': return <Th key={key} className="w-[160px]">JAUGE 11 JOURS</Th>
     case 'logAppel': return <Th key={key} className="w-[120px]">LOG APPEL</Th>
@@ -1319,7 +1320,6 @@ function renderSetterCell(
               ) : lead.city && (
                 <span className="lead-name-sub" title={lead.city}>{lead.city}</span>
               )}
-              <ResubmittedBadge lead={lead} />
               {lead.promotionId && !activePromoIds?.has(lead.promotionId) && (
                 <span className="ml-1 rounded-full bg-or-tint px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-or-dark" title="Lead rattaché à une promotion (pas en cours)">Promo</span>
               )}
@@ -1337,6 +1337,7 @@ function renderSetterCell(
     case 'jaugeAppels': return <Td key={key}><DailyCallGauge count={lead.callsToday ?? 0} /></Td>
     case 'dernierAppel': return <Td key={key} className="text-faint">{lastCallDateTime(lead.latestCallAt ?? lead.lastContactAt)}</Td>
     case 'statut': return <Td key={key}><span className={`status-badge ${statusBadgeForLead(lead, 'setter')}`}>{statusLabelForLead(lead, 'setter')}</span></Td>
+    case 'resimulation': return <Td key={key}><ResimulationCell lead={lead} /></Td>
     case 'appelDate': return <Td key={key} className="text-faint">{lastCallDateTime(lead.latestCallAt ?? lead.lastContactAt)}</Td>
     case 'jauge': return <Td key={key}><ElevenDayGauge jours={lead.joursRelance} /></Td>
     case 'logAppel': return <Td key={key}><LeadCommentButton comment={lead.latestCallComment} leadName={fullName(lead)} onOpen={setOpenComment} /></Td>
@@ -1349,6 +1350,7 @@ function renderAdminHeader(key: ColumnKey, sort?: { callbackDir: CallbackSort; o
   switch (key) {
     case 'nom': return <Th key={key} className="w-[190px] lead-sticky-head">NOM</Th>
     case 'statut': return <Th key={key} className="w-[160px]">STATUT OPPORTUNITÉ</Th>
+    case 'resimulation': return <Th key={key} className="w-[130px]">RÉSIMULATION</Th>
     case 'email': return <Th key={key} className="w-[220px]">EMAIL</Th>
     case 'telephone': return <Th key={key} className="w-[180px]">TÉLÉPHONE DU PROSPECT</Th>
     case 'adresse': return <Th key={key} className="w-[220px]">ADRESSE</Th>
@@ -1400,11 +1402,11 @@ function renderAdminCell(
     case 'nom': return (
       <Td key={key} className="lead-sticky-cell">
         <span className="block max-w-[155px] font-semibold truncate" title={fullName(lead)}>{fullName(lead)}</span>
-        <ResubmittedBadge lead={lead} />
         <RetourSettersBadge lead={lead} />
       </Td>
     )
     case 'statut': return <Td key={key}><span className={`status-badge ${statusBadgeForLead(lead)}`}>{statusLabelForLead(lead)}</span></Td>
+    case 'resimulation': return <Td key={key}><ResimulationCell lead={lead} /></Td>
     case 'email': return <Td key={key} className="text-muted truncate" title={lead.email ?? undefined}>{lead.email ?? '—'}</Td>
     case 'telephone': return <Td key={key} className="text-muted truncate" title={lead.phone ?? undefined}>{lead.phone ?? '—'}</Td>
     case 'adresse': return <Td key={key} className="text-muted truncate" title={lead.addressLine ?? undefined}>{lead.addressLine ?? '—'}</Td>
@@ -2094,6 +2096,31 @@ function useRememberedLeadTableScroll(
   return scrollRef
 }
 
+// Colonnes ajoutées après coup : affichées une fois chez les utilisateurs qui
+// avaient déjà des préférences enregistrées (placées après la colonne indiquée),
+// puis libres d'être masquées.
+const ADDED_COLUMNS: { key: ColumnKey; after: ColumnKey }[] = [
+  { key: 'resimulation', after: 'statut' },
+]
+
+function withAddedColumns(stored: ColumnKey[], allKeys: ColumnKey[], flagPrefix: string): ColumnKey[] {
+  let next = stored
+  for (const { key, after } of ADDED_COLUMNS) {
+    if (!allKeys.includes(key)) continue
+    const flag = `${flagPrefix}:added:${key}`
+    try {
+      if (window.localStorage.getItem(flag)) continue
+      window.localStorage.setItem(flag, '1')
+    } catch {
+      continue
+    }
+    if (next.includes(key)) continue
+    const idx = next.indexOf(after)
+    next = idx >= 0 ? [...next.slice(0, idx + 1), key, ...next.slice(idx + 1)] : [...next, key]
+  }
+  return next
+}
+
 function useColumnVisibility(storageKey: string, columns: ColumnChoice[], defaultVisibleKeys?: ColumnKey[]) {
   const allKeys = columns.map((c) => c.key)
   const defaultKeys = (defaultVisibleKeys?.filter((key) => allKeys.includes(key)) ?? allKeys)
@@ -2118,13 +2145,14 @@ function useColumnVisibility(storageKey: string, columns: ColumnChoice[], defaul
 
   const [visible, setVisible] = useState<ColumnKey[]>(() => {
     // 1) Essaye la clé scopée user, 2) fallback ancien storage non-scopé (one-shot migration)
-    return readStored(scopedKey) ?? readStored(storageKey) ?? defaultKeys
+    const stored = readStored(scopedKey) ?? readStored(storageKey)
+    return stored ? withAddedColumns(stored, allKeys, scopedKey) : defaultKeys
   })
 
   // Si l'utilisateur change (login d'un autre compte, sortie de view-as), recharger ses prefs.
   useEffect(() => {
     const stored = readStored(scopedKey)
-    if (stored) setVisible(stored)
+    if (stored) setVisible(withAddedColumns(stored, allKeys, scopedKey))
     else if (userId) setVisible(defaultKeys)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopedKey])
