@@ -2,7 +2,7 @@
 // lecture « en cours » pour tous. Le rattachement des leads est dans
 // model/promotionAttach.ts (tags) et attachLegacy ci-dessous (statuts).
 import { ConvexError, v } from "convex/values";
-import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -964,5 +964,40 @@ export const backfillGhlSyncFromLogs = internalMutation({
       }
     }
     return { leads: seen.size, failed };
+  },
+});
+
+/** Ce qu'il faut pour envoyer le mail de confirmation à un lead (null = rien à faire). */
+export const confirmationMailContext = internalQuery({
+  args: { leadId: v.id("leads") },
+  handler: async (ctx, { leadId }) => {
+    const lead = await ctx.db.get(leadId);
+    if (!lead || lead.deletedAt !== undefined || lead.promotionMailSentAt !== undefined || !lead.email) return null;
+    const promo = lead.promotionId ? await ctx.db.get(lead.promotionId) : null;
+    const key = promo?.ghlSlotSync?.confirmationMailKey;
+    if (!key) return null;
+    const mail = renderPromotionMail(key, lead.firstName);
+    const contactId = lead.ghlContactId ?? (lead.externalId && /^[A-Za-z0-9]{20}$/.test(lead.externalId) ? lead.externalId : null);
+    return mail && contactId ? { mail, contactId } : null;
+  },
+});
+
+/**
+ * Rattrapage (23/11) : envoie le mail « prix par écrit » à un prospect dont la
+ * présence au bureau a été confirmée AVANT l'activation du mail. Une seule fois.
+ * `npx convex run promotions:sendConfirmationMail '{"leadId":"…"}'`
+ */
+export const sendConfirmationMail = internalAction({
+  args: { leadId: v.id("leads") },
+  handler: async (ctx, { leadId }): Promise<{ sent: boolean }> => {
+    const c: { mail: { subject: string; html: string }; contactId: string } | null =
+      await ctx.runQuery(internal.promotions.confirmationMailContext, { leadId });
+    if (!c) return { sent: false };
+    await ghlRequest("/conversations/messages", {
+      method: "POST", version: "2021-04-15",
+      body: { type: "Email", contactId: c.contactId, subject: c.mail.subject, html: c.mail.html },
+    });
+    await ctx.runMutation(internal.promotions.markPromotionMailSent, { leadId, subject: c.mail.subject });
+    return { sent: true };
   },
 });
