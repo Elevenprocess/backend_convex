@@ -607,6 +607,7 @@ export const setGhlSlotSync = internalMutation({
     sync: v.optional(v.object({
       pipelineId: v.string(), stageId: v.string(),
       dayFieldId: v.string(), hourFieldId: v.string(), labelFieldId: v.string(), startFieldId: v.string(),
+      bookedWorkflowId: v.optional(v.string()),
     })),
   },
   handler: async (ctx, { id, sync }) => {
@@ -636,8 +637,11 @@ export const setOfficeSlotByStaff = internalMutation({
       throw new Error("Créneau impossible : vendredi ou samedi de 8 h à 18 h, dimanche de 9 h à 13 h, pas dans le passé.");
     }
     const changed = lead.promotionSlotDay !== day || lead.promotionSlotHour !== hour;
+    // Premier créneau du prospect (aucun pris sur le site ni par un setter) :
+    // l'automatisation « créneau réservé » est à lancer, une seule fois.
+    const firstSlot = lead.promotionSlotDay === undefined && lead.promotionSlotWorkflow === undefined;
     if (changed) {
-      await ctx.db.patch(leadId, { promotionSlotDay: day, promotionSlotHour: hour });
+      await ctx.db.patch(leadId, { promotionSlotDay: day, promotionSlotHour: hour, ...(firstSlot ? { promotionSlotWorkflow: "pending" as const } : {}) });
       await logActivity(ctx, {
         action: "lead.promotion.slot", entityType: "lead", entityId: leadId, leadId,
         subject: leadLabel(lead),
@@ -646,21 +650,29 @@ export const setOfficeSlotByStaff = internalMutation({
       });
     }
     const name = [lead.firstName, lead.lastName].filter(Boolean).join(" ").trim() || lead.phone || "Prospect";
-    return { userId: user._id, externalId: lead.externalId ?? null, name, promoName: promo.name, sync: promo.ghlSlotSync };
+    const workflowPending = firstSlot || lead.promotionSlotWorkflow === "pending";
+    return { userId: user._id, externalId: lead.externalId ?? null, name, promoName: promo.name, sync: promo.ghlSlotSync, workflowPending };
+  },
+});
+
+export const markSlotWorkflowDone = internalMutation({
+  args: { leadId: v.id("leads") },
+  handler: async (ctx, { leadId }) => {
+    await ctx.db.patch(leadId, { promotionSlotWorkflow: "done" });
   },
 });
 
 export const logOfficeSlotGhl = internalMutation({
-  args: { leadId: v.id("leads"), ok: v.boolean(), created: v.boolean(), error: v.optional(v.string()) },
-  handler: async (ctx, { leadId, ok, created, error }) => {
+  args: { leadId: v.id("leads"), ok: v.boolean(), created: v.boolean(), error: v.optional(v.string()), workflow: v.optional(v.boolean()) },
+  handler: async (ctx, { leadId, ok, created, error, workflow }) => {
     const lead = await ctx.db.get(leadId);
     await logActivity(ctx, {
       action: ok ? "lead.promotion.ghl_confirmed" : "lead.promotion.ghl_failed", entityType: "lead", entityId: leadId, leadId,
       subject: leadLabel(lead),
       summary: ok
-        ? `a envoyé le créneau de ${leadLabel(lead)} à GHL et l'a passé en « Présence confirmée »${created ? " (opportunité créée)" : ""}`
+        ? `a envoyé le créneau de ${leadLabel(lead)} à GHL et l'a passé en « Présence confirmée »${created ? " (opportunité créée)" : ""}${workflow ? ", automatisation « créneau réservé » lancée" : ""}`
         : `n'a pas pu envoyer le créneau de ${leadLabel(lead)} à GHL : ${error ?? "erreur inconnue"}`,
-      details: { created, error: error ?? null },
+      details: { created, workflow: workflow ?? false, error: error ?? null },
     });
   },
 });
@@ -676,7 +688,7 @@ type GhlOpp = { id: string; pipelineId?: string };
 export const confirmOfficeSlot = action({
   args: { leadId: v.id("leads"), day: v.string(), hour: v.number() },
   handler: async (ctx, { leadId, day, hour }): Promise<{ ghl: "ok"; created: boolean }> => {
-    const info: { externalId: string | null; name: string; promoName: string; sync: NonNullable<Doc<"promotions">["ghlSlotSync"]> } =
+    const info: { externalId: string | null; name: string; promoName: string; sync: NonNullable<Doc<"promotions">["ghlSlotSync"]>; workflowPending: boolean } =
       await ctx.runMutation(internal.promotions.setOfficeSlotByStaff, { leadId, day, hour, now: Date.now() });
     try {
       if (!isGhlConfigured()) throw new Error("GHL n'est pas configuré.");
@@ -710,7 +722,17 @@ export const confirmOfficeSlot = action({
           },
         });
       }
-      await ctx.runMutation(internal.promotions.logOfficeSlotGhl, { leadId, ok: true, created: !opp });
+      // Premier créneau : on lance l'automatisation GHL « créneau réservé »
+      // APRÈS l'écriture des champs (elle peut s'en servir dans ses messages).
+      let workflow = false;
+      if (info.workflowPending && s.bookedWorkflowId) {
+        await ghlRequest(`/contacts/${encodeURIComponent(info.externalId)}/workflow/${encodeURIComponent(s.bookedWorkflowId)}`, {
+          method: "POST", body: {},
+        });
+        await ctx.runMutation(internal.promotions.markSlotWorkflowDone, { leadId });
+        workflow = true;
+      }
+      await ctx.runMutation(internal.promotions.logOfficeSlotGhl, { leadId, ok: true, created: !opp, workflow });
       return { ghl: "ok", created: !opp };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

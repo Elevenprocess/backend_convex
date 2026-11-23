@@ -132,6 +132,9 @@ export default defineSchema({
     promotionSlotDay: v.optional(v.string()),
     promotionSlotHour: v.optional(v.number()),
     promotionTicket: v.optional(v.string()),
+    // Automatisation « créneau réservé » à lancer (pending) ou lancée (done)
+    // après un premier créneau donné par un setter (promotions.confirmOfficeSlot).
+    promotionSlotWorkflow: v.optional(v.union(v.literal("pending"), v.literal("done"))),
     // Renvoi par les commerciaux (étape GHL « (BIS) Retour aux Setters 🔙 ») :
     // le lead repasse en relance court terme (pas_de_reponse) ; on garde d'où
     // il vient (étape/statut GHL précédents) pour l'historique côté setters.
@@ -370,6 +373,9 @@ export default defineSchema({
       hourFieldId: v.string(),
       labelFieldId: v.string(),
       startFieldId: v.string(),
+      // Automatisation GHL lancée quand le setter donne son PREMIER créneau
+      // à un prospect (ex. « BF26 | 2 | Créneau réservé »).
+      bookedWorkflowId: v.optional(v.string()),
     })),
     legacyStatuses: v.optional(v.array(leadStatusValidator)),
     legacyArrivedFrom: v.optional(v.number()),

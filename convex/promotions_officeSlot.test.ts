@@ -47,4 +47,21 @@ describe("RDV au bureau choisi par le setter", () => {
     const [p] = await asUser(t, setter).query(api.promotions.active, { now: NOW });
     expect(p.officeSlots).toBe(true);
   });
+
+  it("premier créneau → automatisation « créneau réservé » à lancer ; créneau déjà pris sur le site → non", async () => {
+    const { t, setter, leadId, promotionId } = await setup();
+    const as = asUser(t, setter);
+    const first = await as.mutation(internal.promotions.setOfficeSlotByStaff, { leadId, day: "2026-11-27", hour: 9, now: NOW });
+    expect(first.workflowPending).toBe(true);
+    expect((await t.run((ctx) => ctx.db.get(leadId)))?.promotionSlotWorkflow).toBe("pending");
+    // Échec GHL puis « Réessayer » : toujours à lancer tant que pas fait.
+    expect((await as.mutation(internal.promotions.setOfficeSlotByStaff, { leadId, day: "2026-11-27", hour: 9, now: NOW })).workflowPending).toBe(true);
+    await t.mutation(internal.promotions.markSlotWorkflowDone, { leadId });
+    expect((await as.mutation(internal.promotions.setOfficeSlotByStaff, { leadId, day: "2026-11-28", hour: 9, now: NOW })).workflowPending).toBe(false);
+
+    const fromSite = await t.run((ctx) => ctx.db.insert("leads", {
+      source: "ghl", status: "nouveau", externalId: "c2", promotionId, promotionSlotDay: "2026-11-27", promotionSlotHour: 10,
+    }));
+    expect((await as.mutation(internal.promotions.setOfficeSlotByStaff, { leadId: fromSite, day: "2026-11-27", hour: 10, now: NOW })).workflowPending).toBe(false);
+  });
 });
