@@ -88,7 +88,7 @@ export function PromotionForm({ initial, onClose, onSaved }: { initial?: Promoti
   const field = 'bg-white border border-line rounded-[14px] px-3 py-2 text-sm w-full'
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" role="dialog" aria-label="Promotion">
-      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[22px] bg-white p-5 space-y-4">
+      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[22px] bg-white modal-surface p-5 space-y-4">
         <h2 className="font-black text-lg">{initial ? 'Modifier la promotion' : 'Nouvelle promotion'}</h2>
 
         <section className="space-y-2">

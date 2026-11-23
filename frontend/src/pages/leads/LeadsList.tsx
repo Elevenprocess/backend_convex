@@ -2446,13 +2446,13 @@ function CommentModal({ data, onClose }: { data: { leadName: string; comment: st
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-text/35 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
     >
       <div
-        className="w-full max-w-lg rounded-[24px] bg-white shadow-2xl border border-line p-6"
+        className="w-full max-w-lg rounded-[24px] bg-white modal-surface shadow-2xl border border-line p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-3 mb-4">
