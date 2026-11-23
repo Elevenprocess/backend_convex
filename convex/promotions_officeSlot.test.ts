@@ -4,7 +4,7 @@ import { makeT } from "./test.kit";
 import { asUser, insertUser } from "./test.helpers";
 import { reunionDayStartMs } from "./model/promotions";
 
-const SYNC = { pipelineId: "p", stageId: "s", dayFieldId: "d", hourFieldId: "h", labelFieldId: "l", startFieldId: "st" };
+const SYNC = { pipelineId: "p", stageId: "s", dayFieldId: "d", hourFieldId: "h", labelFieldId: "l", startFieldId: "st", confirmationMailKey: "bf26-confirmation-prix" };
 const NOW = reunionDayStartMs("2026-11-25");
 
 async function setup(withSync = true) {
@@ -27,11 +27,11 @@ describe("RDV au bureau choisi par le setter", () => {
     expect(await t.run((ctx) => ctx.db.get(leadId))).toMatchObject({ promotionSlotDay: "2026-11-29", promotionSlotHour: 10 });
   });
 
-  it("refuse un créneau hors règles (dimanche 13 h, jeudi)", async () => {
+  it("refuse un créneau hors règles (dimanche 13 h, mercredi)", async () => {
     const { t, setter, leadId } = await setup();
     const as = asUser(t, setter);
     await expect(as.mutation(internal.promotions.setOfficeSlotByStaff, { leadId, day: "2026-11-29", hour: 13, now: NOW })).rejects.toThrow(/Créneau impossible/);
-    await expect(as.mutation(internal.promotions.setOfficeSlotByStaff, { leadId, day: "2026-11-26", hour: 10, now: NOW })).rejects.toThrow(/Créneau impossible/);
+    await expect(as.mutation(internal.promotions.setOfficeSlotByStaff, { leadId, day: "2026-11-25", hour: 10, now: NOW })).rejects.toThrow(/Créneau impossible/);
   });
 
   it("refuse sans synchro configurée sur la promo, et en mode Explorer", async () => {
@@ -116,5 +116,20 @@ describe("RDV au bureau choisi par le setter", () => {
     expect(r.contact).toMatchObject({ addressLine: "12 rue des Lilas", city: "Saint-Paul", postalCode: "97460" });
     expect(r.pendingNote).toContain("Adresse : 12 rue des Lilas");
     expect(r.pendingNote).toContain("97460 Saint-Paul");
+  });
+
+  it("mail « prix par écrit » : prêt avec le prénom, une seule fois, jamais sans e-mail", async () => {
+    const { t, setter, leadId, promotionId } = await setup();
+    const as = asUser(t, setter);
+    await t.run((ctx) => ctx.db.patch(leadId, { email: "julie@example.com" }));
+    const r = await as.mutation(internal.promotions.setOfficeSlotByStaff, { leadId, day: "2026-11-26", hour: 9, now: NOW });
+    expect(r.mail?.subject).toBe("Votre prix par écrit, kit solaire à 1 € prime déduite");
+    expect(r.mail?.html).toContain("Bonjour Julie,");
+    expect(r.mail?.html).not.toContain("{{contact.first_name}}");
+    await t.mutation(internal.promotions.markPromotionMailSent, { leadId, subject: r.mail!.subject });
+    expect((await as.mutation(internal.promotions.setOfficeSlotByStaff, { leadId, day: "2026-11-26", hour: 10, now: NOW })).mail).toBeNull();
+
+    const sansMail = await t.run((ctx) => ctx.db.insert("leads", { source: "ghl", status: "nouveau", firstName: "Paul", promotionId }));
+    expect((await as.mutation(internal.promotions.setOfficeSlotByStaff, { leadId: sansMail, day: "2026-11-26", hour: 9, now: NOW })).mail).toBeNull();
   });
 });

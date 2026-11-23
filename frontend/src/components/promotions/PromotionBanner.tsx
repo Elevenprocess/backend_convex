@@ -39,7 +39,7 @@ export function PromotionBanner({ promo, source, onSource, showSourceFilter = tr
       </div>
       {promo.offer && <p className="text-sm font-semibold text-text">{promo.offer}</p>}
       {promo.officeSlots && (
-        <p className="text-xs text-or-dark">RDV au bureau possibles le vendredi et le samedi de 8 h à 18 h, le dimanche de 9 h à 13 h{promo.officeAddress ? ` — ${promo.officeAddress}` : ''}.</p>
+        <p className="text-xs text-or-dark">RDV au bureau possibles du jeudi au samedi de 8 h à 18 h, le dimanche de 8 h à 13 h{promo.officeAddress ? ` — ${promo.officeAddress}` : ''}.</p>
       )}
       {promo.pitch && (
         <div>

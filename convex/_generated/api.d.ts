@@ -72,6 +72,7 @@ import type * as model_deriveLeadStatusFromDebrief from "../model/deriveLeadStat
 import type * as model_devisEcheancier from "../model/devisEcheancier.js";
 import type * as model_devisExtraction from "../model/devisExtraction.js";
 import type * as model_devisStatusSync from "../model/devisStatusSync.js";
+import type * as model_emails_promotionMails from "../model/emails/promotionMails.js";
 import type * as model_enrichLead from "../model/enrichLead.js";
 import type * as model_ensureDossier from "../model/ensureDossier.js";
 import type * as model_ensureProject from "../model/ensureProject.js";
@@ -199,6 +200,7 @@ declare const fullApi: ApiFromModules<{
   "model/devisEcheancier": typeof model_devisEcheancier;
   "model/devisExtraction": typeof model_devisExtraction;
   "model/devisStatusSync": typeof model_devisStatusSync;
+  "model/emails/promotionMails": typeof model_emails_promotionMails;
   "model/enrichLead": typeof model_enrichLead;
   "model/ensureDossier": typeof model_ensureDossier;
   "model/ensureProject": typeof model_ensureProject;

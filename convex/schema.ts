@@ -140,6 +140,8 @@ export default defineSchema({
     // Remarque du setter (note contact GHL) à envoyer avec le RDV au bureau ;
     // effacée une fois la note créée dans GHL (pas de doublon au renvoi).
     promotionGhlNote: v.optional(v.string()),
+    // Mail de confirmation (prix par écrit) envoyé au prospect : une seule fois.
+    promotionMailSentAt: v.optional(v.number()),
     promotionGhlSync: v.optional(v.object({
       status: v.union(v.literal("pending"), v.literal("ok"), v.literal("failed")),
       at: v.number(),
@@ -386,6 +388,8 @@ export default defineSchema({
       // Automatisation GHL lancée quand le setter donne son PREMIER créneau
       // à un prospect (ex. « BF26 | 2 | Créneau réservé »).
       bookedWorkflowId: v.optional(v.string()),
+      // Mail envoyé au prospect à sa présence confirmée (model/emails/promotionMails.ts).
+      confirmationMailKey: v.optional(v.string()),
     })),
     legacyStatuses: v.optional(v.array(leadStatusValidator)),
     legacyArrivedFrom: v.optional(v.number()),

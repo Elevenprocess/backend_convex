@@ -10,6 +10,7 @@ import { requireLeadWriteRole, requireRole, requireUser } from "./model/access";
 import { ghlRequest, isGhlConfigured, requireGhlLocationId } from "./ghlClient";
 import { ghlSlotTexts, isOfficeSlot } from "./model/promotionSlots";
 import { buildGhlProspectRemark } from "./model/ghl/prospectRemark";
+import { renderPromotionMail } from "./model/emails/promotionMails";
 import { leadLabel, logActivity, logSystemActivity } from "./model/activity";
 import { applyTagsToLead, blankSlateForPromotion } from "./model/promotionAttach";
 import { findLeadByGhlContact } from "./webhooks";
@@ -609,6 +610,7 @@ export const setGhlSlotSync = internalMutation({
       pipelineId: v.string(), stageId: v.string(),
       dayFieldId: v.string(), hourFieldId: v.string(), labelFieldId: v.string(), startFieldId: v.string(),
       bookedWorkflowId: v.optional(v.string()),
+      confirmationMailKey: v.optional(v.string()),
     })),
   },
   handler: async (ctx, { id, sync }) => {
@@ -635,7 +637,7 @@ export const setOfficeSlotByStaff = internalMutation({
       throw new Error("Ce prospect n'est pas dans une promotion en cours avec RDV au bureau.");
     }
     if (!isOfficeSlot(promo.startAt, promo.endAt, day, hour, now)) {
-      throw new Error("Créneau impossible : vendredi ou samedi de 8 h à 18 h, dimanche de 9 h à 13 h, pas dans le passé.");
+      throw new Error("Créneau impossible : du jeudi au samedi de 8 h à 18 h, dimanche de 8 h à 13 h, pas dans le passé.");
     }
     const changed = lead.promotionSlotDay !== day || lead.promotionSlotHour !== hour;
     // Premier créneau du prospect (aucun pris sur le site ni par un setter) :
@@ -680,7 +682,11 @@ export const setOfficeSlotByStaff = internalMutation({
       addressLine: lead.addressLine?.trim() || undefined, city: lead.city?.trim() || undefined,
       postalCode: lead.postalCode?.trim() || undefined,
     };
-    return { userId: user._id, externalId: contactId, contact, name, promoName: promo.name, sync: promo.ghlSlotSync, workflowPending, pendingNote };
+    // Mail « prix par écrit » : une seule fois par prospect, s'il a un e-mail.
+    const mail = promo.ghlSlotSync.confirmationMailKey && lead.promotionMailSentAt === undefined && lead.email
+      ? renderPromotionMail(promo.ghlSlotSync.confirmationMailKey, lead.firstName)
+      : null;
+    return { userId: user._id, externalId: contactId, contact, name, promoName: promo.name, sync: promo.ghlSlotSync, workflowPending, pendingNote, mail };
   },
 });
 
@@ -696,6 +702,21 @@ export const linkGhlContact = internalMutation({
       subject: leadLabel(lead),
       summary: `${created ? "a recréé" : "a retrouvé"} le contact GHL de ${leadLabel(lead)}${previous ? " (l'ancien n'existait plus dans GHL)" : ""}`,
       details: { previous, contactId, created },
+    });
+  },
+});
+
+export const markPromotionMailSent = internalMutation({
+  args: { leadId: v.id("leads"), subject: v.string() },
+  handler: async (ctx, { leadId, subject }) => {
+    const lead = await ctx.db.get(leadId);
+    if (!lead) return;
+    await ctx.db.patch(leadId, { promotionMailSentAt: Date.now() });
+    await logActivity(ctx, {
+      action: "lead.promotion.mail_sent", entityType: "lead", entityId: leadId, leadId,
+      subject: leadLabel(lead),
+      summary: `a envoyé le mail « ${subject} » à ${leadLabel(lead)}`,
+      details: { subject },
     });
   },
 });
@@ -756,6 +777,7 @@ export const confirmOfficeSlot = action({
   handler: async (ctx, { leadId, day, hour, notes }): Promise<{ ghl: "ok"; created: boolean }> => {
     const info: {
       externalId: string | null; name: string; promoName: string; workflowPending: boolean; pendingNote: string | null;
+      mail: { subject: string; html: string } | null;
       sync: NonNullable<Doc<"promotions">["ghlSlotSync"]>;
       contact: { firstName?: string; lastName?: string; email?: string; phone?: string; addressLine?: string; city?: string; postalCode?: string };
     } =
@@ -823,6 +845,14 @@ export const confirmOfficeSlot = action({
             contactId: info.externalId, name: `${info.name} · ${info.promoName}`, status: "open",
           },
         });
+      }
+      // Présence confirmée : mail « prix par écrit » au prospect (une fois).
+      if (info.mail) {
+        await ghlRequest("/conversations/messages", {
+          method: "POST", version: "2021-04-15",
+          body: { type: "Email", contactId: info.externalId, subject: info.mail.subject, html: info.mail.html },
+        });
+        await ctx.runMutation(internal.promotions.markPromotionMailSent, { leadId, subject: info.mail.subject });
       }
       // Premier créneau : on lance l'automatisation GHL « créneau réservé »
       // APRÈS l'écriture des champs (elle peut s'en servir dans ses messages).

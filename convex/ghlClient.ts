@@ -108,12 +108,12 @@ export function requireGhlLocationId(): string {
 
 export async function ghlRequest(
   path: string,
-  opts: { method?: string; query?: Record<string, string | number | undefined>; body?: unknown } = {},
+  opts: { method?: string; query?: Record<string, string | number | undefined>; body?: unknown; version?: string } = {},
 ): Promise<unknown> {
   const token = ghlToken();
   if (!token) throw new Error("GHL_PRIVATE_INTEGRATION_TOKEN manquant dans l'environnement Convex.");
   const baseUrl = process.env.GHL_API_BASE_URL || "https://services.leadconnectorhq.com";
-  const version = process.env.GHL_API_VERSION || "2021-07-28";
+  const version = opts.version || process.env.GHL_API_VERSION || "2021-07-28";
   const url = new URL(`${baseUrl}${path.startsWith("/") ? path : `/${path}`}`);
   for (const [key, value] of Object.entries(opts.query ?? {})) {
     if (value !== undefined && value !== null && value !== "") url.searchParams.set(key, String(value));

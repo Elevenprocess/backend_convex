@@ -1480,7 +1480,7 @@ function NotesTab({
                   active={setterStatus === 'qualifie' && rdvMode === 'bureau'}
                   icon="map-pin"
                   title="Qualifié – RDV au bureau"
-                  text={`${officePromo.name} · vendredi, samedi ou dimanche au bureau`}
+                  text={`${officePromo.name} · du jeudi au dimanche au bureau`}
                   onClick={() => { setSetterStatus('qualifie'); setRdvMode('bureau'); setResult('joint') }}
                 />
               )}
