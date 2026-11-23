@@ -651,6 +651,8 @@ export const setOfficeSlotByStaff = internalMutation({
     }
     const name = [lead.firstName, lead.lastName].filter(Boolean).join(" ").trim() || lead.phone || "Prospect";
     const workflowPending = firstSlot || lead.promotionSlotWorkflow === "pending";
+    // Tant que GHL n'a pas confirmé, la fiche montre « Renvoyer à GHL ».
+    await ctx.db.patch(leadId, { promotionGhlSync: { status: "pending", at: now } });
     // Id contact GHL réel : ghlContactId (leads migrés, dont externalId = uuid de
     // l'ancienne base) sinon externalId (leads créés par les webhooks GHL).
     return { userId: user._id, externalId: lead.ghlContactId ?? lead.externalId ?? null, name, promoName: promo.name, sync: promo.ghlSlotSync, workflowPending };
@@ -668,6 +670,9 @@ export const logOfficeSlotGhl = internalMutation({
   args: { leadId: v.id("leads"), ok: v.boolean(), created: v.boolean(), error: v.optional(v.string()), workflow: v.optional(v.boolean()) },
   handler: async (ctx, { leadId, ok, created, error, workflow }) => {
     const lead = await ctx.db.get(leadId);
+    await ctx.db.patch(leadId, {
+      promotionGhlSync: ok ? { status: "ok", at: Date.now() } : { status: "failed", at: Date.now(), ...(error ? { error } : {}) },
+    });
     await logActivity(ctx, {
       action: ok ? "lead.promotion.ghl_confirmed" : "lead.promotion.ghl_failed", entityType: "lead", entityId: leadId, leadId,
       subject: leadLabel(lead),
@@ -741,5 +746,32 @@ export const confirmOfficeSlot = action({
       await ctx.runMutation(internal.promotions.logOfficeSlotGhl, { leadId, ok: false, created: false, error: msg.slice(0, 300) });
       throw new Error(`Créneau enregistré dans Velora, mais l'envoi à GHL a échoué : ${msg}`);
     }
+  },
+});
+
+/**
+ * Rattrapage ponctuel (23/11) : leads dont le dernier envoi GHL du RDV bureau
+ * a échoué AVANT que l'état soit gardé sur la fiche → promotionGhlSync failed.
+ */
+export const backfillGhlSyncFromLogs = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("activityLog").order("desc").take(5000);
+    const seen = new Set<string>();
+    let failed = 0;
+    for (const r of rows) {
+      if (!r.leadId || (r.action !== "lead.promotion.ghl_failed" && r.action !== "lead.promotion.ghl_confirmed")) continue;
+      if (seen.has(r.leadId)) continue;
+      seen.add(r.leadId);
+      const lead = await ctx.db.get(r.leadId);
+      if (!lead || lead.promotionGhlSync !== undefined) continue;
+      if (r.action === "lead.promotion.ghl_failed") {
+        await ctx.db.patch(r.leadId, { promotionGhlSync: { status: "failed", at: r.at } });
+        failed++;
+      } else {
+        await ctx.db.patch(r.leadId, { promotionGhlSync: { status: "ok", at: r.at } });
+      }
+    }
+    return { leads: seen.size, failed };
   },
 });

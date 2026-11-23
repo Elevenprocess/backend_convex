@@ -135,6 +135,13 @@ export default defineSchema({
     // Automatisation « créneau réservé » à lancer (pending) ou lancée (done)
     // après un premier créneau donné par un setter (promotions.confirmOfficeSlot).
     promotionSlotWorkflow: v.optional(v.union(v.literal("pending"), v.literal("done"))),
+    // Envoi à GHL du RDV au bureau (champs créneau + « Présence confirmée ») :
+    // pending/failed = bouton « Renvoyer à GHL » sur la fiche ; ok = transmis.
+    promotionGhlSync: v.optional(v.object({
+      status: v.union(v.literal("pending"), v.literal("ok"), v.literal("failed")),
+      at: v.number(),
+      error: v.optional(v.string()),
+    })),
     // Renvoi par les commerciaux (étape GHL « (BIS) Retour aux Setters 🔙 ») :
     // le lead repasse en relance court terme (pas_de_reponse) ; on garde d'où
     // il vient (étape/statut GHL précédents) pour l'historique côté setters.

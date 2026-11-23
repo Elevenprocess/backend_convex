@@ -112,6 +112,8 @@ export type LeadResponse = {
   promotionSlotDay?: string | null
   promotionSlotHour?: number | null
   promotionTicket?: string | null
+  // Envoi à GHL du RDV au bureau (champs créneau + « Présence confirmée »).
+  promotionGhlSync?: { status: 'pending' | 'ok' | 'failed'; at: string; error: string | null } | null
   // Lead renvoyé aux setters par les commerciaux depuis GHL (étape « (BIS)
   // Retour aux Setters ») : date ISO + étape/statut d'où il vient.
   retourSetters?: { at: string; fromStage: string | null; fromStatus: LeadStatus | null } | null
