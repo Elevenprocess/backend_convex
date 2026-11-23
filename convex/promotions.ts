@@ -567,11 +567,14 @@ export const setSlotBookingUrl = internalMutation({
  * lead déjà remis à zéro. `npx convex run promotions:blankSlateExisting '{"promotionId":"…","dryRun":true}'`
  */
 export const blankSlateExisting = internalMutation({
-  args: { promotionId: v.id("promotions"), dryRun: v.boolean() },
-  handler: async (ctx, { promotionId, dryRun }) => {
+  // statuses : ne traiter que ces statuts (ex. ["qualifie"], Mario 23/11).
+  args: { promotionId: v.id("promotions"), dryRun: v.boolean(), statuses: v.optional(v.array(v.string())) },
+  handler: async (ctx, { promotionId, dryRun, statuses }) => {
     const promo = await ctx.db.get(promotionId);
     if (!promo) throw new Error("Promotion introuvable.");
-    const leads = await ctx.db.query("leads").withIndex("by_promotion", (q) => q.eq("promotionId", promotionId)).collect();
+    const leads = (await ctx.db.query("leads").withIndex("by_promotion", (q) => q.eq("promotionId", promotionId)).collect())
+      .filter((l) => !statuses || statuses.includes(l.status));
+    const names: string[] = [];
     const byStatus: Record<string, number> = {};
     let reset = 0, workedInPromo = 0, kept = 0;
     for (const lead of leads) {
@@ -587,6 +590,7 @@ export const blankSlateExisting = internalMutation({
         const keep = ["signature_en_cours", "signe"].includes(lead.status);
         if (keep) { kept++; continue; }
         byStatus[lead.status] = (byStatus[lead.status] ?? 0) + 1;
+        names.push(leadLabel(lead));
         reset++;
         continue;
       }
@@ -594,9 +598,10 @@ export const blankSlateExisting = internalMutation({
       if (Object.keys(patch).length === 0) { kept++; continue; }
       await ctx.db.patch(lead._id, patch);
       byStatus[lead.status] = (byStatus[lead.status] ?? 0) + 1;
+      names.push(leadLabel(lead));
       reset++;
     }
-    return { promo: promo.name, total: leads.length, reset, byStatus, workedInPromo, kept, dryRun };
+    return { promo: promo.name, total: leads.length, reset, byStatus, workedInPromo, kept, dryRun, names };
   },
 });
 
