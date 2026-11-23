@@ -9,6 +9,12 @@ const SOURCES: { key: PromotionSourceFilter; label: string }[] = [
   { key: 'statut', label: 'Anciens prospects' },
 ]
 
+const COLLAPSED_KEY = 'ecoi.promo-banner.collapsed'
+
+function readCollapsed(): boolean {
+  try { return window.localStorage.getItem(COLLAPSED_KEY) === '1' } catch { return false }
+}
+
 export function PromotionBanner({ promo, source, onSource, showSourceFilter = true }: {
   promo: ActivePromotion
   source: PromotionSourceFilter
@@ -16,6 +22,24 @@ export function PromotionBanner({ promo, source, onSource, showSourceFilter = tr
   showSourceFilter?: boolean
 }) {
   const [showPitch, setShowPitch] = useState(false)
+  const [collapsed, setCollapsedState] = useState(readCollapsed)
+  const setCollapsed = (v: boolean) => {
+    setCollapsedState(v)
+    try { window.localStorage.setItem(COLLAPSED_KEY, v ? '1' : '0') } catch { /* stockage indisponible */ }
+  }
+
+  if (collapsed) {
+    const current = SOURCES.find((s) => s.key === source)
+    return (
+      <div className="mx-4 sm:mx-8 mt-4 inline-flex items-center gap-2 rounded-full border border-or/30 bg-or-tint px-3 py-1.5 text-xs">
+        <span className="font-bold uppercase tracking-widest text-[10px] text-or-dark">Promotion</span>
+        <span className="font-black text-text">{promo.name}</span>
+        {showSourceFilter && source !== 'all' && current && <span className="text-muted">· {current.label}</span>}
+        <button type="button" onClick={() => setCollapsed(false)} className="font-semibold text-or hover:underline">Afficher</button>
+      </div>
+    )
+  }
+
   return (
     <div className="mx-4 sm:mx-8 mt-4 w-auto lg:w-1/2 lg:max-w-[640px] rounded-[18px] border border-or/30 bg-or-tint p-4 space-y-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -24,8 +48,8 @@ export function PromotionBanner({ promo, source, onSource, showSourceFilter = tr
           <div className="font-black text-lg text-text">{promo.name}</div>
           <div className="text-xs text-muted">{formatPromotionRange(promo.startAt, promo.endAt)}</div>
         </div>
-        {showSourceFilter && <div className="flex gap-1">
-          {SOURCES.map((s) => (
+        <div className="flex flex-wrap items-center gap-1">
+          {showSourceFilter && SOURCES.map((s) => (
             <button
               key={s.key}
               type="button"
@@ -35,12 +59,11 @@ export function PromotionBanner({ promo, source, onSource, showSourceFilter = tr
               {s.label}
             </button>
           ))}
-        </div>}
+          <button type="button" onClick={() => setCollapsed(true)} className="ml-1 text-xs font-semibold text-or hover:underline">
+            Masquer
+          </button>
+        </div>
       </div>
-      {promo.offer && <p className="text-sm font-semibold text-text">{promo.offer}</p>}
-      {promo.officeSlots && (
-        <p className="text-xs text-or-dark">RDV au bureau possibles du jeudi au samedi de 8 h à 18 h, le dimanche de 8 h à 13 h{promo.officeAddress ? ` — ${promo.officeAddress}` : ''}.</p>
-      )}
       {promo.pitch && (
         <div>
           <button type="button" onClick={() => setShowPitch((v) => !v)} className="text-xs font-semibold text-or hover:underline">
