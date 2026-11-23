@@ -1,4 +1,5 @@
 // Onglets de promo de la page Leads (admin et setter).
+import { useState } from 'react'
 import { formatPromotionRange, promotionLeads, type ActivePromotion } from '../../lib/promotions'
 
 type PromoLeadRef = { promotionId?: string | null; promotionSource?: 'tag' | 'statut' | null }
@@ -50,3 +51,23 @@ export function SetterPromotionPicker({ promos, leads, onOpen }: {
   )
 }
 
+
+/** Copie le lien de l'onglet ouvert (adresse de la page, onglet compris). */
+export function CopyPromoLinkButton() {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      window.prompt('Lien de cet onglet :', window.location.href)
+    }
+  }
+  return (
+    <button type="button" onClick={copy} title="Copier le lien de cet onglet"
+      className="pill-tab ml-auto bg-white border border-line text-muted hover:text-text">
+      {copied ? 'Lien copié ✓' : '🔗 Copier le lien'}
+    </button>
+  )
+}

@@ -12,12 +12,13 @@ import { convexAuthEnabled } from '../../lib/convex'
 import { useLeadSidebar } from '../../lib/leadSidebar'
 import { emitLeadDeselect, emitLeadSelect, useLeadLocks, type LeadLockInfo } from '../../lib/realtime'
 import { normalizeSearchText, phoneMatches, phoneSearchVariants } from '../../lib/searchText'
-import { useActivePromotions, useActivePromotionsState } from '../../lib/promotionsApi'
+import { useActivePromotions, useActivePromotionsState, usePromotionsList } from '../../lib/promotionsApi'
 import { leadKpis, activePromotionIds, activePromotionLeads, promotionLeads, pruneSelectedIds, withoutActivePromotionLeads, type ActivePromotion } from '../../lib/promotions'
 import { PromotionsAdmin } from '../../components/promotions/PromotionsAdmin'
 import { PromotionSlot } from '../../components/promotions/PromotionSlot'
 import { PromotionBanner, type PromotionSourceFilter } from '../../components/promotions/PromotionBanner'
-import { ClosableTab, SetterPromotionPicker } from '../../components/promotions/PromoTabs'
+import { ClosableTab, CopyPromoLinkButton, SetterPromotionPicker } from '../../components/promotions/PromoTabs'
+import { usePromoTabsUrl } from '../../lib/promoTabsUrl'
 import { DossierCard } from '../../components/suivi/DossierCard'
 import { ManualLeadModal } from '../../components/leads/ManualLeadModal'
 import { buildDossiers, readWorkflowState } from '../../lib/suivi'
@@ -271,8 +272,9 @@ function LeadsSetter() {
   const [promoSource, setPromoSource] = useState<PromotionSourceFilter>('all')
   // Onglets façon navigateur (comme l'admin) : « Leads », « Promotion » (choix
   // de la promo), puis « Leads de « X » » qui reste ouvert jusqu'à la croix.
-  const [setterView, setSetterView] = useState<'leads' | 'promotions' | 'promoLeads'>('leads')
-  const [promoOpen, setPromoOpen] = useState<{ id: string; name: string } | null>(null)
+  // Onglet + promo ouverte gardés dans l'adresse (survivent à l'actualisation).
+  const { view: setterView, promoId: promoOpenId, setTabs: setPromoTabs, setView: setSetterView } = usePromoTabsUrl()
+  const promoOpen = useMemo(() => (promoOpenId ? { id: promoOpenId } : null), [promoOpenId])
   const [promoFilters, setPromoFilters] = useState<LeadListFilters>(DEFAULT_LEAD_FILTERS)
   const openPromo = promoOpen ? activePromos.find((p) => p._id === promoOpen.id) ?? null : null
   const promoScope = setterView === 'promoLeads' ? openPromo : null
@@ -285,16 +287,15 @@ function LeadsSetter() {
   // retombe sur la liste habituelle (on attend la réponse du serveur).
   useEffect(() => {
     if (!activePromosState) return
-    if (promoOpen && !activePromosState.some((p) => p._id === promoOpen.id)) setPromoOpen(null)
-    if (setterView !== 'leads' && activePromosState.length === 0) setSetterView('leads')
-  }, [activePromosState, promoOpen, setterView])
-  useEffect(() => {
-    if (setterView === 'promoLeads' && !promoOpen) setSetterView(hasPromo ? 'promotions' : 'leads')
-  }, [setterView, promoOpen, hasPromo])
+    if (activePromosState.length === 0) {
+      if (setterView !== 'leads' || promoOpen) setPromoTabs({ view: 'leads', promoId: null }, { replace: true })
+    } else if (promoOpen && !activePromosState.some((p) => p._id === promoOpen.id)) {
+      setPromoTabs({ promoId: null }, { replace: true })
+    }
+  }, [activePromosState, promoOpen, setterView, setPromoTabs])
   const openPromoLeads = (p: ActivePromotion) => {
     if (promoOpen?.id !== p._id) { setPromoFilters(DEFAULT_LEAD_FILTERS); setPromoSource('all') }
-    setPromoOpen({ id: p._id, name: p.name })
-    setSetterView('promoLeads')
+    setPromoTabs({ view: 'promoLeads', promoId: p._id })
   }
 
   // Leads "à rappeler" dont l'heure de rappel tombe dans les 3 prochaines minutes
@@ -421,9 +422,10 @@ function LeadsSetter() {
               label={`Leads de « ${openPromo.name} »`}
               active={setterView === 'promoLeads'}
               onSelect={() => setSetterView('promoLeads')}
-              onClose={() => { setPromoOpen(null); if (setterView === 'promoLeads') setSetterView('promotions') }}
+              onClose={() => setPromoTabs({ promoId: null, view: setterView === 'promoLeads' ? 'promotions' : setterView })}
             />
           )}
+          {setterView !== 'leads' && <CopyPromoLinkButton />}
         </div>
       )}
       <div className="flex flex-grow overflow-hidden">
@@ -650,8 +652,20 @@ function LeadsAdmin() {
   const allLeads = leadsData ?? EMPTY_LEADS
   // Onglets façon navigateur : « Leads », « Promotion », puis un onglet par promo
   // ouverte via « Voir les leads » (reste ouvert jusqu'à la croix).
-  const [adminView, setAdminView] = useState<'leads' | 'promotions' | 'promoLeads'>('leads')
-  const [promoLeadsOf, setPromoLeadsOf] = useState<{ id: string; name: string } | null>(null)
+  // Onglet + promo ouverte gardés dans l'adresse (survivent à l'actualisation).
+  const { view: adminView, promoId: promoLeadsId, setTabs: setPromoTabs, setView: setAdminView } = usePromoTabsUrl()
+  const promosList = usePromotionsList()
+  const promoLeadsOf = useMemo(() => {
+    if (!promoLeadsId) return null
+    const p = promosList?.find((x) => x._id === promoLeadsId)
+    return { id: promoLeadsId, name: p?.name ?? 'la promotion' }
+  }, [promoLeadsId, promosList])
+  // Promo supprimée (lien ancien) : on ferme son onglet une fois la liste reçue.
+  useEffect(() => {
+    if (promosList && promoLeadsId && !promosList.some((x) => x._id === promoLeadsId)) {
+      setPromoTabs({ promoId: null }, { replace: true })
+    }
+  }, [promosList, promoLeadsId, setPromoTabs])
   const promoScope = adminView === 'promoLeads' ? promoLeadsOf : null
   const activePromos = useActivePromotions()
   const activePromoIds = useMemo(() => activePromotionIds(activePromos), [activePromos])
@@ -822,15 +836,16 @@ function LeadsAdmin() {
             label={`Leads de « ${promoLeadsOf.name} »`}
             active={adminView === 'promoLeads'}
             onSelect={() => setAdminView('promoLeads')}
-            onClose={() => { setPromoLeadsOf(null); if (adminView === 'promoLeads') setAdminView('promotions') }}
+            onClose={() => setPromoTabs({ promoId: null, view: adminView === 'promoLeads' ? 'promotions' : adminView })}
           />
         )}
+        {adminView !== 'leads' && <CopyPromoLinkButton />}
       </div>
       {adminView === 'promotions' && (
         <div className="px-4 sm:px-8 pt-4">{kpiCards}</div>
       )}
       {adminView === 'promotions' && (
-        <PromotionsAdmin leads={allLeads} onOpenLeads={(p) => { setPromoLeadsOf({ id: p._id, name: p.name }); setAdminView('promoLeads') }} />
+        <PromotionsAdmin leads={allLeads} onOpenLeads={(p) => setPromoTabs({ view: 'promoLeads', promoId: p._id })} />
       )}
       {adminView !== 'promotions' && (
       <div className="flex flex-grow overflow-hidden">
