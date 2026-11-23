@@ -52,7 +52,11 @@ async function leadHasPlannedRdv(ctx: MutationCtx, leadId: Id<"leads">): Promise
     .query("rdv")
     .withIndex("by_lead", (q) => q.eq("leadId", leadId))
     .collect();
-  return rows.some((r) => r.deletedAt === undefined && r.status === "planifie");
+  // Seul un RDV À VENIR protège le statut (même règle que la page blanche des
+  // promos) : un vieux RDV jamais débriefé, resté « planifié » dans le passé,
+  // ne doit pas figer un lead remis en « nouveau » (cas Cuvelier 23/11).
+  const now = Date.now();
+  return rows.some((r) => r.deletedAt === undefined && r.status === "planifie" && (r.scheduledAt ?? Infinity) > now);
 }
 
 async function leadHasDownstreamProject(ctx: MutationCtx, leadId: Id<"leads">): Promise<boolean> {

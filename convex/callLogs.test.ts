@@ -184,3 +184,31 @@ test("logCall() non_joint sur un lead « à rappeler » après RDV reporté sans
   await asUser(t, setterId).mutation(api.callLogs.logCall, { leadId, result: "non_joint" });
   expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("pas_de_reponse");
 });
+
+test("logCall() : un vieux RDV resté « planifié » dans le passé ne fige plus le statut (lead de promo remis en nouveau)", async () => {
+  const t = makeT();
+  const setterId = await insertUser(t, { role: "setter" });
+  const commercialId = await insertUser(t, { role: "commercial", email: "com3@ecoi.fr" });
+  const leadId = await asUser(t, setterId).mutation(api.leads.create, { firstName: "Old" });
+  await t.run(async (ctx) => {
+    await ctx.db.insert("rdv", { leadId, commercialId, scheduledAt: Date.now() - 3 * 86_400_000, locationType: "domicile", status: "planifie" });
+    await ctx.db.patch(leadId, { status: "nouveau" });
+  });
+  for (const [result, status] of [["non_joint", "pas_de_reponse"], ["messagerie", "pas_de_reponse"], ["refus", "pas_qualifie"]] as const) {
+    await asUser(t, setterId).mutation(api.callLogs.logCall, { leadId, result });
+    expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe(status);
+  }
+});
+
+test("logCall() : un RDV à venir protège toujours le statut", async () => {
+  const t = makeT();
+  const setterId = await insertUser(t, { role: "setter" });
+  const commercialId = await insertUser(t, { role: "commercial", email: "com4@ecoi.fr" });
+  const leadId = await asUser(t, setterId).mutation(api.leads.create, { firstName: "Fut" });
+  await t.run(async (ctx) => {
+    await ctx.db.insert("rdv", { leadId, commercialId, scheduledAt: Date.now() + 3 * 86_400_000, locationType: "domicile", status: "planifie" });
+    await ctx.db.patch(leadId, { status: "a_rappeler" });
+  });
+  await asUser(t, setterId).mutation(api.callLogs.logCall, { leadId, result: "non_joint" });
+  expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("a_rappeler");
+});
