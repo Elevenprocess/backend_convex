@@ -109,7 +109,9 @@ export function OfficeSlotPicker({ days, hoursOf, selectedDay, selectedHour, onD
                             ? 'border-or bg-or-tint ring-2 ring-or'
                             : full && !fromSite
                               ? 'cursor-not-allowed border-line-soft bg-cream/60 opacity-60'
-                              : 'border-line bg-white/80 hover:border-or/50 hover:bg-white'
+                              : few
+                                ? 'border-cuivre/40 bg-cuivre-tint hover:border-cuivre'
+                                : 'border-line bg-white/80 hover:border-or/50 hover:bg-white'
                         }`}
                       >
                         <span className={`text-sm font-bold ${full && !fromSite ? 'text-faint line-through' : 'text-text'}`}>
