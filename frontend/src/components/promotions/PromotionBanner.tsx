@@ -5,8 +5,8 @@ export type PromotionSourceFilter = 'all' | 'tag' | 'statut'
 
 const SOURCES: { key: PromotionSourceFilter; label: string }[] = [
   { key: 'all', label: 'Tous' },
-  { key: 'tag', label: 'Nouveaux' },
-  { key: 'statut', label: 'Anciens' },
+  { key: 'tag', label: 'Venus pour la promo' },
+  { key: 'statut', label: 'Anciens prospects' },
 ]
 
 export function PromotionBanner({ promo, source, onSource, showSourceFilter = true }: {

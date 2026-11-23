@@ -15,11 +15,11 @@ describe('PromotionBanner', () => {
     expect(screen.queryByText('Dire bonjour')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /argumentaire/i }))
     expect(screen.getByText('Dire bonjour')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Anciens' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Anciens prospects' }))
     expect(onSource).toHaveBeenCalledWith('statut')
   })
   it('showSourceFilter=false masque le sélecteur', () => {
     render(<PromotionBanner promo={promo} source="all" onSource={vi.fn()} showSourceFilter={false} />)
-    expect(screen.queryByRole('button', { name: 'Anciens' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Anciens prospects' })).not.toBeInTheDocument()
   })
 })
