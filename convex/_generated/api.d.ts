@@ -79,6 +79,7 @@ import type * as model_ensureProject from "../model/ensureProject.js";
 import type * as model_enums from "../model/enums.js";
 import type * as model_funnelBuilders from "../model/funnelBuilders.js";
 import type * as model_funnelMath from "../model/funnelMath.js";
+import type * as model_funnelPlaces from "../model/funnelPlaces.js";
 import type * as model_ghl_calendarNormalize from "../model/ghl/calendarNormalize.js";
 import type * as model_ghl_calendarSync from "../model/ghl/calendarSync.js";
 import type * as model_ghl_calendarTypes from "../model/ghl/calendarTypes.js";
@@ -207,6 +208,7 @@ declare const fullApi: ApiFromModules<{
   "model/enums": typeof model_enums;
   "model/funnelBuilders": typeof model_funnelBuilders;
   "model/funnelMath": typeof model_funnelMath;
+  "model/funnelPlaces": typeof model_funnelPlaces;
   "model/ghl/calendarNormalize": typeof model_ghl_calendarNormalize;
   "model/ghl/calendarSync": typeof model_ghl_calendarSync;
   "model/ghl/calendarTypes": typeof model_ghl_calendarTypes;
