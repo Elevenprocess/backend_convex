@@ -137,6 +137,9 @@ export default defineSchema({
     promotionSlotWorkflow: v.optional(v.union(v.literal("pending"), v.literal("done"))),
     // Envoi à GHL du RDV au bureau (champs créneau + « Présence confirmée ») :
     // pending/failed = bouton « Renvoyer à GHL » sur la fiche ; ok = transmis.
+    // Remarque du setter (note contact GHL) à envoyer avec le RDV au bureau ;
+    // effacée une fois la note créée dans GHL (pas de doublon au renvoi).
+    promotionGhlNote: v.optional(v.string()),
     promotionGhlSync: v.optional(v.object({
       status: v.union(v.literal("pending"), v.literal("ok"), v.literal("failed")),
       at: v.number(),

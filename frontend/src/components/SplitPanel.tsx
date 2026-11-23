@@ -1245,7 +1245,7 @@ function NotesTab({
         setStep('done')
         onSaved?.()
         try {
-          await confirmOfficeSlot({ leadId: lead.id, day, hour })
+          await confirmOfficeSlot({ leadId: lead.id, day, hour, notes: rdvTransferNote })
           setGhlRetry(null)
           setSuccess(`Qualifié : RDV au bureau ${ghlSlotTexts(day, hour).creneau}. Envoyé à GHL (Présence confirmée).`)
         } catch (e) {

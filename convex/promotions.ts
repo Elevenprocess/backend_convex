@@ -9,6 +9,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { requireLeadWriteRole, requireRole, requireUser } from "./model/access";
 import { ghlRequest, isGhlConfigured, requireGhlLocationId } from "./ghlClient";
 import { ghlSlotTexts, isOfficeSlot } from "./model/promotionSlots";
+import { buildGhlProspectRemark } from "./model/ghl/prospectRemark";
 import { leadLabel, logActivity, logSystemActivity } from "./model/activity";
 import { applyTagsToLead, blankSlateForPromotion } from "./model/promotionAttach";
 import { findLeadByGhlContact } from "./webhooks";
@@ -624,8 +625,8 @@ export const setGhlSlotSync = internalMutation({
  * créneau est valide, puis le range sur la fiche. Renvoie ce qu'il faut pour GHL.
  */
 export const setOfficeSlotByStaff = internalMutation({
-  args: { leadId: v.id("leads"), day: v.string(), hour: v.number(), now: v.number() },
-  handler: async (ctx, { leadId, day, hour, now }) => {
+  args: { leadId: v.id("leads"), day: v.string(), hour: v.number(), now: v.number(), notes: v.optional(v.string()) },
+  handler: async (ctx, { leadId, day, hour, now, notes }) => {
     const user = await requireLeadWriteRole(ctx);
     const lead = await ctx.db.get(leadId);
     if (!lead || lead.deletedAt !== undefined) throw new Error("Prospect introuvable.");
@@ -651,8 +652,24 @@ export const setOfficeSlotByStaff = internalMutation({
     }
     const name = [lead.firstName, lead.lastName].filter(Boolean).join(" ").trim() || lead.phone || "Prospect";
     const workflowPending = firstSlot || lead.promotionSlotWorkflow === "pending";
+    // Remarques du setter → note contact GHL, comme pour un RDV à domicile.
+    // Gardée sur la fiche jusqu'à sa création dans GHL (le renvoi la reprend).
+    const [y, m, d] = day.split("-").map(Number);
+    const newNote = notes !== undefined
+      ? buildGhlProspectRemark({
+        sector: "Bureau", firstName: lead.firstName, lastName: lead.lastName,
+        addressLine: lead.addressLine, city: lead.city, postalCode: lead.postalCode,
+        scheduledAt: Date.UTC(y, m - 1, d, hour) - 4 * 3_600_000,
+        // En-têtes « RDV BUREAU… » / « RDV ECOI » de la note front : déjà dans l'en-tête GHL.
+        notes: notes.split("\n").filter((l) => !/^RDV (BUREAU|ECOI)\b/.test(l.trim())).join("\n"),
+      })
+      : undefined;
+    const pendingNote = newNote ?? lead.promotionGhlNote ?? null;
     // Tant que GHL n'a pas confirmé, la fiche montre « Renvoyer à GHL ».
-    await ctx.db.patch(leadId, { promotionGhlSync: { status: "pending", at: now } });
+    await ctx.db.patch(leadId, {
+      promotionGhlSync: { status: "pending", at: now },
+      ...(newNote ? { promotionGhlNote: newNote } : {}),
+    });
     // Id contact GHL réel : ghlContactId (leads migrés, dont externalId = uuid de
     // l'ancienne base) sinon externalId (leads créés par les webhooks GHL).
     // Id contact GHL plausible (20 caractères) : un uuid de l'ancienne base n'en est pas un.
@@ -661,7 +678,7 @@ export const setOfficeSlotByStaff = internalMutation({
       firstName: lead.firstName ?? undefined, lastName: lead.lastName ?? undefined,
       email: lead.email ?? undefined, phone: lead.phone ?? undefined,
     };
-    return { userId: user._id, externalId: contactId, contact, name, promoName: promo.name, sync: promo.ghlSlotSync, workflowPending };
+    return { userId: user._id, externalId: contactId, contact, name, promoName: promo.name, sync: promo.ghlSlotSync, workflowPending, pendingNote };
   },
 });
 
@@ -678,6 +695,13 @@ export const linkGhlContact = internalMutation({
       summary: `${created ? "a recréé" : "a retrouvé"} le contact GHL de ${leadLabel(lead)}${previous ? " (l'ancien n'existait plus dans GHL)" : ""}`,
       details: { previous, contactId, created },
     });
+  },
+});
+
+export const markGhlNoteSent = internalMutation({
+  args: { leadId: v.id("leads") },
+  handler: async (ctx, { leadId }) => {
+    await ctx.db.patch(leadId, { promotionGhlNote: undefined });
   },
 });
 
@@ -726,14 +750,14 @@ async function ghlContactExists(contactId: string): Promise<boolean> {
  * Rejouable sans risque (bouton « Réessayer l'envoi à GHL »).
  */
 export const confirmOfficeSlot = action({
-  args: { leadId: v.id("leads"), day: v.string(), hour: v.number() },
-  handler: async (ctx, { leadId, day, hour }): Promise<{ ghl: "ok"; created: boolean }> => {
+  args: { leadId: v.id("leads"), day: v.string(), hour: v.number(), notes: v.optional(v.string()) },
+  handler: async (ctx, { leadId, day, hour, notes }): Promise<{ ghl: "ok"; created: boolean }> => {
     const info: {
-      externalId: string | null; name: string; promoName: string; workflowPending: boolean;
+      externalId: string | null; name: string; promoName: string; workflowPending: boolean; pendingNote: string | null;
       sync: NonNullable<Doc<"promotions">["ghlSlotSync"]>;
       contact: { firstName?: string; lastName?: string; email?: string; phone?: string };
     } =
-      await ctx.runMutation(internal.promotions.setOfficeSlotByStaff, { leadId, day, hour, now: Date.now() });
+      await ctx.runMutation(internal.promotions.setOfficeSlotByStaff, { leadId, day, hour, now: Date.now(), ...(notes !== undefined ? { notes } : {}) });
     try {
       if (!isGhlConfigured()) throw new Error("GHL n'est pas configuré.");
       const locationId = requireGhlLocationId();
@@ -765,6 +789,12 @@ export const confirmOfficeSlot = action({
           { id: s.startFieldId, value: t.debut },
         ] },
       });
+      if (info.pendingNote) {
+        await ghlRequest(`/contacts/${encodeURIComponent(info.externalId)}/notes`, {
+          method: "POST", body: { body: info.pendingNote },
+        });
+        await ctx.runMutation(internal.promotions.markGhlNoteSent, { leadId });
+      }
       const found = (await ghlRequest("/opportunities/search", {
         query: { location_id: locationId, contact_id: info.externalId, pipeline_id: s.pipelineId, limit: 20 },
       })) as { opportunities?: GhlOpp[] } | null;

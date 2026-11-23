@@ -90,4 +90,20 @@ describe("RDV au bureau choisi par le setter", () => {
     await t.mutation(internal.promotions.linkGhlContact, { leadId, contactId: "NEWaaaaaaaaaaaaaaaaa", previous: "c1aaaaaaaaaaaaaaaaaa", created: true });
     expect((await t.run((ctx) => ctx.db.get(leadId)))?.ghlContactId).toBe("NEWaaaaaaaaaaaaaaaaa");
   });
+
+  it("remarques du setter : note GHL préparée (commentaire + éligibilité + créneau), gardée pour le renvoi", async () => {
+    const { t, setter, leadId } = await setup();
+    const as = asUser(t, setter);
+    const notes = "RDV BUREAU\nRDV ECOI\nCommentaire setter :\nVient avec sa femme\nÉligibilité :\nPropriétaire : oui";
+    const r = await as.mutation(internal.promotions.setOfficeSlotByStaff, { leadId, day: "2026-11-27", hour: 12, now: NOW, notes });
+    expect(r.pendingNote).toContain("Vient avec sa femme");
+    expect(r.pendingNote).toContain("Propriétaire");
+    expect(r.pendingNote).toContain("Secteur Bureau");
+    // Renvoi sans remarques : la note en attente est reprise.
+    const again = await as.mutation(internal.promotions.setOfficeSlotByStaff, { leadId, day: "2026-11-27", hour: 12, now: NOW });
+    expect(again.pendingNote).toBe(r.pendingNote);
+    // Une fois créée dans GHL : plus rien à renvoyer (pas de doublon).
+    await t.mutation(internal.promotions.markGhlNoteSent, { leadId });
+    expect((await as.mutation(internal.promotions.setOfficeSlotByStaff, { leadId, day: "2026-11-27", hour: 12, now: NOW })).pendingNote).toBeNull();
+  });
 });

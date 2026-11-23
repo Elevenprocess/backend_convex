@@ -918,6 +918,6 @@ export const apiTokensRevoke = makeFunctionReference<'mutation', { id: string },
 
 export const promotionsConfirmOfficeSlot = makeFunctionReference<
   'action',
-  { leadId: string; day: string; hour: number },
+  { leadId: string; day: string; hour: number; notes?: string },
   { ghl: 'ok'; created: boolean }
 >('promotions:confirmOfficeSlot')

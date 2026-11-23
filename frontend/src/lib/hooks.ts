@@ -972,7 +972,7 @@ export type CreateCallLogInput = {
 }
 
 /** RDV au bureau d'une promo : créneau → Velora + champs GHL + « Présence confirmée ». */
-export async function confirmOfficeSlot(input: { leadId: string; day: string; hour: number }): Promise<{ ghl: 'ok'; created: boolean }> {
+export async function confirmOfficeSlot(input: { leadId: string; day: string; hour: number; notes?: string }): Promise<{ ghl: 'ok'; created: boolean }> {
   if (!convexAuthEnabled || !convexClient) throw new Error('RDV au bureau disponible seulement en mode Convex.')
   return await convexClient.action(promotionsConfirmOfficeSlot, input)
 }
