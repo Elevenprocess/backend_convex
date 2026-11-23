@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
 import { Icon, type IconName } from './Icon'
 import { Spinner, LoadingBlock } from './Spinner'
 import {
@@ -17,8 +16,6 @@ import {
 } from '../lib/types'
 import { useCall, type CallState } from '../lib/call'
 import { useCallLogs, useRdvList, useStartCall, createCallLog, confirmOfficeSlot, createRdv, updateLead, updateGhlAppointment, useGhlCalendarConfig, useGhlFreeSlots, createGhlAppointment, syncLeadGhlCalendarEvents, humanizeError, type GhlCalendarEvent } from '../lib/hooks'
-import { useAuth } from '../lib/auth'
-import { leadDetailPath } from '../lib/leadPaths'
 import { sectorFromCity } from '../lib/sector'
 import { useActivePromotionsState } from '../lib/promotionsApi'
 import { PromotionSlot } from './promotions/PromotionSlot'
@@ -98,7 +95,6 @@ function fullAddressLines(lead: LeadResponse): string[] {
 }
 
 export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, children, onClose, onSaved, className }: SplitPanelProps) {
-  const role = useAuth((s) => s.user?.role)
   const [active, setActive] = useState(defaultTab ?? tabs[0].id)
   const callState = useCall()
   const startCall = useStartCall()
@@ -162,9 +158,6 @@ export function SplitPanel({ lead, userMap, tabs = DEFAULT_TABS, defaultTab, chi
         >
           <Icon name="phone" size={14} />
         </button>
-        <Link viewTransition to={leadDetailPath(role, lead.id)} className="text-xs font-semibold text-or hover:underline whitespace-nowrap">
-          Fiche →
-        </Link>
         {onClose && (
           <button
             onClick={onClose}
