@@ -983,6 +983,12 @@ function NotesTab({
   )
   const officePromo = officeDays.length > 0 ? leadOfficePromo : undefined
   const [ghlRetry, setGhlRetry] = useState<{ day: string; hour: number } | null>(null)
+  // Créneau déjà pris par le prospect sur le site et encore possible : il ne
+  // reste qu'à le confirmer (le setter peut quand même en choisir un autre).
+  const ownOfficeSlot = officePromo && lead.promotionSlotDay && lead.promotionSlotHour != null
+    && officeDays.includes(lead.promotionSlotDay) && officeSlotHours(lead.promotionSlotDay, officeNow).includes(lead.promotionSlotHour)
+    ? { day: lead.promotionSlotDay, hour: lead.promotionSlotHour } : null
+  const [changeOfficeSlot, setChangeOfficeSlot] = useState(false)
   const [rdvMode, setRdvMode] = useState<RdvMode>('domicile')
   // Promo archivée/terminée pendant la saisie : on repasse en domicile.
   // On attend la fin du chargement pour ne pas écraser un mode bureau restauré du brouillon.
@@ -1586,7 +1592,19 @@ function NotesTab({
             </div>
             {isBureau && officePromo?.officeAddress && <div className="text-xs text-or-dark mt-1">{officePromo.officeAddress}</div>}
           </div>
-          {isBureau ? (
+          {isBureau && ownOfficeSlot && !changeOfficeSlot ? (
+            <div className="rounded-[18px] border border-success/30 bg-success-tint p-4 space-y-3">
+              <div className="text-[10px] font-bold tracking-widest uppercase text-success">Créneau déjà choisi par le prospect</div>
+              <div className="text-base font-black text-text">{ghlSlotTexts(ownOfficeSlot.day, ownOfficeSlot.hour).creneau}</div>
+              {lead.promotionTicket && <div className="text-xs text-muted">Billet {lead.promotionTicket}</div>}
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setChangeOfficeSlot(true)} className="rounded-xl border border-line bg-white/70 py-2 text-sm font-semibold hover:bg-white">Choisir un autre créneau</button>
+                <button type="button"
+                  onClick={() => { setRdvDate(ownOfficeSlot.day); setRdvAt(`${ownOfficeSlot.day}T${String(ownOfficeSlot.hour).padStart(2, '0')}:00`); setStep('confirmation') }}
+                  className="btn-primary rounded-xl py-2 text-sm">Confirmer ce créneau</button>
+              </div>
+            </div>
+          ) : isBureau ? (
             <div>
               <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-1">Jour du RDV au bureau</div>
               <div className="flex flex-wrap gap-2">
@@ -1605,7 +1623,7 @@ function NotesTab({
           ) : (
             <DateOnlyInput label="Date du RDV commercial" value={rdvDate} onChange={(date) => { setRdvDate(date); setRdvAt('') }} />
           )}
-          {isBureau ? (
+          {isBureau && ownOfficeSlot && !changeOfficeSlot ? null : isBureau ? (
             <div>
               <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-1">Heure d’arrivée au bureau</div>
               <div className="flex flex-wrap gap-2">
@@ -1645,7 +1663,9 @@ function NotesTab({
           </>)}
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setStep(previousStepFromRdv(isBureau ? 'bureau' : 'domicile'))} className="rounded-xl border border-line bg-white/70 py-2 text-sm font-semibold hover:bg-white">Retour</button>
-            <button onClick={() => setStep('confirmation')} disabled={!rdvAt} className="btn-primary rounded-xl py-2 text-sm disabled:opacity-50">Next · formulaire lead</button>
+            {!(isBureau && ownOfficeSlot && !changeOfficeSlot) && (
+              <button onClick={() => setStep('confirmation')} disabled={!rdvAt} className="btn-primary rounded-xl py-2 text-sm disabled:opacity-50">Next · formulaire lead</button>
+            )}
           </div>
         </div>
       )}
