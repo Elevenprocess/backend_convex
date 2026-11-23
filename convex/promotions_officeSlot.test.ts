@@ -106,4 +106,15 @@ describe("RDV au bureau choisi par le setter", () => {
     await t.mutation(internal.promotions.markGhlNoteSent, { leadId });
     expect((await as.mutation(internal.promotions.setOfficeSlotByStaff, { leadId, day: "2026-11-27", hour: 12, now: NOW })).pendingNote).toBeNull();
   });
+
+  it("adresse saisie en fin de qualification : envoyée au contact GHL et écrite dans la remarque", async () => {
+    const { t, setter, leadId } = await setup();
+    await t.run((ctx) => ctx.db.patch(leadId, { addressLine: "12 rue des Lilas", city: "Saint-Paul", postalCode: "97460" }));
+    const r = await asUser(t, setter).mutation(internal.promotions.setOfficeSlotByStaff, {
+      leadId, day: "2026-11-27", hour: 12, now: NOW, notes: "Commentaire setter :\nok",
+    });
+    expect(r.contact).toMatchObject({ addressLine: "12 rue des Lilas", city: "Saint-Paul", postalCode: "97460" });
+    expect(r.pendingNote).toContain("Adresse : 12 rue des Lilas");
+    expect(r.pendingNote).toContain("97460 Saint-Paul");
+  });
 });

@@ -677,6 +677,8 @@ export const setOfficeSlotByStaff = internalMutation({
     const contact = {
       firstName: lead.firstName ?? undefined, lastName: lead.lastName ?? undefined,
       email: lead.email ?? undefined, phone: lead.phone ?? undefined,
+      addressLine: lead.addressLine?.trim() || undefined, city: lead.city?.trim() || undefined,
+      postalCode: lead.postalCode?.trim() || undefined,
     };
     return { userId: user._id, externalId: contactId, contact, name, promoName: promo.name, sync: promo.ghlSlotSync, workflowPending, pendingNote };
   },
@@ -755,7 +757,7 @@ export const confirmOfficeSlot = action({
     const info: {
       externalId: string | null; name: string; promoName: string; workflowPending: boolean; pendingNote: string | null;
       sync: NonNullable<Doc<"promotions">["ghlSlotSync"]>;
-      contact: { firstName?: string; lastName?: string; email?: string; phone?: string };
+      contact: { firstName?: string; lastName?: string; email?: string; phone?: string; addressLine?: string; city?: string; postalCode?: string };
     } =
       await ctx.runMutation(internal.promotions.setOfficeSlotByStaff, { leadId, day, hour, now: Date.now(), ...(notes !== undefined ? { notes } : {}) });
     try {
@@ -770,7 +772,10 @@ export const confirmOfficeSlot = action({
         if (!c.email && !c.phone) throw new Error("ce prospect n'a ni e-mail ni téléphone pour retrouver son contact GHL.");
         const up = (await ghlRequest("/contacts/upsert", {
           method: "POST",
-          body: { locationId, firstName: c.firstName, lastName: c.lastName, email: c.email, phone: c.phone },
+          body: {
+            locationId, firstName: c.firstName, lastName: c.lastName, email: c.email, phone: c.phone,
+            address1: c.addressLine, city: c.city, postalCode: c.postalCode,
+          },
         })) as { contact?: { id?: string }; new?: boolean } | null;
         const newId = up?.contact?.id;
         if (!newId) throw new Error("GHL n'a pas renvoyé de contact.");
@@ -780,9 +785,16 @@ export const confirmOfficeSlot = action({
       info.externalId = contactId;
       const t = ghlSlotTexts(day, hour);
       const s = info.sync;
+      // Adresse saisie par le setter à la fin de la qualification → fiche du
+      // contact GHL (jamais d'effacement : seuls les champs remplis partent).
+      const c = info.contact;
       await ghlRequest(`/contacts/${encodeURIComponent(info.externalId)}`, {
         method: "PUT",
-        body: { customFields: [
+        body: {
+          ...(c.addressLine ? { address1: c.addressLine } : {}),
+          ...(c.city ? { city: c.city } : {}),
+          ...(c.postalCode ? { postalCode: c.postalCode } : {}),
+          customFields: [
           { id: s.dayFieldId, value: t.jour },
           { id: s.hourFieldId, value: t.heure },
           { id: s.labelFieldId, value: t.creneau },
