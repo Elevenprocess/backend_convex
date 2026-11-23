@@ -15,13 +15,14 @@ import {
   type UserResponse,
 } from '../lib/types'
 import { useCall, type CallState } from '../lib/call'
-import { useCallLogs, useRdvList, createCallLog, confirmOfficeSlot, createRdv, updateLead, updateGhlAppointment, useGhlCalendarConfig, useGhlFreeSlots, createGhlAppointment, syncLeadGhlCalendarEvents, humanizeError, type GhlCalendarEvent } from '../lib/hooks'
+import { useCallLogs, useRdvList, createCallLog, confirmOfficeSlot, reserveFunnelSlot, createRdv, updateLead, updateGhlAppointment, useGhlCalendarConfig, useGhlFreeSlots, createGhlAppointment, syncLeadGhlCalendarEvents, humanizeError, type GhlCalendarEvent } from '../lib/hooks'
 import { sectorFromCity } from '../lib/sector'
 import { useActivePromotionsState } from '../lib/promotionsApi'
 import { PromotionSlot } from './promotions/PromotionSlot'
 import { GhlSlotSyncNotice } from './promotions/GhlSlotSyncNotice'
-import { formatBureauDay } from '../lib/promotions'
 import { ghlSlotTexts, officeSlotDays, officeSlotHours } from '../lib/promotionSlots'
+import { slotKey, useFunnelAvailability } from '../lib/funnelSlots'
+import { OfficeSlotPicker } from './promotions/OfficeSlotPicker'
 import { RdvLocationBadge, rdvLocationLabel } from './RdvLocationBadge'
 import { formatRdvTransferNote, nextStepAfterQualification, previousStepFromRdv, type RdvMode } from './promotions/qualification'
 
@@ -971,6 +972,8 @@ function NotesTab({
     && officeDays.includes(lead.promotionSlotDay) && officeSlotHours(lead.promotionSlotDay, officeNow).includes(lead.promotionSlotHour)
     ? { day: lead.promotionSlotDay, hour: lead.promotionSlotHour } : null
   const [changeOfficeSlot, setChangeOfficeSlot] = useState(false)
+  // Places restantes en direct du funnel d'inscription (même table que le site).
+  const funnelAvailability = useFunnelAvailability(Boolean(officePromo))
   const [rdvMode, setRdvMode] = useState<RdvMode>('domicile')
   // Promo archivée/terminée pendant la saisie : on repasse en domicile.
   // On attend la fin du chargement pour ne pas écraser un mode bureau restauré du brouillon.
@@ -978,6 +981,14 @@ function NotesTab({
   const isBureau = rdvMode === 'bureau' && Boolean(officePromo)
   const [rdvDate, setRdvDate] = useState(todayInputValue())
   const [rdvAt, setRdvAt] = useState('')
+  // Heure choisie complète sur le funnel (sauf si c'est la place du prospect lui-même).
+  const selectedOfficeSlotFull = (() => {
+    if (!rdvAt || !funnelAvailability) return false
+    const day = rdvAt.slice(0, 10)
+    const hour = Number(rdvAt.slice(11, 13))
+    if (lead.promotionSlotDay === day && lead.promotionSlotHour === hour) return false
+    return (funnelAvailability.get(slotKey(day, hour)) ?? 1) <= 0
+  })()
   // Mode bureau : la date est forcément un vendredi/samedi/dimanche de la promo ;
   // on part du créneau déjà choisi par le prospect sur le site s'il est encore possible.
   useEffect(() => {
@@ -1220,6 +1231,8 @@ function NotesTab({
         // de la promo en « Présence confirmée ».
         const [day, time] = rdvAt.split('T')
         const hour = Number(time?.slice(0, 2))
+        // Place réservée dans le funnel AVANT de qualifier : complet = on reste ici.
+        await reserveFunnelSlot({ leadId: lead.id, day, hour })
         await createCallLog({ leadId: lead.id, result: 'joint', notes: noteFinale || null })
         await updateLead(lead.id, bureauLeadPatch)
         setStep('done')
@@ -1587,42 +1600,23 @@ function NotesTab({
               </div>
             </div>
           ) : isBureau ? (
-            <div>
-              <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-1">Jour du RDV au bureau</div>
-              <div className="flex flex-wrap gap-2">
-                {officeDays.map((day) => (
-                  <button
-                    key={day}
-                    type="button"
-                    onClick={() => { setRdvDate(day); setRdvAt('') }}
-                    className={`pill-tab text-xs ${rdvDate === day ? '!bg-text !text-white' : 'bg-white border border-line text-muted'}`}
-                  >
-                    {formatBureauDay(day)}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <OfficeSlotPicker
+              days={officeDays}
+              hoursOf={(day) => officeSlotHours(day, officeNow)}
+              selectedDay={rdvDate}
+              selectedHour={rdvAt.startsWith(`${rdvDate}T`) ? Number(rdvAt.slice(11, 13)) : null}
+              onDay={(day) => { setRdvDate(day); setRdvAt('') }}
+              onHour={(h) => setRdvAt(`${rdvDate}T${String(h).padStart(2, '0')}:00`)}
+              availability={funnelAvailability}
+              siteSlot={lead.promotionSlotDay && lead.promotionSlotHour != null ? { day: lead.promotionSlotDay, hour: lead.promotionSlotHour } : null}
+            />
           ) : (
             <DateOnlyInput label="Date du RDV commercial" value={rdvDate} onChange={(date) => { setRdvDate(date); setRdvAt('') }} />
           )}
           {isBureau && ownOfficeSlot && !changeOfficeSlot ? null : isBureau ? (
-            <div>
-              <div className="text-[10px] font-bold tracking-widest uppercase text-faint mb-1">Heure d’arrivée au bureau</div>
-              <div className="flex flex-wrap gap-2">
-                {officeSlotHours(rdvDate, officeNow).map((h) => {
-                  const value = `${rdvDate}T${String(h).padStart(2, '0')}:00`
-                  return (
-                    <button key={h} type="button" onClick={() => setRdvAt(value)}
-                      className={`pill-tab text-xs ${rdvAt === value ? '!bg-text !text-white' : 'bg-white border border-line text-muted'}`}>
-                      {h} h – {h + 1} h
-                    </button>
-                  )
-                })}
-              </div>
-              {lead.promotionSlotDay && lead.promotionSlotHour != null && (
-                <p className="mt-2 text-xs text-muted">Créneau pris par le prospect sur le site : {ghlSlotTexts(lead.promotionSlotDay, lead.promotionSlotHour).creneau}</p>
-              )}
-            </div>
+            lead.promotionSlotDay && lead.promotionSlotHour != null ? (
+              <p className="text-xs text-muted">Créneau pris par le prospect sur le site : {ghlSlotTexts(lead.promotionSlotDay, lead.promotionSlotHour).creneau}</p>
+            ) : null
           ) : (<>
           <InlineRdvAgenda
             selectedAt={rdvAt}
@@ -1646,7 +1640,7 @@ function NotesTab({
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setStep(previousStepFromRdv(isBureau ? 'bureau' : 'domicile'))} className="rounded-xl border border-line bg-white/70 py-2 text-sm font-semibold hover:bg-white">Retour</button>
             {!(isBureau && ownOfficeSlot && !changeOfficeSlot) && (
-              <button onClick={() => setStep('confirmation')} disabled={!rdvAt} className="btn-primary rounded-xl py-2 text-sm disabled:opacity-50">Next · formulaire lead</button>
+              <button onClick={() => setStep('confirmation')} disabled={!rdvAt || (isBureau && selectedOfficeSlotFull)} className="btn-primary rounded-xl py-2 text-sm disabled:opacity-50">Next · formulaire lead</button>
             )}
           </div>
         </div>

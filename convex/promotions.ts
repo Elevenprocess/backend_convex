@@ -1,7 +1,7 @@
 // API des promotions (onglet Promotion de la page Leads). Gestion admin,
 // lecture « en cours » pour tous. Le rattachement des leads est dans
 // model/promotionAttach.ts (tags) et attachLegacy ci-dessous (statuts).
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { QueryCtx } from "./_generated/server";
@@ -14,6 +14,7 @@ import { renderPromotionMail } from "./model/emails/promotionMails";
 import { leadLabel, logActivity, logSystemActivity } from "./model/activity";
 import { applyTagsToLead, blankSlateForPromotion } from "./model/promotionAttach";
 import { findLeadByGhlContact } from "./webhooks";
+import { funnelErrorMessage, reserveFunnelPlace } from "./model/funnelPlaces";
 import { OPEN_RDV_STATUSES } from "./rdv";
 import { leadStatusValidator } from "./model/enums";
 import { ANSWERED_RESULTS, CALLBACK_RESULTS, QUALIFIED_STATUSES } from "./model/funnelMath";
@@ -790,6 +791,42 @@ async function ghlContactExists(contactId: string): Promise<boolean> {
  * pipeline de la promo passée en « Présence confirmée » (créée si absente).
  * Rejouable sans risque (bouton « Réessayer l'envoi à GHL »).
  */
+/** Téléphone + nom d'un lead pour réserver sa place dans le funnel. */
+export const funnelLeadRef = internalQuery({
+  args: { leadId: v.id("leads") },
+  handler: async (ctx, { leadId }) => {
+    const lead = await ctx.db.get(leadId);
+    if (!lead || lead.deletedAt !== undefined) return null;
+    return { phone: lead.phone ?? null, name: leadLabel(lead) };
+  },
+});
+
+/**
+ * Réserve la place du lead dans le funnel d'inscription (même table de places
+ * que le site). Appelée AVANT de qualifier le lead : un créneau complet bloque
+ * le setter. Idempotent (même créneau = rien ne bouge). Funnel injoignable =
+ * on laisse passer (ok: "off").
+ */
+export const reserveFunnelSlot = action({
+  args: { leadId: v.id("leads"), day: v.string(), hour: v.number() },
+  handler: async (ctx, { leadId, day, hour }): Promise<{ ok: boolean | "off"; billet?: string }> => {
+    await ctx.runQuery(internal.promotions.assertStaffForFunnel, {});
+    const ref = await ctx.runQuery(internal.promotions.funnelLeadRef, { leadId });
+    if (!ref) throw new ConvexError("Prospect introuvable.");
+    const r = await reserveFunnelPlace({ leadId, telephone: ref.phone, jour: day, heure: hour, nom: ref.name });
+    if (r.ok === false) throw new ConvexError(funnelErrorMessage(r.erreur));
+    return r.ok === true ? { ok: true, ...(r.billet ? { billet: r.billet } : {}) } : { ok: "off" };
+  },
+});
+
+export const assertStaffForFunnel = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    await requireLeadWriteRole(ctx);
+    return null;
+  },
+});
+
 export const confirmOfficeSlot = action({
   args: { leadId: v.id("leads"), day: v.string(), hour: v.number(), notes: v.optional(v.string()) },
   handler: async (ctx, { leadId, day, hour, notes }): Promise<{ ghl: "ok"; created: boolean }> => {
@@ -799,7 +836,13 @@ export const confirmOfficeSlot = action({
       sync: NonNullable<Doc<"promotions">["ghlSlotSync"]>;
       contact: { firstName?: string; lastName?: string; email?: string; phone?: string; addressLine?: string; city?: string; postalCode?: string };
     } =
-      await ctx.runMutation(internal.promotions.setOfficeSlotByStaff, { leadId, day, hour, now: Date.now(), ...(notes !== undefined ? { notes } : {}) });
+      await (async () => {
+        // Place dans le funnel d'abord (idempotent) : complet = on n'écrit rien.
+        const ref = await ctx.runQuery(internal.promotions.funnelLeadRef, { leadId });
+        const r = await reserveFunnelPlace({ leadId, telephone: ref?.phone, jour: day, heure: hour, nom: ref?.name });
+        if (r.ok === false) throw new ConvexError(funnelErrorMessage(r.erreur));
+        return ctx.runMutation(internal.promotions.setOfficeSlotByStaff, { leadId, day, hour, now: Date.now(), ...(notes !== undefined ? { notes } : {}) });
+      })();
     try {
       if (!isGhlConfigured()) throw new Error("GHL n'est pas configuré.");
       const locationId = requireGhlLocationId();

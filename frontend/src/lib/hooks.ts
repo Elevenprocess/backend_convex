@@ -35,7 +35,8 @@ export { SharedLeadsKeeper, useSharedLeads, useNotificationRdvFilters } from './
 import { fetchCache, type FetchCacheEntry } from './fetchCacheStore'
 import { persistEntry, loadAllEntries, migrateLegacyLocalStorage } from './cachePersist'
 import { convexAuthEnabled, convexClient } from './convex'
-import { callLogsLogCall, promotionsConfirmOfficeSlot, leadsCreate, leadsGet, leadsSoftDelete, leadsUpdate, rdvCreate, rdvFlagByReception, rdvGet, rdvUpdate,
+import { callLogsLogCall, promotionsConfirmOfficeSlot,
+  promotionsReserveFunnelSlot, leadsCreate, leadsGet, leadsSoftDelete, leadsUpdate, rdvCreate, rdvFlagByReception, rdvGet, rdvUpdate,
   ghlCalendarGetConfig, ghlCalendarListUsers, ghlCalendarMySector, ghlCalendarSyncUsers, ghlCalendarFreeSlots, ghlCalendarEventsAction,
   ghlCalendarSyncEvents, ghlCalendarSyncLeadEvents, ghlAppointmentsCreate, ghlAppointmentsUpdate, ghlAppointmentsReassign,
   usersAdminUpdate, usersRemove, usersGet } from './convexApi'
@@ -969,6 +970,12 @@ export type CreateCallLogInput = {
   contactPhone?: string | null
   contactCity?: string | null
   contactPostalCode?: string | null
+}
+
+/** Place dans le funnel d'inscription (même table que le site) : erreur si le créneau est complet. */
+export async function reserveFunnelSlot(input: { leadId: string; day: string; hour: number }): Promise<{ ok: boolean | 'off'; billet?: string }> {
+  if (!convexAuthEnabled || !convexClient) throw new Error('RDV au bureau disponible seulement en mode Convex.')
+  return await convexClient.action(promotionsReserveFunnelSlot, input)
 }
 
 /** RDV au bureau d'une promo : créneau → Velora + champs GHL + « Présence confirmée ». */

@@ -921,3 +921,8 @@ export const promotionsConfirmOfficeSlot = makeFunctionReference<
   { leadId: string; day: string; hour: number; notes?: string },
   { ghl: 'ok'; created: boolean }
 >('promotions:confirmOfficeSlot')
+export const promotionsReserveFunnelSlot = makeFunctionReference<
+  'action',
+  { leadId: string; day: string; hour: number },
+  { ok: boolean | 'off'; billet?: string }
+>('promotions:reserveFunnelSlot')
