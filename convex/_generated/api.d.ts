@@ -99,6 +99,7 @@ import type * as model_notify from "../model/notify.js";
 import type * as model_ocr from "../model/ocr.js";
 import type * as model_passwordCrypto from "../model/passwordCrypto.js";
 import type * as model_promotionAttach from "../model/promotionAttach.js";
+import type * as model_promotionSlots from "../model/promotionSlots.js";
 import type * as model_promotions from "../model/promotions.js";
 import type * as model_rdvReschedule from "../model/rdvReschedule.js";
 import type * as model_solteo_signedQuote from "../model/solteo/signedQuote.js";
@@ -225,6 +226,7 @@ declare const fullApi: ApiFromModules<{
   "model/ocr": typeof model_ocr;
   "model/passwordCrypto": typeof model_passwordCrypto;
   "model/promotionAttach": typeof model_promotionAttach;
+  "model/promotionSlots": typeof model_promotionSlots;
   "model/promotions": typeof model_promotions;
   "model/rdvReschedule": typeof model_rdvReschedule;
   "model/solteo/signedQuote": typeof model_solteo_signedQuote;
