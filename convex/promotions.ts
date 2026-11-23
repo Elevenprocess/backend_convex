@@ -651,7 +651,9 @@ export const setOfficeSlotByStaff = internalMutation({
     }
     const name = [lead.firstName, lead.lastName].filter(Boolean).join(" ").trim() || lead.phone || "Prospect";
     const workflowPending = firstSlot || lead.promotionSlotWorkflow === "pending";
-    return { userId: user._id, externalId: lead.externalId ?? null, name, promoName: promo.name, sync: promo.ghlSlotSync, workflowPending };
+    // Id contact GHL réel : ghlContactId (leads migrés, dont externalId = uuid de
+    // l'ancienne base) sinon externalId (leads créés par les webhooks GHL).
+    return { userId: user._id, externalId: lead.ghlContactId ?? lead.externalId ?? null, name, promoName: promo.name, sync: promo.ghlSlotSync, workflowPending };
   },
 });
 

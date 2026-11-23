@@ -64,4 +64,13 @@ describe("RDV au bureau choisi par le setter", () => {
     }));
     expect((await as.mutation(internal.promotions.setOfficeSlotByStaff, { leadId: fromSite, day: "2026-11-27", hour: 10, now: NOW })).workflowPending).toBe(false);
   });
+
+  it("lead migré : utilise le vrai id de contact GHL (ghlContactId), pas l'uuid de l'ancienne base", async () => {
+    const { t, setter, promotionId } = await setup();
+    const migrated = await t.run((ctx) => ctx.db.insert("leads", {
+      source: "ghl", status: "nouveau", externalId: "d56581e6-1725-4b83-b0b8-0aa82902061a", ghlContactId: "2aMnM4Od6x14zgwq1qUx", promotionId,
+    }));
+    const r = await asUser(t, setter).mutation(internal.promotions.setOfficeSlotByStaff, { leadId: migrated, day: "2026-11-27", hour: 12, now: NOW });
+    expect(r.externalId).toBe("2aMnM4Od6x14zgwq1qUx");
+  });
 });
