@@ -12,11 +12,12 @@ import { convexAuthEnabled } from '../../lib/convex'
 import { useLeadSidebar } from '../../lib/leadSidebar'
 import { emitLeadDeselect, emitLeadSelect, useLeadLocks, type LeadLockInfo } from '../../lib/realtime'
 import { normalizeSearchText, phoneMatches, phoneSearchVariants } from '../../lib/searchText'
-import { useActivePromotions } from '../../lib/promotionsApi'
-import { leadKpis, activePromotionIds, activePromotionLeads, promotionLeads, pruneSelectedIds, withoutActivePromotionLeads } from '../../lib/promotions'
+import { useActivePromotions, useActivePromotionsState } from '../../lib/promotionsApi'
+import { leadKpis, activePromotionIds, activePromotionLeads, promotionLeads, pruneSelectedIds, withoutActivePromotionLeads, type ActivePromotion } from '../../lib/promotions'
 import { PromotionsAdmin } from '../../components/promotions/PromotionsAdmin'
 import { PromotionSlot } from '../../components/promotions/PromotionSlot'
 import { PromotionBanner, type PromotionSourceFilter } from '../../components/promotions/PromotionBanner'
+import { ClosableTab, SetterPromotionPicker } from '../../components/promotions/PromoTabs'
 import { DossierCard } from '../../components/suivi/DossierCard'
 import { ManualLeadModal } from '../../components/leads/ManualLeadModal'
 import { buildDossiers, readWorkflowState } from '../../lib/suivi'
@@ -180,7 +181,7 @@ function LeadsSuivi() {
 }
 
 
-type SetterFilter = 'nouveau' | 'sans_reponse' | 'relance_ct' | 'rappel' | 'qualifie' | 'perdu' | 'relance_lt' | 'promotion'
+type SetterFilter = 'nouveau' | 'sans_reponse' | 'relance_ct' | 'rappel' | 'qualifie' | 'perdu' | 'relance_lt'
 type SetterMissingFilter = 'all' | 'any' | 'phone' | 'address' | 'postalCode' | 'email' | 'city'
 
 const SETTER_MISSING_FILTERS: { key: SetterMissingFilter; label: string; icon: IconName }[] = [
@@ -193,7 +194,7 @@ const SETTER_MISSING_FILTERS: { key: SetterMissingFilter; label: string; icon: I
   { key: 'city', label: 'Sans ville', icon: 'map-pin' },
 ]
 
-const SETTER_STATUS_FILTERS: { key: SetterFilter; label: string; icon: IconName; countKey: 'nouveau' | 'sansReponse' | 'relanceCt' | 'rappel' | 'qualifie' | 'perdu' | 'relanceLt' | 'promotion' }[] = [
+const SETTER_STATUS_FILTERS: { key: SetterFilter; label: string; icon: IconName; countKey: 'nouveau' | 'sansReponse' | 'relanceCt' | 'rappel' | 'qualifie' | 'perdu' | 'relanceLt' }[] = [
   { key: 'nouveau', label: 'Nouveaux', icon: 'sparkles', countKey: 'nouveau' },
   { key: 'sans_reponse', label: 'Sans réponse', icon: 'phone-off', countKey: 'sansReponse' },
   { key: 'relance_ct', label: 'Relance court terme', icon: 'arrow-left', countKey: 'relanceCt' },
@@ -263,19 +264,38 @@ function LeadsSetter() {
 
   // Promotions en cours : leurs leads ne sont QUE dans l'onglet Promotion
   // (retour automatique dans les onglets habituels à la fin de la promo).
+  const activePromosState = useActivePromotionsState()
   const activePromos = useActivePromotions()
   const activePromoIds = useMemo(() => activePromotionIds(activePromos), [activePromos])
   const hasPromo = activePromos.length > 0
   const [promoSource, setPromoSource] = useState<PromotionSourceFilter>('all')
+  // Onglets façon navigateur (comme l'admin) : « Leads », « Promotion » (choix
+  // de la promo), puis « Leads de « X » » qui reste ouvert jusqu'à la croix.
+  const [setterView, setSetterView] = useState<'leads' | 'promotions' | 'promoLeads'>('leads')
+  const [promoOpen, setPromoOpen] = useState<{ id: string; name: string } | null>(null)
+  const [promoFilters, setPromoFilters] = useState<LeadListFilters>(DEFAULT_LEAD_FILTERS)
+  const openPromo = promoOpen ? activePromos.find((p) => p._id === promoOpen.id) ?? null : null
+  const promoScope = setterView === 'promoLeads' ? openPromo : null
   const promoLeads = useMemo(
-    () => activePromotionLeads(mine, activePromoIds, promoSource),
-    [mine, activePromoIds, promoSource],
+    () => (promoScope ? promotionLeads(mine, promoScope._id, promoSource) : EMPTY_LEADS),
+    [mine, promoScope, promoSource],
   )
   const categoryLeads = useMemo(() => withoutActivePromotionLeads(mine, activePromoIds), [mine, activePromoIds])
-  // Si la promo se termine pendant qu'on est sur l'onglet, on retombe sur « Nouveaux ».
+  // Promo terminée pendant qu'on la regarde : son onglet se ferme et on
+  // retombe sur la liste habituelle (on attend la réponse du serveur).
   useEffect(() => {
-    if (filter === 'promotion' && !hasPromo) setFilter('nouveau')
-  }, [filter, hasPromo])
+    if (!activePromosState) return
+    if (promoOpen && !activePromosState.some((p) => p._id === promoOpen.id)) setPromoOpen(null)
+    if (setterView !== 'leads' && activePromosState.length === 0) setSetterView('leads')
+  }, [activePromosState, promoOpen, setterView])
+  useEffect(() => {
+    if (setterView === 'promoLeads' && !promoOpen) setSetterView(hasPromo ? 'promotions' : 'leads')
+  }, [setterView, promoOpen, hasPromo])
+  const openPromoLeads = (p: ActivePromotion) => {
+    if (promoOpen?.id !== p._id) { setPromoFilters(DEFAULT_LEAD_FILTERS); setPromoSource('all') }
+    setPromoOpen({ id: p._id, name: p.name })
+    setSetterView('promoLeads')
+  }
 
   // Leads "à rappeler" dont l'heure de rappel tombe dans les 3 prochaines minutes
   // (futur proche uniquement ; les rappels déjà dépassés ne déclenchent pas).
@@ -327,19 +347,14 @@ function LeadsSetter() {
     promotion: activePromotionLeads(mine, activePromoIds, 'all').length,
   }), [categoryLeads, activePromoIds, mine])
 
-  const statusFilters = useMemo(
-    () => hasPromo
-      ? [{ key: 'promotion' as const, label: 'Promotion', icon: 'tag' as const, countKey: 'promotion' as const }, ...SETTER_STATUS_FILTERS]
-      : SETTER_STATUS_FILTERS,
-    [hasPromo],
-  )
+  const statusFilters = SETTER_STATUS_FILTERS
 
   const missingCounts = useMemo(() => {
-    const withinStatus = filter === 'promotion' ? promoLeads : filterSetterLeadsByStatus(categoryLeads, filter)
+    const withinStatus = filterSetterLeadsByStatus(categoryLeads, filter)
     return Object.fromEntries(
       SETTER_MISSING_FILTERS.map((item) => [item.key, withinStatus.filter((lead) => matchesMissingFilter(lead, item.key)).length]),
     ) as Record<SetterMissingFilter, number>
-  }, [categoryLeads, promoLeads, filter])
+  }, [categoryLeads, filter])
 
   const filtered = useMemo(() => {
     // Recherche insensible à la casse ET aux accents ; les numéros matchent
@@ -349,11 +364,13 @@ function LeadsSetter() {
     // Si une recherche est saisie, elle doit être globale sur toutes les catégories
     // setter, même si l’onglet actif est "Nouveaux", "À rappeler", etc.
     const searching = Boolean(q) || qPhoneVariants.length > 0
-    // Recherche globale : retrouve aussi les leads de promo.
-    let list = searching
-      ? mine
-      : filter === 'promotion' ? promoLeads : filterSetterLeadsByStatus(categoryLeads, filter)
-    if (missingFilter !== 'all') list = list.filter((l) => matchesMissingFilter(l, missingFilter))
+    // Onglet d'une promo : seulement ses leads (recherche comprise), avec les
+    // filtres du rail admin (statut, dernier appel, période…).
+    // Ailleurs, recherche globale : retrouve aussi les leads de promo.
+    let list = promoScope
+      ? applyLeadFilters(promoLeads, promoFilters)
+      : searching ? mine : filterSetterLeadsByStatus(categoryLeads, filter)
+    if (!promoScope && missingFilter !== 'all') list = list.filter((l) => matchesMissingFilter(l, missingFilter))
     if (searching) {
       list = list.filter((l) => {
         const hay = normalizeSearchText(
@@ -366,13 +383,13 @@ function LeadsSetter() {
     // Tri explicite par clic sur l'en-tête « prochain rappel » : prioritaire sur le tri par défaut.
     if (callbackSort) {
       list = sortLeadsByNextCallback(list, callbackSort)
-    } else if (!searching && filter === 'rappel') {
+    } else if (promoScope ? (promoFilters.status === 'a_rappeler' || promoFilters.status === 'relance') : (!searching && filter === 'rappel')) {
       // Onglet "À rappeler" : on trie par date de prochain rappel (futurs proches en haut,
       // en retard regroupés en bas). On ne le fait pas en recherche globale (liste multi-catégories).
       list = sortCallbackLeadsByNextCallback(list)
     }
     return list
-  }, [mine, promoLeads, categoryLeads, filter, missingFilter, query, callbackSort])
+  }, [mine, promoScope, promoLeads, promoFilters, categoryLeads, filter, missingFilter, query, callbackSort])
 
   const selected = useMemo(
     () => (selectedId ? mine.find((l) => l.id === selectedId) ?? null : null),
@@ -393,23 +410,57 @@ function LeadsSetter() {
         eyebrow="LEADS / SETTER"
         title="Suivi leads"
       />
+      {(hasPromo || openPromo) && (
+        <div className="px-4 sm:px-8 pt-3 flex flex-wrap gap-2">
+          <button type="button" onClick={() => setSetterView('leads')} className={`pill-tab ${setterView === 'leads' ? '!bg-text !text-white' : 'bg-white border border-line text-muted'}`}>Leads</button>
+          <button type="button" onClick={() => setSetterView('promotions')} className={`pill-tab ${setterView === 'promotions' ? '!bg-text !text-white' : 'bg-white border border-line text-muted'}`}>
+            Promotion <span className="ml-1 opacity-70">{counts.promotion}</span>
+          </button>
+          {openPromo && (
+            <ClosableTab
+              label={`Leads de « ${openPromo.name} »`}
+              active={setterView === 'promoLeads'}
+              onSelect={() => setSetterView('promoLeads')}
+              onClose={() => { setPromoOpen(null); if (setterView === 'promoLeads') setSetterView('promotions') }}
+            />
+          )}
+        </div>
+      )}
       <div className="flex flex-grow overflow-hidden">
-        <LeadsRail
-          statusFilters={statusFilters}
-          missingFilters={SETTER_MISSING_FILTERS}
-          filter={filter}
-          missingFilter={missingFilter}
-          onFilter={setFilter}
-          onMissingFilter={setMissingFilter}
-          counts={counts}
-          missingCounts={missingCounts}
-          blinkRappel={blinkRappel}
-        />
+        {setterView === 'promotions' ? (
+          <SetterPromotionPicker promos={activePromos} leads={mine} onOpen={openPromoLeads} />
+        ) : (<>
+        {promoScope ? (
+          <AdminLeadsRail
+            leads={promoLeads}
+            leadFilters={promoFilters}
+            setLeadFilters={setPromoFilters}
+            setterFilter="all"
+            setSetterFilter={() => {}}
+            commercialFilter="all"
+            setCommercialFilter={() => {}}
+            setters={[]}
+            commerciaux={[]}
+            showPeople={false}
+          />
+        ) : (
+          <LeadsRail
+            statusFilters={statusFilters}
+            missingFilters={SETTER_MISSING_FILTERS}
+            filter={filter}
+            missingFilter={missingFilter}
+            onFilter={setFilter}
+            onMissingFilter={setMissingFilter}
+            counts={counts}
+            missingCounts={missingCounts}
+            blinkRappel={blinkRappel}
+          />
+        )}
 
         <div className="flex-grow flex flex-col min-w-0">
-          {filter === 'promotion' && activePromos.map((p, i) => (
-            <PromotionBanner key={p._id} promo={p} source={promoSource} onSource={setPromoSource} showSourceFilter={i === 0} />
-          ))}
+          {promoScope && (
+            <PromotionBanner promo={promoScope} source={promoSource} onSource={setPromoSource} />
+          )}
           <div className="px-4 sm:px-8 pt-4 flex items-center gap-3 flex-shrink-0 flex-wrap">
             <div className="relative flex-grow max-w-sm min-w-[200px]">
               <Icon name="search" size={16} className="absolute left-3 top-2.5 text-faint" />
@@ -422,7 +473,12 @@ function LeadsSetter() {
               />
             </div>
 
-            <span className="text-xs text-faint font-semibold ml-auto">{filtered.length}/{categoryLeads.length}</span>
+            {promoScope && leadFiltersActive(promoFilters) && (
+              <button type="button" onClick={() => setPromoFilters(DEFAULT_LEAD_FILTERS)} className="text-xs font-bold text-muted underline underline-offset-4">
+                Réinitialiser les filtres
+              </button>
+            )}
+            <span className="text-xs text-faint font-semibold ml-auto">{filtered.length}/{promoScope ? promoLeads.length : categoryLeads.length}</span>
             <button
               type="button"
               onClick={() => setManualOpen(true)}
@@ -447,7 +503,9 @@ function LeadsSetter() {
                   icon="users"
                   title={mine.length === 0 ? 'Aucun prospect pour le moment' : 'Aucun prospect ne correspond'}
                   description={mine.length === 0 ? "Aucun prospect disponible pour le moment." : 'Aucun prospect ne correspond à cette catégorie.'}
-                  secondaryAction={{ label: 'Voir les nouveaux prospects', onClick: () => { setFilter('nouveau'); setMissingFilter('all'); setQuery('') } }}
+                  secondaryAction={promoScope
+                    ? { label: 'Réinitialiser les filtres', onClick: () => { setPromoFilters(DEFAULT_LEAD_FILTERS); setPromoSource('all'); setQuery('') } }
+                    : { label: 'Voir les nouveaux prospects', onClick: () => { setFilter('nouveau'); setMissingFilter('all'); setQuery('') } }}
                 />
               </div>
             ) : (
@@ -506,6 +564,7 @@ function LeadsSetter() {
             )}
           </main>
         </div>
+        </>)}
 
         {manualOpen && (
           <ManualLeadModal
@@ -515,6 +574,7 @@ function LeadsSetter() {
             onCreated={(lead) => {
               baseLeadsState.refetch()
               searchLeadsState.refetch()
+              setSetterView('leads')
               setFilter('nouveau')
               setMissingFilter('all')
               setQuery('')
@@ -758,12 +818,12 @@ function LeadsAdmin() {
         <button type="button" onClick={() => setAdminView('leads')} className={`pill-tab ${adminView === 'leads' ? '!bg-text !text-white' : 'bg-white border border-line text-muted'}`}>Leads</button>
         <button type="button" onClick={() => setAdminView('promotions')} className={`pill-tab ${adminView === 'promotions' ? '!bg-text !text-white' : 'bg-white border border-line text-muted'}`}>Promotion</button>
         {promoLeadsOf && (
-          <span className={`pill-tab inline-flex items-center gap-1.5 !pr-1.5 ${adminView === 'promoLeads' ? '!bg-text !text-white' : 'bg-or-tint border border-or/30 text-or-dark'}`}>
-            <button type="button" onClick={() => setAdminView('promoLeads')} className="font-semibold">Leads de « {promoLeadsOf.name} »</button>
-            <button type="button" aria-label={`Fermer l'onglet ${promoLeadsOf.name}`}
-              onClick={() => { setPromoLeadsOf(null); if (adminView === 'promoLeads') setAdminView('promotions') }}
-              className="flex h-4 w-4 items-center justify-center rounded-full text-[13px] leading-none opacity-70 hover:opacity-100 hover:bg-black/10">×</button>
-          </span>
+          <ClosableTab
+            label={`Leads de « ${promoLeadsOf.name} »`}
+            active={adminView === 'promoLeads'}
+            onSelect={() => setAdminView('promoLeads')}
+            onClose={() => { setPromoLeadsOf(null); if (adminView === 'promoLeads') setAdminView('promotions') }}
+          />
         )}
       </div>
       {adminView === 'promotions' && (
@@ -1019,8 +1079,6 @@ function filterSetterLeadsByStatus(leads: LeadResponse[], filter: SetterFilter):
       return leads.filter((lead) => lead.status === 'perdu' || lead.status === 'pas_qualifie')
     case 'relance_lt':
       return leads.filter(isLongTermRelanceLead)
-    case 'promotion':
-      return leads
   }
 }
 
@@ -1591,6 +1649,7 @@ function AdminLeadsRail({
   setCommercialFilter,
   setters,
   commerciaux,
+  showPeople = true,
 }: {
   leads: LeadResponse[]
   leadFilters: LeadListFilters
@@ -1601,6 +1660,8 @@ function AdminLeadsRail({
   setCommercialFilter: (id: string) => void
   setters: UserResponse[]
   commerciaux: UserResponse[]
+  /** false côté setter (onglet d'une promo) : pas de filtres par setter/commercial. */
+  showPeople?: boolean
 }) {
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false
@@ -1806,6 +1867,7 @@ function AdminLeadsRail({
         ))}
       </CollapsibleSection>
 
+      {showPeople && (<>
       <CollapsibleSection storageKey="ecoi.leads.admin.section.setter" label="Setter">
         <button
           type="button"
@@ -1853,6 +1915,7 @@ function AdminLeadsRail({
           </button>
         ))}
       </CollapsibleSection>
+      </>)}
     </aside>
   )
 }
