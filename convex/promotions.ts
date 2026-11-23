@@ -655,7 +655,29 @@ export const setOfficeSlotByStaff = internalMutation({
     await ctx.db.patch(leadId, { promotionGhlSync: { status: "pending", at: now } });
     // Id contact GHL réel : ghlContactId (leads migrés, dont externalId = uuid de
     // l'ancienne base) sinon externalId (leads créés par les webhooks GHL).
-    return { userId: user._id, externalId: lead.ghlContactId ?? lead.externalId ?? null, name, promoName: promo.name, sync: promo.ghlSlotSync, workflowPending };
+    // Id contact GHL plausible (20 caractères) : un uuid de l'ancienne base n'en est pas un.
+    const contactId = lead.ghlContactId ?? (lead.externalId && /^[A-Za-z0-9]{20}$/.test(lead.externalId) ? lead.externalId : null);
+    const contact = {
+      firstName: lead.firstName ?? undefined, lastName: lead.lastName ?? undefined,
+      email: lead.email ?? undefined, phone: lead.phone ?? undefined,
+    };
+    return { userId: user._id, externalId: contactId, contact, name, promoName: promo.name, sync: promo.ghlSlotSync, workflowPending };
+  },
+});
+
+/** Relie le lead à son contact GHL retrouvé ou recréé (ancien contact supprimé/fusionné). */
+export const linkGhlContact = internalMutation({
+  args: { leadId: v.id("leads"), contactId: v.string(), previous: v.union(v.string(), v.null()), created: v.boolean() },
+  handler: async (ctx, { leadId, contactId, previous, created }) => {
+    const lead = await ctx.db.get(leadId);
+    if (!lead) return;
+    await ctx.db.patch(leadId, { ghlContactId: contactId });
+    await logActivity(ctx, {
+      action: "lead.ghl_contact_relinked", entityType: "lead", entityId: leadId, leadId,
+      subject: leadLabel(lead),
+      summary: `${created ? "a recréé" : "a retrouvé"} le contact GHL de ${leadLabel(lead)}${previous ? " (l'ancien n'existait plus dans GHL)" : ""}`,
+      details: { previous, contactId, created },
+    });
   },
 });
 
@@ -686,6 +708,17 @@ export const logOfficeSlotGhl = internalMutation({
 
 type GhlOpp = { id: string; pipelineId?: string };
 
+/** false si GHL répond que le contact n'existe pas ; toute autre erreur remonte. */
+async function ghlContactExists(contactId: string): Promise<boolean> {
+  try {
+    const r = (await ghlRequest(`/contacts/${encodeURIComponent(contactId)}`)) as { contact?: { id?: string } } | null;
+    return Boolean(r?.contact?.id);
+  } catch (err) {
+    if (/not found/i.test(err instanceof Error ? err.message : String(err))) return false;
+    throw err;
+  }
+}
+
 /**
  * Bouton final « RDV au bureau » du setter : créneau rangé dans Velora, champs
  * du créneau mis à jour sur le contact GHL (billet inchangé), opportunité du
@@ -695,11 +728,32 @@ type GhlOpp = { id: string; pipelineId?: string };
 export const confirmOfficeSlot = action({
   args: { leadId: v.id("leads"), day: v.string(), hour: v.number() },
   handler: async (ctx, { leadId, day, hour }): Promise<{ ghl: "ok"; created: boolean }> => {
-    const info: { externalId: string | null; name: string; promoName: string; sync: NonNullable<Doc<"promotions">["ghlSlotSync"]>; workflowPending: boolean } =
+    const info: {
+      externalId: string | null; name: string; promoName: string; workflowPending: boolean;
+      sync: NonNullable<Doc<"promotions">["ghlSlotSync"]>;
+      contact: { firstName?: string; lastName?: string; email?: string; phone?: string };
+    } =
       await ctx.runMutation(internal.promotions.setOfficeSlotByStaff, { leadId, day, hour, now: Date.now() });
     try {
       if (!isGhlConfigured()) throw new Error("GHL n'est pas configuré.");
-      if (!info.externalId) throw new Error("ce prospect n'a pas de contact GHL.");
+      const locationId = requireGhlLocationId();
+      // Contact GHL introuvable (supprimé, fusionné, jamais créé) : on le
+      // retrouve par e-mail/téléphone ou on le recrée (upsert), puis on relie.
+      let contactId = info.externalId;
+      if (contactId && !(await ghlContactExists(contactId))) contactId = null;
+      if (!contactId) {
+        const c = info.contact;
+        if (!c.email && !c.phone) throw new Error("ce prospect n'a ni e-mail ni téléphone pour retrouver son contact GHL.");
+        const up = (await ghlRequest("/contacts/upsert", {
+          method: "POST",
+          body: { locationId, firstName: c.firstName, lastName: c.lastName, email: c.email, phone: c.phone },
+        })) as { contact?: { id?: string }; new?: boolean } | null;
+        const newId = up?.contact?.id;
+        if (!newId) throw new Error("GHL n'a pas renvoyé de contact.");
+        await ctx.runMutation(internal.promotions.linkGhlContact, { leadId, contactId: newId, previous: info.externalId, created: Boolean(up?.new) });
+        contactId = newId;
+      }
+      info.externalId = contactId;
       const t = ghlSlotTexts(day, hour);
       const s = info.sync;
       await ghlRequest(`/contacts/${encodeURIComponent(info.externalId)}`, {
@@ -711,7 +765,6 @@ export const confirmOfficeSlot = action({
           { id: s.startFieldId, value: t.debut },
         ] },
       });
-      const locationId = requireGhlLocationId();
       const found = (await ghlRequest("/opportunities/search", {
         query: { location_id: locationId, contact_id: info.externalId, pipeline_id: s.pipelineId, limit: 20 },
       })) as { opportunities?: GhlOpp[] } | null;
