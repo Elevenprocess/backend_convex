@@ -14,7 +14,8 @@ import { renderPromotionMail } from "./model/emails/promotionMails";
 import { leadLabel, logActivity, logSystemActivity } from "./model/activity";
 import { applyTagsToLead, blankSlateForPromotion } from "./model/promotionAttach";
 import { findLeadByGhlContact } from "./webhooks";
-import { funnelErrorMessage, reserveFunnelPlace } from "./model/funnelPlaces";
+import { funnelErrorMessage, releaseFunnelPlace, reserveFunnelPlace } from "./model/funnelPlaces";
+import { listPipelines } from "./ghlAppointments";
 import { OPEN_RDV_STATUSES } from "./rdv";
 import { leadStatusValidator } from "./model/enums";
 import { ANSWERED_RESULTS, CALLBACK_RESULTS, QUALIFIED_STATUSES } from "./model/funnelMath";
@@ -999,5 +1000,81 @@ export const sendConfirmationMail = internalAction({
     });
     await ctx.runMutation(internal.promotions.markPromotionMailSent, { leadId, subject: c.mail.subject });
     return { sent: true };
+  },
+});
+
+
+// ---- RDV à domicile choisi → RDV au bureau annulé + place rendue (Mario 24/11) ----
+
+export const officeSlotCancelInfo = internalQuery({
+  args: { leadId: v.id("leads") },
+  handler: async (ctx, { leadId }) => {
+    const lead = await ctx.db.get(leadId);
+    if (!lead || lead.deletedAt !== undefined || lead.promotionSlotDay === undefined) return null;
+    const promo = lead.promotionId ? await ctx.db.get(lead.promotionId) : null;
+    const contactId = lead.ghlContactId ?? (lead.externalId && /^[A-Za-z0-9]{20}$/.test(lead.externalId) ? lead.externalId : null);
+    return {
+      phone: lead.phone ?? null, day: lead.promotionSlotDay, hour: lead.promotionSlotHour ?? null,
+      contactId, sync: promo?.ghlSlotSync ?? null,
+    };
+  },
+});
+
+export const clearOfficeSlot = internalMutation({
+  args: { leadId: v.id("leads"), released: v.union(v.number(), v.null()), ghl: v.string() },
+  handler: async (ctx, { leadId, released, ghl }) => {
+    const lead = await ctx.db.get(leadId);
+    if (!lead || lead.promotionSlotDay === undefined) return;
+    const slot = lead.promotionSlotHour !== undefined ? ghlSlotTexts(lead.promotionSlotDay, lead.promotionSlotHour).creneau : lead.promotionSlotDay;
+    await ctx.db.patch(leadId, { promotionSlotDay: undefined, promotionSlotHour: undefined, promotionSlotWorkflow: undefined });
+    await logSystemActivity(ctx, {
+      source: "Promotions", action: "lead.promotion.office_slot_cancelled", entityType: "lead", entityId: leadId, leadId,
+      subject: leadLabel(lead),
+      summary: `RDV au bureau (${slot}) annulé pour ${leadLabel(lead)} : RDV à domicile choisi. `
+        + (released === null ? "Site d'inscription injoignable, place à rendre à la main." : `${released} place rendue sur le site.`)
+        + ` GHL : ${ghl}.`,
+      details: { day: lead.promotionSlotDay, hour: lead.promotionSlotHour, released, ghl },
+    });
+  },
+});
+
+export const cancelOfficeSlotForDomicile = internalAction({
+  args: { leadId: v.id("leads") },
+  handler: async (ctx, { leadId }) => {
+    const info = await ctx.runQuery(internal.promotions.officeSlotCancelInfo, { leadId });
+    if (!info) return;
+    const released = await releaseFunnelPlace({ leadId, telephone: info.phone });
+    let ghl = "rien à changer";
+    if (info.sync && info.contactId && isGhlConfigured()) {
+      try {
+        const s = info.sync;
+        await ghlRequest(`/contacts/${encodeURIComponent(info.contactId)}`, {
+          method: "PUT",
+          body: { customFields: [
+            { id: s.dayFieldId, value: "" }, { id: s.hourFieldId, value: "" },
+            { id: s.labelFieldId, value: "" }, { id: s.startFieldId, value: "" },
+          ] },
+        });
+        ghl = "champs du créneau vidés";
+        const found = (await ghlRequest("/opportunities/search", {
+          query: { location_id: requireGhlLocationId(), contact_id: info.contactId, pipeline_id: s.pipelineId, limit: 20 },
+        })) as { opportunities?: GhlOpp[] } | null;
+        const opp = (found?.opportunities ?? []).find((o) => o.pipelineId === s.pipelineId);
+        if (opp) {
+          const norm = (x: string) => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+          const stage = (await listPipelines()).find((p) => p.id === s.pipelineId)?.stages
+            .find((st) => norm(st.name).includes("domicile"));
+          if (stage) {
+            await ghlRequest(`/opportunities/${encodeURIComponent(opp.id)}`, {
+              method: "PUT", body: { pipelineId: s.pipelineId, pipelineStageId: stage.id },
+            });
+            ghl += ` + opportunité en « ${stage.name} »`;
+          }
+        }
+      } catch (e) {
+        ghl = `échec (${String(e instanceof Error ? e.message : e).slice(0, 200)})`;
+      }
+    }
+    await ctx.runMutation(internal.promotions.clearOfficeSlot, { leadId, released, ghl });
   },
 });

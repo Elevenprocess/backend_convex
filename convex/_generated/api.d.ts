@@ -99,6 +99,7 @@ import type * as model_leadAgg from "../model/leadAgg.js";
 import type * as model_notifMessages from "../model/notifMessages.js";
 import type * as model_notify from "../model/notify.js";
 import type * as model_ocr from "../model/ocr.js";
+import type * as model_officeSlotCancel from "../model/officeSlotCancel.js";
 import type * as model_passwordCrypto from "../model/passwordCrypto.js";
 import type * as model_promotionAttach from "../model/promotionAttach.js";
 import type * as model_promotionSlots from "../model/promotionSlots.js";
@@ -228,6 +229,7 @@ declare const fullApi: ApiFromModules<{
   "model/notifMessages": typeof model_notifMessages;
   "model/notify": typeof model_notify;
   "model/ocr": typeof model_ocr;
+  "model/officeSlotCancel": typeof model_officeSlotCancel;
   "model/passwordCrypto": typeof model_passwordCrypto;
   "model/promotionAttach": typeof model_promotionAttach;
   "model/promotionSlots": typeof model_promotionSlots;

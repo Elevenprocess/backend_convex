@@ -15,6 +15,7 @@
  * L'écho webhook GHL (stage → rdv_pris) reboucle ensuite sans effet de bord
  * (statut identique → no-op côté applyGhlStageChange).
  */
+import { cancelOfficeSlotIfDomicile } from "./model/officeSlotCancel";
 import { v } from "convex/values";
 import { action, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -199,6 +200,11 @@ export const finalizeAppointment = internalMutation({
           ? { externalId: args.appointmentId, ghlEventId: args.appointmentId }
           : {}),
       });
+    }
+
+    {
+      const finalRdv = await ctx.db.get(rdvId);
+      await cancelOfficeSlotIfDomicile(ctx, args.leadId, finalRdv?.locationType);
     }
 
     // Lead : id contact GHL + infos corrigées + statut qualifie (parité NestJS).

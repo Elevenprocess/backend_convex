@@ -1618,6 +1618,11 @@ function NotesTab({
               <p className="text-xs text-muted">Créneau pris par le prospect sur le site : {ghlSlotTexts(lead.promotionSlotDay, lead.promotionSlotHour).creneau}</p>
             ) : null
           ) : (<>
+          {lead.promotionSlotDay && lead.promotionSlotHour != null && (
+            <div className="rounded-xl border border-cuivre/40 bg-cuivre-tint px-3 py-2 text-xs font-semibold text-text">
+              RDV au bureau du {ghlSlotTexts(lead.promotionSlotDay, lead.promotionSlotHour).creneau} : il sera annulé automatiquement et sa place rendue sur le site dès que ce RDV à domicile sera pris.
+            </div>
+          )}
           <InlineRdvAgenda
             selectedAt={rdvAt}
             rdvs={agendaRdvs ?? []}

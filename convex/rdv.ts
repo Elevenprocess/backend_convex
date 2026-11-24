@@ -1,3 +1,4 @@
+import { cancelOfficeSlotIfDomicile } from "./model/officeSlotCancel";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
@@ -61,6 +62,7 @@ export const create = mutation({
       externalId: args.externalId,
       notes: args.notes,
     });
+    await cancelOfficeSlotIfDomicile(ctx, args.leadId, args.locationType ?? "domicile");
 
     const lead = await ctx.db.get(args.leadId);
     if (lead && lead.status !== "qualifie") {
