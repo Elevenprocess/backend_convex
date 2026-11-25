@@ -2,6 +2,7 @@ import { query, mutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { callResultValidator } from "./model/enums";
 import type { CallResult, LeadStatus } from "./model/enums";
 import { requireUser, requireLeadWriteRole, roleOf } from "./model/access";
@@ -59,6 +60,29 @@ async function leadHasPlannedRdv(ctx: MutationCtx, leadId: Id<"leads">): Promise
   return rows.some((r) => r.deletedAt === undefined && r.status === "planifie" && (r.scheduledAt ?? Infinity) > now);
 }
 
+// Exception au verrou : un lead QUALIFIÉ (pas encore en RDV) qui annule —
+// « elle part en métropole, ne viendra pas » (Lucile Maillot, 25/11) — doit
+// pouvoir repasser « À rappeler » (avec une date) ou « Pas qualifié ». Réservé
+// au setter qui l'a qualifié et aux rôles au-dessus (commercial, admin…) : un
+// autre setter ne peut toujours pas toucher la qualification d'un collègue.
+async function canReopenQualified(
+  ctx: MutationCtx,
+  lead: { _id: Id<"leads">; status: LeadStatus },
+  user: Parameters<typeof roleOf>[0] & { _id: Id<"users"> },
+  result: CallResult,
+  nextCallbackAt: number | undefined,
+): Promise<boolean> {
+  if (lead.status !== "qualifie") return false;
+  if (!(result === "refus" || (result === "rappel_planifie" && nextCallbackAt))) return false;
+  if (roleOf(user) !== "setter") return true;
+  const last = await ctx.db
+    .query("callLogs")
+    .withIndex("by_lead_calledAt", (q) => q.eq("leadId", lead._id))
+    .order("desc")
+    .first();
+  return last?.setterId === user._id;
+}
+
 async function leadHasDownstreamProject(ctx: MutationCtx, leadId: Id<"leads">): Promise<boolean> {
   const projects = await ctx.db
     .query("projects")
@@ -82,7 +106,9 @@ export const logCall = mutation({
     const user = await requireLeadWriteRole(ctx);
     const lead = await ctx.db.get(args.leadId);
     if (!lead) throw new Error("Lead introuvable");
-    if (QUALIFIED_LOCKED_STATUSES.has(lead.status)) {
+    const reopening = QUALIFIED_LOCKED_STATUSES.has(lead.status)
+      && (await canReopenQualified(ctx, lead, user, args.result, args.nextCallbackAt));
+    if (QUALIFIED_LOCKED_STATUSES.has(lead.status) && !reopening) {
       throw new Error("Ce prospect est déjà qualifié : sa qualification est le dernier appel, impossible d'en enregistrer un autre.");
     }
     const calledAt = Date.now();
@@ -129,6 +155,11 @@ export const logCall = mutation({
     }
 
     await ctx.db.patch(args.leadId, patch);
+    // Lead de promo qui ne viendra plus : sa place au bureau est rendue au
+    // site d'inscription (même circuit que le RDV à domicile).
+    if (reopening && derivedStatus && lead.promotionSlotDay !== undefined) {
+      await ctx.scheduler.runAfter(0, internal.promotions.cancelOfficeSlotForDomicile, { leadId: args.leadId, reason: "annule" });
+    }
     if (derivedStatus && derivedStatus !== lead.status) {
       await insertStageHistory(ctx, {
         leadId: args.leadId,

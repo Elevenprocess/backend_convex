@@ -1021,8 +1021,8 @@ export const officeSlotCancelInfo = internalQuery({
 });
 
 export const clearOfficeSlot = internalMutation({
-  args: { leadId: v.id("leads"), released: v.union(v.number(), v.null()), ghl: v.string() },
-  handler: async (ctx, { leadId, released, ghl }) => {
+  args: { leadId: v.id("leads"), released: v.union(v.number(), v.null()), ghl: v.string(), reason: v.optional(v.literal("annule")) },
+  handler: async (ctx, { leadId, released, ghl, reason }) => {
     const lead = await ctx.db.get(leadId);
     if (!lead || lead.promotionSlotDay === undefined) return;
     const slot = lead.promotionSlotHour !== undefined ? ghlSlotTexts(lead.promotionSlotDay, lead.promotionSlotHour).creneau : lead.promotionSlotDay;
@@ -1030,17 +1030,19 @@ export const clearOfficeSlot = internalMutation({
     await logSystemActivity(ctx, {
       source: "Promotions", action: "lead.promotion.office_slot_cancelled", entityType: "lead", entityId: leadId, leadId,
       subject: leadLabel(lead),
-      summary: `RDV au bureau (${slot}) annulé pour ${leadLabel(lead)} : RDV à domicile choisi. `
+      summary: `RDV au bureau (${slot}) annulé pour ${leadLabel(lead)} : ${reason === "annule" ? "le prospect ne viendra pas (reclassé par le setter)" : "RDV à domicile choisi"}. `
         + (released === null ? "Site d'inscription injoignable, place à rendre à la main." : `${released} place rendue sur le site.`)
         + ` GHL : ${ghl}.`,
-      details: { day: lead.promotionSlotDay, hour: lead.promotionSlotHour, released, ghl },
+      details: { day: lead.promotionSlotDay, hour: lead.promotionSlotHour, released, ghl, reason: reason ?? "domicile" },
     });
   },
 });
 
 export const cancelOfficeSlotForDomicile = internalAction({
-  args: { leadId: v.id("leads") },
-  handler: async (ctx, { leadId }) => {
+  // reason "annule" : le prospect ne vient plus (lead qualifié reclassé) — place
+  // rendue et champs GHL vidés, mais l'opportunité n'est pas mise en « domicile ».
+  args: { leadId: v.id("leads"), reason: v.optional(v.literal("annule")) },
+  handler: async (ctx, { leadId, reason }) => {
     const info = await ctx.runQuery(internal.promotions.officeSlotCancelInfo, { leadId });
     if (!info) return;
     const released = await releaseFunnelPlace({ leadId, telephone: info.phone });
@@ -1060,7 +1062,7 @@ export const cancelOfficeSlotForDomicile = internalAction({
           query: { location_id: requireGhlLocationId(), contact_id: info.contactId, pipeline_id: s.pipelineId, limit: 20 },
         })) as { opportunities?: GhlOpp[] } | null;
         const opp = (found?.opportunities ?? []).find((o) => o.pipelineId === s.pipelineId);
-        if (opp) {
+        if (opp && reason !== "annule") {
           const norm = (x: string) => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
           const stage = (await listPipelines()).find((p) => p.id === s.pipelineId)?.stages
             .find((st) => norm(st.name).includes("domicile"));
@@ -1075,6 +1077,6 @@ export const cancelOfficeSlotForDomicile = internalAction({
         ghl = `échec (${String(e instanceof Error ? e.message : e).slice(0, 200)})`;
       }
     }
-    await ctx.runMutation(internal.promotions.clearOfficeSlot, { leadId, released, ghl });
+    await ctx.runMutation(internal.promotions.clearOfficeSlot, { leadId, released, ghl, reason });
   },
 });

@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { api } from "./_generated/api";
 import { makeT } from "./test.kit";
 import { asUser, insertUser } from "./test.helpers";
@@ -89,6 +89,38 @@ test("logCall() : une fois qualifié, plus AUCUN appel et le crédit reste au qu
   expect(logs).toHaveLength(2);
   const last = logs.sort((x, y) => y.calledAt - x.calledAt)[0];
   expect(last.setterId).toBe(nirvana);
+});
+
+test("logCall() : un lead qualifié qui annule repasse « À rappeler » / « Pas qualifié » (commercial ou setter qualifieur)", async () => {
+  vi.useFakeTimers();
+  try {
+  const t = makeT();
+  const nirvana = await insertUser(t, { role: "setter", email: "nirvana@ecoi.fr" });
+  const ony = await insertUser(t, { role: "setter", email: "ony@ecoi.fr" });
+  const eric = await insertUser(t, { role: "commercial", email: "eric@ecoi.fr" });
+  const leadId = await asUser(t, nirvana).mutation(api.leads.create, { firstName: "Lucile" });
+  await asUser(t, nirvana).mutation(api.callLogs.logCall, { leadId, result: "joint" });
+  await t.run((ctx) => ctx.db.patch(leadId, { promotionSlotDay: "2026-11-26", promotionSlotHour: 10 }));
+
+  // Un autre setter : toujours verrouillé ; sans date de rappel : verrouillé.
+  const cb = Date.now() + 86_400_000;
+  await expect(asUser(t, ony).mutation(api.callLogs.logCall, { leadId, result: "rappel_planifie", nextCallbackAt: cb })).rejects.toThrow(/déjà qualifié/);
+  await expect(asUser(t, eric).mutation(api.callLogs.logCall, { leadId, result: "rappel_planifie" })).rejects.toThrow(/déjà qualifié/);
+  await expect(asUser(t, eric).mutation(api.callLogs.logCall, { leadId, result: "messagerie" })).rejects.toThrow(/déjà qualifié/);
+
+  await asUser(t, eric).mutation(api.callLogs.logCall, { leadId, result: "rappel_planifie", nextCallbackAt: cb });
+  expect((await t.run((ctx) => ctx.db.get(leadId)))?.status).toBe("a_rappeler");
+  const jobs = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+  expect(jobs.some((j) => j.name.includes("cancelOfficeSlotForDomicile") && (j.args[0] as { reason?: string }).reason === "annule")).toBe(true);
+
+  // Le setter qualifieur peut aussi le passer en non qualifié.
+  const lead2 = await asUser(t, nirvana).mutation(api.leads.create, { firstName: "Autre" });
+  await asUser(t, nirvana).mutation(api.callLogs.logCall, { leadId: lead2, result: "joint" });
+  await asUser(t, nirvana).mutation(api.callLogs.logCall, { leadId: lead2, result: "refus" });
+  expect((await t.run((ctx) => ctx.db.get(lead2)))?.status).toBe("pas_qualifie");
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("logCall() refuse un rôle non commercial (technicien)", async () => {
