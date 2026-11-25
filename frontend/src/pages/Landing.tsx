@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import Orb from '../components/visual/Orb'
 import { useAuth } from '../lib/auth'
+import { VeloraMark } from '../components/shell/VeloraMark'
 
 const FEATURES = [
   {
@@ -83,9 +84,7 @@ export function Landing() {
         </div>
         <header className="relative z-10 flex h-20 items-center justify-between px-6 sm:px-10 lg:px-14">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/12 bg-white/[0.08] text-sm font-black backdrop-blur-2xl">
-              V
-            </div>
+            <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/12 bg-white/[0.08] text-sm font-black backdrop-blur-2xl"><VeloraMark animated={false} className="h-6 w-6" /></div>
             <p className="text-xs font-black uppercase tracking-[0.32em] text-white/80">VELORA</p>
           </div>
 
@@ -205,9 +204,7 @@ export function Landing() {
       <footer className="border-t border-white/[0.06] px-6 py-10 sm:px-10 lg:px-14">
         <div className="mx-auto flex max-w-[1080px] flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/12 bg-white/[0.08] text-xs font-black">
-              V
-            </div>
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/12 bg-white/[0.08] text-xs font-black"><VeloraMark animated={false} className="h-5 w-5" /></div>
             <p className="text-[11px] font-black uppercase tracking-[0.32em] text-white/60">VELORA</p>
           </div>
           <p className="text-xs text-white/35">

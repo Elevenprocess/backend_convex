@@ -5,6 +5,7 @@ import { ApiError } from '../lib/api'
 import { convexAuthEnabled } from '../lib/convex'
 import { Spinner } from '../components/Spinner'
 import Orb from '../components/visual/Orb'
+import { VeloraMark } from '../components/shell/VeloraMark'
 
 export function Login() {
   const [email, setEmail] = useState('')
@@ -90,7 +91,7 @@ export function Login() {
 
       <header className="relative z-10 flex h-20 items-center justify-between px-6 sm:px-10 lg:px-14">
         <Link viewTransition to="/" className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/12 bg-white/[0.08] text-sm font-black backdrop-blur-2xl">V</div>
+          <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/12 bg-white/[0.08] text-sm font-black backdrop-blur-2xl"><VeloraMark animated={false} className="h-6 w-6" /></div>
           <p className="text-xs font-black uppercase tracking-[0.32em] text-white/80">VELORA</p>
         </Link>
 

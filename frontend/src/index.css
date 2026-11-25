@@ -1764,41 +1764,32 @@ body {
   overflow: visible;
 }
 
-/* Logo animé : le V se trace comme un trait (After Effects), les anneaux se
-   dessinent autour. Rejoué à chaque navigation via la `key` côté Sidebar. */
-.velora-mark .velora-v {
-  /* Longueur des deux segments du V (≈ 2 × 78). */
-  stroke-dasharray: 156;
-  stroke-dashoffset: 156;
-  animation: velora-draw-v 0.7s cubic-bezier(0.65, 0, 0.35, 1) 0.28s forwards;
-}
-.velora-mark .velora-ring--sm {
-  /* Circonférence ≈ 2π × 82. */
-  stroke-dasharray: 515;
-  stroke-dashoffset: 515;
-  animation: velora-draw-ring 0.7s ease-out forwards;
-}
-.velora-mark .velora-ring--lg {
+/* Logo animé « Prisme » : les deux facettes glissent en place, puis le pli
+   apparaît. Rejoué à chaque navigation via la `key` côté Sidebar. */
+.velora-mark.is-animated .velora-facet--l {
   opacity: 0;
-  transform-origin: 120px 120px;
-  animation: velora-fade-ring 0.6s ease-out 0.45s forwards;
+  transform: translate(-40px, -56px);
+  animation: velora-facet-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
-
-@keyframes velora-draw-v {
-  to { stroke-dashoffset: 0; }
+.velora-mark.is-animated .velora-facet--r {
+  opacity: 0;
+  transform: translate(40px, -56px);
+  animation: velora-facet-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.12s forwards;
 }
-@keyframes velora-draw-ring {
-  to { stroke-dashoffset: 0; }
+.velora-mark.is-animated .velora-fold {
+  opacity: 0;
+  animation: velora-fold-in 0.35s ease-out 0.55s forwards;
 }
-@keyframes velora-fade-ring {
-  from { opacity: 0; transform: scale(0.92); }
-  to { opacity: 1; transform: scale(1); }
+@keyframes velora-facet-in {
+  to { opacity: 1; transform: none; }
+}
+@keyframes velora-fold-in {
+  to { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .velora-mark .velora-v,
-  .velora-mark .velora-ring--sm { stroke-dashoffset: 0; animation: none; }
-  .velora-mark .velora-ring--lg { opacity: 1; animation: none; }
+  .velora-mark .velora-facet,
+  .velora-mark .velora-fold { opacity: 1; transform: none; animation: none; }
 }
 .sb-workspace-meta {
   flex: 1 1 auto;
@@ -3872,10 +3863,9 @@ body {
 @media (max-width: 767px) {
   .topbar-burger { display: inline-flex; }
 
-  /* Sur mobile, pas d'animation du logo : affichage direct du V et des anneaux. */
-  .velora-mark .velora-v,
-  .velora-mark .velora-ring--sm { stroke-dashoffset: 0; animation: none; }
-  .velora-mark .velora-ring--lg { opacity: 1; transform: none; animation: none; }
+  /* Sur mobile, pas d'animation du logo : affichage direct. */
+  .velora-mark .velora-facet,
+  .velora-mark .velora-fold { opacity: 1; transform: none; animation: none; }
 
   /* La sidebar devient un drawer plein-hauteur en overlay */
   .app-sidebar {
