@@ -8,6 +8,7 @@ import {
 } from '../../lib/promotionsApi'
 import { PromotionForm, LEGACY_STATUS_OPTIONS } from './PromotionForm'
 import { humanizeError } from '../../lib/hooks'
+import { PromotionPie } from './PromotionPie'
 
 const GROUPS: { key: PromotionRow['status']; label: string }[] = [
   { key: 'en_cours', label: 'En cours' },
@@ -120,10 +121,13 @@ function PromotionCard({ promo, leadCount, onEdit, onOpenLeads }: { promo: Promo
         <button type="button" onClick={onOpenLeads} className="text-xs font-semibold text-or hover:underline">Voir les {leadCount} leads</button>
       </div>
       {stats && (
-        <div className="space-y-0.5">
-          <StatLine label="Nouveaux" b={stats.nouveaux} />
-          <StatLine label="Anciens" b={stats.anciens} />
-          {stats.rdvBureauHorsPromo > 0 && <div className="text-xs text-text">+ {stats.rdvBureauHorsPromo} RDV bureau pris par des leads hors promo</div>}
+        <div className="space-y-2">
+          <PromotionPie blocks={[stats.nouveaux, stats.anciens]} />
+          <div className="space-y-0.5">
+            <StatLine label="Nouveaux" b={stats.nouveaux} />
+            <StatLine label="Anciens" b={stats.anciens} />
+            {stats.rdvBureauHorsPromo > 0 && <div className="text-xs text-text">+ {stats.rdvBureauHorsPromo} RDV bureau pris par des leads hors promo</div>}
+          </div>
         </div>
       )}
       {preview && (
