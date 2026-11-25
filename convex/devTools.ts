@@ -593,3 +593,37 @@ export const purgePromoTestLead = internalMutation({
     return { deleted: logs.length + 1 };
   },
 });
+
+// Remet l'identité d'un lead écrasée par erreur (fiche d'un prospect remplie
+// avec les coordonnées d'un autre — Janick M'couezou ← Aimé BABOIS, 25/11).
+// `npx convex run devTools:restoreLeadIdentity '{"leadId":"…","fields":{…},"status":"…"}'`
+export const restoreLeadIdentity = internalMutation({
+  args: {
+    leadId: v.id("leads"),
+    fields: v.object({
+      firstName: v.optional(v.string()), lastName: v.optional(v.string()),
+      phone: v.optional(v.string()), email: v.optional(v.string()),
+      addressLine: v.optional(v.string()), city: v.optional(v.string()), postalCode: v.optional(v.string()),
+    }),
+    status: v.optional(leadStatusValidator),
+    reason: v.string(),
+  },
+  handler: async (ctx, { leadId, fields, status, reason }) => {
+    const lead = await ctx.db.get(leadId);
+    if (!lead) throw new Error("Lead introuvable");
+    const before = Object.fromEntries(Object.keys(fields).map((k) => [k, (lead as Record<string, unknown>)[k] ?? null]));
+    await ctx.db.patch(leadId, { ...fields, ...(status ? { status } : {}) });
+    if (status && status !== lead.status) {
+      await insertStageHistory(ctx, { leadId, ghlStageName: status, saasStatus: status, assignedToId: lead.assignedToId, changedAt: Date.now(), source: "manual" });
+    }
+    await ctx.db.insert("activityLog", {
+      action: "lead.updated", actorName: "Velora (correction)", at: Date.now(), domain: "system",
+      entityType: "lead", entityId: leadId, leadId,
+      subject: `${fields.firstName ?? lead.firstName ?? ""} ${fields.lastName ?? lead.lastName ?? ""}`.trim(),
+      summary: `Fiche remise en état : ${reason}`,
+      details: { before: { ...before, status: lead.status }, after: { ...fields, status: status ?? lead.status } },
+    });
+    await refreshLeadAgg(ctx, leadId);
+    return { before, statusBefore: lead.status };
+  },
+});
