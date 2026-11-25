@@ -25,4 +25,10 @@ describe('ClosableTab', () => {
     fireEvent.click(screen.getByLabelText("Fermer l'onglet Leads de « Black Friday »"))
     expect(onClose).toHaveBeenCalled()
   })
+  it('clignote quand un rappel de la promo est imminent', () => {
+    const { container, rerender } = render(<ClosableTab label="Promo" active={false} onSelect={() => {}} onClose={() => {}} />)
+    expect(container.querySelector('.is-blinking')).toBeNull()
+    rerender(<ClosableTab label="Promo" active={false} blinking onSelect={() => {}} onClose={() => {}} />)
+    expect(container.querySelector('.is-blinking')).toBeTruthy()
+  })
 })

@@ -2412,7 +2412,8 @@ body {
   }
 }
 .leads-rail-item.is-blinking,
-.leads-rail-mini.is-blinking {
+.leads-rail-mini.is-blinking,
+.pill-tab.is-blinking {
   animation: leads-rail-blink 1s ease-in-out infinite;
   border-radius: 10px;
   color: var(--color-or-dark);
@@ -2420,7 +2421,8 @@ body {
 }
 @media (prefers-reduced-motion: reduce) {
   .leads-rail-item.is-blinking,
-  .leads-rail-mini.is-blinking {
+  .leads-rail-mini.is-blinking,
+  .pill-tab.is-blinking {
     animation: none;
     background: rgba(214, 137, 16, 0.24);
     box-shadow: 0 0 0 2px rgba(214, 137, 16, 0.32);

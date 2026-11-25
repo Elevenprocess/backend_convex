@@ -5,14 +5,16 @@ import { formatPromotionRange, promotionLeads, type ActivePromotion } from '../.
 type PromoLeadRef = { promotionId?: string | null; promotionSource?: 'tag' | 'statut' | null }
 
 /** Onglet façon navigateur avec une croix pour le fermer. */
-export function ClosableTab({ label, active, onSelect, onClose }: {
+export function ClosableTab({ label, active, onSelect, onClose, blinking = false }: {
   label: string
   active: boolean
+  /** Rappel imminent dans cette promo. */
+  blinking?: boolean
   onSelect: () => void
   onClose: () => void
 }) {
   return (
-    <span className={`pill-tab inline-flex items-center gap-1.5 !pr-1.5 ${active ? '!bg-text !text-white' : 'bg-or-tint border border-or/30 text-or-dark'}`}>
+    <span className={`pill-tab inline-flex items-center gap-1.5 !pr-1.5 ${active ? '!bg-text !text-white' : 'bg-or-tint border border-or/30 text-or-dark'} ${blinking ? 'is-blinking' : ''}`}>
       <button type="button" onClick={onSelect} className="font-semibold">{label}</button>
       <button type="button" aria-label={`Fermer l'onglet ${label}`} onClick={onClose}
         className="flex h-4 w-4 items-center justify-center rounded-full text-[13px] leading-none opacity-70 hover:opacity-100 hover:bg-black/10">×</button>

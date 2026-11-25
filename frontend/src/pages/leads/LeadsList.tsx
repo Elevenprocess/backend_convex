@@ -310,7 +310,9 @@ function LeadsSetter() {
     const compute = () => {
       const now = Date.now()
       const horizon = now + 3 * 60 * 1000
-      const ids = categoryLeads
+      // Tous les leads du setter, promos comprises : un rappel imminent d'un
+      // lead de promo doit aussi alerter (onglet Promotion + filtre du rail).
+      const ids = mine
         .filter((l) => isCallbackLead(l) && l.nextCallbackAt)
         .filter((l) => {
           const t = new Date(l.nextCallbackAt as string).getTime()
@@ -322,7 +324,7 @@ function LeadsSetter() {
     compute()
     const id = window.setInterval(compute, 15_000)
     return () => window.clearInterval(id)
-  }, [categoryLeads])
+  }, [mine])
 
   // Accusé de réception : on mémorise les leads dont le sidebar dynamique a été ouvert.
   const [acknowledgedCallbackIds, setAcknowledgedCallbackIds] = useState<Set<string>>(() => new Set())
@@ -337,7 +339,17 @@ function LeadsSetter() {
   }, [selectedId])
 
   // Le filtre "À rappeler" clignote tant qu'il reste au moins un rappel imminent non ouvert.
-  const blinkRappel = imminentCallbackIds.some((id) => !acknowledgedCallbackIds.has(id))
+  // Onglets habituels d'un côté, promos en cours de l'autre (leurs leads n'y
+  // sont pas) : chacun clignote pour ses propres rappels.
+  const { blinkRappel, blinkPromotion, blinkOpenPromo } = useMemo(() => {
+    const pending = new Set(imminentCallbackIds.filter((id) => !acknowledgedCallbackIds.has(id)))
+    const hit = (list: LeadResponse[]) => pending.size > 0 && list.some((l) => pending.has(l.id))
+    return {
+      blinkRappel: hit(categoryLeads),
+      blinkPromotion: hit(activePromotionLeads(mine, activePromoIds, 'all')),
+      blinkOpenPromo: openPromo ? hit(promotionLeads(mine, openPromo._id, 'all')) : false,
+    }
+  }, [imminentCallbackIds, acknowledgedCallbackIds, categoryLeads, mine, activePromoIds, openPromo])
 
   const counts = useMemo(() => ({
     all: categoryLeads.length,
@@ -417,13 +429,14 @@ function LeadsSetter() {
       {(hasPromo || openPromo) && (
         <div className="px-4 sm:px-8 pt-3 flex flex-wrap gap-2">
           <button type="button" onClick={() => setSetterView('leads')} className={`pill-tab ${setterView === 'leads' ? '!bg-text !text-white' : 'bg-white border border-line text-muted'}`}>Leads</button>
-          <button type="button" onClick={() => setSetterView('promotions')} className={`pill-tab ${setterView === 'promotions' ? '!bg-text !text-white' : 'bg-white border border-line text-muted'}`}>
+          <button type="button" onClick={() => setSetterView('promotions')} className={`pill-tab ${setterView === 'promotions' ? '!bg-text !text-white' : 'bg-white border border-line text-muted'} ${blinkPromotion && setterView !== 'promoLeads' ? 'is-blinking' : ''}`} title={blinkPromotion ? 'Un rappel de promo arrive dans moins de 3 min' : undefined}>
             Promotion <span className="ml-1 opacity-70">{counts.promotion}</span>
           </button>
           {openPromo && (
             <ClosableTab
               label={`Leads de « ${openPromo.name} »`}
               active={setterView === 'promoLeads'}
+              blinking={blinkOpenPromo && setterView !== 'promoLeads'}
               onSelect={() => setSetterView('promoLeads')}
               onClose={() => setPromoTabs({ promoId: null, view: setterView === 'promoLeads' ? 'promotions' : setterView })}
             />
@@ -447,6 +460,7 @@ function LeadsSetter() {
             setters={[]}
             commerciaux={[]}
             showPeople={false}
+            blinkStatus={blinkOpenPromo ? 'a_rappeler' : null}
           />
         ) : (
           <LeadsRail
@@ -554,7 +568,7 @@ function LeadsSetter() {
                                 title={lockedByOther ? `${lockedBy!.setterName} est en train de bosser sur ce lead` : undefined}
                                 onClick={() => selectLead(l.id)}
                               >
-                                {orderedColumns.map((column) => renderSetterCell(column.key, l, userMap, startCall, setOpenComment, lockedByOther ? lockedBy : null, activePromoIds))}
+                                {orderedColumns.map((column) => renderSetterCell(column.key, l, userMap, startCall, setOpenComment, lockedByOther ? lockedBy : null, activePromoIds, Boolean(promoScope)))}
                               </tr>
                             )
                           })}
@@ -1299,6 +1313,8 @@ function renderSetterCell(
   setOpenComment: (data: { leadName: string; comment: string }) => void,
   lockedBy?: LeadLockInfo | null,
   activePromoIds?: Set<string>,
+  /** Onglet d'une promo : pas d'onglets par statut, on montre le vrai statut (Nouveau, À rappeler…) au lieu de « En attente ». */
+  detailedStatus = false,
 ) {
   switch (key) {
     case 'nom':
@@ -1336,7 +1352,10 @@ function renderSetterCell(
     case 'setter': return <Td key={key}><SetterChips lead={lead} userMap={userMap} /></Td>
     case 'jaugeAppels': return <Td key={key}><DailyCallGauge count={lead.callsToday ?? 0} /></Td>
     case 'dernierAppel': return <Td key={key} className="text-faint">{lastCallDateTime(lead.latestCallAt ?? lead.lastContactAt)}</Td>
-    case 'statut': return <Td key={key}><span className={`status-badge ${statusBadgeForLead(lead, 'setter')}`}>{statusLabelForLead(lead, 'setter')}</span></Td>
+    case 'statut': {
+      const role = detailedStatus ? null : 'setter'
+      return <Td key={key}><span className={`status-badge ${statusBadgeForLead(lead, role)}`}>{statusLabelForLead(lead, role)}</span></Td>
+    }
     case 'resimulation': return <Td key={key}><ResimulationCell lead={lead} /></Td>
     case 'appelDate': return <Td key={key} className="text-faint">{lastCallDateTime(lead.latestCallAt ?? lead.lastContactAt)}</Td>
     case 'jauge': return <Td key={key}><ElevenDayGauge jours={lead.joursRelance} /></Td>
@@ -1667,6 +1686,7 @@ function AdminLeadsRail({
   setters,
   commerciaux,
   showPeople = true,
+  blinkStatus = null,
 }: {
   leads: LeadResponse[]
   leadFilters: LeadListFilters
@@ -1679,6 +1699,8 @@ function AdminLeadsRail({
   commerciaux: UserResponse[]
   /** false côté setter (onglet d'une promo) : pas de filtres par setter/commercial. */
   showPeople?: boolean
+  /** Statut dont le filtre clignote (rappel imminent dans une promo). */
+  blinkStatus?: LeadStatus | null
 }) {
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false
@@ -1768,7 +1790,7 @@ function AdminLeadsRail({
         <div className="leads-rail-collapsed-sep" />
         <div className="leads-rail-collapsed-group">
           {ADMIN_STATUS_FILTERS.slice(0, 6).map((item) => (
-            <button key={item.key} type="button" onClick={() => setLeadFilters({ ...leadFilters, status: item.key })} className={`leads-rail-mini ${leadFilters.status === item.key ? 'is-active' : ''}`} title={`${item.label} (${statusCounts[item.key] ?? 0})`} aria-label={item.label}>
+            <button key={item.key} type="button" onClick={() => setLeadFilters({ ...leadFilters, status: item.key })} className={`leads-rail-mini ${leadFilters.status === item.key ? 'is-active' : ''} ${blinkStatus === item.key ? 'is-blinking' : ''}`} title={`${item.label} (${statusCounts[item.key] ?? 0})`} aria-label={item.label}>
               <Icon name={item.icon} size={16} strokeWidth={1.75} />
               {(statusCounts[item.key] ?? 0) > 0 && <span className="leads-rail-mini-dot">{(statusCounts[item.key] ?? 0) > 99 ? '99+' : (statusCounts[item.key] ?? 0)}</span>}
             </button>
@@ -1802,7 +1824,7 @@ function AdminLeadsRail({
             key={item.key}
             type="button"
             onClick={() => setLeadFilters({ ...leadFilters, status: item.key })}
-            className={`sb-item leads-rail-item ${leadFilters.status === item.key ? 'is-active' : ''}`}
+            className={`sb-item leads-rail-item ${leadFilters.status === item.key ? 'is-active' : ''} ${blinkStatus === item.key ? 'is-blinking' : ''}`}
           >
             <span className="sb-item-icon"><Icon name={item.icon} size={15} strokeWidth={1.75} /></span>
             <span className="sb-item-label">{item.label}</span>
