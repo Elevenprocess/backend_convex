@@ -746,6 +746,23 @@ export const markPromotionMailSent = internalMutation({
   },
 });
 
+export const logPromotionMailFailed = internalMutation({
+  args: { leadId: v.id("leads"), subject: v.string(), error: v.string() },
+  handler: async (ctx, { leadId, subject, error }) => {
+    const lead = await ctx.db.get(leadId);
+    if (!lead) return;
+    const invalid = /e-?mail is invalid|invalid email/i.test(error);
+    await logActivity(ctx, {
+      action: "lead.promotion.mail_failed", entityType: "lead", entityId: leadId, leadId,
+      subject: leadLabel(lead),
+      summary: invalid
+        ? `n'a pas pu envoyer le mail « ${subject} » à ${leadLabel(lead)} : e-mail invalide (${lead.email ?? "vide"}), à corriger sur la fiche`
+        : `n'a pas pu envoyer le mail « ${subject} » à ${leadLabel(lead)} : ${error}`,
+      details: { subject, error, email: lead.email ?? null },
+    });
+  },
+});
+
 export const markGhlNoteSent = internalMutation({
   args: { leadId: v.id("leads") },
   handler: async (ctx, { leadId }) => {
@@ -914,12 +931,19 @@ export const confirmOfficeSlot = action({
         });
       }
       // Présence confirmée : mail « prix par écrit » au prospect (une fois).
+      // Non bloquant : un e-mail refusé par GHL (adresse invalide…) ne doit pas
+      // faire échouer le RDV au bureau, déjà écrit dans GHL à ce stade.
       if (info.mail) {
-        await ghlRequest("/conversations/messages", {
-          method: "POST", version: "2021-04-15",
-          body: { type: "Email", contactId: info.externalId, subject: info.mail.subject, html: info.mail.html },
-        });
-        await ctx.runMutation(internal.promotions.markPromotionMailSent, { leadId, subject: info.mail.subject });
+        try {
+          await ghlRequest("/conversations/messages", {
+            method: "POST", version: "2021-04-15",
+            body: { type: "Email", contactId: info.externalId, subject: info.mail.subject, html: info.mail.html },
+          });
+          await ctx.runMutation(internal.promotions.markPromotionMailSent, { leadId, subject: info.mail.subject });
+        } catch (mailErr) {
+          const m = mailErr instanceof Error ? mailErr.message : String(mailErr);
+          await ctx.runMutation(internal.promotions.logPromotionMailFailed, { leadId, subject: info.mail.subject, error: m.slice(0, 300) });
+        }
       }
       // Premier créneau : on lance l'automatisation GHL « créneau réservé »
       // APRÈS l'écriture des champs (elle peut s'en servir dans ses messages).
