@@ -10,6 +10,7 @@ import { requireLeadWriteRole, requireRole, requireUser } from "./model/access";
 import { ghlRequest, isGhlConfigured, requireGhlLocationId } from "./ghlClient";
 import { ghlSlotTexts, isOfficeSlot } from "./model/promotionSlots";
 import { buildGhlProspectRemark } from "./model/ghl/prospectRemark";
+import { renderSlotChangeMail } from "./model/emails/slotChangeMail";
 import { renderPromotionMail } from "./model/emails/promotionMails";
 import { leadLabel, logActivity, logSystemActivity } from "./model/activity";
 import { applyTagsToLead, blankSlateForPromotion } from "./model/promotionAttach";
@@ -711,7 +712,12 @@ export const setOfficeSlotByStaff = internalMutation({
     const mail = promo.ghlSlotSync.confirmationMailKey && lead.promotionMailSentAt === undefined && lead.email
       ? renderPromotionMail(promo.ghlSlotSync.confirmationMailKey, lead.firstName)
       : null;
-    return { userId: user._id, externalId: contactId, contact, name, promoName: promo.name, sync: promo.ghlSlotSync, workflowPending, pendingNote, mail };
+    // Créneau CHANGÉ (il en avait déjà un) : le prospect reçoit son billet à
+    // jour par mail (même numéro, nouveau jour/heure).
+    const slotChange = changed && lead.promotionSlotDay !== undefined && lead.email
+      ? { firstName: lead.firstName ?? null, ticket: lead.promotionTicket ?? null, day, hour }
+      : null;
+    return { userId: user._id, externalId: contactId, contact, name, promoName: promo.name, sync: promo.ghlSlotSync, workflowPending, pendingNote, mail, slotChange };
   },
 });
 
@@ -745,6 +751,33 @@ export const markPromotionMailSent = internalMutation({
     });
   },
 });
+
+export const logSlotChangeMail = internalMutation({
+  args: { leadId: v.id("leads"), subject: v.string(), ticket: v.string() },
+  handler: async (ctx, { leadId, subject, ticket }) => {
+    const lead = await ctx.db.get(leadId);
+    if (!lead) return;
+    await logActivity(ctx, {
+      action: "lead.promotion.slot_change_mail", entityType: "lead", entityId: leadId, leadId,
+      subject: leadLabel(lead),
+      summary: `a envoyé à ${leadLabel(lead)} son billet ${ticket} à jour : « ${subject} »`,
+      details: { subject, ticket },
+    });
+  },
+});
+
+/** Lien du billet (champ GHL « lien billet » rempli par le site d'inscription), null si absent. */
+const GHL_TICKET_URL_FIELD = "ZiYXDuxecgwrFejZXX7y";
+async function ghlTicketUrl(contactId: string): Promise<string | null> {
+  try {
+    const r = (await ghlRequest(`/contacts/${encodeURIComponent(contactId)}`)) as
+      { contact?: { customFields?: { id: string; value?: unknown }[] } } | null;
+    const f = r?.contact?.customFields?.find((c) => c.id === GHL_TICKET_URL_FIELD);
+    return typeof f?.value === "string" && f.value.startsWith("https://") ? f.value : null;
+  } catch {
+    return null;
+  }
+}
 
 export const logPromotionMailFailed = internalMutation({
   args: { leadId: v.id("leads"), subject: v.string(), error: v.string() },
@@ -853,9 +886,11 @@ export const assertStaffForFunnel = internalQuery({
 export const confirmOfficeSlot = action({
   args: { leadId: v.id("leads"), day: v.string(), hour: v.number(), notes: v.optional(v.string()) },
   handler: async (ctx, { leadId, day, hour, notes }): Promise<{ ghl: "ok"; created: boolean }> => {
+    let funnelTicket: string | null = null;
     const info: {
       externalId: string | null; name: string; promoName: string; workflowPending: boolean; pendingNote: string | null;
       mail: { subject: string; html: string } | null;
+      slotChange: { firstName: string | null; ticket: string | null; day: string; hour: number } | null;
       sync: NonNullable<Doc<"promotions">["ghlSlotSync"]>;
       contact: { firstName?: string; lastName?: string; email?: string; phone?: string; addressLine?: string; city?: string; postalCode?: string };
     } =
@@ -864,6 +899,7 @@ export const confirmOfficeSlot = action({
         const ref = await ctx.runQuery(internal.promotions.funnelLeadRef, { leadId });
         const r = await reserveFunnelPlace({ leadId, telephone: ref?.phone, jour: day, heure: hour, nom: ref?.name });
         if (r.ok === false) throw new ConvexError(funnelErrorMessage(r.erreur));
+        if (r.ok === true && r.billet) funnelTicket = r.billet;
         return ctx.runMutation(internal.promotions.setOfficeSlotByStaff, { leadId, day, hour, now: Date.now(), ...(notes !== undefined ? { notes } : {}) });
       })();
     try {
@@ -943,6 +979,25 @@ export const confirmOfficeSlot = action({
         } catch (mailErr) {
           const m = mailErr instanceof Error ? mailErr.message : String(mailErr);
           await ctx.runMutation(internal.promotions.logPromotionMailFailed, { leadId, subject: info.mail.subject, error: m.slice(0, 300) });
+        }
+      }
+      // Créneau changé : billet à jour par mail (non bloquant, comme ci-dessus).
+      if (info.slotChange) {
+        const ticket = funnelTicket ?? info.slotChange.ticket;
+        if (ticket) {
+          const subjectFallback = "Votre nouveau créneau";
+          try {
+            const ticketUrl = await ghlTicketUrl(info.externalId);
+            const m = renderSlotChangeMail({ ...info.slotChange, ticket, ticketUrl });
+            await ghlRequest("/conversations/messages", {
+              method: "POST", version: "2021-04-15",
+              body: { type: "Email", contactId: info.externalId, subject: m.subject, html: m.html },
+            });
+            await ctx.runMutation(internal.promotions.logSlotChangeMail, { leadId, subject: m.subject, ticket });
+          } catch (mailErr) {
+            const m = mailErr instanceof Error ? mailErr.message : String(mailErr);
+            await ctx.runMutation(internal.promotions.logPromotionMailFailed, { leadId, subject: subjectFallback, error: m.slice(0, 300) });
+          }
         }
       }
       // Premier créneau : on lance l'automatisation GHL « créneau réservé »
