@@ -25,6 +25,18 @@ describe("créneaux bureau de la promo", () => {
     expect(isOfficeSlot(START, END, "2026-11-27", 10, samedi)).toBe(false);
     expect(isOfficeSlot(START, END, "2026-11-29", 13, BEFORE)).toBe(false);
   });
+  it("le créneau du prospect reste valable toute sa journée, même commencé ou passé", () => {
+    const keep = { day: "2026-11-27", hour: 17 };
+    const vendredi17h20 = reunionDayStartMs("2026-11-27") + 17.33 * 3_600_000;
+    const vendredi19h = reunionDayStartMs("2026-11-27") + 19 * 3_600_000;
+    expect(officeSlotHours("2026-11-27", vendredi17h20)).toEqual([]);
+    expect(officeSlotHours("2026-11-27", vendredi17h20, keep)).toEqual([17]);
+    expect(isOfficeSlot(START, END, "2026-11-27", 17, vendredi19h, keep)).toBe(true);
+    expect(officeSlotDays(START, END, vendredi19h, keep)[0]).toBe("2026-11-27");
+    expect(isOfficeSlot(START, END, "2026-11-27", 16, vendredi19h, keep)).toBe(false);
+    const samedi = reunionDayStartMs("2026-11-28") + 3_600_000;
+    expect(isOfficeSlot(START, END, "2026-11-27", 17, samedi, keep)).toBe(false);
+  });
   it("textes GHL au format du site d'invitation", () => {
     expect(ghlSlotTexts("2026-11-27", 9)).toEqual({
       jour: "Vendredi 27 novembre", heure: "9 h à 10 h",

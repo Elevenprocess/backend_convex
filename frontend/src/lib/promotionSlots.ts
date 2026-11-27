@@ -21,32 +21,39 @@ function reunionToday(now: number): string {
   return new Date(now + REUNION_OFFSET_MS).toISOString().slice(0, 10);
 }
 
+/**
+ * Créneau déjà pris par le prospect : il reste valable toute sa journée, même
+ * une fois l'heure commencée ou passée (le setter valide sa présence à son
+ * arrivée, souvent pendant ou après l'heure prévue).
+ */
+export type KeptSlot = { day: string; hour: number } | null | undefined;
+
 /** Jeudis, vendredis, samedis et dimanches de la promo à partir d'aujourd'hui (Réunion). */
-export function officeSlotDays(startAt: number, endAt: number, now: number): string[] {
+export function officeSlotDays(startAt: number, endAt: number, now: number, keep?: KeptSlot): string[] {
   const days: string[] = [];
   const first = Math.max(startAt, now);
   let t = Math.floor((first + REUNION_OFFSET_MS) / DAY_MS) * DAY_MS - REUNION_OFFSET_MS;
   for (; t <= endAt && days.length < 60; t += DAY_MS) {
     const day = new Date(t + REUNION_OFFSET_MS).toISOString().slice(0, 10);
-    if (officeSlotHours(day, now).length > 0) days.push(day);
+    if (officeSlotHours(day, now, keep).length > 0) days.push(day);
   }
   return days;
 }
 
-/** Heures de début possibles ce jour-là (heures déjà commencées exclues aujourd'hui). */
-export function officeSlotHours(day: string, now: number): number[] {
+/** Heures de début possibles ce jour-là (heures déjà commencées exclues aujourd'hui, sauf le créneau gardé). */
+export function officeSlotHours(day: string, now: number, keep?: KeptSlot): number[] {
   const range = OFFICE_SLOT_HOURS[weekday(day)];
   if (!range) return [];
   const today = reunionToday(now);
   if (day < today) return [];
   const currentHour = new Date(now + REUNION_OFFSET_MS).getUTCHours();
   const hours: number[] = [];
-  for (let h = range[0]; h < range[1]; h++) if (day !== today || h > currentHour) hours.push(h);
+  for (let h = range[0]; h < range[1]; h++) if (day !== today || h > currentHour || (keep?.day === day && keep.hour === h)) hours.push(h);
   return hours;
 }
 
-export function isOfficeSlot(startAt: number, endAt: number, day: string, hour: number, now: number): boolean {
-  return officeSlotDays(startAt, endAt, now).includes(day) && officeSlotHours(day, now).includes(hour);
+export function isOfficeSlot(startAt: number, endAt: number, day: string, hour: number, now: number, keep?: KeptSlot): boolean {
+  return officeSlotDays(startAt, endAt, now, keep).includes(day) && officeSlotHours(day, now, keep).includes(hour);
 }
 
 const JOURS = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];

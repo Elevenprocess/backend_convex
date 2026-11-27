@@ -960,16 +960,23 @@ function NotesTab({
     ? (activePromosState ?? []).find((p) => p._id === lead.promotionId && p.officeSlots)
     : (activePromosState ?? []).find((p) => p.officeSlots)
   const [officeNow] = useState(() => Date.now())
+  // Le créneau du prospect reste proposé toute sa journée (présence validée à l'arrivée).
+  const keptSlotDay = lead.promotionSlotDay
+  const keptSlotHour = lead.promotionSlotHour
+  const keptSlot = useMemo(
+    () => (keptSlotDay && keptSlotHour != null ? { day: keptSlotDay, hour: keptSlotHour } : null),
+    [keptSlotDay, keptSlotHour],
+  )
   const officeDays = useMemo(
-    () => (leadOfficePromo ? officeSlotDays(leadOfficePromo.startAt, leadOfficePromo.endAt, officeNow) : []),
-    [leadOfficePromo, officeNow],
+    () => (leadOfficePromo ? officeSlotDays(leadOfficePromo.startAt, leadOfficePromo.endAt, officeNow, keptSlot) : []),
+    [leadOfficePromo, officeNow, keptSlot],
   )
   const officePromo = officeDays.length > 0 ? leadOfficePromo : undefined
   const [ghlRetry, setGhlRetry] = useState<{ day: string; hour: number } | null>(null)
   // Créneau déjà pris par le prospect sur le site et encore possible : il ne
   // reste qu'à le confirmer (le setter peut quand même en choisir un autre).
   const ownOfficeSlot = officePromo && lead.promotionSlotDay && lead.promotionSlotHour != null
-    && officeDays.includes(lead.promotionSlotDay) && officeSlotHours(lead.promotionSlotDay, officeNow).includes(lead.promotionSlotHour)
+    && officeDays.includes(lead.promotionSlotDay) && officeSlotHours(lead.promotionSlotDay, officeNow, keptSlot).includes(lead.promotionSlotHour)
     ? { day: lead.promotionSlotDay, hour: lead.promotionSlotHour } : null
   const [changeOfficeSlot, setChangeOfficeSlot] = useState(false)
   // Places restantes en direct du funnel d'inscription (même table que le site).
@@ -995,11 +1002,11 @@ function NotesTab({
     if (!isBureau || officeDays.length === 0 || officeDays.includes(rdvDate)) return
     const own = lead.promotionSlotDay && officeDays.includes(lead.promotionSlotDay) ? lead.promotionSlotDay : null
     const day = own ?? officeDays[0]
-    const ownHour = own && lead.promotionSlotHour != null && officeSlotHours(day, officeNow).includes(lead.promotionSlotHour)
+    const ownHour = own && lead.promotionSlotHour != null && officeSlotHours(day, officeNow, keptSlot).includes(lead.promotionSlotHour)
       ? lead.promotionSlotHour : null
     setRdvDate(day)
     setRdvAt(ownHour != null ? `${day}T${String(ownHour).padStart(2, '0')}:00` : '')
-  }, [isBureau, officeDays, rdvDate, lead.promotionSlotDay, lead.promotionSlotHour, officeNow])
+  }, [isBureau, officeDays, rdvDate, lead.promotionSlotDay, lead.promotionSlotHour, officeNow, keptSlot])
   const [form, setForm] = useState<LeadNotesForm>(() => leadToNotesForm(lead))
   // Snapshot des champs lead sur lesquels le formulaire est aligné. Sert à fusionner
   // les modifs venues d'ailleurs (onglet Infos) sans écraser ce que le setter a déjà
@@ -1602,7 +1609,7 @@ function NotesTab({
           ) : isBureau ? (
             <OfficeSlotPicker
               days={officeDays}
-              hoursOf={(day) => officeSlotHours(day, officeNow)}
+              hoursOf={(day) => officeSlotHours(day, officeNow, keptSlot)}
               selectedDay={rdvDate}
               selectedHour={rdvAt.startsWith(`${rdvDate}T`) ? Number(rdvAt.slice(11, 13)) : null}
               onDay={(day) => { setRdvDate(day); setRdvAt('') }}

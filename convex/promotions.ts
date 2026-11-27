@@ -662,7 +662,9 @@ export const setOfficeSlotByStaff = internalMutation({
     if (!promo || !promo.ghlSlotSync) {
       throw new Error("Pas de promotion en cours avec RDV au bureau pour ce prospect.");
     }
-    if (!isOfficeSlot(promo.startAt, promo.endAt, day, hour, now)) {
+    const keptSlot = lead.promotionSlotDay !== undefined && lead.promotionSlotHour !== undefined
+      ? { day: lead.promotionSlotDay, hour: lead.promotionSlotHour } : null;
+    if (!isOfficeSlot(promo.startAt, promo.endAt, day, hour, now, keptSlot)) {
       throw new Error("Créneau impossible : du jeudi au samedi de 8 h à 18 h, dimanche de 8 h à 13 h, pas dans le passé.");
     }
     const changed = lead.promotionSlotDay !== day || lead.promotionSlotHour !== hour;
